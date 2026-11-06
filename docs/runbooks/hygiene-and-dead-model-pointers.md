@@ -6,7 +6,8 @@ precondition: "read-only — every Diagnose step is safe with the broker down; n
 last_verified: 2026-10-29
 verified_by: delegate
 evidence: "every command under Diagnose was run 2026-10-29 on Linux (Fedora 7.2.11-200.fc42.x86_64, box Alex-Desktop-Win10, node v24.22.1) against ./selfdev.sqlite (137,427 entries) and the live servers at :47831 / :1234; the dead-pointer half is the 2026-10-29 incident recorded in docs/DECISIONS.md as D163/D166 and in `git log --oneline` at the commit whose subject begins 'rig+NEXT+runbook(verifier seat strings)' (reachable from main)"
-check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails when rig.selfdev.json and durig.config.json disagree; the LIVE installed-vs-loaded half is unimplemented — docs/ROADMAP.md 261"
+check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails when rig.selfdev.json and durig.config.json disagree; the LIVE installed-vs-loaded half is unimplemented — docs/ROADMAP.md 261; the STORE-pin half (Diagnose step 4) has no gate at all — docs/ROADMAP.md 299"
+evidence_addendum: "Diagnose step 4 and Do step 2b were run 2026-11-06 on Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1 (no hostname recorded, D205): `up rig.selfdev.json --refresh --dry-run` printed the `wouldRefresh[].changes.model` drift every check missed; `up … --refresh` returned `created: []` with 12 seats refreshed and the follow-up dry-run printed `writes: 0` with every `changes` empty; `tools/latency-budget.mjs` §3 counted 1,057 + 450 + 7 dead-pointer generations inside 16,166 of 64,401 errored generations (25.1%, 65.9 h busy). `last_verified` stays 2026-10-29 because the `:1234` / `ps` server-side steps were NOT re-run — that server has been down since 2026-10-29 with both GPUs full, and the rig now runs the metered `verifier` arm (D214, ROADMAP 297)."
 ---
 
 # A seat has no shell on this host, and a model pointer can be dead while every check passes
@@ -25,6 +26,10 @@ never compared* — and both produce a confident, wrong green.
   have loaded, while `cli.mjs check` reports nothing.
 - You are asked whether seat **hygiene** (worktrees, branches, merges to `main`) is acceptable, and the only
   evidence anyone has is prose.
+- A woken seat fails with **`no_model`** and its task record reads `Model <provider>/<id> is not available` **even though
+  `rig.selfdev.json` and `durig.config.json` agree and `cli.mjs check` prints nothing about it** — the dead pointer is the
+  store's own per-conversation pin, not the rig file. Measured 2026-11-06: Diagnose step 4 found it in ~1 s after a whole
+  broker pass (7 seats woken, every turn lost) and two config-side readings had both come back clean. ROADMAP **299**.
 
 ## Impact
 
@@ -104,6 +109,31 @@ line names `…-Q6_K.gguf --ctx-size 8192 --parallel 4`; the demo prints
 `LOCAL MODEL POINTER PASS (providers=local=iq3_s, verifier=mistralai/ministral-3-14b-reasoning, pinned seats=12)`.
 **A model key never identifies the bytes** — the `ps` line is the only surface naming variant + ctx + parallel.
 
+```bash
+# 4. The THIRD surface: what the store believes each seat's model is. The two config surfaces agreeing does NOT
+#    mean the seats will run — each conversation carries its own `pi.agent` pin, and a stale one fails at runtime
+#    as `no_model` while every check stays green.
+DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh --dry-run > .spike/pindrift.json 2>&1
+python3 -c "
+import json
+lines=[l for l in open('.spike/pindrift.json') if not l.startswith('{\"spend')]
+d=json.loads(''.join(lines))
+drift=[(w['seat'],w.get('changes')) for w in d.get('wouldRefresh',[]) if w.get('changes')]
+print('writes:',d.get('writes'),'seats with drift:',len(drift))
+[print('  ',s,json.dumps(c)) for s,c in drift]"      # the field is `wouldRefresh[].changes.model = {from,to}`; the prose never says "drift"
+node -e 'const{DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log("task records saying a model is unavailable:", db.prepare("select count(*) c from tasks where record like ?").get("%is not available%").c)'
+DURIG_DB=./selfdev.sqlite node cli.mjs status | python3 -c "import json,sys;d=json.load(sys.stdin);print([(a.get('seat') or a.get('name'), a.get('reason') or a.get('attention')) for a in d.get('attention',[])][:12])"   # `no_model` / `last_run_failed` surface HERE, not in check
+```
+
+Measured 2026-11-06 (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1 — no hostname recorded,
+D205): the dry-run printed `changes.model = {from:"local/iq3_s", to:"local/qwen3.8-flash-next-iq3_s"}` for `pm`, `impl`,
+`lead` and `{from:"verifier/mistralai/ministral-3-14b-reasoning", to:"verifier/openai/gpt-oss-120b"}` for `qa`, `qa2`,
+while `cli.mjs check rig.selfdev.json` named nothing and `demo/local-model-pointer.test.mjs` exited 0. **1,022** task
+records read `Model local/iq3_s is not available` at that moment; `tools/latency-budget.mjs` §3 prices the class across
+the store span: `local/iq3_s` n=**1,057**, `verifier/mistralai/ministral-3-14b-reasoning` n=**450**,
+`deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017` n=7 — inside **16,166 of 64,401 (25.1%)** errored generations holding
+65.9 h of busy time.
+
 ## Do
 
 1. **Missing shell (ROADMAP 217, owner `devtools`).** Do not hand-patch `src/seattools.mjs`: the current choice
@@ -118,6 +148,15 @@ line names `…-Q6_K.gguf --ctx-size 8192 --parallel 4`; the demo prints
    served window makes the request unsatisfiable, **259**) — then re-run `demo/local-model-pointer.test.mjs` and
    the `ps` check. Loading/unloading or re-windowing a model is the operator's grant and is procedure:
    `docs/runbooks/verifier-model-server.md`.
+2b. **Dead pointer in the STORE** (the third surface — Diagnose step 4, ROADMAP **299**). When the rig file and the config
+   agree but woken seats die `no_model`, the fix is not an edit; it is **`up --refresh`**, which re-pins every seat from
+   `rig.selfdev.json`. **Stop the broker first** — `cli.mjs up` refuses while a resident broker drives the store
+   (`cli.mjs:202`: "Stop it with `serve --stop`, or route the request through the spool") because `up` is a second writer.
+   **The verb is not free: it writes a `pi.reset` boundary per seat** (`model-change reset: this seat is reconfigured to
+   …; your context was reset so you do not re-carry it`), so refresh **before** a pass — never between delivering an
+   intent and the turn that was supposed to act on it (**300**). Closing evidence is the idempotence read, not the exit
+   code: verified 2026-11-06, `up … --refresh` returned `created: []` with all 12 seats refreshed and the next
+   `--dry-run` printed `writes: 0` with every `wouldRefresh[].changes` empty.
 3. **A "hygiene" claim.** Refuse it unless it names a command. `cli.mjs worktree audit` is a seed, not a verdict
    (`reapable: 0` is not a verdict — `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:244`), and the rehearsal instrument
    256 asks for (`tools/seat-hygiene-audit.mjs`) **does not exist**. Before any `up`/`worktree`/`run`, run

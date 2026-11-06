@@ -9405,3 +9405,75 @@ rig's one red demo is red **because the arm succeeded**; the probe for the fix i
 persisted anywhere in the tree), and it probes the metered endpoint with `/chat/completions` (`:270`, `:308`) with **no
 ceiling and no ledger row** — after a completed `verifier: completes (finish=stop, prompt=59 tok, completion=44 tok)` the
 store ledger still did not exist. Unaccounted spend also reads as *less* spend to the caps that consult that ledger.
+
+## D215 — The operator's "Accepted" wake-and-measure pass ran: the empty queue was a **runtime** failure (dead store pins), not a routing failure; and an idle wake loop is now a paid, context-destroying loop (delegate acting, 2026-11-06, Linux Fedora Linux 45 kernel `7.2.15-300.fc45.x86_64` node v24.22.1 git 2.56.0, trunk `fca4e980` at session start)
+
+**What the operator asked.** D214(b): **"Wake-and-measure: Accepted"** — run a bounded broker pass with
+`--yes-pm-wakes`, dispatch real rows, and publish per-role **wake → claim** latency plus the
+`tools/latency-budget.mjs` split, so D213's "how long should a wake take" stops being a guess. Routing and decomposition
+stay with `lead`; the delegate drives the loop and measures.
+
+**What the pass found first — and it was not the queue.** The first bounded pass (pid 398532, 00:56–01:04 UTC) woke
+`lead scribe devtools auditor security qa2 architect` and lost **every** seat to `last_run_failed: no_model`, whose task
+record reads `Model local/iq3_s is not available`; **1,022** task rows carried that string. The rig file and
+`durig.config.json` named real models, `node cli.mjs check rig.selfdev.json` reported nothing about it, and
+`demo/local-model-pointer.test.mjs` exited 0. The dead pointer was the **store's** per-conversation `pi.agent` revision —
+a third surface nobody had been comparing. `up rig.selfdev.json --refresh --dry-run` had been printing the drift the whole
+time as `wouldRefresh[].changes.model = {from,to}` (`pm`/`impl`/`lead`: `local/iq3_s` → `local/qwen3.8-flash-next-iq3_s`;
+`qa`/`qa2`: `verifier/mistralai/ministral-3-14b-reasoning` → `verifier/openai/gpt-oss-120b`) — the same field shape D178
+recorded for `cwd`, and the same trap: the prose never says "drift". The delegate stopped the broker (`--stop` →
+`pid 398532 proven gone`), because `cli.mjs up` refuses a second writer (`cli.mjs:202`), and ran `up … --refresh`:
+`created: []` with all 12 seats refreshed, and the next `--dry-run` printed `writes: 0` with every
+`wouldRefresh[].changes` empty. **Recorded so it is not re-derived:** the fix verb for a dead store pin is `up --refresh`,
+its evidence is the idempotence read, and its cost is a `pi.reset` boundary per seat.
+
+**The ruling this buys, measured.** Twenty minutes after the refresh the same loop produced what three briefs had not:
+max queue id **#5156 → #5174**, `queued 0 → 11`, `claimed 0 → 8`, `deferred 183 → 174`, `done 3816 → 3825`, with seats
+cutting rows to each other (`lead→pm`, `pm→auditor`, `security→devtools`, `architect→lead`, `impl→pm`) and those rows
+naming real defects (`#5158` `peek_queue` truncates the tail; `#5162` the worktree-removal refusal; `#5163` root cause of
+the false "NO SHELL" reading; `#5174` a 26-row gate census on `impl`). **`tools/latency-budget.mjs` §1 (3.1 s, read-only,
+run 02:03Z):** `WAIT 72.8% / WORK 12.3% / HELD 5.7%` of item latency over 5,170 rows, and the per-day curve's claim-wait
+p50 is **0.0m on 2026-11-06** (7 done) against **230.0m on 2026-11-05** and **1,232.4m on 2026-11-03**. So ROADMAP **292**'s
+question — is the 183-row deferral wave idle capacity or a logjam — has an answer for this rig: **the binding constraint
+was a runtime pointer, and claim latency collapses to seconds the moment seats can run.** Do not spend capacity money
+before that read is cheap (299).
+
+**The new hazard this pass exposed (ROADMAP 300).** On the empty stretches of the same pass the loop ground a
+degeneration storm: durable delta since entry 290500 = `pi.user 366` (396 records carry the driver's "nothing claimable"
+text), `pi.assistant 331`, **`pi.reset 1,406`**, `pi.compaction 79`; broker stderr escalations
+`scribe:degeneration 592 / devtools 481 / pm 458 / auditor 69 / impl 58 / lead 30` (+169 `repeated_failure`); the run block
+reports `passes=1245 escalated=1394 stoppedBy="max-duration"`. On the metered arm the 30-minute window is
+**249 calls, $0.08565**, 1,771,716 prompt tokens against 118,229 completion tokens, 53 calls with ≤5 completion tokens —
+≈ **$0.17/h for nothing**, and `latency-budget.mjs` §2 shows the same shape lifetime-wide (186 generations ≥10 min hold
+**517.8 h = 64.1%** of generation busy time; the eight longest are one per seat at 2,115–2,126 min with `events=2–3`).
+The decision the delegate drew and the reason: **the guard's answer to "nothing to do" is a context reset, and a reset
+erases the operator's own ruling from the seat that has to act on it** — `lead` took 31 resets, which is how a "Granted /
+Accepted" instruction can be delivered (`INTENT delivered=1`) and still never be executed. Therefore:
+**backoff before capacity.** `DURIG_MAX_CONCURRENT_SEATS` measured `durig.config.json=undefined`,
+`durig.config.default.json="1"`, so any rise in concurrency (265/**297**) multiplies the storm; the cheap order is
+300's backoff (the driver already computes `SKIP reason=no-work`, so it is a policy change, not a new sensor), then the
+capacity pairing.
+
+**What the delegate did not do.** No claiming, completing, deferring or routing (the new rows are all seat-authored:
+`from=lead/pm/security/architect/impl/devtools`). No slot move on the verifier (297 still owes three priced legs before
+the 24,576/3,000 context/max-tokens pair changes; one maximal call at the vendor's 131,072 ctx costs $4.85, over the $4
+store cap). No credential rotation (295 exposed values in terminal output only — operator's call). No hostname scrub
+(D214 recommendation stands, awaiting selection). No rename row (D214 defers naming until research question 7).
+
+**Registered as a consequence:** **299** (a store pin can be dead at runtime with every check green — the check rule that
+compares the latest `pi.agent` revision against `rig.selfdev.json`, and the 1-second per-seat pin print), **300** (the
+idle-wake degeneration storm, with the acceptance test "re-run the same bounded pass on `queued 0` and require escalations
+≤ seats, not 1,394"), **301** (the rig's own `next:` advice names instruments that do not exist —
+`tools/store-inspect.mjs`, `tools/broker-spool-audit.mjs`: `test -e` NO, `git log --all` never existed; the emitter of
+that text is **unidentified** and this row says so rather than naming a file it has not located), **302** (seats spend
+11× more tool calls on `powershell` than `bash` on a Linux host — 20,296 calls / 10.77% errors / 40.0 h busy vs 1,824 /
+7.35% / 2.5 h — which is the measurement 217's remaining half asks for).
+
+**Cost of the session so far, from the ledger not from guesswork:** the store ledger `selfdev.sqlite.spend.jsonl` **now
+exists**, correcting D214's "still does not exist": **365 calls, $0.13195** on 2026-11-06 at 02:20Z, and **411 calls,
+$0.15100** at the final read (03:45Z) — so a 30-minute idle wake pass costs about nine cents and the whole
+wake-and-measure effort cost fifteen (max single call $0.000879) — all of it the `verifier` arm (`openai/gpt-oss-120b`, priced 2026-11-06 at $0.037 in /
+$0.17 out per Mtok). Delegate-side probes remain separately ledgered in `.spike/delegate-20261106/spend-arm-*.jsonl`
+(~$0.00003 for the capability probes, under `DURIG_PROBE_CEILING_USD=0.15`). Wall clock: the two bounded passes are 20–25
+minutes each and dominate the session; the diagnosis that mattered took **one** dry-run read. The speed-up is recorded in
+`docs/SELFDEV.md` §session F: when the queue reads empty, read `wouldRefresh[].changes` before briefing anybody.

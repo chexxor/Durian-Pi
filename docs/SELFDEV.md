@@ -2210,3 +2210,56 @@ the prefix forever.
     `deepinfra-catalog` red was "only for a missing `DEEPINFRA_API_KEY`"; the demo's own output named the roster
     exemption count. When you close a blocker, rewrite the sentence that *described* it, not only the sentence that
     *listed* it — otherwise the next session re-arms the wrong instrument (here: hunting a key that was never the cause).
+
+## Operational pitfalls and speed-ups (delegate session F, 2026-11-06 — the operator's "Accepted" wake-and-measure pass, D214; every number measured in this session: Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+1. **`no_model` is a *store* failure, not a config failure — and every check is green while it happens.** A bounded pass
+   woke 7 seats and lost all of them (`last_run_failed: no_model`, task text `Model local/iq3_s is not available`, 1,022
+   task rows carrying it). `cli.mjs check rig.selfdev.json` said nothing; `demo/local-model-pointer.test.mjs` passed; the
+   rig file and `durig.config.json` both named real models. The dead pointer is the **conversation's** `pi.agent`
+   revision, not `rig.selfdev.json`. Diagnose in 1 s with `up rig.selfdev.json --refresh --dry-run` and read
+   `wouldRefresh[].changes.model = {from,to}` (the same field D178 recorded for `cwd` — the prose never says "drift").
+   Fix verb: `up … --refresh` (all 12 seats, `ok:true`, and afterwards `writes: 0` with every `changes` empty). **Cost of
+   the fix: it writes a `pi.reset` per seat** ("model-change reset … your context was reset"), so refresh *before* a pass,
+   never mid-pass. Registered as **299**; the lifetime price is in `tools/latency-budget.mjs` §3 (1,057 + 450 + 7 dead-
+   pointer generations; 16,166 of 64,401 generations = 25.1% errored, holding 65.9 h).
+2. **Fix the pins and the "logjam" evaporates — the empty queue was a runtime symptom, not a routing failure.** Before
+   the refresh: max id #5156, `queued 0`, and three briefs to `lead` with no cut. Twenty minutes after `up --refresh`:
+   max id **#5174**, `queued 11`, `claimed 8`, `done` 3816 → 3825, with seats cutting rows to each other (`pm→auditor`,
+   `security→devtools`, `architect→lead`, `impl→pm`). This is ROADMAP **292**'s answer, measured:
+   `tools/latency-budget.mjs` §1 gives `WAIT 72.8% / WORK 12.3% / HELD 5.7%`, and the per-day curve shows claim-wait p50
+   **0.0m on 2026-11-06** (7 done) against 230.0m on 11-05 and 1,232.4m on 11-03. **Speed-up: when the queue reads empty,
+   read `wouldRefresh[].changes` before briefing anyone.**
+3. **An idle wake loop is now a paid, destructive loop.** On the same pass, 30 minutes of an empty stretch produced
+   `pi.user 366`, `pi.assistant 331`, **`pi.reset 1,406`**, `pi.compaction 79`, and broker-stderr escalations
+   `scribe:degeneration 592 / devtools 481 / pm 458 / auditor 69 / impl 58 / lead 30`; the run block reports
+   `passes=1245 escalated=1394 stoppedBy="max-duration"`. On the metered arm that window is **249 calls / $0.08565**
+   (1,771,716 prompt tokens vs 118,229 completion, 53 calls with ≤5 completion tokens ≈ **$0.17/h of nothing**). Worse
+   than the money: the guard answers "nothing to do" with a **context reset**, so `node intent.mjs lead --body-file …`
+   can be wiped from the seat that has to act on it (lead took 31 resets). Registered as **300**, with the discriminator
+   already present in the driver log (`SKIP reason=no-work`).
+4. **Every reset record has empty text.** All 1,406 group as one blank string, so a guard reset is
+   indistinguishable from a model-change reset after the fact. If you are measuring resets, say which kind you counted and
+   stamp it in the record — D159's "state the mechanism you counted".
+5. **`cli.mjs log <seat>` can hang to timeout while the broker is mid-turn** — `timeout 120 node cli.mjs log lead 20`
+   exited **124** with no output. Reads that open the store are not immune to the broker. Cheap alternatives while a pass
+   runs: `cli.mjs status` (a viewer, D11), the broker log, and the durable directly.
+6. **Do not hand-write SQL against this store on memory of its schema.** Measured the hard way: `kind` and `status`
+   columns hold **JSON-encoded** values (`'"pi.agent"'`, not `pi.agent`); `entries` has no `kind`/`at` column (they live
+   inside `record`); there is **no `items` and no `seats` table** — the queue is the `durig.queue` document and the roster
+   is `durig.seats` + per-conversation `pi.agent` revisions, in `document_revisions`. Run the instrument first:
+   `tools/latency-budget.mjs` (3.1 s, read-only) already computes item latency, machine time, provider waste, context/
+   prefill and tool-time percentiles.
+7. **`.spike/serve.out` / `.spike/serve.err` accumulate across runs.** One `serve.out` held **6 run blocks**; a regex over
+   the whole file quoted `passes=248 escalated=171` from an old run while the last block said `passes=1245 escalated=1394`.
+   Parse the **last** block.
+8. **The rig's `next:` advice can name instruments that do not exist** (`tools/store-inspect.mjs`,
+   `tools/broker-spool-audit.mjs`) — `test -e` → NO, `git log --all` → never existed. Registered as **301**. Same class as
+   `tools/intent.mjs` (the real file is `intent.mjs` at the repo root, added in `c43e277c`, and the correct form is printed
+   by `cli.mjs:202`).
+9. **Seats still spend more tool calls on a shell that cannot spawn here.** `powershell n=20296 err=2186 (10.77%)
+   busy=40.0h` vs `bash n=1824 err=134 (7.35%) busy=2.5h` (`latency-budget.mjs` §5, store span 605.6 h) while the preflight
+   confirms `/usr/bin/bash` CAN start. Registered as **302**; the remaining half is the seat INSTRUCTION text (217).
+10. **Capacity before backoff would multiply the churn.** `DURIG_MAX_CONCURRENT_SEATS` measured
+    `durig.config.json=undefined`, `durig.config.default.json="1"`. Any answer to 265/**297** that raises concurrency or
+    verifier context raises the 300 storm too, so 300's backoff is the cheap prerequisite — say that in the same row.

@@ -6,6 +6,7 @@ precondition: "broker-stopped"
 last_verified: unverified
 verified_by: delegate
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
+evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303."
 check_rule: null
 ---
 # Broker down or stalled
@@ -61,6 +62,19 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   Concurrent store openers are the suspect class — a test/`serve --max-duration` broker from an item
   worktree must not open the shared selfdev store. Same recovery as case (b): terminate (no genlock),
   `resume`, restart.
+- **Third signature — the deadline linger: the read path is dark while the store is healthy** (2026-11-06, ROADMAP 303).
+  A broker started with `--max-duration` reaches its deadline, stops logging `PASS`, and **stays alive** — here for 75
+  minutes with a **fresh** `heartbeatAt` (03:35:55, 03:42:35) and a **frozen** `lastPassAt` (02:28:23), no `genlock.*`, and
+  no run block in `serve.out` for that run. Everything that routes **through** the broker then fails: `cli.mjs status` and
+  `cli.mjs queue` return nothing and time out, and only the bounded run shows the body —
+  `{"ok":false,"error":"read health: timed out awaiting the broker's result"}`. **Do not conclude the store is broken.**
+  The discriminator is a read that bypasses the broker: a direct read-only open answered `select count(*) from entries` →
+  150,347 in **111 ms**, and `tools/latency-budget.mjs` (which opens the store itself) returned full numbers throughout.
+  `serve --stop` does **not** fix it: `"stopped": false … "did not exit within the stop grace; no forced kill"`. With no
+  `genlock` held, `kill <pid>` is the remedy (Linux; the runbook's `taskkill /F` is the Windows half) and the broker then
+  logs `EXIT reason=deadline passes=-`. Suspect class: `SKIP <seat> reason=pending conv=…` lines just before it goes quiet
+  — a run with in-flight seat conversations drains instead of exiting, while the prior run with none exited cleanly
+  (`reason=max-duration passes=1245`). **Never write to the store to fix this signature.**
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
   old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false.
   **THE DISCRIMINATOR — idle, not wedged:** a FRESH `heartbeatAt` with a FROZEN `lastPassAt` means the
