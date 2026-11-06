@@ -85,12 +85,12 @@ node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node 
 ```
 
 **Push state:** `origin/main` = **`4620cecf`** — session L's five commits plus its D224 batch were pushed this session
-(`4c3fd7cc..4620cecf`), and the session-G grant is **spent**. Two local-only commits from this session need a **fresh
-per-batch operator grant** (D218), or `DURIAN_PI_ALLOW_PUSH=1` at launch: **`7eaaf131`** (the credential sweep, options +
-follow-up prompt, rows 334–342, D225, pitfalls 55–59, session-L pointer archived verbatim) and **`474f94f5`** (M12
-resolver-not-value, the five per-project review deltas, the D225 HEAD correction); a third commit adds row **343**
-(`vendor-pins --freshness` prints the drift direction inverted). `git rev-list --count refs/remotes/origin/main..main` is
-the check.
+(`4c3fd7cc..4620cecf`), and the session-G grant is **spent**. **Four** local-only commits need a **fresh per-batch operator
+grant** (D218), or `DURIAN_PI_ALLOW_PUSH=1` at launch: **`7eaaf131`** (the credential sweep, options + follow-up prompt,
+rows 334–342, D225, pitfalls 55–59, the session-L pointer archived verbatim), **`474f94f5`** (M12 resolver-not-value, the
+five per-project review deltas, the D225 HEAD correction), **`f5be46ca`** (row 343, `vendor-pins --freshness` prints the
+drift direction inverted), **`e4c6f31d`** (pitfall 60 + the D225 spend correction). `git rev-list --count
+refs/remotes/origin/main..main` → **4** at this close, and it is the check.
 
 **Blocker:**
 1. **311 still gates every further pass** — cleanup refuses with the unreadable `undefined/anthropic-ai-sdk…` string
