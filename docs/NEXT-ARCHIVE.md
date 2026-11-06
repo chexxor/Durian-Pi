@@ -12309,3 +12309,16 @@ previous pointer and in the broker's own guidance text throws `MODULE_NOT_FOUND`
 - **Host facts, hostname-free:** Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Two GPUs
   remain full (RTX A4000 14637/16376 MiB, RTX 3090 23098/24576 MiB), which is why the local `:1234` verifier stayed down
   and the metered arm is the arm that runs.
+
+## Superseded pointer — 2026-11-06T03:5xZ (delegate session F) — moved VERBATIM from `docs/NEXT.md`
+
+**Last update:** 2026-11-06T03:5xZ (delegate session **F** closes — the operator-granted wake-and-measure pass ran, and it
+**reversed the top blocker**. The empty queue was not a routing logjam: **11 of 12 seats were dying at wake with
+`no_model`** because per-conversation model pointers in `selfdev.sqlite` still named retired models while every check was
+green (ROADMAP **299**). `up --refresh` fixed the pins and the queue moved **#5156 → #5205**, **49 new rows**, **25
+`queued`**, 8 `claimed`, claim-wait **p50 = 0.0 m** on 2026-11-06 against **230 m** on 2026-11-05 and **1,232 m** on
+2026-11-03. Recorded as **`docs/DECISIONS.md` D215**, registered as **`docs/ROADMAP.md` 299–309**. The pass also found the
+expensive thing: on an **empty** queue the wake loop grinds **1,245 passes / 1,394 guard escalations / ~1,400 `pi.reset`
+records / 249 paid calls / $0.086 in 30 minutes**, and a reset erases a just-delivered operator ruling (**300**). The
+topology research **came back and is verified** — see *Research* below. The superseded session-E pointer moved **VERBATIM**
+to `docs/NEXT-ARCHIVE.md`.)

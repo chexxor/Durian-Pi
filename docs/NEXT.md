@@ -1,15 +1,14 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-06T03:5xZ (delegate session **F** closes — the operator-granted wake-and-measure pass ran, and it
-**reversed the top blocker**. The empty queue was not a routing logjam: **11 of 12 seats were dying at wake with
-`no_model`** because per-conversation model pointers in `selfdev.sqlite` still named retired models while every check was
-green (ROADMAP **299**). `up --refresh` fixed the pins and the queue moved **#5156 → #5205**, **49 new rows**, **25
-`queued`**, 8 `claimed`, claim-wait **p50 = 0.0 m** on 2026-11-06 against **230 m** on 2026-11-05 and **1,232 m** on
-2026-11-03. Recorded as **`docs/DECISIONS.md` D215**, registered as **`docs/ROADMAP.md` 299–309**. The pass also found the
-expensive thing: on an **empty** queue the wake loop grinds **1,245 passes / 1,394 guard escalations / ~1,400 `pi.reset`
-records / 249 paid calls / $0.086 in 30 minutes**, and a reset erases a just-delivered operator ruling (**300**). The
-topology research **came back and is verified** — see *Research* below. The superseded session-E pointer moved **VERBATIM**
-to `docs/NEXT-ARCHIVE.md`.)
+**Last update:** 2026-11-06T10:0xZ (delegate session **H** closes — the operator's four answers executed, the `local`
+family moved to the second strata box and **back to loopback** when the rig's own provider gate refused to start
+(**325**), three bounded broker passes ran, and the team decomposed the delegate's fifth `lead` brief into **20 new rows**
+(`#5224`–`#5243`) while **cancelling two duplicates** the delegate had flagged. Registered **323–328**; signed **D219**
+(the answers, the passes, 303 now 5/5) and **D220** (the strata box, the price-key trap, the $0.50 verifier-family rule).
+New measured defect: a **stop request survives its broker and steals the next run** — a `--max-duration 600` pass ended at
+`reason=stop passes=15`, 66 s in (**327**). Verifier-family spend is now **$0.27019 = 54.0 %** of the operator's $0.50
+trigger; worktrees **26 → 32**. The session-E and session-F pointers are VERBATIM in `docs/NEXT-ARCHIVE.md`.)
+
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
@@ -17,9 +16,16 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead`'s owners work the rows cut from ROADMAP 294–326; the operator holds one live decision — the second
-strata box.** Queue at max id **`#5223`**: `38 queued, 9 claimed, 347 held, 174 deferred`; verifier-family spend
-**$0.22538 of the operator's $0.50 trigger (45.1%)**; worktrees 26.
+**Current item: `lead`'s owners work the rows cut from ROADMAP 294–**328**; the operator holds one live decision — the
+second strata box.** Queue at max id **`#5243`**: `38 queued, 13 claimed, 355 held, 173 deferred, 3848 done`; verifier-family
+spend **$0.27019 of the operator's $0.50 trigger (54.0 %)**; worktrees **32** (`seat-root 8, reapable 15, live 7, locked 2`).
+**Do not run another pass before 311 lands** — each pass adds worktrees (26 → 32 in three passes) and the cleanup refusal is
+unchanged. **Before any start, `ls selfdev.sqlite.broker.stop`** — a stale stop file silently cut the last 600 s pass to 15
+passes of work (**327**). Two queue rows the delegate already executed are cancelled by `lead` (`#5224`, `#5225`): 297's
+priced legs and 319's scope answer. New rows this session: **323** (`CONFIG_KEYS` lacks the LOCAL price keys), **324**
+(the $0.50 family threshold has no enforcer, and the switch makes the rig single-model), **325** (the LAN box vs the 20 s
+bound), **326** (per-box keys; a rotation darkens the rig invisibly), **327** (stale stop request), **328** (`passes=-` makes
+a gutted run indistinguishable from a wedged one).
 
 **The live operator decision (325).** The rig's qwen seats were pointed at the second strata box and the rig's own gate
 refused to start: `BLOCK provider-local-completion-failed: local: /chat/completions failed — timeout after 20s` →
@@ -47,20 +53,28 @@ invisibly; keys are per box).
 
 ```bash
 cd ~/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node cli.mjs status          # empty/timeout + fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
-node .spike/delegate-20261106/verifier-spend-tripwire.mjs   # family spend vs the operator's $0.50 trigger (free)
+node .spike/delegate-20261106/verifier-spend-tripwire.mjs   # family spend vs the operator's $0.50 trigger (free) — 54.0% at close
+ls selfdev.sqlite.broker.stop                               # 327 guard: a stale stop file silently steals the next pass
+git worktree list | wc -l                                   # 311 leak meter: 17 at day start, 32 at this close
+DURIG_DB=./selfdev.sqlite node cli.mjs status               # empty/timeout + fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
 node .spike/delegate-20261106/strata-endpoint-check.mjs     # is the LAN box inside the 20 s preflight bound yet? (free)
-node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --dry-run   # findings only; NEVER paste its output -- 295 prints credential VALUES
-node intent.mjs lead --body-file .spike/delegate-20261106/brief-lead-5.md    # 297/319 done, 323-326 to cut
-node scripts/test.mjs --area docs && node scripts/test.mjs --area check
+node demo/deepinfra-catalog.test.mjs                        # "12 rig seat models resolve ... local=7, verifier=5" = the rig is lit
+node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node scripts/test.mjs --area guard
+# then, only after 311 lands and the stop file is absent:
+# node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --dry-run   # NEVER paste its output -- 295 prints credential VALUES
+# node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
 ```
 
-**Blocker:** (1) The strata-box capacity call above — operator's, and it decides whether the author family runs at
-second-GPU speed. (2) **The preflight prints credential VALUES (295)**: the current `DURIG_LOCAL_API_KEY`/
-`DURIG_VERIFIER_API_KEY` values are in a durable transcript; cut 295 before further preflights, rotation is the operator's.
-(3) `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**) — a workspace move that skips it restarts the caps
-from zero. (4) The verifier switch at $0.50 is a ruling with a consequence not yet signed: single-model + no cross-family
-verifier (**324**).
+
+
+**Blocker:** (1) The strata-box capacity call (**325**) — operator's, and it decides whether the author family runs at
+second-GPU speed; the interim is loopback. (2) **311 gates every further pass** — worktrees grew 26 → 32 and cleanup still
+refuses. (3) **The preflight prints credential VALUES (295)**: the current `DURIG_LOCAL_API_KEY`/`DURIG_VERIFIER_API_KEY`
+values are in a durable transcript; cut 295 before further preflights, rotation is the operator's. (4)
+`selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**) — a workspace move that skips it restarts the caps from
+zero. (5) The $0.50 verifier-family switch is a ruling with an unsigned consequence: single-model + no cross-family verifier
+(**324**); headroom at close is $0.23 and one 600 s pass costs ~$0.007–$0.035. (6) The stop-file writer in **327** is
+unresolved — the probe is in the row.
 
 ## State (measured 2026-11-06T03:4xZ, same host signature as above)
 

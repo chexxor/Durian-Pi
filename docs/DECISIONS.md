@@ -9547,3 +9547,43 @@ minutes each and dominate the session; the diagnosis that mattered took **one** 
 **Also found while arming it: the price-key asymmetry (**323**).** A non-loopback URL makes the family `metered`, and the refusal text says to declare `DURIG_LOCAL_PRICE_USD_IN/OUT`; putting those keys in `durig.config.json` makes **every CLI verb** exit `unknown config-file key(s) …` because `CONFIG_KEYS` carries the `VERIFIER` price keys and not the `LOCAL` ones. The price must live in the environment, which means **a start without `--env-file` registers no model row and darkens all seven author seats**. That is the sharpest new footgun this session found.
 
 **Standing ruling (operator, same message): "if you spend any more than 0.50 on verifiers, switch them to use the same local model that others are using."** Recorded as a **family** threshold, and today **nothing in the rig can enforce a family threshold** — `DURIG_SPEND_CAP_CALL/RUN/STORE_USD` stop calls, not families (**324**). Current state, read from the live ledger: **572 calls, $0.22538, 100% of it the verifier family — 45.1% of the way to the trigger, ~696 more calls of the current mean size.** Two consequences stated so the ruling is not executed blind: (1) the switch collapses the rig to **one model family**, which is exactly what makes `cli.mjs check` fire `single-model-rig` again; (2) it removes **D137**'s cross-family verifier, so the author seats would be graded by the same family that wrote them. The delegate's recommendation: land **321**'s retry first — 30% of that $0.22538 bought ≤5-token answers, so a third of the distance to the trigger is provider failure, not verification — and let the operator reconfirm the switch with the distance-to-trigger number in hand.
+
+## D221 — passes are gated on 311, the delegate is the family-spend tripwire, and the `local` family stays on loopback pending 325 (2026-11-06T10:0xZ; host signature: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**Why a separate decision when D219/D220 exist.** Three rulings changed shape only *after* the passes ran, and the next
+session needs them stated once, with numbers: how many passes are safe to run, who enforces the $0.50 family rule, and
+which endpoint the author seats use tonight.
+
+**1. No further broker pass until ROADMAP 311 lands.** The operator approved one pass (D219 §4). Three passes then ran,
+and the worktree count went **26 → 31 → 32** while `cli.mjs worktree audit` moved `reapable 14 → 15`: cleanup still
+refuses with `refusing to remove worktree /home/chexxor/Git/Durian-Pi/item-5216: junction/symlink detected at
+undefined/anthropic-ai-sdk` (verbatim, extracted with `grep -oE`, not `cut` — see session-H pitfall 31). A pass is
+therefore not free: it buys queue progress at the price of an unreaped worktree per completed item. **Ruling: run the
+next pass only after 311's `reap` verb and guard fix land, or with an explicit operator override.** Evidence in
+`docs/runbooks/leaked-worktrees.md`; the count is a clock-in/clock-out meter.
+
+**2. The delegate is the $0.50 verifier-family tripwire until 324 lands.** The standing ruling (*"if you spend any more
+than 0.50 on verifiers, switch them to use the same local model that others are using"*) has **no enforcer in the rig**:
+`DURIG_SPEND_CAP_CALL/RUN/STORE_USD` are per-call/per-run/per-store, not per-family (**324**). Measured at close:
+**669 calls, $0.27019 = 54.0 % of $0.50**, of which **114 calls ≤ 5 completion tokens = $0.07284 = 27.0 %** of that
+family's spend (**321**), and **14 calls with `status:"error"` billed $0.00**. Read
+`node .spike/delegate-20261106/verifier-spend-tripwire.mjs` before any paid pass. When it crosses, the switch is not a
+config tweak: it makes the rig **single-model** and drops D137's cross-family verifier independence — that consequence is
+registered (**324**) and waits for the operator.
+
+**3. Interim: the `local` family runs on loopback, not the LAN box.** The rig's own gate refused the LAN box
+(`START REFUSED: provider-local-completion-failed`, `timeout after 20s`; 129.5 s measured for a 31-token completion on a
+single-slot server at ~8 tok/s, against 1.4 s on loopback). **The gate was not lowered.** Reverting is a dated interim,
+not a rejection of the operator's instruction: the choice between (a) loopback and (b) LAN-with-a-raised
+`DURIG_STREAM_TIMEOUT_MS` is **325** and is the operator's.
+
+**4. Standing delegate discipline from 327/328.** `ls selfdev.sqlite.broker.stop` before every start (a stale stop
+request silently cut a 600 s pass to `reason=stop passes=15`), and never read productivity from
+`EXIT … passes=-` — compare `heartbeatAt`/`lastPassAt` in `selfdev.sqlite.broker.json` with the `PASS nnn` ids in the log.
+
+**Cost of this session's paid work** (ledger reads, not estimates): `selfdev.sqlite.spend.jsonl` **669 calls, $0.27019**
+lifetime for the verifier family; the three passes' delta was **$0.03581** (653→669 calls plus the earlier window);
+delegate-side probe/leg ledgers **7 calls, $0.00187**. Wall-clock shape: the three passes were 960 s, 1,380 s and 66 s of
+machine time; the delegate's own measurement time was dominated by reading the linger, which **328** would make legible.
+Next thing worth spending on: **311's `reap` verb**, because it converts every future pass from leak-plus-work into
+work alone.

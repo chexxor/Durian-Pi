@@ -2336,3 +2336,57 @@ against JSON-encoded `kind`/`status`). Cap the pass at `--max-duration 900` or l
 
 **Fast path for a provider-family change (~40 s, all free, no seat woken):**
 `GET /health` (ctx, `loaded`) → `GET /status` (`busy`/`queued`/`phase`) → **one ≤64-token completion timed against the 20 s bound** (`.spike/delegate-20261106/strata-endpoint-check.mjs`) → `verifier-arm-probe --family=LOCAL` → `broker-serve --dry-run` (findings only) → `up --dry-run` (pins) → only then `--start`. The 129 s dead end this session hit is fully pre-payable.
+
+## Operational pitfalls (2026-11-06, session H — the pass-running session: D219/D220, rows 323–328; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+29. **A stop request survives the broker that received it and steals the next run.** A `--max-duration 600`
+    run printed `STOP-REQUESTED source=file` **66 s in** and `EXIT pid=765129 reason=stop passes=15`. The
+    request file (`<db>.broker.stop`, `src/broker.mjs:2244`) was left behind by the *previous* broker, which had
+    taken `STOP-REQUESTED source=file` at 09:02:20 — 2 m 59 s **after** its own deadline, while already in a **303**
+    linger. Consequence for a delegate: a short run with `reason=stop` is a **stolen** pass, not a quiet queue, and
+    you will spend the next hour debugging an empty queue that was never worked. Cheap guard until **327** lands:
+    `ls selfdev.sqlite.broker.stop` immediately before every start. Registered **327** with the probe that names
+    the writer.
+30. **`EXIT … passes=-` makes a gutted run and a wedged run identical in the log.** Every forced exit on
+    2026-11-06 printed `reason=deadline passes=-`; only cooperative exits print a count (`reason=max-duration
+    passes=1245`, `reason=stop passes=15`). Don't conclude "the rig had nothing to do" from that line — read
+    `selfdev.sqlite.broker.json` (`heartbeatAt` fresh + `lastPassAt` frozen = 303) and count `PASS nnn` ids in
+    `selfdev.sqlite.broker.log`. Registered **328**.
+31. **`cut -c1-160` re-created a phantom citation while I was correcting one.** Piping `tail -4 .spike/serve.err |
+    cut -c1-160` showed `junction/symlink detected at undefined/ant` and I nearly recorded that as the verbatim
+    string — the same error session G pitfall 16 exists to prevent. The verbatim string is
+    `undefined/anthropic-ai-sdk`: `grep -rhoE "junction/symlink detected at [^ ]*" .spike/serve.err selfdev.sqlite.broker.log`
+    → 2 hits, both the long form, **zero** `undefined/ant`. Rule: never `cut`/`head` a log line you are about to
+    quote; extract the exact pattern with `grep -oE`.
+32. **A `spend:catalog-refused` line is not necessarily the rig going dark.** `cli.mjs resume` printed
+    `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,"maxCallExposureUsd":14,…}`.
+    That is a *vendor catalog* row, not a seat pin: `node demo/deepinfra-catalog.test.mjs` prints
+    `12 rig seat models resolve across providers local=7, verifier=5; 15 entries; 1 row(s) refused by the validation
+    layer`, and `documents` holds **0** rows matching `gemini-3.1-pro` (measured, read-only `node:sqlite`). Read the
+    "N rig seat models resolve" line before treating any refusal as an outage — unlike `metered-endpoint-unkeyed`,
+    which *does* darken the verifier family.
+33. **Every pass adds worktrees until 311 lands.** 26 at session start → 31 → 32. `cli.mjs worktree audit` now
+    reports `seat-root 8, reapable 15, live 7, locked 2`, and the cleanup refusals are still
+    `refusing to remove worktree …/item-5216: junction/symlink detected at undefined/anthropic-ai-sdk`. Count
+    `git worktree list | wc -l` at clock-in and clock-out; treat a growing count as the cost of running passes and
+    gate further passes on **311** (operator approved holding the pass until 311 landed, then approved one pass).
+34. **A linger destroys CLI reads.** `selfdev.sqlite.broker.inbox.error/` held **4** destroyed ops
+    (`read health`, `read queue` from the CLI), each `.reason` = `apply failed: SqliteStorage is closed`. So a
+    `status`/`queue` timeout during a linger is not a store problem and the read cannot be replayed — re-read after
+    the broker is gone, and confirm with a direct read-only open rather than trusting the CLI.
+35. **Read the family tripwire before every paid pass.** `node .spike/delegate-20261106/verifier-spend-tripwire.mjs`
+    → 669 calls, **$0.27019 = 54.0 %** of the operator's $0.50 verifier-family rule, of which **114 calls returned
+    ≤ 5 completion tokens** and accounted for **$0.07284 = 27.0 %** of that family's spend (**321**). Nothing in the
+    rig enforces the family threshold (**324**) — the only enforcers are per-call/run/store caps — so the delegate is
+    the tripwire, and the instrument lives in gitignored `.spike/` (**312**).
+
+**Fast path for one bounded pass + its true result (~25 s of delegate time, plus the pass itself):**
+`node .spike/delegate-20261106/verifier-spend-tripwire.mjs` (free, decides whether to run at all) → `ls
+selfdev.sqlite.broker.stop` (327 guard) → `: > .spike/serve.out; : > .spike/serve.err` (the files accumulate) →
+`nohup node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600 >
+.spike/serve.out 2> .spike/serve.err &` → read the **pid from `selfdev.sqlite.broker.json`**, never `pgrep` (it
+matches its own subshell) → at the deadline+2 min compare `heartbeatAt`/`lastPassAt`; if heartbeat fresh and
+`lastPassAt` frozen with no `*lock*` table, `kill <pid>`, then `cli.mjs resume`, then `ls
+selfdev.sqlite.broker.inbox.error | wc -l` to see what the linger destroyed → measure with `cli.mjs queue --json
+--no-body`, `cli.mjs worktree audit`, and the tripwire. Host signature for all of it: Linux, Fedora Linux 45, kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
