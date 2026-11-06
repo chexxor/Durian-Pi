@@ -9587,3 +9587,52 @@ delegate-side probe/leg ledgers **7 calls, $0.00187**. Wall-clock shape: the thr
 machine time; the delegate's own measurement time was dominated by reading the linger, which **328** would make legible.
 Next thing worth spending on: **311's `reap` verb**, because it converts every future pass from leak-plus-work into
 work alone.
+
+## D222 — the operator answers all five open items in one word each, the pass order becomes 311 → 300/313 → capacity, and the broker's dark-read damage gets its own row (2026-11-06T17:5xZ, delegate acting; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+**The operator answered, verbatim, to the five items the delegate put in front of him at D221's close:** "all approved".
+That closes the last held operator decisions except one, and each answer is now a constraint on the team, not a suggestion:
+
+1. **Push grant (D218 per-batch mechanic):** the batch through `ffbd0e1e` is pushed — `git push origin main` → `278f9d09..ffbd0e1e`,
+   and `git rev-list --count refs/remotes/origin/main..main` → `0` immediately after. **The grant is spent**; the one commit made
+   after it (`926a7754`, the `.gitignore` disposition below) is local-only and needs a fresh grant.
+2. **One bounded broker pass, and the operator set its ORDER:** "with 311 first, and then those items" — so the pass order is
+   **ROADMAP 311 (all three revised halves) → 300/313 backoff → the capacity knobs (#5211, #5223, #5258)**, and **321's retry +
+   317's calibration (#5214) before any further verifier spend**. This is why the pass ran with `--max-duration 600` and why the
+   delegate re-states the order in every brief until 311 lands: 311 is what stops each pass from adding worktrees (measured
+   32 → 35 in this one pass, `reapable 15 → 19`, while `worktree audit` still returned `ok: true` — the audit reports the set and
+   no verb consumes it).
+3. **The 325 second-strata-box decision is answered: stay on loopback**, do **not** raise `DURIG_STREAM_TIMEOUT_MS`. So the
+   interim from D221 becomes the standing configuration and **#5230 carries the answer** for the architect; **325** is the row that
+   records why the LAN box was rejected (31 tokens in 129.5 s vs 1.4 s loopback, a single-slot server at ~8 tok/s).
+4. **The $0.50 verifier-family trigger (D220) is answered "approved" on the cost-reduction path, not the enforcement path:** land
+   **321** (one bounded retry with jitter at the provider seam, built on 313's backoff machinery — not a second scheduler), then
+   317's calibration, and only then consider **324** (a rig-side family threshold). Until 324 lands the delegate is the enforcer:
+   measured `669 calls / $0.27019 = 54.0 %` at clock-in and `744 / $0.29660 = 59.3 %` at clock-out, so the one 600 s pass cost
+   **$0.02641** of family spend. Do **not** "fix" the trigger by pointing the verifier at the local model — that makes the rig
+   single-model and forfeits D137's cross-family verification.
+5. **File disposition:** `install.sh` is **ignored, not deleted** (`.gitignore` `/install.sh`, commit `926a7754`) because deleting
+   an untracked file is not git-recoverable; `selfdev.sqlite.spend.jsonl` stays untracked and uncommitted because **310** owns the
+   spend ledger's durability story and committing a live ledger invents a schema nobody ruled.
+
+**D222 also registers two rows from the pass itself, and the second is about this file family.**
+
+- **329 — a broker-routed read has no fast-fail and no named cause.** **303 reproduced 6/6**: the pass's broker (pid `846763`,
+  `--max-duration 600`, deadline `16:57:19Z`) was heartbeating at `17:08:19.675Z` with `lastPassAt` frozen at `16:57:08.821Z` and no
+  `genlock*`; `serve --stop` returned `"stopped": false … did not exit within the stop grace`, and `kill` logged `EXIT …
+  reason=deadline passes=-` (**328**'s blind spot again). The new half is that the client has **two** shapes of the same fault:
+  mid-pass the spooled read is drained and refused (`selfdev.sqlite.broker.inbox.error/0001793983908425-849434-yf8m0j.error.json.reason`
+  = `apply failed: SqliteStorage is closed`, op `read`, `view: "health"`, `from: "cli"`) which is the error text the operator sees
+  on `watch`; post-deadline the inbox is never drained, so the identical verb waits the full `timeoutMs = 120_000`
+  (`src/readclient.mjs:35`) — measured `DURIG_DB=./selfdev.sqlite node cli.mjs watch --once --human` → **0 bytes on both streams for
+  90+ s**, while the same command with the broker down rendered in ~1 s (`exit 0`, 2,971 B). One boolean routes both: `readData`
+  (`src/readclient.mjs:109-110`) trusts `brokerAliveFor()`, which reads `heartbeatAt` only. The row deliberately does **not** authorize
+  a client-side fallback to a direct open: pi-durable cannot open read-only (`src/readclient.mjs:61-72`, the reason `assertStoreReadable`
+  exists, #4955) and a second owner can poison the broker's session (`:3-11`) — that ruling is the architect's, on **#5231**.
+- **330 — an uncommitted doc edit in the shared tree can be reverted, invisibly.** A `docs/SELFDEV.md` entry written at ~16:40Z was
+  gone by 17:2xZ; the file is byte-identical to `HEAD` (231,242 B, mtime `03:58:00Z`, `git status` clean for the path). Also gone: a
+  `##` pitfalls block another lane appended that afternoon, and a docs-slim state `scripts/clockin.mjs` measured at 199,814 B at
+  16:28Z that no commit or live worktree holds. Seats cannot have done it — `src/confine.mjs:228/:238/:283-294` refuse `checkout`,
+  `restore` and `checkout-index` against the shared tree, and `docs/runbooks/tracked-files-missing-on-disk.md` forbids `git restore .`
+  there. **Standing rule from this:** a delegate commits its doc edits **before** any broker verb, and proves presence at clock-out by
+  grepping its own phrase — a clean `git status` for a path is exactly what a lost edit looks like.

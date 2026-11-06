@@ -2380,6 +2380,49 @@ against JSON-encoded `kind`/`status`). Cap the pass at `--max-duration 900` or l
     rig enforces the family threshold (**324**) — the only enforcers are per-call/run/store caps — so the delegate is
     the tripwire, and the instrument lives in gitignored `.spike/` (**312**).
 
+## Operational pitfalls (2026-11-06T17:4xZ, session I — the operator-answers pass: D222, rows 329, 303 now 6/6; host
+signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`
+→ Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+36. **303 is 6/6, and `--stop` is not the remedy.** A `--max-duration 600` broker (pid `846763`, started `16:47:19.116Z`,
+    last `PASS 95` at `16:57:08.821Z`, deadline `16:57:19Z`) was still heartbeating 11 min later (`heartbeatAt
+    17:08:19.675Z`, `lastPassAt` frozen, **no** `selfdev.sqlite.genlock*`). `node tools/broker-serve.mjs --stop` →
+    `"stopped": false … did not exit within the stop grace; no forced kill`; `kill <pid>` → `EXIT pid=846763
+    reason=deadline passes=-` (**328**, again). Discriminator unchanged: `--status` says `up: yes` AND `lastPassAt` is old
+    → scheduler wedged (kill it), not idle (leave it). Proof the store is fine: re-run the same read after the kill —
+    `watch --once --human` rendered in ~1 s, `exit 0`.
+37. **The operator-facing damage has two shapes and the silent one is worse** (registered **329**). Mid-pass, a spooled read
+    IS drained and refused: `ls selfdev.sqlite.broker.inbox.error` → `0001793983908425-849434-yf8m0j.error.json.reason` =
+    `apply failed: SqliteStorage is closed` (op `read`, `view: "health"`, `from: "cli"`) while `PASS 47 ms=7` was logging —
+    that is the `SqliteStorage is closed` line an operator sees over and over, because `watch` (no `--once`) catches each
+    failed poll and re-polls (`cli.mjs:2771-2775`). Inside a post-deadline linger the inbox is **never drained**, so the same
+    verb waits `timeoutMs = 120_000` (`src/readclient.mjs:35`): `DURIG_DB=./selfdev.sqlite node cli.mjs watch --once --human`
+    → **0 bytes on both streams for 90+ s** (exit 124 only because the run was bounded). One boolean routes both shapes:
+    `readData` (`src/readclient.mjs:109-110`) trusts `brokerAliveFor()`, which reads `heartbeatAt` only, so a wedged broker
+    still reads as alive. **Do not paper over it client-side by opening the store** — `readLocal` cannot open read-only
+    (`src/readclient.mjs:61-72`, why `assertStoreReadable` exists, #4955) and the header (`:3-11`) says a second owner
+    contends with the broker's write lock and can poison its session; that ruling is the architect's, on #5231.
+38. **While a broker is up, read the broker's own files — never a second store open.** `node tools/broker-serve.mjs --status`
+    (state, spool depth, provider reachability), `<db>.broker.json`, `<db>.broker.log`,
+    `ls <db>.broker.inbox.error | wc -l`. `tools/latency-budget.mjs` and ad-hoc `node:sqlite` opens do answer during a
+    linger, but they are the second-owner path the read client exists to avoid — fine as a delegate's read-only check, not a
+    pattern for seats or the operator.
+39. **A 10-minute pass with 311 unlanded is a net cleanup loss, and `worktree audit` will not say so.** Worktrees `32 → 35`,
+    `reapable 15 → 19`, while `worktree audit` kept returning `ok: true` — the audit **reports** the reapable set and no verb
+    consumes it (311's third half). So `ok: true` is not evidence the workspace is tidy: compare `reapable` and
+    `git worktree list | wc -l` against seat count + declared roots before and after.
+40. **Price a pass from the family ledger, never from call counts.** Family `669/$0.27019 → 744/$0.29660` = **59.3 %** of the
+    operator's $0.50 rule; the whole 10-minute pass cost **$0.02641** — that is the number to plan a batch with. Verifier
+    `254 → 272` looked like +18 calls but ~20 s of `engine_overloaded` retries inflate the count, and 114 of 744 calls
+    returned ≤ 5 completion tokens = $0.07284 = **24.5 %** of the family (the **321** retry case). Read
+    `verifier.usage.{modelCalls,inputTokens,outputTokens,costUsd}` in `cli.mjs status --json`.
+41. **An uncommitted doc edit in the main workspace can vanish during a pass.** A `docs/SELFDEV.md` entry written at
+    ~16:40Z (tool-reported success) was gone by 17:2xZ: the file matched `HEAD` byte-for-byte (`231,242 B`, mtime
+    `03:58:00Z`), and a whole `##` pitfalls block that another lane had appended earlier the same day was gone with it. Rule
+    (reinforcing D221 pitfall 27): **write the doc, then commit it, then verify it is in the commit — before any broker verb**;
+    `git diff -- <path>` immediately before committing and `git show --stat <sha>` immediately after. Never assume a doc edit
+    survives a pass you have not committed it past.
+
 **Fast path for one bounded pass + its true result (~25 s of delegate time, plus the pass itself):**
 `node .spike/delegate-20261106/verifier-spend-tripwire.mjs` (free, decides whether to run at all) → `ls
 selfdev.sqlite.broker.stop` (327 guard) → `: > .spike/serve.out; : > .spike/serve.err` (the files accumulate) →

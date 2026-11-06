@@ -16,25 +16,27 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
-**Current item: `lead`'s owners work the rows cut from ROADMAP 294–**328**; the operator holds one live decision — the
-second strata box.** Queue at max id **`#5243`**: `38 queued, 13 claimed, 355 held, 173 deferred, 3848 done`; verifier-family
-spend **$0.27019 of the operator's $0.50 trigger (54.0 %)**; worktrees **32** (`seat-root 8, reapable 15, live 7, locked 2`).
-**Do not run another pass before 311 lands** — each pass adds worktrees (26 → 32 in three passes) and the cleanup refusal is
-unchanged. **Before any start, `ls selfdev.sqlite.broker.stop`** — a stale stop file silently cut the last 600 s pass to 15
-passes of work (**327**). Two queue rows the delegate already executed are cancelled by `lead` (`#5224`, `#5225`): 297's
-priced legs and 319's scope answer. New rows this session: **323** (`CONFIG_KEYS` lacks the LOCAL price keys), **324**
-(the $0.50 family threshold has no enforcer, and the switch makes the rig single-model), **325** (the LAN box vs the 20 s
-bound), **326** (per-box keys; a rotation darkens the rig invisibly), **327** (stale stop request), **328** (`passes=-` makes
-a gutted run indistinguishable from a wedged one).
+**Current item: `lead`/`pm` release ROADMAP 311's carriers FIRST (the operator set the pass order at D222: 311 → 300/313 →
+capacity knobs last).** Queue at max id **`#5270`**: `47 queued, 12 claimed, 361 held, 174 deferred, 817 cancelled, 3859 done`;
+verifier-family spend **$0.29660 of the operator's $0.50 trigger (59.3 %)**; worktrees **35** (`seat-root 8, reapable 19, live 7,
+locked 2`); **broker DOWN** (the 16:47Z `--max-duration 600` pass lingered past its 16:57:19Z deadline and was killed at
+17:17:31.518Z — **303** 6/6). **Do not run another pass before 311 lands** — that one pass took worktrees `32 → 35` and
+`reapable 15 → 19` while `worktree audit` returned `ok: true` (the audit reports the reapable set; no verb consumes it), and it
+cost **$0.02641** of family spend. **Before any start, `ls selfdev.sqlite.broker.stop`** (**327**), and `--stop` is not a reliable
+remedy for a linger: `serve --stop` returned `"stopped": false … did not exit within the stop grace` (**303**). New rows this
+session: **329** (a broker-routed read has no fast-fail and no named cause — `watch --once --human` printed **0 bytes for 90+ s**
+against a wedged broker, and mid-pass the same verb's read is dead-lettered as `apply failed: SqliteStorage is closed`) and
+**330** (an uncommitted doc edit in the shared tree was silently reverted mid-session; two lanes' doc work is gone). Routing that
+is already correct, do not re-mint: **#5255** (pm, the pass order), **#5261** (pm, 311 blocks the delegate's passes), **#5256**
+(impl, 311's junction ruling), **#5231**/**#5260** (architect, 303 root cause), **#5258**/**#5259** (impl, 327/328), **#5243**
+(pm, 295 re-registration), **#5214** (qa, 317 calibration), **#5227** (impl, 295 mask — live again).
 
-**The live operator decision (325).** The rig's qwen seats were pointed at the second strata box and the rig's own gate
-refused to start: `BLOCK provider-local-completion-failed: local: /chat/completions failed — timeout after 20s` →
-`START REFUSED: provider-local-completion-failed`. Measured on that box: `/health` ok, `/v1/models` reports the model
-**loaded**, `/status` shows a **single slot** serving another client at **~8 tok/s** (`generated` 5,316 → 5,830 in 64 s);
-a 31-token completion took **129.5 s**; loopback took **1.4 s** (`ctx` 204800 vs 131072, `images` true vs false).
-**Interim now in effect: the `local` family points at loopback** so the seven author seats run. The operator's choice:
-(a) stay on loopback, or (b) use the LAN box and **raise `DURIG_STREAM_TIMEOUT_MS` as a dated ruling**, accepting
-minute-scale seat turns while another client holds the slot. The gate was **not** lowered to make anything pass.
+**325 is ANSWERED — decision closed, no operator action pending.** The operator's answer (D222, item 3) is **(a) stay on
+loopback**; do **not** raise `DURIG_STREAM_TIMEOUT_MS`. So the seven author seats keep running on loopback (measured 1.4 s for a
+31-token completion) and the LAN box stays out of the rig (single slot, ~8 tok/s, 31 tokens in **129.5 s**). **The row is still
+stale:** `#5230` (pm) is `held` and its body still says "needs the operator" — `lead`/`pm` must release or close it with the
+answer, not leave the next session re-asking. `#5257` (scribe, held) is the DECISIONS entry for this ratification; **D222 has
+already recorded it**, so the scribe should fold rather than mint a second entry.
 
 **Two rows are already done — do not pay twice.** Queue `#5213` (qa: run 297's three priced legs) is **already run**
 (4 legs, $0.00184, finding on ROADMAP **322**; `DURIG_VERIFIER_MAX_TOKENS` is now **6000** by operator approval) — the
@@ -53,28 +55,38 @@ invisibly; keys are per box).
 
 ```bash
 cd ~/Git/Durian-Pi
-node .spike/delegate-20261106/verifier-spend-tripwire.mjs   # family spend vs the operator's $0.50 trigger (free) — 54.0% at close
+node .spike/delegate-20261106/verifier-spend-tripwire.mjs   # family spend vs the $0.50 trigger (free) — 59.3% ($0.29660) at this close
 ls selfdev.sqlite.broker.stop                               # 327 guard: a stale stop file silently steals the next pass
-git worktree list | wc -l                                   # 311 leak meter: 17 at day start, 32 at this close
-DURIG_DB=./selfdev.sqlite node cli.mjs status               # empty/timeout + fresh heartbeatAt + frozen lastPassAt = 303, not a broken store
-node .spike/delegate-20261106/strata-endpoint-check.mjs     # is the LAN box inside the 20 s preflight bound yet? (free)
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json > .spike/status-i.json   # run this only with the broker DOWN — 329: a wedged broker makes it print nothing for 120 s
+node tools/broker-serve.mjs --status                        # up? spool depth? provider reachability? — reads files, not the store, so it answers even when the broker is wedged
+test -e selfdev.sqlite.broker.json && node -e 'const r=require("fs").readFileSync("selfdev.sqlite.broker.json","utf8");console.log(r)'  # fresh heartbeatAt + frozen lastPassAt = 303
+ls selfdev.sqlite.broker.inbox.error | wc -l                # reads the broker destroyed (5 today, all `apply failed: SqliteStorage is closed`) — 329
+git worktree list | wc -l                                   # 311 leak meter: 32 at this session's clock-in, 35 at its close
+node .spike/delegate-20261106b/queue-counts.mjs             # (probe, promote-or-delete per 312)
 node demo/deepinfra-catalog.test.mjs                        # "12 rig seat models resolve ... local=7, verifier=5" = the rig is lit
 node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node scripts/test.mjs --area guard
-# then, only after 311 lands and the stop file is absent:
+grep -c "<a phrase only your own entry contains>" docs/SELFDEV.md   # 330: prove YOUR doc edit survived; a clean `git status` is what a lost edit looks like
+# no pass until 311 lands; then, and only with the operator's intent:
 # node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --dry-run   # NEVER paste its output -- 295 prints credential VALUES
 # node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
 ```
 
+**Push state:** `origin/main` = `ffbd0e1e` (the operator's batch grant, spent). `926a7754` (`.gitignore` disposition) is
+**local-only** and needs a fresh per-batch grant (D218).
 
 
-**Blocker:** (1) The strata-box capacity call (**325**) — operator's, and it decides whether the author family runs at
-second-GPU speed; the interim is loopback. (2) **311 gates every further pass** — worktrees grew 26 → 32 and cleanup still
-refuses. (3) **The preflight prints credential VALUES (295)**: the current `DURIG_LOCAL_API_KEY`/`DURIG_VERIFIER_API_KEY`
-values are in a durable transcript; cut 295 before further preflights, rotation is the operator's. (4)
-`selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**) — a workspace move that skips it restarts the caps from
-zero. (5) The $0.50 verifier-family switch is a ruling with an unsigned consequence: single-model + no cross-family verifier
-(**324**); headroom at close is $0.23 and one 600 s pass costs ~$0.007–$0.035. (6) The stop-file writer in **327** is
-unresolved — the probe is in the row.
+
+**Blocker:** (1) **311 gates every further pass** — worktrees `32 → 35` in one pass and cleanup still refuses with the
+unreadable `undefined/anthropic-ai-sdk…` string (`src/worktree.mjs:1237` reads `dirent.path`, which is `undefined` on node
+v24.22.1; the property is `parentPath`). (2) **The preflight prints credential VALUES (295)**: `DURIG_LOCAL_API_KEY` /
+`DURIG_VERIFIER_API_KEY` are in a durable transcript; do not run or paste preflight output until the mask lands, and rotation
+(`#5233`, held) is the operator's. (3) **303's root cause is open** (`#5231`/`#5260`, architect): a broker past its deadline
+keeps heartbeating with a closed storage, and that shape now **destroys reads** (**329**) — 5 CLI reads dead-lettered today.
+(4) **The $0.50 family threshold has no rig-side enforcer (324)**; the delegate is the tripwire and headroom is **$0.20340**,
+which is ~7 more 600 s passes at the measured $0.02641 each. (5) **321 must land before 324** (operator ruling), and 317's
+calibration (`#5214`) before further verifier spend. (6) **330** — shared-tree doc edits are volatile: commit doc work before
+any broker verb. (7) `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**). (8) The **327** stop-file writer is
+still unidentified; the probe is in the row.
 
 ## State (measured 2026-11-06T03:4xZ, same host signature as above)
 
