@@ -4,6 +4,23 @@ Authored by: delegate, 2026-11-05 (Linux Fedora 45 7.2.15-300.fc45.x86_64 node v
 Routed by: **operator** — the research agent is off-host and has no write access to this repo
 (`docs/runbooks/research-request.md`, Preconditions). Hand it the file; ask for **text to copy**, never commits.
 
+## Answer placement — where each artifact goes (answered 2026-11-06, operator asked "where do you want the answer placed?")
+
+One destination per artifact, so a finished study cannot land unread. Registered as **`docs/ROADMAP.md` 298** (the intake
+row); the acceptance test there is **propagation, not publication**.
+
+| Artifact | Goes to | Why there |
+|---|---|---|
+| The study itself | `docs/reviews/base-agent-product-topology-research.md` | the path this file's own `## Deliverable` section already names |
+| Round 2, if needed | `docs/reviews/base-agent-product-topology-followup-research-prompt.md` | the path this file's own `## Follow-up` section already names |
+| Base-product non-goals | `docs/MVP.md` — it already carries `## Explicitly out of MVP scope` | the existing carrier for "what it does not do"; a new parallel doc would be a second truth |
+| Competitor/topology facts | `docs/COMPETITORS.md` | the definitions ROADMAP 280 argues against live there |
+| The naming decision (question 7) | `docs/DECISIONS.md` **D212** as an addendum | the operator **deferred** naming until this study completes; the ruling belongs beside the ruling it amends, not beside the questions |
+| Your `## Proposed backlog items` | `docs/ROADMAP.md`, registered *or rejected in writing* | standing rule for research output in this rig (`docs/runbooks/research-request.md`) |
+
+**There is no `docs/product/` directory in this repo** — if you invent one, we will reject the pointer, not the directory
+(`git ls-files` returns nothing under it; D159 addendum: a wrong pointer reads as verified).
+
 ## Why this question, and what it unblocks
 
 The operator ruled (2026-11-05) that durian-pi ships as **two minimum products**:

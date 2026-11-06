@@ -2139,3 +2139,74 @@ the prefix forever.
     rows. `human` is not a seat (`rig.selfdev.json` registers 12; `intent.mjs human` → `unknown seat: human`), so the store now
     says "nothing to do" while 528 rows are parked on a channel that cannot be woken — and `clockin` still prints a calm idle
     rig. **Read the histogram, not the absence of red.** Registered as ROADMAP 292.
+
+## Operational pitfalls and speed-ups (delegate session E, 2026-11-06 — the metered-arm session, D214; every number measured in this session: Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+1. **Arming a metered provider is price-first, model-second — in that order or the probe refuses.** The sequence that
+   worked, end to end in about ten minutes: (a) `node tools/verifier-arm-probe.mjs --family=VERIFIER
+   --base=https://api.deepinfra.com/v1/openai --model=openai/gpt-oss-120b` → `NOT-ARMABLE`,
+   `cause:metered-endpoint-unpriced`, `maxCallExposureUsd:null`; (b) fetch the vendor catalog **with** the key (the
+   keyless catalog hides pricing) and read the model row — `openai/gpt-oss-120b`: ctx **131,072**, **$0.037** in /
+   **$0.17** out per Mtok, fetched 2026-11-06; (c) write `DURIG_VERIFIER_PRICE_USD_IN/_OUT` **plus
+   `DURIG_VERIFIER_PRICE_AS_OF=2026-11-06`** into both gitignored host configs (`durig.config.json` in the repo root and
+   `../durian-dev/seatroot/durig.config.json` — the seat root one is what woken seats read); (d) re-run the probe →
+   **`ARMABLE`**, `maxCallExposureUsd 0.001419`, `maximalTurnsUnderStoreCap 2818`,
+   `maximalCallsUnderProbeCeiling 105` at `DURIG_PROBE_CEILING_USD=0.15`. The refusal in (a) is **not** a defect — it is
+   #5090's false-green removal working. Do not "fix" it by deleting the probe. ROADMAP 272's exposure rule means a price
+   row is a **precondition** for a model row, and D201's `asOf` means an undated price is not a price.
+2. **Raising a metered model's context to the vendor's number makes the roster DARK, not fast.** At the inherited
+   `DURIG_VERIFIER_CONTEXT=24576 / MAX_TOKENS=3000` the maximal-call exposure is **$0.001419** against caps of
+   `$0.05` call / `$0.10` run / `$4.00` store. At the vendor's 131,072 the same arithmetic gives **$4.85**, which exceeds
+   the store cap, so `src/providers/local.mjs` refuses the row **before any request** — the failure looks like a config
+   typo and reads like a model problem. Slot and cap move together or not at all: that pairing is an operator capacity
+   decision, registered as ROADMAP **297**.
+3. **A reasoning model spends the completion budget thinking, so a small probe can return HTTP 200 with nothing in it.**
+   Measured on the armed arm: `max_tokens=24` → `finish_reason:"length"`, `content:""`. The capability question then got
+   answered correctly only because the next probe asked for tools at `max_tokens=400` and got
+   `finish_reason:"tool_calls"` in **40** completion tokens, for **both** `tool_choice=auto` and `tool_choice:"required"`.
+   Cheapest useful shape for a capability question on a reasoning arm: one tool, `tool_choice:"required"`, budget in the
+   hundreds of tokens, `DURIG_PROBE_CEILING_USD` set, ledger in `.spike/`. Total cost of the three calls that settled the
+   "does it do function calling" question: **$0.00003**.
+4. **A red demo can mean your change worked.** With the arm legitimately priced, `demo/verifier-arm-probe.test.mjs`
+   **fails**: it forces the unpriced arm by setting `DURIG_VERIFIER_PRICE_JSON`, but `run()`
+   (`demo/verifier-arm-probe.test.mjs:15-22`) scrubs only `API_KEY|SECRET|TOKEN$` from the environment, so it cannot
+   neutralize the **config-file** layer — `durig.config.json` at the repo root — which now carries
+   `DURIG_VERIFIER_PRICE_USD_IN`. Suite shape at `ef29516d`: **257/258**, that one failure. Read the *cause* line before
+   deciding anything is broken. Fix direction (probe already run): the tool takes `--config=PATH`, and
+   `--config=/tmp/nonexistent-config.json` reproduces `price:null, priceSource:"none", verdict:"NOT-ARMABLE"`, so the demo
+   must pass a **fixture** per arm instead of inheriting the host. ROADMAP **294**. Do **not** "fix" it by deleting the
+   price keys — that darkens the family the operator just ruled in.
+5. **The blessed first command leaks credentials and spends without accounting — read its output before pasting it.**
+   `tools/broker-serve.mjs:467-471` puts every `DURIG_(LOCAL|VERIFIER)_*` env entry, **values included**, into the line it
+   prints (reproduced on `--status` and `--dry-run`; the values reached terminal output only — a tree scan and `git grep`
+   found no persisted copy, and `durig.config.json` holds no key). Its provider probe calls `/chat/completions` on the
+   paid endpoint (`:270`, `:308`) with no ceiling and no ledger row: after a completed `verifier: completes (finish=stop,
+   prompt=59 tok, completion=44 tok)`, `selfdev.sqlite.spend.jsonl` still did not exist. Consequence that is easy to miss:
+   spend that never reaches the ledger also never reaches the **caps** that read it, so the store total reads low.
+   ROADMAP **295**, **296**. While reporting it, **do not re-print the value** — truncate it in your own prose (D205).
+6. **`--dry-run` refuses a dirty live tree, and the docs you just wrote are that dirty tree.**
+   `BLOCK live-tree-dirty: 2 tracked file(s) are modified here, and a seat woken from this cwd edits this tree
+   (F12/F23)`. Ordering that avoids the `--allow-dirty` argument entirely: finish and **commit** the doc edits (explicit
+   paths, never `git add -A`), then `--dry-run`, then `--start`. Inventory first, cheap:
+   `echo "worktree_entries=$(git worktree list --porcelain | grep -c '^worktree') branches=$(git branch --list | wc -l) spike=$(ls .spike | wc -l)"`
+   → 16 / 18 / 225 at session E, and re-check after any writing verb (`docs/runbooks/workspace-move.md`).
+7. **Two commands the pointer told you to run do not exist as written.** `tools/intent.mjs` → `MODULE_NOT_FOUND`; the
+   instrument is **`intent.mjs` at the repo root** (`git ls-files` confirms, and it has never existed under `tools/`).
+   `docs/QUICKSTART.md:110` prints `node intent.mjs pm --body-file -`, `docs/NEXT.md` printed `tools/intent.mjs …`. Same
+   defect class as the `path:line` citations that were never `test -e`-checked (D159 addendum, D211 CORRECTION): a wrong
+   command in a runbook reads as verified until someone runs it under stress. Registered with 291/298.
+8. **The `local-model-pointer` and `deepinfra-catalog` demos fail as a *pair*, and the pair names the file to edit.**
+   Before the roster flip the first said `seat "qa" names local/…, which is not a verifier seat`; the second said
+   `real seats exercise BOTH exemptions (local=12)`. Both went green on the same commit that edited `rig.selfdev.json`,
+   with **no** credential and **no** provider code touched — so when `check` reports `single-model-rig`, the fix is the
+   roster plus the host config, and the key is a separate question. `docs/runbooks/verifier-independence.md` says the two
+   instruments move together; believe it and check both in one command.
+9. **A compacted session's earlier read is not the file.** Editing `docs/NEXT.md` from a read result taken earlier in the
+   same (compacted) session failed on exact match: the live pointer is **159** lines, the read result I acted on described
+   **221**. Re-read the file you are about to edit, and let the edit tool's failure be the guard rather than assuming the
+   drift is cosmetic. `demo/next-pointer.test.mjs` caps the live pointer at **200** lines and requires the superseded
+   block moved **VERBATIM** to `docs/NEXT-ARCHIVE.md` — archive first, then rewrite the pointer, or you lose history.
+10. **The pointer's own claims go stale in the same commit that fixes them.** The session-D pointer asserted the
+    `deepinfra-catalog` red was "only for a missing `DEEPINFRA_API_KEY`"; the demo's own output named the roster
+    exemption count. When you close a blocker, rewrite the sentence that *described* it, not only the sentence that
+    *listed* it — otherwise the next session re-arms the wrong instrument (here: hunting a key that was never the cause).

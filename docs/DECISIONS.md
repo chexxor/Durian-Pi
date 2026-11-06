@@ -9320,3 +9320,88 @@ simply waking seats for real work needs a broker pass over a **non-empty** queue
 (`--yes-pm-wakes`), so it is escalated rather than run. Registered as ROADMAP **292**, with the recency-read gap
 (**291**) and the crashing channel instrument (**293**) as its siblings — all three are D213's requirement ("every piece has
 a fast loop; isolate what restricts it") applied to the state plane rather than the code plane.
+
+## D214 — The operator rules the verifier back in on the **metered** arm; the rig is cross-family again with no single-model finding (operator ruling, 2026-11-06)
+
+**Context.** `docs/NEXT.md` carried one blocker with two ways out: the self-hosted `:1234` verifier server had been down
+since 2026-10-29, so `6d2c50e2` lifted the five verifier-capable seats onto the author model to keep the rig running, and
+that lift is exactly the condition D137 forbids — `node cli.mjs check rig.selfdev.json` reported **`single-model-rig`**, and
+`demo/deepinfra-catalog.test.mjs` was red with cause `real seats exercise BOTH exemptions (local=12)`. The delegate asked
+whether to reload the local verifier or arm the metered one. **Operator: "Metered arm."**
+
+**What landed** (`ef29516d`, tracked diff is `rig.selfdev.json` only — five seats): `qa`, `qa2`, `advocate`, `auditor`,
+`designer` now name `verifier/openai/gpt-oss-120b`, which is **cross-family and cross-vendor** to the seven author seats on
+`local/qwen3.8-flash-next-iq3_s` — the posture ROADMAP 283 states as the requirement, and stricter than the pre-lift roster
+(which paired two DeepInfra families). The two instruments `docs/runbooks/verifier-independence.md` says must move together
+both moved: `deepinfra-catalog` exit 0 (`12 rig seat models resolve across providers local=7, verifier=5`) and
+`local-model-pointer` exit 0 (`locally-served providers=local,verifier … verifier=openai/gpt-oss-120b`). The red demo's cause
+was **the roster lift, not a missing `DEEPINFRA_API_KEY`** as `docs/NEXT.md` asserted — corrected here because that claim
+would send the next session to the wrong file.
+
+**How the arm was armed, in order, because the order is the finding.** `tools/verifier-arm-probe.mjs` returned
+`NOT-ARMABLE / cause:metered-endpoint-unpriced / maxCallExposureUsd:null` — the pre-spike false-green shape #5090 removed,
+working as intended: *a paid endpoint with no price is not armable.* So the price came from the vendor, not a guess
+(`.spike/delegate-20261106/deepinfra-catalog.json`, 174 models fetched 2026-11-06): `openai/gpt-oss-120b` ctx **131,072**,
+**$0.037** in / **$0.17** out per Mtok. Written into the **gitignored** host config at both paths the rig reads
+(`/home/chexxor/Git/Durian-Pi/durig.config.json`, `/home/chexxor/Git/durian-dev/seatroot/durig.config.json`):
+`DURIG_VERIFIER_PRICE_USD_IN/_OUT` plus `DURIG_VERIFIER_PRICE_AS_OF=2026-11-06` (D201's `asOf` discipline — the exposure rule
+can only fire against a dated row). The probe then returned **`ARMABLE`**, and the capability question was settled by
+observation rather than vendor marketing: `tool_choice=auto` **and** `=required` both returned `finish_reason:"tool_calls"`
+with valid JSON arguments — **3 calls, $0.00003**, ledgered in `.spike/delegate-20261106/spend-arm-*.jsonl` under
+`DURIG_PROBE_CEILING_USD=0.15`, guard checked **before** the send.
+
+**Deliberately not decided (delegation, not drift).** `DURIG_VERIFIER_CONTEXT` stayed **24,576** and
+`DURIG_VERIFIER_MAX_TOKENS` **3,000**, inherited from the self-hosted era, even though the vendor declares 131,072. Raising
+the context to the vendor's number makes one maximal call **$4.85**, over the `$4.00` store cap, so the catalog layer
+*refuses the row* and the verifier family goes dark — a capacity decision with a money consequence is the operator's
+(ROADMAP **297**, priced there). The cost picture handed to the operator: maximal-call exposure **$0.001419** at the current
+slot → **2,818** maximal verify legs under the store cap; a real 55k-token verifier prompt (p50 measured in **#4948**) is
+≈ **$0.002**. The binding constraints are the slot and the model's thinking tokens, not the budget: at `max_tokens=24` the
+arm returned `finish_reason:"length"` with **`content:""`** — the #4949 shape, measured on this arm.
+
+**The other four rulings of the same session, recorded so they cannot be re-asked as if open.** (a) **Push: "Granted."**
+Executed — `git push origin main` → `4c585f5b..ef29516d`; `git rev-list --count origin/main..main` = **0**. The grant is for
+this session's trunk advance; the standing rule (AGENTS.md: push requires an explicit grant or `DURIAN_PI_ALLOW_PUSH=1`) is
+unchanged, and nothing was published from a seat. (b) **Wake-and-measure: "Accepted."** The pass is scoped to the deferral
+wave (**292**): dispatch real rows, wake the team on the operator's `--yes-pm-wakes`, publish per-role **wake → claim**
+latency plus `tools/latency-budget.mjs`'s `WAIT 72.4% / WORK 13.0% / HELD 5.9%` split — so that D213's "how long should wake
+take" stops being a guess. Routing and decomposition stayed with `lead`. (c) **Topology research: "Routed."** The operator
+asked where the answer should be placed; the answer is **one destination per artifact**, written into the prompt file
+itself (`docs/reviews/base-agent-product-topology-research-prompt.md`, new *Answer placement* section) and registered as
+the intake row **ROADMAP 298**: the study at `docs/reviews/base-agent-product-topology-research.md` (the path the prompt's
+own `## Deliverable` names), round 2 at `…-followup-research-prompt.md` (the path its `## Follow-up` names), the
+decisions into `docs/MVP.md` / `docs/COMPETITORS.md` / **D212**, and the study's proposed backlog registered or rejected
+in writing. The 298 acceptance test is **propagation, not publication**: every open question in 279–281/283 must name the
+section that answers it. Nothing is parked in `.spike/`.
+(d) **Naming: "Defer until research is complete."** `durian-core` stays **unratified**; `docs/NEXT.md` says so; no rename row
+is cut until the research answers question 7.
+
+**Answered with options, not with a ruling (the operator asked for a recommendation).** Ruling (a) of the hostname question
+came through as "please continue… provide a recommendation amongst options", which is not a grant, so the 32 tracked files
+holding transient hostnames stay as they are and the options are put in front of the operator here — measured at
+`ef29516d`: `grep -rl "<host>" docs/ *.md | wc -l` = **32**, of which **17** are in `docs/DECISIONS.md`, and **27 of the 32**
+also name the distro (`Fedora`) or kernel (`fc44`/`fc45`), which is what makes a partial edit safe.
+1. **Keep `OS + distro + kernel + node`, strip the hostname, and never touch the dated strings that were measured** — add a
+   standing rule that host attribution is written as `Linux Fedora 45 7.2.15-300.fc45.x86_64 node v24.22.1`, and mark the
+   historical lines as *measured on a host whose name was recorded and is now transient* by editing **only** lines carrying
+   `fc44`/`fc45` (27 files). *Cost:* 27 file edits, one gate. *Risk:* none to the record — the OS/distro/kernel remains, and
+   that is the part D205 actually requires.
+2. **Leave every historical string, gate only the future.** *Cost:* one guard, zero edits. *Risk:* D197b–D204 keep an
+   unmeasured label that has already misled once (the `-Win10` name on a Linux box), and the next session cannot tell a real
+   host attribution from a stale one.
+3. **Full scrub of all 32.** *Cost:* 32 edits. *Risk:* **rewrites the evidence** — 5 files carry a host attribution with no
+   distro or kernel next to it, so removing the name removes the only provenance the row has. This is the option the rig's own
+   discipline (D205: record the fact, never the label) rejects.
+**Recommendation: option 1**, with the future-facing half implemented as a `check`-area finding (a tracked doc naming a
+hostname alongside a host attribution) rather than a prose rule, because prose rules rot at this rig and `check` gates ship.
+Registered nowhere until the operator picks; the delegate will not edit 32 tracked files on an un-granted ruling.
+
+**Two new defects this ruling surfaced, both registered, neither fixed by the delegate.** **294**: arming the metered arm
+turned the suite red — `demo/verifier-arm-probe.test.mjs` asserts *host* config state (it scrubs only
+`API_KEY|SECRET|TOKEN$` from env and cannot neutralize `DURIG_VERIFIER_PRICE_USD_IN` read from `durig.config.json`), so the
+rig's one red demo is red **because the arm succeeded**; the probe for the fix is already run (`--config=/tmp/…` →
+`verdict:NOT-ARMABLE`). **295/296**: `tools/broker-serve.mjs` — the runbooks' blessed first command — prints credential
+**values** at `:467-471` (reproduced on `--status` and `--dry-run`; values reached terminal output only, verified not
+persisted anywhere in the tree), and it probes the metered endpoint with `/chat/completions` (`:270`, `:308`) with **no
+ceiling and no ledger row** — after a completed `verifier: completes (finish=stop, prompt=59 tok, completion=44 tok)` the
+store ledger still did not exist. Unaccounted spend also reads as *less* spend to the caps that consult that ledger.

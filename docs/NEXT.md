@@ -1,159 +1,116 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-05T22:5xZ (delegate session **D** closes. Two things moved. (1) The operator issued a **second standing
-architecture ruling** — **fast development iteration is an architectural requirement** — recorded as **`docs/DECISIONS.md`
-D213**, registered as **`docs/ROADMAP.md` 282–289**, made operable as **`docs/runbooks/slow-loop.md`**, turned into a
-user-acceptance requirement **UAR-8** in `docs/ACCEPTANCE.md`, and pushed into the entry points (`AGENTS.md`) and both
-delegate skills. (2) **The actionable queue is now empty**: at session start `queue-drain-audit` reported `deferred 16 ·
-queued 162`; at close it reports `done 3816 · cancelled 812 · held 345 · deferred 183` and **no `queued` rows at all** —
-every deferred row's last transition is `{"event":"deferred","by":"supervisor","to":"human"}`, **171 of them inside the single
-hour 2026-11-05T20**. Registered as ROADMAP **292** (plus **290** citation resolution, **291** no recency read). The **D212
-rows are still not cut**: max queue id is still **5156**, although `lead` received the brief (`INTENT delivered=1` at
-`2026-11-05T22:07:56Z`) and was woken. The superseded session-C pointer moved **VERBATIM** to `docs/NEXT-ARCHIVE.md`.)
+**Last update:** 2026-11-06T00:4xZ (delegate session **E** closes. The operator answered six questions and three of them
+moved state — recorded as **`docs/DECISIONS.md` D214**, registered as **`docs/ROADMAP.md` 294–298**. (1) **"Metered arm"**:
+the verifier family is restored, cross-family *and* cross-vendor, at `ef29516d`, and `single-model-rig` is gone from
+`check`. (2) **"Granted"**: the push grant was exercised — `git push origin main` → `4c585f5b..ef29516d`, and
+`git rev-list --count origin/main..main` = **0**. (3) **"Accepted"**: the wake-and-measure pass (`--yes-pm-wakes`) is
+granted and in flight. (4) **"Routed"** for the topology research, with the answer placement now defined by ROADMAP
+**298**. (5) **naming deferred until the research completes** — `durian-core` is still unratified. (6) the hostname scrub
+came back as *"please continue… provide a recommendation amongst options"*, so the options are in D214 and **nothing was
+edited**. The superseded session-D pointer moved **VERBATIM** to `docs/NEXT-ARCHIVE.md`.)
 
-Host for everything below, measured in the same command as the measurements: **Linux Fedora 45**, kernel
-`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — the probe is `uname -s && uname -r && (. /etc/os-release && echo
-"$PRETTY_NAME") && node -v && git --version` (**never sign work with a hostname** — D205, ROADMAP 281).
+Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — the probe is `uname -s && uname -r && (. /etc/os-release &&
+echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a hostname** — D205, ROADMAP 281).
 
 ## NEXT SESSION
 
-**Current item: there is no queued work, so the next cut is the whole backlog — `lead` cuts `docs/ROADMAP.md` **282–292** into
-rows, cheapest-and-most-visible first, and the suite goes green hermetically.** Ruling (operator, 2026-11-05): the system is **broken into pieces that each
-have a fast iteration loop**; anything that **restricts** iteration is **isolated**; the **LLM** — expected to be the slowest
-part — is made iterable **anyway** (prompt engineering, mocking, **smaller/faster models in test cases**); and competitor
-research must read **iteration architecture**, not just features. The order the delegate briefed (not routed — routing is
-`lead`'s): **(1)** make `demo/deepinfra-catalog.test.mjs` leave the hermetic loop so the offline run reports **258/258**
-(ROADMAP **282** clause 2 — it is the only red demo and it is red only for a missing `DEEPINFRA_API_KEY`); **(2)** publish and
-enforce **per-area loop budgets** (**282** clauses 1+3+4 — `check` has **zero** timing rules today); **(3)** bound the
-**turn** (**283** — 185 generations = 0.29% hold **64.6%** of generation busy time; measure per role first or it manufactures
-fake greens, D91); **(4)** refuse doomed spend **before** the request (**285** — 14,377 refusal-ended generations, 22.5 h);
-**(5)** the **sleep tax** (**286** — 43/258 demos sleep; seam is `src/eventfeed.mjs`); **(6)** **compaction** budget/lane
-reporting (**284** — p95 4.2 min, 55.5 h total); **(7)** split the **49,000-token** `docs/SELFDEV.md` journal (**289**);
-**(8)** instrument **WAIT** and `channel-down` duration (**287** — WAIT is **72.4%** of item latency); **(9)** rewrite the
-stale **93-line pre-broker** `driving-durian-pi` skill (**288**); **(10)** fix **`tools/channel-preflight.mjs`, which crashes since `8160b8be`** (ROADMAP **293**, Blocker (c)
-— it is the blessed first command, so it is the cheapest high-visibility row in the list);
-**(11)** the **deferral wave** (**292**) and a **recency read** for the store (**291**). Brief: 
-`.spike/delegate-20261105c/brief-lead-4.md` (gitignored — rewrite from **D213** and **282–292** if it is gone).
+**Current item: the queue is still empty, so the cut is the whole backlog — `lead` cuts `docs/ROADMAP.md` 282–298 into
+rows, cheapest-and-most-visible first.** Max queue id is still **#5156**: `lead` has now been briefed twice (`INTENT
+delivered=1` at `2026-11-05T22:52Z` and this session's `intent 27b1a681` at `2026-11-06T00:1xZ`, brief at
+`.spike/delegate-20261106/brief-lead-1.md`) and the wake-and-measure pass is running on the operator's explicit
+**"Accepted"** grant. Routing is `lead`'s; the delegate's briefed order (cheapest and most visible first) is:
+**(1)** ROADMAP **294** — the *only* red demo, and it is red **because the metered arm succeeded**:
+`demo/verifier-arm-probe.test.mjs` asserts host config state; the fix probe is already run
+(`--config=<fixture>` → `verdict:NOT-ARMABLE cause:metered-endpoint-unpriced`), so the demo must supply its own config
+fixture per arm and pin both directions; **(2)** ROADMAP **295** — the blessed first command prints credential **values**
+(`tools/broker-serve.mjs:467-471`); **(3)** ROADMAP **296** — the same preflight probes the paid endpoint with no ceiling
+and no ledger row; **(4)** ROADMAP **297** — price and measure three real verify legs on the armed arm before anyone
+touches the slot; **(5)** **282** clauses 1+3+4 (per-area loop budgets — `check` still has zero timing rules) and
+**283–289**, **291**, **293** (`tools/channel-preflight.mjs` still throws, and it is the blessed first command);
+**(6)** the deferral wave (**292**) — now measurable, because the operator granted the pass; **(7)** ROADMAP **298** as
+the research intake.
 
-**Also still open from session C (D212):** the two-minimum-products ruling (**ROADMAP 279–280**, proposed base name
-**`durian-core`**, awaiting operator ratification) and the **topology research prompt**, which now also carries the
-iteration-architecture questions (**question 8** of
-`docs/reviews/base-agent-product-topology-research-prompt.md`). Both need `lead`'s decomposition; the research prompt needs the
-**operator** to route it (there is no channel from this rig to the off-host research agent).
-
-**Blocker:** **four**, and none of them is the delivery channel (`INTENT delivered=1` three times — 22:07:56, 22:11:28,
-22:52:21; the broker was restarted at `22:52` as `pid=267510` with `--max-duration 900`, so it **self-exits ≈ 23:07** and an
-intent spooled while it is down is **pending, not lost**).
-**(a)** `lead` has not turned **D212**/**D213** into rows — max queue id is still **#5156**, and there is now **0 `queued`
-work**, so a woken seat has nothing to claim (measured: the 22:52 pass woke **9 seats** and fed `lead` *“there is nothing
-claimable for you … do not call `claim_work` expecting work”*, `log lead` event 289893); if it is still 5156 after a wake,
-re-send the brief (`node intent.mjs lead --body-file <file>`, **space** after `--body-file`). **(b)** the **verifier provider is
-temporarily lifted** (`6d2c50e2` removed `DURIG_VERIFIER_BASE_URL` from both host configs and re-pointed the 5 verifier seats at
-`local/qwen3.8-flash-next-iq3_s`), so `check` reports `single-model-rig` and `verification-without-evidence` as `fix-now` —
-honest and intended, but the cross-family author/verifier invariant cannot hold until the `:1234` model server is up
-(ECONNREFUSED; no GPU/RAM room: RTX A4000 14637/16376 MiB, RTX 3090 23098/24576 MiB) or the **metered** arm is approved
-(`tools/verifier-arm-probe.mjs` → `ARMABLE`, `maxCallExposureUsd 0.001419`). Restoring needs **both** an operator capacity grant
-(`docs/runbooks/verifier-model-server.md`, seats idle first) **and** `git revert 6d2c50e2`. Do **not** schedule 283–286 in a
-shape that requires a verifier wake. **(c)** **`tools/channel-preflight.mjs` throws**, so the blessed channel instrument is
-unusable: `tools/channel-preflight.mjs:57` spawns `cli.mjs` with **`DURIG_CONFIG: RIG`** (the *rig* file as the *config* file),
-and since `8160b8be` (**#5125**, landed by this session's merge of `item-5131`) `src/config.mjs` **refuses** a config file that
-sets keys no code reads — so every preflight now dies at `tools/channel-preflight.mjs:59` with
-`unknown config-file key(s): _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json`. Reproduced twice. Registered as ROADMAP **293**.
-**(d)** `broker-serve.mjs --dry-run` **refused this cwd** earlier (`BLOCK live-tree-dirty — 3 tracked file(s) modified
-here`, F12/F23); after the docs commits the same dry run reports **0 blocking, 3 noted** and the broker started clean.
-
-**Pointer hygiene (this section is what `scripts/clockin.mjs` prints, so it *is* the cost of a cold start):** the live file is
-capped at **cap 200** lines by `demo/next-pointer.test.mjs`; superseded history moves **verbatim** to
-`docs/NEXT-ARCHIVE.md`, never rewritten.
+**Blocker:** **the team has nothing to claim** — `queued 0`, max id **#5156** — and a broker pass over an empty queue
+costs wakes and proves only that the queue is empty. Below it, in order of cost to the rig: the credential-printing
+preflight (**295**), the unaccounted metered probe spend (**296**), the red-because-success demo (**294**), the
+still-crashing channel instrument (**293**), and the un-priced verifier slot (**297**). Closed this session and do not
+re-open: the verifier (**"Metered arm"**, `ef29516d`) and the push grant (**"Granted"**, exercised, 0 unpushed).
 
 Run this first — all reads, no writes:
 
 ```bash
 cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 27 ahead at 6cd29bd2, 0 pushed
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --id 5143 --id 5144 --id 5145 --id 5146 --id 5149 --id 5152 --id 5153 --id 5154 --id 5155 --id 5156
-DURIG_DB=./selfdev.sqlite node cli.mjs queue 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('max id',max(i['id'] for i in d['items']));[print(i['id'],i['status'],i.get('from'),'->',i.get('to'),str(i.get('subject'))[:90]) for i in d['items'] if i['id']>=5157]"   # >5156 = lead cut the D212/D213 rows; still 5156 = re-send the brief
-node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status   # up/down; a broker started with --max-duration SELF-EXITS
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --status queued | python3 -c "import json,sys;print('queued rows:',len(json.load(sys.stdin)['items']))"   # measured 0 = the team has NOTHING to claim
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --status deferred | python3 -c "import json,sys;d=json.load(sys.stdin);t=[(i['transitions'][-1].get('by'),i['transitions'][-1].get('to'),i['transitions'][-1].get('at')) for i in d['items']];print(len(t),t[-1])"   # the deferral wave, with dates
-node scripts/test.mjs --list                                               # 0.1 s — the loop map (9 areas, 258 tests)
-DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 1.0 s; hygiene counts, pm-owned
-node --env-file="$HOME/.config/durig/env" tools/channel-preflight.mjs      # KNOWN-RED: throws since 8160b8be (Blocker (c)) — do not trust its absence of output as health
+git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 0 = pushed; ef29516d is trunk
+DURIG_DB=./selfdev.sqlite node cli.mjs status                                    # 7 s — attention + non-terminal work
+DURIG_DB=./selfdev.sqlite node cli.mjs queue 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('max id',max(i['id'] for i in d['items']));[print(i['id'],i['status'],i.get('from'),'->',i.get('to'),str(i.get('subject'))[:90]) for i in d['items'] if i['id']>=5157]"   # >5156 = lead cut the rows; still 5156 = re-send the brief
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --status queued | python3 -c "import json,sys;print('queued rows:',len(json.load(sys.stdin)['items']))"
+node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status         # broker up/down + provider classes
+node scripts/test.mjs --list                                                     # 0.1 s — the loop map (9 areas, 258 tests)
+node scripts/test.mjs --area check                                               # 6 s — the roster gate: `single-model-rig` must stay ABSENT
+DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --config=./rig.selfdev.json --counts-only   # 1.1 s
 ```
 
-## State (measured 2026-11-05T22:2xZ, same host signature as above)
+The intent instrument is **`intent.mjs` at the repo root** (`git ls-files`), *not* `tools/intent.mjs`: the path in the
+previous pointer and in the broker's own guidance text throws `MODULE_NOT_FOUND`. Re-send the brief with
+`node intent.mjs lead --body-file <file>` (**space** after `--body-file`).
 
-- **Trunk:** `main` = `6cd29bd2`, **27 commits ahead of `origin/main`, 0 pushed** (the push grant is the operator's; this
-  pointer's own commit makes it 28).
-  Session-D commits: `497dddd3` (D213 + ROADMAP 282–288 + `docs/runbooks/slow-loop.md`), `e7287d9d` (ROADMAP 289), `4a787a71`
-  (`AGENTS.md` — stop reading the 49k-token journal whole), `17991f37` (UAR-8 + SELFDEV session-D pitfalls), `24fe6c98`
-  (the four pointers I invented in my own docs, corrected).
-- **Suite:** **257/258 in 57.0 s** parallel (`node scripts/test.mjs`, jobs = `min(8, cores)`). The one failure is
-  `demo/deepinfra-catalog.test.mjs` — **credential-shaped, not a regression**. Session C's landed-trunk run was
-  `SUITE GREEN: pass=258 environmental=0 fail=0` at `a978bcd9`.
-- **Loop costs (the new baseline, in `docs/runbooks/slow-loop.md` front-matter):** `docs` 1.2 s/6 · `guard` 2.0 s/24 ·
-  `readapi` 3.8 s/5 · `check` 6.3 s/12 · `worktree` 7.8 s/23 · `toolchain` 11.1 s/16 · `tui` 12.4 s/46 · `rig` 24.0 s/63
-  (**`demo/cli.test.mjs` alone = 20.1 s**) · `broker` 25.4 s/63. Mocked delegation loop `node demo/offline.mjs` = **0.301 s**.
-  The **closing** run at `6cd29bd2` printed **256/258 in 48.8 s**: the credential red plus
-  `demo/seat-turn-shape.test.mjs:292`, whose real-store leg asserts the store's sha256 is unchanged across its own read and
-  therefore **cannot hold while a broker is live** — a live-lane test in the fast lane, added to ROADMAP 282 as an addendum.
-- **Cost shape** (`tools/latency-budget.mjs`, 3.1 s, 63,172 generations): model-call p50 **52 ms** / p95 **9.0 s** / p99 1.8 m /
-  max 2.0 h; **50.8%** of generations ≤ 5 s hold **1.8%** of busy time; **185 (0.29%)** > 10 min hold **517.5 h = 64.6%**;
-  compaction p50 23.2 s / p95 4.2 min / **55.5 h**; **WAIT 72.4% / WORK 13.0% / HELD 5.9%**; **308.7 h** with zero generations
-  in flight; **14,377** generations ended in refusals (**22.5 h**).
-- **Queue:** max id **#5156**. `done` 3816 · `cancelled` 812 · `held` **345** (276 > 7 d) · `deferred` **183** · **`queued` 0**.
-  The 183 are not a throughput number: **all** of them end in `{"by":"supervisor","to":"human"}` and **171** are timestamped
-  inside `2026-11-05T20` (read them with `queue --status deferred` → `transitions[].at`, the queue JSON **does** carry the
-  per-transition time and actor). 67 of the 183 are `notice` rows. `human` is **not a seat** (`rig.selfdev.json` registers 12;
-  `intent.mjs human` → `unknown seat: human`), so the deferrals are addressed to a channel that cannot be woken. Landing rows
-  already fully on `main`: **73** of 93 (pm-owned); orphan candidates **75**; unresolvable citations **33**; gate prose with no
-  resolvable id **12**.
-- **Rig state (`scripts/clockin.mjs`, 7.0 s, 22,537 B):** `attention: 30`; **all ten seats' `last_run_failed` is `no_model`**,
-  yet `broker-serve.mjs --dry-run` resolves **all 12 seats to `local/qwen3.8-flash-next-iq3_s`**, and a real wake pass at
-  22:52 left the records unchanged — so they look stale, which I could **not** prove without a pass that has real work to run
-  (the closing probe is one broker pass over a **non-empty** queue). `deferred_awaiting_answer` ≈ 190 rows across 10 seats, most `waiting on human`. `RUNBOOKS dated 40 |
-stale 32`. `GIT refs=18 worktrees=16 unmerged=5` (`item-5145 +2`, `wip/seat-prompt-files +1`).
-- **Rows in flight:** **#5145 `done`** (`impl`; branch `item-5145` tip `39ee4fcc`, 2 commits, +806/−1, `git merge-tree` clean,
-  0 behind / 2 ahead, `what-to-test --base=main` ok with 25 derived tests) — **unlanded**, and its own verification rows
-  **#5155** (`impl→qa`) and **#5156** (`impl→lead`) are both **`deferred`**. **#5144 `deferred`** (`lead→impl`) after a turn
-  that produced **no branch and no worktree**. `#5152`/`#5153` `held` (gated), `#5147`/`#5148` `held` (operator-routed
-  research), `#5149`/`#5154` `queued` (`scribe`).
-- **Spend:** **$0.00** — no `DURIG_SPEND_LEDGER` (`/tmp/durian-spend.jsonl`) exists, and every metered attempt this session
-  refused **before** any request (`401 Invalid API key` from a `send` without `--env-file`; the `catalog-refused` /
-  `model-unpriced` guards).
+## State (measured 2026-11-06T00:3xZ, same host signature as above)
 
-## Traps this session found (mirrored into `docs/SELFDEV.md` §session D)
+- **Trunk:** `main` = `ef29516d`, **pushed** (`origin/main..main` = 0). Session-E commits: `ef29516d` (the roster returns
+  five verifier-capable seats — `qa`, `qa2`, `advocate`, `auditor`, `designer` — to `verifier/openai/gpt-oss-120b`).
+  Docs for this session (D214, ROADMAP 294–298, this pointer) land with it.
+- **The verifier arm (the operator's "Metered arm"):** `verifier` = `https://api.deepinfra.com/v1/openai`,
+  `openai/gpt-oss-120b`, ctx 24,576 / out 3,000 — **the slot was deliberately not moved** (ROADMAP 297). Price came from
+  the vendor catalog fetched 2026-11-06 (174 models: ctx 131,072, $0.037 in / $0.17 out per Mtok) and is recorded in the
+  **gitignored** host configs (`durig.config.json`, `../durian-dev/seatroot/durig.config.json`) with
+  `DURIG_VERIFIER_PRICE_AS_OF=2026-11-06`. Arming order is the finding: the probe first returned
+  `NOT-ARMABLE / metered-endpoint-unpriced`, and only after the dated price row returned **`ARMABLE`** with
+  `maxCallExposureUsd 0.001419` → **2,818 legs** under the `$4` store cap (`check` 284.7 % of cap, `run` 240.7 %, `call`
+  35.5 %). Capability by observation, not vendor card: `tool_choice=auto` and `=required` both returned valid
+  `tool_calls` — 3 calls, **$0.00003**, ledgers `.spike/delegate-20261106/spend-arm-*.jsonl` under
+  `DURIG_PROBE_CEILING_USD=0.15`. At `max_tokens=24` the arm returned `content:""` with `finish:length` — it spends the
+  completion budget thinking, which is why 297 measures legs rather than trusting the slot.
+- **Suite:** **257/258** — the one failure is `demo/verifier-arm-probe.test.mjs` (ROADMAP **294**, red *because* the arm
+  is legitimately priced; it inherits `durig.config.json`, which the demo cannot scrub). The two instruments
+  `docs/runbooks/verifier-independence.md` says must move together both moved: `deepinfra-catalog` exit 0
+  (`12 rig seat models resolve across providers local=7, verifier=5`) and `local-model-pointer` exit 0. **Correct the old
+  claim wherever it appears:** that demo's red cause was **the roster lift** (`real seats exercise BOTH exemptions
+  (local=12)`), not a missing `DEEPINFRA_API_KEY`.
+- **`check`:** 126 findings — `citation-unresolvable` 67, `duplicate-item` 57, `verification-without-evidence` 1,
+  `evidence-tree` 1 — and **`single-model-rig` is gone**. `check` has no timing budget (ROADMAP 282).
+- **Queue:** max id **#5156**. `done` 3816 · `cancelled` 812 · `held` 345 rows (276 > 7 d) · `deferred` 183 rows ·
+  **`queued` 0**. All 183 deferrals end `{"by":"supervisor","to":"human"}` and `human` is not a seat.
+- **Spend:** the store ledger (`selfdev.sqlite.spend.jsonl`) still does **not exist** — every call this session was
+  either on the free `local` arm or a probe ledgered in `.spike/`. The non-existence is itself evidence for ROADMAP
+  **296**: the preflight's metered probe leaves no row.
 
-1. **The suite is 57 s, not 1672 s.** The previous pointer's 1672 s was a degraded sequential/cold-deps shape. Quote the shape
-   with the number, and run from the seat root where vendored deps are linked (`~/Git/durian-dev/seatroot`).
-2. **`clockin` carries a stale suite stamp** — `last suite: 245/245 … 43.3 s … STALE: main is now 497dddd3`. Worth a `pm` row
-   to refresh after the next full run.
-3. **`faux` scripted responses drain in global call order across conversations** (documented in `demo/offline.mjs`'s header).
-   That is why ordering-sensitive faux tests rot; count your turns.
-4. **`docs/SELFDEV.md` is 195,532 B / 2,088 lines ≈ 49,000 tokens**, 20 append-only pitfall blocks, no size gate; `AGENTS.md`
-   used to tell every session to read it whole (**fixed** in `4a787a71`). `scripts/clockin.mjs:9`'s comment (`57,589 B / 749
-   lines`) is itself now false — ROADMAP 289 wants generated sizes.
-5. **`.agents/skills/driving-durian-pi/SKILL.md` is a stale pre-broker artifact** (93 lines, teaches `cli.mjs send` as primary,
-   Windows path examples) sitting beside a current 196-line `delegating-to-durian-pi`. Registered as ROADMAP 288.
-6. **A broker started with `--max-duration N` self-exits at N**, and an intent spooled while it is down is **pending, not
-   lost**. Delivery is auditable: `grep INTENT ./selfdev.sqlite.broker.log` → `INTENT delivered=1 dead=0 dup=0`.
-7. **`tools/channel-preflight.mjs` has thrown since `8160b8be`** (#5125's "a config file may not set a key no code reads",
-   landed by this session's `807f24a0`): it spawns `cli.mjs` with **`DURIG_CONFIG` = the rig file**
-   (`tools/channel-preflight.mjs:57`), which used to be harmless and is now fatal. A **crashing instrument reads as silence** —
-   treat an empty preflight as a crash until you have seen it print findings (ROADMAP **293**; ROADMAP 290 is the same lesson for pointers).
-8. **`cli.mjs events --tail 400` returned 15,425 events** (2026-10-11 → 2026-11-05): `--tail` does not bound the read the way
-   the name promises, and `events --since` takes a numeric cursor (`cli.mjs:3455`), so "what moved today" costs a full feed.
-   Registered as ROADMAP **291**. `queue` has **no** time filter (`unknown argument --since=…`).
+## Traps this session found (mirrored into `docs/SELFDEV.md` §session E)
+
+1. **A red demo can mean success.** `demo/verifier-arm-probe.test.mjs` asserts a *host* config property; arming the arm
+   the operator asked for turned the suite red. Read the failure's *cause*, not its count (ROADMAP 294).
+2. **Two commands documented in the pointer do not exist as written.** `tools/intent.mjs` → the file is `intent.mjs` at
+   the repo root. Run `test -e` before citing a path (D159 addendum, D211 CORRECTION) — ROADMAP 291/298 family.
+3. **`--dry-run` is not a health check of the queue.** It reports provider classes, the spool and the wake set, and it
+   *refuses a dirty live tree* (`BLOCK live-tree-dirty` — F12/F23): commit the docs before starting a pass, or a seat
+   woken from this cwd edits this tree.
+4. **Reasoning models eat the completion budget.** `max_tokens=24` → `finish_reason:"length"`, `content:""`. A verifier
+   leg needs completion headroom, not just a context slot (ROADMAP 297).
+5. **A stale read is a trap in a compacted session.** Editing against an earlier read result failed on exact-match —
+   the live pointer is 159 lines, not the 221 an earlier read showed. Re-read the file you are about to edit.
 
 ## Watch-list (delegate)
 
-- **Did `lead` cut the D212/D213 rows?** Max id > 5156 means yes. If not after two wakes, re-send and then escalate the
-  non-response to the operator rather than routing rows yourself.
-- **#5145 stays unlanded** until `qa`/verifier evidence exists (`#5155`/`#5156` are `deferred`) — landing it without evidence is
-  exactly the `verification-without-evidence` finding the rig is already carrying.
-- **`deferred` 16 → 183, `queued` 162 → 0** is a **class**, not a throughput number, and it is dated: 171 deferrals inside
-  one hour, all `supervisor → human`. `lead`/`pm` own the read (ROADMAP **292**); the delegate claims nothing.
-- **Never buy speed with verification depth.** Any proposal to move a real-model check out of the default loop is an
-  operator/pm product call (D91's fake-green hazard applies to speed-ups exactly as to features).
-- **`docs/NEXT.md` is a pointer** (cap 200 lines, `demo/next-pointer.test.mjs`) — history goes **verbatim** to
-  `docs/NEXT-ARCHIVE.md`, never rewritten.
+- **The pass is the evidence.** If `queue --id` shows rows above **#5156**, ROADMAP **292** is measurable: publish
+  per-role **wake → claim** latency and the `tools/latency-budget.mjs` `WAIT 72.4% / WORK 13.0% / HELD 5.9%` split.
+- **#5145** is `done` and unlanded with both evidence legs (`#5155` qa, `#5156` lead) `deferred`; the lift is gone, so a
+  real cross-family verify leg on `item-5145` @ `39ee4fcc` is finally possible. No author-side leg closes it.
+- **#5151** (`deferred → human`) is now **answered** by the operator's ruling and by `ef29516d`; whether the gate the
+  earlier ruling asked for (**#5146**, also `deferred → human`) is still owed *after* the fact is `lead`'s call.
+- **Naming:** `durian-core` stays unratified by operator ruling until the research completes. Do not cut a rename row.
+- **Untracked `install.sh` in the repo root** — an unrelated installer (Strata Terminal), not the rig's. Disposition is
+  the operator's; nothing in this repo references it (`git grep` clean).
+- **Host facts, hostname-free:** Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Two GPUs
+  remain full (RTX A4000 14637/16376 MiB, RTX 3090 23098/24576 MiB), which is why the local `:1234` verifier stayed down
+  and the metered arm is the arm that runs.

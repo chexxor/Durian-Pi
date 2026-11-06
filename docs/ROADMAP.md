@@ -5849,3 +5849,134 @@ accepted-and-ignored class #5071 was raised for, so the gate must be "the rig fi
 file", not "the config loader forgives rig keys"; and the vocabulary is mid-rename (D103: `DURIG_*` is
 live, `DURIAN_PI_*` half-applied), so the fix must be written against `CONFIG_KEYS`
 (`src/config.mjs`) rather than a hand-maintained list, or it rots in a release.
+
+**294. A demo pins *host* config state, so arming the thing it is supposed to guard turns the suite red.**
+**Observed** at `ef29516d` (metered verifier arm landed): `node scripts/test.mjs --all --jobs 8` →
+**257/258**, sole failure `demo/verifier-arm-probe.test.mjs` case 1 —
+`AssertionError: an unpriced metered endpoint must exit non-zero (the spike copy exited 0 — the false-green
+shape #5090 removed)` / `0 !== 1`. Cause, pinned: the demo sets `DURIG_VERIFIER_PRICE_JSON` to the
+wrong-shape file to force the unpriced arm, but its `run()` (`demo/verifier-arm-probe.test.mjs:15-22`)
+scrubs only `API_KEY|SECRET|TOKEN$` from the environment — it has no handle on the **config-file layer**,
+and `tools/verifier-arm-probe.mjs` reads `durig.config.json` at the repo root. Once that gitignored host
+file legitimately carries `DURIG_VERIFIER_PRICE_USD_IN/_OUT` (which it must, for a metered arm to register
+any model row at all — ROADMAP 272), `declaredPrice` resolves, the probe exits **0**, and the assertion
+about an unpriced endpoint cannot be satisfied. Nothing in the tracked tree regressed; the **host** moved.
+· *Probe for the fix, already run:* `node tools/verifier-arm-probe.mjs --family=VERIFIER
+--base=https://api.deepinfra.com/v1/openai --model=openai/gpt-oss-120b --config=/tmp/nonexistent-config.json`
+→ `price:null, priceSource:"none", verdict:"NOT-ARMABLE", cause:"metered-endpoint-unpriced",
+operatorConfig:null` — the tool already supports `--config=PATH`; the demo does not pass it.
+· *Cost if unfixed:* the rig's only arming instrument for a paid provider class goes red **because the arm
+succeeded**, which teaches the next session to roll back a correct host config to keep a green; and the
+suite's one red is then indistinguishable from the real thing, which is how a live-lane dependency hides in
+the fast lane (same class as the `demo/seat-turn-shape.test.mjs` sha256 leg named in 282's addendum).
+· *Prescribed:* the demo must **supply its own config fixture** (`--config=<fixture>` per arm, one with the
+price keys and one without) and assert both directions, so the verdict depends on the fixture rather than
+on the machine; then a `toolchain`-area guard that a demo which spawns a `tools/` instrument pins **every**
+input layer that instrument reads (argv, env, config file). · *Blind spots:* deleting the price keys from
+the host config is the tempting one-line "fix" and it would darken the verifier family the operator just
+ruled in (`rig.selfdev.json` at `ef29516d` names `verifier/openai/gpt-oss-120b` on five seats); and a
+fixture written into the repo must not be confused with the real host file — the demo's own header ("NO
+credential of the operator's shell is copied in") is the property to preserve while widening it.
+
+**295. The blessed first command prints live credential *values* — an instrument the runbooks tell every
+operator and seat to run is a secret-leak surface.** **Observed** twice at `ef29516d`, on the metered arm:
+`node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status` and the same with `--dry-run`
+both end with a line `env: {"DURIG_DB":…,"DURIG_SEAT_ROOT":…,"DURIG_LOCAL_API_KEY":"sk-strata-…",
+"DURIG_VERIFIER_API_KEY":"…"}` — the **values**, printed into whatever captures the terminal (an agent
+transcript, a CI log, a runbook paste). Cause, pinned: `tools/broker-serve.mjs:467-471` builds
+`envNotes` as `{DURIG_DB, DURIG_SEAT_ROOT, ...Object.fromEntries(Object.entries(process.env).filter(([k])
+=> /^DURIG_(LOCAL|VERIFIER)_/.test(k)))}` — the filter selects the whole family, and the family now
+includes `DURIG_*_API_KEY` (`src/providers/local.mjs:88` `apiKeyEnv: ${prefix}API_KEY`). · *Scope
+measured:* the values appeared in **terminal output only** — `git grep <the verifier key>` and a scan of
+`*.log|*.json|*.out|*.err|*.md` in the tree returned **no** match, and `durig.config.json` (gitignored)
+holds no key; the credential store itself is unchanged. · *Cost if unfixed:* the leak class #5125 closed
+at the **config** layer stays open at the **preflight** layer, and it is the layer every
+`docs/runbooks/*` recovery path (and the delegate skill) runs first, under stress, with the output pasted
+into reports. A leaked key is an operator rotation event, not a cleanup. · *Prescribed:* print **presence**,
+never a value — reuse `looksLikeSecret` (`src/config.mjs`, the predicate #5125's own credential surface
+already uses) inside `envNotes`, print `DURIG_VERIFIER_API_KEY: "set"`, and add a `toolchain` demo that
+runs the preflight with a sentinel in every `DURIG_*_API_KEY` and asserts the sentinel never appears on
+stdout/stderr. · *Blind spots:* the values in this session's transcript are already exposed, so the row
+must state that **rotation is the operator's call, not a doc edit** (D205's discipline: record the fact,
+never the secret — and never re-print the value while proving the point, which is why the quotes above are
+truncated); and a presence-only report must still answer the preflight's real question, so the fix names
+which variable is set rather than silently dropping the family from the output.
+
+**296. The preflight probes a *metered* provider with no ceiling and no ledger row — unaccounted spend,
+and spend that the caps cannot see.** **Observed** at `ef29516d`: `tools/broker-serve.mjs --dry-run` printed
+`verifier: answers, advertises 174 model(s) including openai/gpt-oss-120b` and `verifier: completes
+(finish=stop, prompt=59 tok, completion=44 tok)` — a real `/chat/completions` call against the paid
+endpoint (`:270` and `:308`) — while the configured store ledger (`DURIG_SPEND_LEDGER` =
+`selfdev.sqlite.spend.jsonl`) still **did not exist** afterwards (`ls`: No such file or directory).
+Meanwhile every *delegate* call of the same endpoint this session went through
+`tools/model-probes/metered.mjs` (`assertCeiling` before the send, `meteredChat` accounting after) and
+produced rows totalling **$0.00003**. · *Cost if unfixed:* two-sided. (a) The spend is unbudgeted and
+undated — the same posture D193/D201 refused ("no run-level or store-level cap can stop the FIRST call").
+(b) Worse than unbudgeted: **unaccounted.** `assertCaps`/`spendTotalUsd` read the ledger file as the
+*store* axis, so calls that never land in it make the store total read low, which under-reports how close
+the rig is to the `$4.00` store cap — a guard whose input the traffic bypassed is not a guard. The
+preflight runs on every start, and a metered arm now means every start spends. · *Prescribed:* route the
+preflight's provider probe through the same seam as the probes (`meteredChat` with a declared ceiling and
+the configured ledger), or make it **explicitly free** (`GET /models` presence only, no completion call) and
+say in the output which it did; then a demo that points the preflight at a metered family with a stub
+transport and asserts a ledger row appears with `priceSource` and `authKeyEnv` named-not-valued.
+· *Blind spots:* a completion probe is the only way to prove the endpoint really generates (the #4949
+lesson: a `/models` list that answers is not a seat that works), so "make it a `/models` check only"
+loses a real signal — the answer is accounting, not amputation; and the ceiling for a **preflight** is not
+the ceiling for a **probe arm** (`DURIG_PROBE_CEILING_USD` is a probe-run axis), so the row must say which
+ceiling governs a health check before it spends.
+
+**297. The armed metered verifier inherited a slot nobody priced or measured against the model's thinking
+tokens.** **Observed** at the arm, three bounded calls (ledgers `.spike/delegate-20261106/spend-arm-*.jsonl`):
+`openai/gpt-oss-120b` at `max_tokens=24` returned `finish_reason:"length"` with **`content:""`** — the whole
+completion budget went to reasoning; at `max_tokens=400` with tools it returned
+`finish_reason:"tool_calls"` in **40** completion tokens with valid JSON arguments; the live catalog
+(fetched 2026-11-06, 174 models) declares that model at **131,072** ctx while this rig's
+`DURIG_VERIFIER_CONTEXT` is **24,576** / `DURIG_VERIFIER_MAX_TOKENS` **3,000**, values inherited from the
+self-hosted `:1234` server era. Row-recorded and NOT re-measured here: verifier prompt sizes p50 **55,538**
+/ max **108,435** tokens (**#4948**), and the `8192 × parallel 4` slot against a declared `24,576`
+(**#4959**). · *Cost if unfixed:* the operator just bought cross-family independence (`single-model-rig` is
+gone from `check`) but the legs can still fail for a **slot** reason and read as a model problem — the exact
+misread `docs/runbooks/verifier-independence.md` warns about ("Before anyone re-points a model to fix a
+timeout, the row must say whether the slot was the cause"). And nobody can price a verify leg before it
+runs, which makes every spend cap a guess. · *Prescribed (measurement first, per the operator's standing
+ruling, no capacity change in this row):* run **three real verify legs** on the armed family and publish per
+leg — prompt/completion tokens, `usd` from the ledger, wall time, and whether reasoning consumed the
+completion budget; then present the slot/cap pairing **with numbers** as one capacity decision: at
+`24,576/3,000` the maximal-call exposure is **$0.001419** (2,818 maximal legs under the `$4` store cap); at
+the vendor's `131,072` one maximal call is **$4.85**, i.e. the catalog layer refuses the row before any
+request unless the store cap moves with it (D201's posture). · *Blind spots:* raising the slot without
+raising the store cap makes the arm **unregisterable**, not merely expensive — the exposure rule fires at
+registration, so a naive "match the vendor" edit produces a dark roster (ROADMAP 272's class); and
+thinking-token headroom is a **model-family** property, so a budget tuned for `iq3_s` does not transfer to
+this arm, which is the point of cross-family verification (D137) and the reason the measurement must be
+run on the arm, not inferred from the author seats.
+
+**298. The topology research has an answer location, and the rig has no place to put an answer.**
+**Observed** 2026-11-06: the operator ruled the research prompt **Routed** and asked *"Let me know where you want the
+answer placed."* The prompt file (`docs/reviews/base-agent-product-topology-research-prompt.md`) asks nine numbered
+questions and gates **three registered items** on its results — 279's "what it does not already have" clause, 280's
+"what the base does NOT do" clause, and 283's "two models from different families and different vendors" clause — yet
+there is no row that receives its output, so a finished study would land as prose in `docs/reviews/` and the three
+gates would stay open with nobody obligated to read it. That is the same failure mode as the unfiled research request
+that became **288** (an answer with no address). · *Cost if unfixed:* the rig spends a research cycle and then fails to
+spend the answer — 279/280/283 keep being re-litigated from memory, and the naming question the operator explicitly
+**deferred until research is complete** has no completion condition. · *Prescribed:* this row **is** the intake, and it
+names a destination for **each** artifact rather than one. (1) The study itself lands at
+`docs/reviews/base-agent-product-topology-research.md` — the path the prompt's own `## Deliverable` section already
+names (existence of the reviews dir and the prompt file verified by `git ls-files`); round 2, if needed, at
+`docs/reviews/base-agent-product-topology-followup-research-prompt.md`, the path its `## Follow-up` section already
+names. (2) The **decisions** the study feeds go to the docs that already carry the decisions, and every path here was
+`test -e`-checked as D159's addendum demands: `docs/MVP.md` (which already carries `## Explicitly out of MVP scope`, the
+existing home for "what it does not do"), `docs/COMPETITORS.md` (the competitor definitions 280 argues against), and
+`docs/DECISIONS.md` **D212** — the two-product ruling itself, which is where the naming ruling lands as an addendum
+**only after** the study answers question 7 (the operator deferred it). There is **no `docs/product/` directory** in this
+repo (`git ls-files` returns nothing under it): the first draft of this row cited two files there and was wrong, and the
+error is recorded rather than silently rewritten, because a phantom pointer is the defect this whole row is about.
+(3) The study's `## Proposed backlog items` are registered or rejected in writing, which is this rig's standing rule for
+research output. Acceptance: **every open question in 279–281 and 283 names the section of the study that answers it**,
+so a reader can tell whether a gate is open because the answer is missing or because nobody has read it. · *Blind
+spots:* a study that only lands in `docs/reviews/` is unread, which is why the acceptance test is phrased as
+*propagation*, not *publication*; the study must not be allowed to decide scope — it names options and boundaries, the
+operator rules (D212); and `docs/INDEX.md:3` claims an inventory role it does not perform (ROADMAP 291), so an intake
+that "leaves a trail someone else can audit" cannot rely on the index — the trail is this row plus the named sections.

@@ -6,6 +6,7 @@ precondition: "read-only through the Diagnose steps; loading/unloading or re-win
 last_verified: 2026-10-29
 verified_by: delegate
 evidence: "every endpoint, schema and number in the Diagnose/Do steps was executed 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1) against LM Studio's v1 REST API at http://127.0.0.1:1234; the memory numbers and the cgroup cap results in §probe discipline were re-measured the same day; commit c34bb232 carries the same evidence"
+evidence_addendum: "the section `Arming a metered verifier provider` was executed end-to-end 2026-11-06 (probe NOT-ARMABLE -> vendor price row -> ARMABLE, maxCallExposureUsd 0.001419; roster flip to verifier/openai/gpt-oss-120b; both pointer instruments green; check no longer reports single-model-rig). The :1234 LM Studio steps were NOT re-verified — that server has been down since 2026-10-29 — so last_verified deliberately stays 2026-10-29."
 check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails when rig.selfdev.json and durig.config.json disagree; the live installed-vs-loaded half is docs/ROADMAP.md 261"
 ---
 
@@ -487,3 +488,52 @@ pre-flight floor. Check it yourself:
 ```bash
 grep -s VmSwap /proc/[0-9]*/status | awk -F'[:\t ]+' '$3>0{print $3, $1}' | sort -rn | head   # who is in swap
 ```
+
+## Arming a **metered** verifier provider instead of loading a local model (executed end-to-end 2026-11-06, Linux Fedora 45, node v24.22.1)
+
+**When this is the right move:** the GPU headroom in §"What one RTX 3090 does and does not buy you" is gone — measured
+2026-11-06, RTX A4000 14637/16376 MiB and RTX 3090 23098/24576 MiB, both full — and `check` is reporting
+`single-model-rig` because the roster was lifted onto the author model to keep the rig running. Money was not the
+obstacle: at the armed slot the maximal verify leg costs **$0.001419**, i.e. **2,818** maximal legs under the `$4.00`
+store cap. This is an **operator decision**, not a recovery step: the local steps in this runbook stay correct, and the
+metered arm is the alternative the operator chose (D214).
+
+**Order (each step run, not assumed):**
+
+1. Ask the arming instrument, not the vendor page:
+   `node tools/verifier-arm-probe.mjs --family=VERIFIER --base=<base> --model=<id>` → on an unpriced endpoint this
+   returns **`NOT-ARMABLE`, `cause:metered-endpoint-unpriced`, `maxCallExposureUsd:null`**. That refusal is #5090's
+   false-green removal working: *a paid endpoint with no price is not armable.* Do not delete the probe to get past it.
+2. Get the price **from the vendor with the key** (the keyless catalog omits pricing) and record it **with a date**:
+   `DURIG_VERIFIER_PRICE_USD_IN`, `DURIG_VERIFIER_PRICE_USD_OUT`, `DURIG_VERIFIER_PRICE_AS_OF=<YYYY-MM-DD>`. Write them
+   into **both** gitignored host configs — `durig.config.json` in the repo root **and** `<seatroot>/durig.config.json`,
+   because a woken seat reads the seat-root one. (Measured row 2026-11-06, `openai/gpt-oss-120b` @
+   `https://api.deepinfra.com/v1/openai`: ctx 131,072, $0.037 in / $0.17 out per Mtok.)
+3. Re-run step 1. Only now does it print **`ARMABLE`** with `maxCallExposureUsd` and the cap headroom
+   (`maximalTurnsUnderStoreCap 2818`, `maximalCallsUnderProbeCeiling 105` at `DURIG_PROBE_CEILING_USD=0.15`).
+4. Set the roster (`rig.selfdev.json`) so the verifier-capable seats name `verifier/<id>`, then run **both** pointer
+   instruments in one command — they move together or the pointer is lying:
+   `node demo/deepinfra-catalog.test.mjs && node demo/local-model-pointer.test.mjs`. Before the flip they fail as a pair
+   (`real seats exercise BOTH exemptions (local=12)` / `seat "qa" names local/…, which is not a verifier seat`), and the
+   pair's failure names the **roster**, not a missing key — that distinction sent a previous session hunting a credential
+   that was never the cause.
+5. Verify the gate that started the hunt: `node cli.mjs check rig.selfdev.json` must no longer print `single-model-rig`.
+
+**Two traps on this path, both measured:**
+
+- **Do not raise the context to the vendor's number without moving the store cap.** Exposure is computed at
+  **registration**: at the inherited `24576/3000` slot the maximal call is **$0.001419**; at the vendor's 131,072 it is
+  **$4.85**, which exceeds the `$4.00` store cap, so `src/providers/local.mjs` refuses the model row **before any
+  request**. The symptom is a dark verifier family that reads like a config typo (ROADMAP **297** prices the pairing).
+- **A reasoning arm answers with nothing when the completion budget is small.** `max_tokens=24` on this arm returned
+  HTTP 200, `finish_reason:"length"`, `content:""` — the same shape `docs/runbooks/verifier-serving-headroom.md` calls a
+  *shape* failure rather than a size failure. Prove capability with `tool_choice:"required"` and a budget in the hundreds
+  of tokens: that is what showed valid `tool_calls` in **40** completion tokens for **3 calls totalling $0.00003**, with
+  the ceiling guard run **before** the send (`tools/model-probes/metered.mjs`).
+
+**Accounting caveat while you are in this file:** `tools/broker-serve.mjs --status/--dry-run` prints the **values** of
+every `DURIG_(LOCAL|VERIFIER)_*` variable it sees (including `DURIG_*_API_KEY`) and probes the paid endpoint without a
+ceiling or a ledger row — so do not paste its output into a report, and do not treat "the spend ledger is empty" as
+evidence that nothing was spent (ROADMAP **295**, **296**). The `:1234` steps above were **not** re-verified on
+2026-11-06 (that server has been down since 2026-10-29), which is why `last_verified` in the front matter stays
+2026-10-29.
