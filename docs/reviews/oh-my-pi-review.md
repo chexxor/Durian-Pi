@@ -132,3 +132,27 @@ TUI-visible and delegate-operable. It also assumes a docker dev image (`package.
 orphan audit. No research-agent prompt. One **operator** question: whether durian-pi adopts omp's persona-file shape as
 the target format for the parked `wip/seat-prompt-files` branch — if yes, that decides ruling #1 (seat-persona surface)
 without inventing our own format.
+
+## Dated delta — 2026-11-07, the credentials-and-secrets question (pin `6f3fbc94`; HEAD re-measured with `git -C vendor/eval/oh-my-pi rev-parse --short=8 HEAD` in the same turn)
+
+Read for the operator's pre-333 question (host: Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node
+v24.22.1): **`docs/auth-broker-gateway.md` (387 lines, in full)**, **`docs/secrets.md` (153 lines, in full)**, and
+`packages/ai/src/auth-broker/{remote-store.ts:1285-1318, wire-schemas.ts:35-75, snapshot-cache.ts:110-125}`.
+Mechanisms land as **M9/M10/M11** in `docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md`; the
+decision rows are in `docs/COMPETITORS.md` (the 2026-11-07 section).
+
+What this project now contributes to durian-pi's decision, in three lines: (1) a **separate credential vault process**
+whose refresh token *"never leaves the broker host"* (`remote-store.ts:1290-1318`), with real-vs-redacted enforced as
+**two types** (`wire-schemas.ts:55-63` narrows `refresh` to not equal `REMOTE_REFRESH_SENTINEL`) — the distinction our
+`cli.mjs:396 fileExists: async () => false` cannot express → rows **334**, **341**; (2) a **request-level gateway** with
+per-client `models`/`accounts` grants answered `404`/`400` **before any credential lookup**, usage/quota at the holder, and
+an **`stdio`** variant for *"one trusted parent process: no listener, no token"* — the only shape found that closes
+durian-pi's measured `/proc/<pid>/environ` hole instead of relocating it → row **342**; (3) **reversible HMAC
+placeholders** restored into tool arguments before execution, collected by **env-name** pattern at value ≥ 8 chars plus
+connection-URL passwords → row **336** against our 40-char-with-a-digit floor (`src/config.mjs:73-82`).
+
+**Null result, stated:** the subagent surface (`docs/agent-hub.md`) carries **no** credential or token scoping
+(`git grep -n -i "credential|auth|token|env" -- docs/agent-hub.md` → one hit, about *tokens* as a usage metric) — omp
+answers per-member credential scoping at the **process/wire** layer, not the agent layer. Pin currency: the pins row
+(`docs/VENDOR-PINS.md:78`) records `v18.16.0`; newest remote tag is now `v18.17.0` (bounded `ls-remote --tags`); cite line
+numbers to `6f3fbc94`.

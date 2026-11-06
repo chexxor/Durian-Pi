@@ -119,3 +119,19 @@ outside our rules (D131) even though the *pattern* is what we want.
 `src/api/agent-profiles-service/profile-field-support.ts` next walk — they define *which fields a profile may carry*,
 which is the exact field list we need before choosing our seat-file schema. That is inside this clone, so no
 research-agent prompt. One operator question: whether durian-pi wants scope-tiered skills (project/personal/rig) at all.
+
+## Dated delta — 2026-11-07, the credentials-and-secrets question (pin `6354932e`, re-measured this turn)
+
+Read for the same question: `src/api/secrets-service.ts:19-46`, `src/api/request-secret-client-tool.ts:9-26`,
+`scripts/mars-secret-store.mjs:1-18`, `src/utils/redact-custom-secrets.ts`. Mechanism rows **M2/M5/M11** in
+`docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md`; decision rows in `docs/COMPETITORS.md`.
+
+Two adoptions and one caution. **(a) Ask-the-human-for-a-secret by name** — *"Never ask the user to paste a secret into
+the chat … Call this tool with the name of the secret you need … exposed to this conversation as an environment variable
+named after the secret … this tool is acknowledged immediately, before the user has answered"* → durian-pi row **335**
+(replaces the `No API key for provider: local` dead-end, `docs/runbooks/local-provider-down.md` state 7). **(b) Store
+policy** — keychain when present, else a file encrypted with a host key, else process memory, and *"Secrets reach the
+tools on stdin, never on the command line, where other processes could read them"* → row **339** (native-host-friendly:
+drive the OS tool, install no daemon, D131). **Caution:** because the secret still lands in the conversation's
+environment, this is **governance, not a boundary** on a single-uid host — measured in our tree that a same-uid child
+shell can read the broker's `/proc/<pid>/environ` (pitfall 55), so an OpenHands-shaped service alone would not close it.

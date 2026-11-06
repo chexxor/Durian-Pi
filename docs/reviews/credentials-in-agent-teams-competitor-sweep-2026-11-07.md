@@ -95,13 +95,20 @@ Consequence: C5 is a backstop whose coverage of *our own* credentials is unprove
 | **`vendor/eval/oh-my-pi`** @ `6f3fbc94` (the pins row records tag `v18.16.0` for this commit; the remote's newest tag is now `v18.17.0` — measured with a bounded `ls-remote --tags`; cite line numbers to `6f3fbc94`, never to `main`) | `docs/auth-broker-gateway.md` (387 lines, read in full), `docs/secrets.md` (153 lines, read in full), `packages/ai/src/auth-broker/{remote-store,wire-schemas,snapshot-cache}.ts` | **M9 + M10 + M11 — the operator's architecture, shipped, in our own ecosystem**: a separate `auth-broker` process holding a SQLite credential vault and refreshing server-side, an `auth-gateway` forward-proxy that members call **without ever receiving the credential**, per-member model/account grants and quota/usage accounting at the holder, and a secret-obfuscation layer whose placeholders the model can *use* but not read |
 | `vendor/eval/crewai` @ `f3d0099d` | `lib/cli/src/crewai_cli/authentication/*` (paths enumerated, `token.py` read) | **M1**: platform OAuth (auth0/okta/auth0/entra/keycloak/workos) + a token helper re-exported from `crewai_core.auth.token` — this is **product** auth, not per-agent auth |
 
-**Not read, and why:** `metagpt`, `hermes-agent`, `symphony`, `prime-agent`, `toolflow`,
+**Not read, and why:** `metagpt`, `hermes-agent`, `symphony`, `toolflow`,
 `mudroom`, `aegis-orchestrator`, `ironclaw`, `pi-permission-modes`, `pi-secure-it`, `pi-code-tool`,
 `sandbox-sdk`, `llm-sandbox`, `auto-permission-system`, `agent-governance-toolkit`,
 `awesome-agent-sandboxes`, `aider`, `copilot-cli` (1 file only) — the five rows above already cover every
 architecture *family* found (store, service, egress broker, command-issued, host-held), and the cheapest way
 to keep this honest is the follow-up prompt (§9), not 20 more shallow greps in one session.
-`crewai`'s per-tool credential modules (`…/tools/**/credentials.py`) were enumerated by name only.
+`crewai`'s per-tool credential modules (`…/tools/**/credentials.py`) were enumerated by name only, and its
+**null result** is worth recording: the only per-role credential surface in crewai is a *separate LLM object* —
+`lib/crewai/src/crewai/crew.py:353 planning_llm` fed to the planning agent at `:1470
+planning_agent_llm=self.planning_llm` — while `api_key` appears solely as a pass-through kwarg in the provider-client
+parameter lists (`lib/crewai/src/crewai/llm.py:2711, 2774`). Nothing scopes one member's credential from another's.
+
+`vendor/eval/prime-agent` @ `815e64b5` was read **after** the first draft of this file (the delta is M12 below): its
+`crates/pa-agent/src/{agent.rs, agent_loop/mod.rs, agent_loop/response.rs}` are the credential surface.
 
 ---
 
@@ -282,7 +289,23 @@ exclusion is stated**.
 collection rule instead of our **value-based 40-char-plus-a-digit** rule (**H2**), the connection-URL class, and
 **reversibility**, which is what turns redaction from *hiding* into *letting a seat act through the secret*.
 
-**M12 — workload **identity** rather than a shared secret.** *(advertised-elsewhere)*
+**M12 — a derived agent inherits a **resolver**, never a value.** *(observed — the cheapest boundary shape found)*
+`vendor/eval/prime-agent` @ `815e64b5`: the loop config carries an injected async resolver,
+`agent_loop/mod.rs:107` — `pub get_api_key: Option<GetApiKeyFn>` — and resolution happens at request time in
+`agent_loop/response.rs:104-111`: *`match config.get_api_key.as_ref() { Some(get_api_key) => …
+get_api_key(config.model.provider.clone()) … Some(key) => Some(key), None => config.api_key.clone() }`* — the callback
+wins, and the stored `api_key` is only the **fallback**. The decisive line is in the derivation path,
+`agent.rs:564` **`config.api_key = None;`** followed by `agent.rs:571`
+**`config.get_api_key.clone_from(&self.get_api_key);`** — a nested/sub-agent loop is handed the **callback**, so no
+materialized key ever enters the child's config. No daemon, no listener, no token: the value is simply never placed
+where the consumer could read it.
+**Counterpart:** durian-pi already does this for the *model* credential — resolution happens broker-side at
+`cli.mjs:349-357` (`ctx.env("DURIG_VERIFIER_API_KEY")`), not in the seat — which is why 342's "holder" does **not** have
+to be a separate process: an in-process resolver is the same shape, and a process boundary only becomes necessary where
+the consumer can construct its own requests (a seat shell talking to git or a registry). Rows **334** (the typed seam)
+and **342** (the grant surface) both get cheaper if the seat-facing surface is *a name it presents*, never a value.
+
+**M13 — workload **identity** rather than a shared secret.** *(advertised-elsewhere)*
 SPIRE concepts, fetched 2026-11-07T00:0xZ, HTTP 200, sha256 `609d7078b1348bc6…`
 (`https://spiffe.io/docs/latest/spire-about/spire-concepts/`; note the singular `spire-concept` URL is a
 **404** — record the URL that answers): *"It also maintains a registry of workload identities and the
@@ -303,6 +326,7 @@ adopt the *pattern* (each consumer gets its own scoped credential) and reject th
 | Real vs redacted credential are **different types**, not a boolean | M9 | **lack** | `cli.mjs:396 fileExists: async () => false` is the whole of our distinction |
 | Per-consumer grant: which models, which accounts; `404`/`400` **before** credential lookup | M10 | **lack** | seats are scoped by role at the tool surface (`src/seattools.mjs:335 scopeSeatTools`), never at the credential surface — 306 (per-seat scoping) and 324 (no family enforcer) meeting |
 | A member can *reference* a secret without being able to read it | M11 | **lack** | our redaction is one-way (`src/secretredact.mjs`); the `looksLikeSecret` floor is 40 chars + a digit (`src/config.mjs:73-82`) — **H2** |
+| A **derived** member inherits a resolver, not a value | M12 | **partial** | the model credential is resolved broker-side (`cli.mjs:349-357`) and never handed to a seat, but a seat's shell inherits the broker's whole environment (**H1**), and nothing in `src/confine.mjs` distinguishes "name" from "value" |
 | Credential **health probe** that refreshes and names the source | M1, M9, M10 | **lack** | 326; the keycheck probe is still `.spike` (carrier `#5277`) |
 | One write path for a stored credential (rotation serialized) | M1 | **not-applicable today** (no store) | becomes applicable the moment 333 chooses (b)/(c) or a broker lands |
 | Secrets addressed by **name**, value injected by the host | M2 | **lack** | nothing in `src/` names a secret; a seat gets an env var only for its own shell (filtered away) |
@@ -366,7 +390,8 @@ adopt the *pattern* (each consumer gets its own scoped credential) and reject th
 | M10 gateway with per-consumer grants — **the `stdio` variant** | **pilot** (the only mechanism found that closes H1 without relocating it) | the broker's provider seam (`cli.mjs:349-357`) + the seat roster | 342 |
 | M10 ordering rules (`404`/`400` before any credential lookup; consumer config cannot redirect broker traffic) | **adopt** (cheap, no new process) | provider construction in `cli.mjs` / `src/providers/*` | 341 |
 | M11 name-based collection (≥ 8 chars) + connection-URL class + **reversible** placeholders | **adapt** | `src/config.mjs:73-82` (the floor), `src/secretredact.mjs`, `src/secretdetect.mjs` | 336 |
-| M12 workload identity (SPIRE machinery) | **reject the machinery, keep the pattern** | per-seat scoping stays inside the broker (`DURIG_ACTIVE_SEAT`) | — |
+| M13 workload identity (SPIRE machinery) | **reject the machinery, keep the pattern** | per-seat scoping stays inside the broker (`DURIG_ACTIVE_SEAT`) | — |
+| M12 injected `get_api_key` resolver + `config.api_key = None` in the derived config | **adopt — the cheapest boundary shape found** (no daemon, no listener, no token) | the provider seam (`cli.mjs:349-357`); the seat-facing surface of 335 and 342 should be **a name the seat presents**, never a value | 334, 335, 342 |
 
 **Standards-and-policies pass (runbook Do 5, one representative artifact per category — no category
 dismissed):** the MCP **authorization** surface is present in all three substrates —
