@@ -184,3 +184,6 @@ grant" before any backend beyond the bare-bones one is chosen.
 session-L 331 block (1), the pass-halting block (2), the row list (3) and the numbered operating notes
 moved VERBATIM to `docs/NEXT-ARCHIVE.md` under the heading `## from docs/NEXT.md 2026-11-07 (session M cut)` — the
 pointer cap is 200 lines (`demo/next-pointer.test.mjs`) and the 200th line must still be readable.
+ONE ERROR TRAVELLED WITH THAT BLOCK — flagged here rather than edited in the archive, which stays verbatim: it reads
+"6 → 12 dead letters". Measured 05:02Z there are **6** dead letters; a bare `ls | wc -l` returns 12 because each letter is a
+`*.error.json` + `*.reason` PAIR, and the newest payload mtime is 2026-11-06T11:49Z, so none were created this session.

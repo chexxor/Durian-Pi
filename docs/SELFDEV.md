@@ -2577,8 +2577,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
 65. **A CLI read against a lingering broker fails SILENTLY: empty stdout, exit code 0.** The read is spooled as a `read`
    intent; when the broker's store closes it dead-letters as a **pair** — `<id>.error.json` whose payload is
    `{"from":"cli","body":""}` plus `<id>.error.json.reason` whose whole content is `apply failed: SqliteStorage is closed`.
-   Consequence for the next reader of `broker.inbox.error`: **the dead letters are usually the operator's/delegate's own
-   reads, not seat traffic** (6 → 12 this session, and 5 more `read` intents sat un-applied in `broker.inbox`). The first
+   Count before reporting a number: `ls *.error.json | wc -l` = **6 dead letters**; `ls | wc -l` = 12 only because each
+   letter is a PAIR. Those 6 are UNCHANGED this session (newest payload mtime 2026-11-06T11:49Z) and their `from` is `cli`,
+   so they are prior CLI traffic, not seat traffic. What this session added was 5 `op:"read"` intents sitting in
+   `broker.inbox`, which the 04:09Z pass then drained. The first
    visible symptom is downstream and misleading — `SyntaxError: Unexpected end of JSON input` from whatever piped the empty
    output into a parser, which reads like store corruption. Five such parses cost me a wrong hypothesis; check
    `wc -c` on the raw stdout before parsing it.
