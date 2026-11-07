@@ -210,3 +210,93 @@ threshold … Token Count Isn't the Only Variable"* — which is the direct just
 free on the loopback provider — one request carrying the seat's system prompt + tool schemas and nothing else, reading
 `usage.prompt_tokens`. That number is the denominator every band should be relative to; today we have only the window, and
 for 7 of 12 seats we have no trajectory at all (§3, pitfall 61).
+
+## 8. The follow-up research, folded — checked, not pasted (2026-11-07T05:3xZ)
+
+Report: `docs/reviews/task-completion-followup-research.md`, produced by the operator's research agent from
+`docs/reviews/task-completion-followup-research-prompt.md`. Pinning and quote-check: `inputs/fetched/MANIFEST.md` §8 —
+**25 of its 26 verbatim quotes located in our own fetched copies**; the 26th is recorded `unverified` because the host
+refused the fetch (HTTP 403, ResearchGate). Everything below is the fold, with our measurements beside its claims.
+
+**8.1 What it settles, and the cross-check that makes it load-bearing.**
+
+1. **The reserve defect is a named, reproduced upstream class that upstream declined to fix.** pi #8651 (our substrate's own
+   repo) is `"state":"CLOSED","stateReason":"NOT_PLANNED"` in the fetched HTML, opened 2026-08-25T23:20:28Z. Our pin is
+   *later* (`pi-main.pin.json` sha `2ec55d80…`, pinnedAt 2026-10-19T07:20:20.541Z), and the shape is live at that pin:
+   `vendor/pi-main/packages/durable/src/harness/generation.ts:355-356` — `blocking = contextWindow - policy.reserveTokens`,
+   `background = blocking - policy.backgroundTokens`, no clamp. So §6's verifier numbers are not a local mis-tuning to wait
+   on; **the invariant has to be enforced in durian-pi's config layer**, which is a seam we own.
+2. **The rule worth writing into the gate**: `usable = window − max(reserve, max_output)` — "a reserve smaller than the
+   declared completion budget is not a reserve". For us: #5309's verifier reserve 4,096 against `maxTokens` 6,000
+   under-reserves by 1,904 (their arithmetic, checked: 6,000 − 4,096).
+3. **No product enforces a token-band work-stoppage rule, and no vendor publishes band boundaries scaling with the window.**
+   Adjacent mechanisms: Hermes' iteration cap plus a tool-stripped closing call; Claude Code's `maxTurns` plus reactive
+   compaction after `prompt_too_long`; OpenClaw's pre-compaction "save your notes" reminder (a warning, not a refusal — the
+   same "accepts, never decides" shape §6 flagged). So the milestone's Economy band is **our design choice**, and the doc
+   should say so rather than implying it is borrowed.
+4. **Fractions are the wrong axis for a mixed-window rig** — and this is measurable here, not rhetorical: windows are
+   200,000 and 24,576 (8.1×) while `maxTokens` is a per-family constant. A 10 % band is 20,000 tokens on one family and
+   2,458 on the other, i.e. **below** the verifier's declared completion. Recommended axis: absolute per family,
+   `floor + max_tokens + k`, re-derived when the floor moves.
+5. **The actuator gap has an answer that does not touch the model**: refuse at **claim** time — the broker declines to
+   dequeue a new item for a seat whose last measured view exceeds the band, and the refusal is a queue-visible seat state with
+   an audit row. That is a broker decision, not a sentence in context the model may ignore. It lands on the unbuilt actuator
+   named in `docs/runbooks/context-over-window.md` (`#1781`), not on a new mechanism.
+6. **Write-ahead handoff is not the industry practice** — the best-documented harness (Anthropic's long-running-agent
+   harness) writes at session *end* plus per-commit, and gets idempotency from the commit boundary and from a machine-checkable
+   JSON feature list whose only legal edit is a `passes` boolean ("the model is less likely to inappropriately change or
+   overwrite JSON files compared to Markdown files"). The transferable finding is **format + validation**, not timing. It also
+   names our risk exactly: a rendered `NEXT_SESSION.md` beside a writable `state.json` is a **second mutable representation of
+   the same truth** — make the render derived and write-protected.
+7. **Summary budgets are absolute, not fractional**: Anthropic's compaction example lands at ~2–3k tokens (2–3 % of a 100k
+   window, 8–12 % of our 24,576). Our `min(floor(0.8 × reserve), maxTokens)` resolves to **3,276** at reserve 4,096 — same
+   absolute range as theirs by coincidence, not design. And because Claude Code's summary step is a **non-deterministic
+   blocking stall** (retained content fluctuates on identical inputs), **nothing load-bearing may exist only inside a
+   summary**: identifiers belong in the store or the state file.
+8. **A store-side clear must emit its audit entry in the same commit as the view change.** Anthropic reports the divergence
+   rather than hiding it (`applied_edits` with `cleared_tool_uses`, `cleared_input_tokens`); that is the pattern for
+   `ContextEdit {action:"omit"}`, which is what held pair **#2402/#2403** already owns. Reinforces §7's recommendation.
+9. **The counter trap is the one to fear most**: if an `omit`/`replace` shrinks the view without recomputing the counter,
+   both thresholds are computed from a number that no longer describes the request (the arXiv analysis' account of the
+   "snip" shaper being invisible to a counter that reads `usage` off the last assistant message). Our `status --json`
+   `context` block is exactly such a counter.
+
+**8.2 The floor it told us to measure first — measured this session.** Host: Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1 (printed by the probe itself, `.spike/delegate-20261107/floor-probe.mjs`,
+`floor-probe-seats.mjs`, output `floor-probe-seats.out`, 2026-11-07T05:35:21Z / 05:35:39Z).
+
+| family | declared window | minimal turn (one "." user msg) | with a real seat instruction file | instruction floor as % of window |
+|---|---|---|---|---|
+| `local/qwen3.8-flash-next-iq3_s` | 200,000 | **53** prompt_tokens | `lead` 358 · `qa` 1,105 · `auditor` 1,131 · `impl` 1,248 | 0.18 – 0.62 % |
+| `verifier/openai/gpt-oss-120b` | 24,576 | **55** prompt_tokens | `lead` 362 · `qa` 1,088 · `auditor` 1,114 · `impl` 1,227 | 1.47 – 4.99 % |
+
+- **The milestone's "often 5–15k token system-prompt floor" is refuted for this rig**: our seat instructions cost
+  358–1,248 tokens. The two families tokenize the same files within ~2 % of each other.
+- **Limitation to carry, not hide**: these floors exclude **tool schemas**, which the harness sends. The honest floor for a
+  live seat is therefore higher, and the cheap way to get it is the ledger, not another probe (below).
+- **Empirical metered-arm trajectory** (the ledger, 1,073 turns with `prompt_tokens > 0`): p0 449, p5 1,548, **p50 6,411**,
+  **p90 19,787**, p99 21,078, **max 24,358** = 99.1 % of the declared window, and **zero** turns over the window.
+- **Band consequence, computed from our own history rather than from a curve**: today's default reserve (16,384 → blocking
+  8,192) would have fired on **38.7 %** of those turns; #5309's accepted reserve (4,096 → 20,480) on **5.6 %**. That is
+  #8651's "fires on essentially every turn" class, at our magnitudes.
+- **Cost disclosure**: the 8 probe calls above were raw provider fetches, so they never entered the spend ledger (pitfall 60
+  in `docs/SELFDEV.md`). Ledger reads **$0.456203**; true verifier-family cumulative is ≈ $0.4568.
+
+**8.3 Corrections to the report's own arithmetic** (recorded so the circulating number is ours, not a rounding drift):
+`min(floor(0.8 × 4096), 6000)` = **3,276**, not "≈ 3,277". `clear_tool_inputs` is a string in the **context-editing doc**
+(6 matches), not in the arXiv analysis (0 matches) — cite the doc. Its 1,904 under-reserve and the 26,000 wall both check out.
+
+**8.4 What stays unanswered, so the next reader does not re-ask it** (the report says so itself, and I could not close it
+from the tree either): a ≤ 20-call protocol for placing an effective window (it says 20 calls cannot place a threshold, only
+detect a grossly misplaced one); any vendor statement of reserve-vs-max-output as a rule (issue trackers only); a published
+fraction for summary size; any product with a token-band stoppage; any automated resume test for handoff docs; measured
+tokenizer-estimate error against a chat template plus tool schemas; and any wall-clock seconds for policy iteration —
+"not reported", so §9's numbers-in-seconds requirement is unmet by construction.
+
+**8.5 Where this lands in the queue (rows the team already holds — no new rows minted here).**
+`#5306`/`#5309`/`#5310`: gate on both `reserveTokens >= maxTokens` **and**
+`keepRecentTokens + summaryBudget + maxTokens + measuredFloor <= window`, per family; `#5308`: promote
+`context-bands.mjs` **and** the two floor probes so the constants stop being re-derived; `#5316`/`#5317` (332 S2/S4): the
+measured floor is a per-family registry constant — which is also what `window.candidates.measured` still lacks (rows 27/97);
+`#2402`/`#2403`: the same-commit audit entry for `ContextEdit omit`; `#5215`: the suppression trace's missing `age=`
+(`docs/NEXT.md` block (W)).

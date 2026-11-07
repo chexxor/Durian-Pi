@@ -45,34 +45,38 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 **AS OF 2026-11-07T04:55Z (delegate session M) — read this block before the sections below; where it disagrees with them,
 this block is the measured current state.**
 
-**Blocker:** **no seat can be woken** — the `SKIP … reason=pending` wedge in block (W) below; `doctor` settles the
-submissions and the next pass skips the same set, so 331 (`#5306`/`#5309`/`#5310`), 338 (`#5277`) and 334 (`#5320`) cannot
-be started by anyone until it is understood.
+**Blocker:** the entry below (04:55Z) said "no seat can be woken". **That cleared at 05:18Z.** `doctor` settled **38**
+stranded submissions, the startup pass woke all ten seats (`PASS 1 ms=113 woke=pm,impl,qa,lead,scribe,devtools,auditor,
+security,qa2,architect`), and `attention` now reports **0 notices**. What remains is a defect rather than a state: the
+suppression trace cannot date a suppression at all — **76,337** `SKIP … reason=pending` lines in the broker log, **0** of
+them carry `age=` (block (W2) below). Until that is fixed, every future session re-derives the wedge from scratch.
 
-**BLOCKER (W) — no seat can be woken, and the named remedy does not fix it.** Three bounded broker starts (pid 1604076,
-1630036, 1549159) each logged `SKIP <seat> reason=pending conv=N` for pm, impl, qa, lead, scribe, devtools, auditor,
-security, qa2, architect, and `status` carried 9 `admitted_not_started` notices ("submission #319666 admitted 101s ago, no
-run started and no slot held; re-arm it with the resume/doctor verb (item 37(b))"). `doctor` with the broker stopped found
-16 and settled them (`run-cancelled` ×10, `abortSubmission:settled` ×2, `withdrawn` ×4) and the **next pass skipped the same
-set within 300 ms**. Not slots (`control.paused:false`, `streaming:{}`), not the spool (`broker.inbox` drained to 0), not the
-model flip (the same SKIP set appears at 03:25Z, before it). **The sharpest observable: those SKIP lines carry `conv=N` but
-NO `age=`** — `pendingConvIds = advancingConvIds(inspection.submissions, …)` (`src/broker.mjs:1278`) counts the conversation
-as advancing while `pendingAgeMs` (`src/broker.mjs:1338-1342`) cannot date it from the same `inspection.submissions`;
-meanwhile `src/attention.mjs:490` dates it fine ("admitted 101s ago"), so the two readers disagree about one conversation.
-`src/broker.mjs:1277` already states the invariant ("#4170: `pendingConvIds` MUST MEAN 'ADVANCING', NOT 'HAS A SUBMISSION
-ROW'") and `:805` names the shape from #2576; **#5215 (RM-314, wedged vs IDLE, claimed) is where this specimen belongs.**
-Run first, in order: (1) `cat selfdev.sqlite.broker.json` then `ps -o pid,etime,args -p <that pid>` — **do not trust
-`pgrep -a node | grep "cli.mjs serve"`, it returned nothing while the process was alive**; (2)
-`DURIG_DB=./selfdev.sqlite node cli.mjs doctor`; (3) a deliberately short start
-`node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 120` and read
-whether the `SKIP reason=pending` lines now carry `age=` — yes: the suppressor is dateable, ask why `advancingConvIds`
-counts it; no: ask which document the suppression is keyed on. A fake check exists for the assertion
-(`demo/offline.mjs` runs pm→worker→done in 0.3 s): admitted → placed → run started.
-**My three intent spools are HELD, not queued, in `.spike/delegate-20261107/held-intent/`** (ruling, wedge, and the earlier
-one) — applying an intent in this state creates a submission that suppresses its seat further. Re-spool only after (W) is
-resolved: `node intent.mjs lead --body-file .spike/delegate-20261107/intent-lead-ruling.md --request-id
-delegate-20261107-ruling` (same for `intent-wedge.md` → lead and architect, and `intent-arch-deadletters.md` +
-`intent-arch-correction.md` → architect).
+**BLOCKER (W) — the state that stopped the session, kept short because (W2) supersedes its diagnosis.** Ten seats were
+skipped every pass (`SKIP <seat> reason=pending conv=N`) with 9 `admitted_not_started` notices; `doctor` settled 16 and the
+next pass skipped the same set inside 300 ms; slots, spool, provider family and pause were all ruled out by reading
+`control`, `streaming`, `broker.inbox` and the pre-flip log. Ruled out again at 05:18Z, and the residue is (W2).
+intent spools are HELD, not queued, in `.spike/delegate-20261107/held-intent/`** — applying an intent in that state admits a
+submission, which is what suppresses the seat. Re-spool once notices are 0 (they are): `node intent.mjs lead --body-file
+.spike/delegate-20261107/intent-lead-ruling.md --request-id delegate-20261107-ruling`, same shape for `intent-wedge.md`
+(lead, architect) and `intent-arch-deadletters.md` / `intent-arch-correction.md` (architect).
+
+**Intent state, updated 05:4xZ:** the five 04:5xZ spools stayed HELD in `.spike/delegate-20261107/held-intent/` (they
+describe the wedge, which has since cleared); two FRESH ones are spooled instead — `delegate-20261107-lead-0545` (the
+rulings, the canary cost, the #5307/#5310 amendment asks) and `delegate-20261107-arch-0545` (the `age=` trace specimen for
+#5215, the EXIT mis-attribution). The inbox also holds two stale `op:"read"` intents from reads against a lingering broker.
+
+**(W2) THE DIAGNOSTIC PASS THE OPERATOR APPROVED — run 05:18:42Z–05:34:18Z (pid 1673276, `--max-duration 120`, 14 passes).**
+It answered the question block (W) posed and produced a sharper finding. (a) `age=` **never** prints: `grep -c
+"SKIP .* reason=pending" selfdev.sqlite.broker.log` → 76,337, `grep -c "SKIP .* reason=pending .* age="` → **0**, across
+every broker this session. Mechanism, read not guessed: `advancingConvIds` keeps only `status === "placed"`
+(`src/broker.mjs:843`), so a suppressing row DOES exist, while `pendingAgeMs` (`src/broker.mjs:1338-1342`) looks that row up
+and returns null — i.e. the placed submission carries no finite `admittedAt`, the same field `src/attention.mjs` reads for
+"admitted 101s ago". So `SKIP … conv=N` with no `age=` is #4180's trace refusing to invent an age (correct) while the field
+it needs is absent (the bug). (b) `SKIP reason=pending` by itself is NOT the wedge — it is back-pressure from the wake the
+previous pass issued; the wedge signature is the `admitted_not_started` NOTICE. (c) Broker audit is still wrong twice:
+`EXIT … reason=deadline passes=-` was logged for a broker I stopped with SIGTERM, and `passes=-` although the same log shows
+`PASS 1`…`PASS 14`; `serve --stop` again failed the grace and left it alive with a fresh heartbeat and frozen `lastPassAt`.
+Lands on **#5215** (RM-314) and the broker-luster rows — do not mint twins.
 
 **RULING APPLIED (R2) — the verifiers now run the local model, and `check` says the invariant is broken.** Operator,
 2026-11-07: "The next pass can have the verifiers use the local model." Applied at `2e59dd89`: qa, qa2, advocate, auditor,
@@ -98,6 +102,18 @@ the delegate's: **(A)** leave it red (costs the suite's signal and hides real re
 `paused` unless a landing needs it, so the $0.50 family trigger stays untouched) and leave the other four local; **(C)** give
 the test its own two-provider fixture — cheap, but the assertion's own comment refuses synthetic-only carriage.
 
+**R2b — the operator chose option B, applied at `baa5fd87`.** `auditor` (the *second* verifier) is back on
+`verifier/openai/gpt-oss-120b` as a GATE CANARY; qa, qa2, advocate, designer stay local, so routine verification is still
+free. Applied by the only apply path: `up … --refresh --dry-run` previewed exactly one `wouldReset` (auditor), `up --refresh`
+reported 12 refreshed, exit 0. Both guards that encode the two-family invariant are green again: `test.mjs --area docs` →
+**6/6**, and `check` findings **142 → 136** with `single-model-rig` now `{"status":"pass","found":0}` and `no-verifier-seat`
+passing. Measured cost of keeping it: the 120 s diagnostic pass woke the canary 3 times and spent **$0.00415** (12 ledger
+rows; cumulative **$0.456203**, so $0.0438 of the probe's $0.50 trigger). Enforced caps are per-call $0.05 / per-run $0.10 /
+per-store $4.00 (`durig.config.default.json:10-12` via `src/causes.mjs` `SPEND_CAUSE`, which stops the seat and PARKS the
+row); there is **no per-family total** — the "$0.50 trigger" is my probe's readout, not a mechanism. Rig verbs need
+`--env-file="$HOME/.config/durig/env"`: without it the config layer REFUSES to register the metered row
+(`"causes":["metered-endpoint-unkeyed"]`) and a seat naming it fails as `no_model` before any request.
+
 **CONSEQUENCE FOR 331 (#5306 plumbing / #5309 values / #5310 verify — all still `queued`, unclaimed).** The verifier half of
 #5309 now configures **no seat**: `DURIG_COMPACTION_MODEL_OVERRIDES` still keys `verifier/openai/gpt-oss-120b` (keep it —
 it is latent policy for a family with no seats, and restoring the family is one seat-model edit each plus `up --refresh`).
@@ -121,16 +137,28 @@ the held pair **#2402/#2403** already owns, so fold the doc's Economy band there
 prompt for the questions the tree cannot answer: `docs/reviews/task-completion-followup-research-prompt.md` (operator hands
 it to the research agent; the delegate cannot).
 
-**CORRECTION to the claim in (M) below — the free arm IS recorded, just not in the ledger.** `cli.mjs status --json`'s
-`context` block carries per-seat `{consumed, usage, window, fraction, head.state}` for **all twelve** seats from the store's
-own usage entries, e.g. `auditor consumed 20,902 / window 24,576 / fraction 0.850 / head.state "current"` and `pm cacheRead
-46,691` on the free arm. What is missing is a **series** and a **measured denominator** (`window.candidates.measured` is
-`null` for every seat — that is rows 27/97, not new work). **Trap before quoting a fraction:** `consumed` is one turn's
-MOVED tokens including `cacheRead`, not the live head (`src/context.mjs:31`, and `docs/runbooks/context-over-window.md`
-says acting on the wrong reading is worse). `advocate` prints `fraction 9.96` today because its newest usage entry (244,751)
-sits **behind a compaction boundary** (`head.state:"behind-boundary"`) and its declared window is now 24,576 — while the
-runbook's worked example still ties that same 244,751 to a 200,000 window ("1.22×"), so **that runbook sentence is now
-false in its detail** (check id `runbook-stale` exists and did not fire; worth a row).
+**THE RESEARCH CAME BACK AND IS FOLDED (05:3xZ).** Report `docs/reviews/task-completion-followup-research.md` (its body is
+the agent's, verbatim; my fold note is appended under a separator). 9 URLs fetched and pinned in `inputs/fetched/MANIFEST.md`
+§8; **25/26 quotes located in our copies**, quote 26 `unverified` (host returned **403**) and the cite gate is left to flag
+that row on purpose. Fold + our own measurements: `docs/reviews/task-completion-milestone-intake-2026-11-07.md` §8 — the
+reserve defect is upstream and closed `NOT_PLANNED` (pi #8651) and live at our pin (`generation.ts:355-356`); the gate
+invariants to assert are `usable = window − max(reserve, max_output)` and
+`keep + summary + maxTokens + measuredFloor <= window`; bands must be ABSOLUTE per family (a 10 % band is 2,458 tokens on
+the verifier — under its own 6,000 completion); the stop-band actuator answer is **refuse at claim time in the broker**
+(audit row), not a sentence in context; and a rendered handoff doc must be derived/write-protected, because two mutable
+surfaces drift. **Floors measured** (`.spike/delegate-20261107/floor-probe*.mjs` + `.out`): empty turn **53** (local) /
+**55** (verifier) prompt_tokens; with real seat instruction files **358–1,248** (local) / **362–1,227** (verifier) — which
+**refutes the milestone's "often 5–15k" prompt floor on this rig**, though tool schemas are excluded from that number.
+Ledger trajectory for the metered arm (1,073 turns): p50 6,411, p90 19,787, max 24,358 = 99.1 % of its window; today's
+default reserve would have fired on **38.7 %** of past turns, #5309's accepted reserve on **5.6 %**.
+
+**CORRECTION to the claim in (M) below — the free arm IS recorded** (pitfall 69 in `docs/SELFDEV.md` holds the detail):
+`cli.mjs status --json`'s `context` block gives every seat `{consumed, usage, window, fraction, head.state}` — e.g. `auditor
+consumed 20,902 / window 24,576 / fraction 0.850 / head "current"`. Two things before quoting one: `consumed` is ONE TURN's
+MOVED tokens including `cacheRead`, and a value behind a compaction boundary is labelled `head.state:"behind-boundary"`
+(`advocate` prints `fraction 9.96` that way). `window.candidates.measured` is `null` everywhere — that is rows 27/97, not new
+work. Also stale: the `context-over-window` runbook's worked example ties 244,751 to a 200,000 window while the seat carrying
+it now declares 24,576, and `check`'s `runbook-stale` did not fire — worth a row for `lead`.
 
 **Current item — the milestone the operator named, then the build the ruling just opened.**
 
@@ -154,22 +182,6 @@ seat is decoration; (2) promote the three `.spike/` instruments under **312** (c
 `lead` can route; (4) settle how **#5273** (311) gets claimed — the doc's kill test and the 41 leaked worktrees are the same
 failure class; (5) `node scripts/test.mjs --area docs && node scripts/test.mjs --area guard` (1.0 s / 1.9 s).
 
-**(C) THE LAND+PRUNE PASS — state of the branch/worktree surface right now, and what to run first.** Landed (merge
-commits on `main`): `item-4829`, `item-4922`, `item-4943`, `item-5090`, **`item-5111`** (= #5134, the
-worktree-removal message fix — **half of row 311 is therefore now landed**: `src/worktree.mjs:1242`
-`entry.parentPath ?? entry.path ?? worktree`), `item-5145`, `item-5175` (the `item-5094` KEEP-HELD disposition row),
-`item-5209`, `item-5216`, `item-5217`. **Still off-main, on their refs, with their worktrees already reclaimed** (so the
-refs are all that remain): `item-4846`, `item-4967`, `item-5208` (needs a decision-number re-mint — the ledger owner's
-call), `item-5094` + `impl-item-5094-recut` (**identical patch-ids** `323f8b98…`/`b8d62623…` — Step 0c says one claim, and
-the landed ledger row for it says **KEEP-HELD**, so the delegate neither landed nor deleted them), `verify-5180` (the 344
-specimen), `wip/seat-prompt-files` (ledger row `SUPERSEDED-BY-EVENTS`; removal needs a named `-D` grant — **yours**).
-**Worktree surface after the ratifications (measured): 18 trees — 8 seat-root (in use), 9 live
-(`claimed`/`held`/`deferred`), 1 `locked` (`item-5094`, held on purpose by its `KEEP-HELD` disposition row), and
-`dirty: 0` — the last orphan (`item-5193`) is landed, and `item-4970`'s lingering lock was reaped on the operator's
-acceptance.** Re-check in one line each:
-`DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `reapable: 0`) and
-`git branch --format='%(refname:short)' | grep -v '^main$' | while read b; do a=$(git rev-list --count main..$b); [ "$a" -gt 0 ] && echo "$b ahead=$a"; done`.
-
 **(R) 333 IS RULED — (b) as an interface — so the credential work is now a build with a known order.** The ruling and the
 four follow-up decisions are in **D227**. Rows updated in place, not duplicated: **333** (the ruling, verbatim; open only for
 which backend is *recommended*), **334** (the seam: corrected citation — `read`/`list`/`modify`/`delete` at
@@ -180,10 +192,8 @@ spooled to `lead`: 331 → 338 (`checkAuth` first, then the paid usability probe
 selector in config) → 336/337/341 (already funded) → then 342's spike**, which measures "does a seat hold a value or a
 grant" before any backend beyond the bare-bones one is chosen.
 
-**ARCHIVED THIS SESSION (2026-11-07, delegate session M): the credential-question block (0), the
-session-L 331 block (1), the pass-halting block (2), the row list (3) and the numbered operating notes
-moved VERBATIM to `docs/NEXT-ARCHIVE.md` under the heading `## from docs/NEXT.md 2026-11-07 (session M cut)` — the
-pointer cap is 200 lines (`demo/next-pointer.test.mjs`) and the 200th line must still be readable.
-ONE ERROR TRAVELLED WITH THAT BLOCK — flagged here rather than edited in the archive, which stays verbatim: it reads
-"6 → 12 dead letters". Measured 05:02Z there are **6** dead letters; a bare `ls | wc -l` returns 12 because each letter is a
-`*.error.json` + `*.reason` PAIR, and the newest payload mtime is 2026-11-06T11:49Z, so none were created this session.
+**ARCHIVED THIS SESSION (2026-11-07, session M, two cuts — 16+ lines each):** session-L's blocks (0), (1), (2), (3), the
+numbered operating notes, and block (C) moved VERBATIM to `docs/NEXT-ARCHIVE.md` (the cap is 200 lines,
+`demo/next-pointer.test.mjs`). One error travelled with the first cut and is labelled there rather than edited in the
+archive: it reads "6 → 12 dead letters"; measured there are **6** (a bare `ls | wc -l` counts the `*.error.json` +
+`*.reason` PAIRS), newest payload 2026-11-06T11:49Z — none created this session.

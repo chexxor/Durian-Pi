@@ -12665,3 +12665,22 @@ node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node 
    path (55), the classifier floor (56), "a secrets service is not automatically a boundary" (57), bounded upstream reads
    and inverted pin drift (58), roadmap rows appended at the **end of the table** (59), and delegate-run provider probes
    spending outside the ledger (60).
+
+### from docs/NEXT.md 2026-11-07 (session M, second cut) — block (C), verbatim
+
+**(C) THE LAND+PRUNE PASS — state of the branch/worktree surface right now, and what to run first.** Landed (merge
+commits on `main`): `item-4829`, `item-4922`, `item-4943`, `item-5090`, **`item-5111`** (= #5134, the
+worktree-removal message fix — **half of row 311 is therefore now landed**: `src/worktree.mjs:1242`
+`entry.parentPath ?? entry.path ?? worktree`), `item-5145`, `item-5175` (the `item-5094` KEEP-HELD disposition row),
+`item-5209`, `item-5216`, `item-5217`. **Still off-main, on their refs, with their worktrees already reclaimed** (so the
+refs are all that remain): `item-4846`, `item-4967`, `item-5208` (needs a decision-number re-mint — the ledger owner's
+call), `item-5094` + `impl-item-5094-recut` (**identical patch-ids** `323f8b98…`/`b8d62623…` — Step 0c says one claim, and
+the landed ledger row for it says **KEEP-HELD**, so the delegate neither landed nor deleted them), `verify-5180` (the 344
+specimen), `wip/seat-prompt-files` (ledger row `SUPERSEDED-BY-EVENTS`; removal needs a named `-D` grant — **yours**).
+**Worktree surface after the ratifications (measured): 18 trees — 8 seat-root (in use), 9 live
+(`claimed`/`held`/`deferred`), 1 `locked` (`item-5094`, held on purpose by its `KEEP-HELD` disposition row), and
+`dirty: 0` — the last orphan (`item-5193`) is landed, and `item-4970`'s lingering lock was reaped on the operator's
+acceptance.** Re-check in one line each:
+`DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `reapable: 0`) and
+`git branch --format='%(refname:short)' | grep -v '^main$' | while read b; do a=$(git rev-list --count main..$b); [ "$a" -gt 0 ] && echo "$b ahead=$a"; done`.
+

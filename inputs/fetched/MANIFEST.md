@@ -252,3 +252,48 @@ quote-not-line-range rule (ROADMAP **243**, D159) is what makes this section usa
   transition + preserve pointers + cap-2 + forced …`"), gated behind the compaction-cluster fold (ROADMAP 92/94, #5220).
   The vendor feature is **server-side**; ours would be **store-side** — same effect, different owner, and it keeps the raw
   entries append-only (D105/D107's non-destructive property).
+
+## 8. The follow-up research report's citations — fetched 2026-11-07T05:15:43Z
+
+Report: `docs/reviews/task-completion-followup-research.md` (arrived untracked at 25,141 B; committed this session).
+Prompt it answers: `docs/reviews/task-completion-followup-research-prompt.md`. Quote-check ran as
+`.spike/delegate-20261107/quote-check-followup.mjs` (entity-normalized exact substring search):
+**25 of the 26 quotes located verbatim in our copies**; the one miss is a fetch that was refused.
+
+| file | source URL | fetched (Z) | HTTP | bytes | sha256 (first 16) | page's own last-modified | quotes found here |
+|---|---|---|---|---|---|---|---|
+| `platform.claude.com_docs_en_build-with-claude_context-editing.html` | https://platform.claude.com/docs/en/build-with-claude/context-editing | 2026-11-07T05:15:39Z | 200 | 1,846,303 | `9ce9667c441caf98` | not sent | 5/5 (§1–5) |
+| `www.anthropic.com_engineering_effective-context-engineering-for-ai-agents.html` | https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents | 2026-11-07T05:15:39Z | 200 | 206,036 | `813eba6339d268ba` | not sent | 5/5 (§6–10) |
+| `www.anthropic.com_engineering_effective-harnesses-for-long-running-agents.html` | https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents | 2026-11-07T05:15:40Z | 200 | 191,377 | `d7e7f9b4de9828b7` | not sent | 4/4 (§11–14) |
+| `github.com_earendil-works_pi_issues_8651.html` | https://github.com/earendil-works/pi/issues/8651 | 2026-11-07T05:15:40Z | 200 | 246,452 | `1d19faced44a9927` | not sent | 2/2 (§15–16) |
+| `arxiv.org_html_2604.14228v3.html` | https://arxiv.org/html/2604.14228v3 | 2026-11-07T05:15:41Z | 200 | 798,527 | `a1bcabcec107daa0` | 2026-10-14T00:58:32Z | 6/6 (§17–22) |
+| `docs.vllm.ai_en_latest_features_per_request_metrics.html` | https://docs.vllm.ai/en/latest/features/per_request_metrics/ | 2026-11-07T05:15:41Z | 200 | 208,967 | `cbe8bbc68076b51f` | 2026-11-03T20:13:56Z | 1/1 (§23) |
+| `www.simplified.guide_llama-cpp_server-enable-metrics.html` | https://www.simplified.guide/llama-cpp/server-enable-metrics | 2026-11-07T05:15:42Z | 200 | 157,477 | `d25c15d80d566a60` | not sent | 1/1 (§24) |
+| `github.com_tontinton_maki_issues_301.html` | https://github.com/tontinton/maki/issues/301 | 2026-11-07T05:15:43Z | 200 | 460,526 | `31ee8718427aec7b` | not sent | 1/1 (§25) |
+| `www.researchgate.net_publication_400858436_context_is_what_you_need.html` | https://www.researchgate.net/publication/400858436_Context_Is_What_You_Need_The_Maximum_Effective_Context_Window_for_Real_World_Limits_of_LLMs | 2026-11-07T05:15:43Z | **403** | 21,291 | `ba7d8a49b1ebc004` | n/a | **0/1 (§26) — `unverified`: the fetch was refused by the host (bot block); the saved body is the 403 page, kept so the failure is reproducible** |
+
+Notes that matter to a later reader:
+
+1. **The `/engineering/` and `/research/` paths of the context-engineering article are byte-identical** — this session's
+   copy (`813eba6339d268ba`) matches §7's copy fetched from the `/research/` URL. So §7 and §8 corroborate rather than
+   duplicate, and a citation to either URL resolves.
+2. **pi #8651 is confirmed closed unactioned, at the source**: the fetched HTML carries
+   `"state":"CLOSED","stateReason":"NOT_PLANNED"`, opened 2026-08-25T23:20:28Z by `rahulrajaram`, body containing both
+   quoted sentences. It is an issue against **our own substrate's repo** (`pi-main.pin.json` →
+   `https://github.com/earendil-works/pi.git`, pinned sha `2ec55d808d455b1a64a2bf7888198207a096120a`, pinned 2026-10-19 —
+   *after* the issue was closed). So no upstream fix predates our pin, and the shape is live here:
+   `vendor/pi-main/packages/durable/src/harness/generation.ts:355-356` reads
+   `const blocking = contextWindow - policy.reserveTokens; const background = blocking - policy.backgroundTokens;` —
+   no clamp to a fraction of the window. That is the exact formula the issue quotes, and it is what makes our verifier
+   family's background threshold negative (−24,576 at the defaults).
+3. Supporting strings probed and found in the same copies (not quoted in the table): `clear_tool_uses` (77×),
+   `clear_at_least` (19×), `cleared_tool_uses` (3×), `cleared_input_tokens` (6×) in the context-editing doc;
+   `maxTurns`, `microcompact` in the arXiv analysis; `claude-progress.txt` (6×), `init.sh` (10×) in the harness doc.
+   One string the report used in prose is **not** in the copy it cited: `clear_tool_inputs` appears in the
+   context-editing doc (6×), not in the arXiv analysis (0×) — cite the doc for it.
+
+> **Untracked by policy (measured 2026-11-07):** `git check-ignore -v` resolves these page files to
+> `.gitignore:75:inputs/fetched/*.html` — the ignore rule at `.gitignore:73-75` records the reason (re-fetchable, too big to
+> track). `git ls-files inputs/fetched/` lists only `MANIFEST.md` and `README.md`. **The rows in this file are the durable
+> record**; the `.html` copies are checksummed scratch. (`inputs/fetched/README.md` still claims the directory is tracked —
+> that sentence is stale; see pitfall 76 in `docs/SELFDEV.md`.)

@@ -2637,3 +2637,59 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
    file already follows), and re-run `node scripts/clockin.mjs | head -1` to see whether you made the pointer worse. A
    digest that grows into the dumps it exists to avoid has failed at its job — that sentence is about the digest, not about
    `NEXT.md`; do not "fix" the wrong file.
+
+## Operational pitfalls (2026-11-07T05:4xZ, delegate session M, second half — the canary ruling, the diagnostic pass, and the research fold; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+71. **A `--json` verb can print a non-JSON line FIRST, so the whole document fails to parse.** Every config load prints
+    `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,"maxCallExposureUsd":14,…}`
+    (a pre-existing, correct refusal) and then the command's own JSON — two top-level documents on stdout. Symptoms:
+    `SyntaxError: Unexpected non-whitespace character after JSON at position 375` from `up`, `check`, `doctor`, `status`.
+    Parse from the second document: `s.slice(s.indexOf("\n{")+1)`. Distinguish it from pitfall 65's failure, which is the
+    *opposite*: empty stdout with exit 0. `wc -c` on the raw capture tells you which one you have in one call.
+72. **The cross-family invariant is enforced by TWO guards, and one of them is a test that reads the rig file.** `cli.mjs
+    check` ids `single-model-rig` and `no-verifier-seat`, and `demo/deepinfra-catalog.test.mjs:141` iterates
+    `rig.selfdev.json`'s `seats`, groups seat models by provider prefix and requires ≥ 1 seat per exemption ("real seats
+    exercise BOTH exemptions … the fix is not carried only by synthetic cases" — the #5013 non-vacuity pair: "a green that
+    cannot go red is not a guard"). Moving a whole family off the rig turns both red at once; the remedy is one seat, not a
+    knob. Related and easy to misread as a broken credential: rig verbs run **without** `--env-file="$HOME/.config/durig/env"`
+    make the config layer **refuse to register** the metered row — `{"spend":"registration-refused","provider":"verifier",
+    "causes":["metered-endpoint-unkeyed"]}` — so a seat naming it fails as `no_model` **before any request**. That is the
+    pre-request spend guard working, not a missing key.
+73. **`SKIP reason=pending` is normal back-pressure; the `admitted_not_started` NOTICE is the wedge.** Read the first pass of
+    a broker before believing a wedge: `PASS 1 ms=113 woke=pm,impl,qa,…` means every seat was woken, and the `SKIP …pending`
+    lines after it are the wake the previous pass issued. The trace's missing `age=` is a separate, real defect and it is
+    quantified, not anecdotal: `grep -c "SKIP .* reason=pending"` → 76,337; `grep -c "SKIP .* reason=pending .* age="` → **0**
+    (every broker, all day). Mechanism, from reading: `advancingConvIds` keeps only `status === "placed"`
+    (`src/broker.mjs:843`), so the suppressing row definitely exists, while `pendingAgeMs` (`src/broker.mjs:1338-1342`) looks
+    it up in the same array and returns null — the placed submission carries no finite `admittedAt`, the very field
+    `src/attention.mjs` reads to print "admitted 101s ago". #4180's refusal to invent an age is correct; the absent field is
+    the bug. Order of instruments: `status --json` notices → `PASS 1 woke=` → `doctor` settle count.
+74. **The broker's `EXIT` line mis-attributes both fields that matter.** Observed: `EXIT pid=1673276 reason=deadline
+    passes=-` for a broker I had stopped with `kill -TERM` after `serve --stop` blew its grace — and `passes=-` although the
+    same log shows `PASS 1` … `PASS 14`. So "why did it stop?" and "how much work did it do?" are both wrong in the audit the
+    comment at `src/broker.mjs:1603` promises. After any stop: `ps -o pid,etime -p <pid>` (a fresh `heartbeatAt` with a frozen
+    `lastPassAt` in `selfdev.sqlite.broker.json` is the dormant signature), then the runbook's genlock check and `kill -TERM`.
+75. **Delegate-run provider probes spend money that never reaches the ledger — again, and now with a rule to stop it.**
+    Eight floor/seat-prompt calls this session (≈ $0.0006) left the ledger at $0.456203 (pitfall 60, restated because it
+    recurred the moment I touched a provider directly). The rule that makes it cheap: **measure the floor once per family and
+    write the constant into the doc**; do not re-probe. Measured 2026-11-07T05:35Z (`.spike/delegate-20261107/floor-probe.mjs`,
+    `floor-probe-seats.mjs`): empty turn **53** prompt_tokens on `local/qwen3.8-flash-next-iq3_s`, **55** on
+    `openai/gpt-oss-120b`; with the real seat instruction files **358–1,248** (local) and **362–1,227** (verifier) — which
+    refutes the "5–15k prompt floor" claim for this rig, with the caveat that **tool schemas are excluded** from those
+    numbers. The free way to get the schema-inclusive floor is the spend ledger, not another call: over 1,073 metered turns
+    with `prompt_tokens > 0`, min 449, p50 6,411, p90 19,787, p99 21,078, max 24,358 = 99.1 % of that family's declared
+    window, and zero turns over it.
+
+76. **`inputs/fetched/README.md` says the fetched corpus is tracked; `.gitignore:75` says it is not — and the ignore rule
+    wins.** Measured 2026-11-07: `git check-ignore -v inputs/fetched/<page>.html` →
+    `.gitignore:75:inputs/fetched/*.html`, and the comment above it states the policy: *"fetched vendor pages are
+    re-fetchable evidence, too big to track (11 pages, 8.2 MB, largest 2.6 MB); the tracked record is
+    `inputs/fetched/MANIFEST.md` (url, date, HTTP, sha256, verified phrases)"*. `du -sh inputs/fetched/` → 4.9 MB here, and
+    `git ls-files inputs/fetched/` lists only `MANIFEST.md` and `README.md`. So README's sentence *"This directory is
+    **tracked** … a corpus that lives only in the agent's workspace counts as lost"* is false in its detail, and a reader who
+    trusts it will look for page copies in the repo and find none. Practical consequence for the fold loop: **the MANIFEST row
+    is the durable artifact** — the sha256 + HTTP + byte count + verified phrases are what a later session re-checks by
+    re-fetching; the local `.html` is scratch with a checksum, and it survives only until someone cleans the tree. Do not
+    "fix" this by `git add -f`-ing megabytes of HTML: the size ruling is recorded inline and reversing it is the operator's
+    call. The cheap check `check` does NOT have (worth a row for `lead`, next to `runbook-stale`): a doc that asserts a path is
+    tracked, contradicted by `.gitignore`.
