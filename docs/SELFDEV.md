@@ -2561,3 +2561,77 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     step 7. **(b) `git rerere` is enabled** and printed "Recorded preimage for …" / "Recorded resolution for …" during this
     merge, so a future merge that touches the same runbook `evidence:` line may silently replay this resolution — read
     `git rerere status` and `git rerere diff` before trusting a merge of those files.
+
+## Operational pitfalls (2026-11-07T04:5xZ, delegate session M — the pass-driving + verifier-family session; rows #5306/#5309/#5310 carriers, the operator's local-verifier ruling applied; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+64. **`pgrep -a node | grep "cli.mjs serve"` can return NOTHING while the broker is alive.** It did, twice, and it made me
+   report an "unclean exit with no `EXIT` line" that was false — the process was up 41 minutes in the documented
+   post-`--max-duration` linger. The two reads that do answer the question, in one command:
+   `cat selfdev.sqlite.broker.json` → `{"pid":…,"since":…,"heartbeatAt":…,"lastPassAt":…}` (driving vs lingering: fresh
+   heartbeat + frozen `lastPassAt` = the 303 signature) and `ps -o pid,etime,args -p <pid>`. Two related record-integrity
+   facts measured here: `tools/broker-serve.mjs --stop` produced **no `STOP-REQUESTED` log line** for pid 1604076 (the only
+   such line in the log came from a stale `.stop` file at 01:26:07), and the eventual `EXIT` read `reason=deadline
+   passes=-` although I had requested the stop and then killed it — so the audit `src/broker.mjs:1603` promises
+   ("why did the broker stop?") mis-attributes a stopped broker as deadline-expired. Do not treat that reason string as
+   evidence of cause.
+65. **A CLI read against a lingering broker fails SILENTLY: empty stdout, exit code 0.** The read is spooled as a `read`
+   intent; when the broker's store closes it dead-letters as a **pair** — `<id>.error.json` whose payload is
+   `{"from":"cli","body":""}` plus `<id>.error.json.reason` whose whole content is `apply failed: SqliteStorage is closed`.
+   Consequence for the next reader of `broker.inbox.error`: **the dead letters are usually the operator's/delegate's own
+   reads, not seat traffic** (6 → 12 this session, and 5 more `read` intents sat un-applied in `broker.inbox`). The first
+   visible symptom is downstream and misleading — `SyntaxError: Unexpected end of JSON input` from whatever piped the empty
+   output into a parser, which reads like store corruption. Five such parses cost me a wrong hypothesis; check
+   `wc -c` on the raw stdout before parsing it.
+66. **`cli.mjs send` refuses while a broker drives; `node intent.mjs <seat> --body-file <file>` is the spool route** — the
+   refusal text itself says so. Two traps. **(a)** Do not spool into a rig that is suppressing its seats (pitfall 68):
+   applying an intent ADMITS a submission, and the submission is what suppresses the seat — I pulled my three spools back
+   out of `broker.inbox` into `.spike/delegate-20261107/held-intent/` and left the finding in `docs/NEXT.md` instead.
+   **(b)** With no broker driving and no key in the environment, `send` runs a **send-hosted generation in the CLI
+   process**, which can die `model_error`; the body still lands in the seat's conversation as a `pi.user` entry (verified
+   via `cli.mjs log <seat> N`), so `settledReason:"model_error"` means "the reply failed", not "the intent was lost".
+67. **A seat-model change applies ONLY through `up --refresh`.** Bare `up` detects and REPORTS `modelMismatch` and writes
+   nothing; `--refresh` is the sole apply path (detect → `conversation.reset(handoff)` via the shared boundary mechanism →
+   configure), and `--refresh --dry-run` prints `wouldReset` + `per-seat wouldRefresh.changes` — always read that before
+   applying. Detection compares the rig-resolved string against **`AgentDoc.model`** (what `configure` last wrote), not the
+   seat record (`detectModelMismatch`, `cli.mjs:1384`). Three traps inside: **(a)** `checkup`'s `single-model-rig` compares
+   resolved model STRINGS (`const distinct = [...new Set(resolved)]`, `src/checkup.mjs:599-606`), so repointing a provider's
+   base URL and leaving seat strings alone keeps the check **green** while every seat runs one family — and this rig's
+   loopback server answers **any** requested id (`/v1/models` lists one model; a request for `openai/gpt-oss-120b` returned
+   a body whose `model` field read `qwen3.8-flash-next-iq3_s`). Nothing anywhere compares requested-vs-returned id
+   (`grep -rn "returned model|served model|model mismatch|modelMismatch" src/ vendor/pi-main/packages/{durable,ai}/src` →
+   no matches). **(b)** Editing a JSON rig file with raw `"` inside a string breaks it silently for every consumer — my
+   `_readme` note did exactly that and `up` answered `Expected ',' or '}' … at position 1367`; validate with
+   `node -e 'JSON.parse(readFileSync(…))'` immediately after any hand edit. **(c)** `broker-serve --start` REFUSES with
+   `live-tree-dirty` ("a seat woken from this cwd edits this tree (F12/F23)") — so commit or stash your doc edits before
+   any pass, or pass `--allow-dirty` knowingly.
+68. **The `SKIP <seat> reason=pending` wedge: `doctor` settles the submissions and the wedge SURVIVES.** Across three
+   broker starts, ten seats were skipped every pass, and `status` carried 9 `admitted_not_started` notices naming the
+   37(b) remedy (`resume`/`doctor`). `doctor` with the broker stopped found 16 and settled them (`run-cancelled` ×10,
+   `abortSubmission:settled` ×2, `withdrawn` ×4); the next pass skipped the **same set within 300 ms**. Ruled out by reading
+   the instruments: slots (`control.paused:false`, `streaming:{}`), spool (`broker.inbox` empty), provider family, and
+   pause. The observable that localizes it: those SKIP lines carry `conv=N` but **no `age=`** —
+   `pendingConvIds = advancingConvIds(inspection.submissions, …)` (`src/broker.mjs:1278`) counts the conversation while
+   `pendingAgeMs` (`src/broker.mjs:1338-1342`) cannot date it from the same `inspection.submissions`, yet
+   `src/attention.mjs:490` dates it ("admitted 101s ago"). `src/broker.mjs:1277` already states the invariant
+   ("#4170: `pendingConvIds` MUST MEAN 'ADVANCING', NOT 'HAS A SUBMISSION ROW'"). **Do not report "no capacity" or "no
+   money" while this is up** — money was not the constraint (a pass cost $0 after the family move) and the team was not
+   saturated (26 claimed rows).
+69. **The free-arm context instrument already ships: `cli.mjs status --json` → `context.<seat>` =
+   `{consumed, usage{input,output,cacheRead,cacheWrite,reasoning}, window{denominator,value,candidates}, fraction,
+   head{state,usageEntryId,boundaryEntryId}}` for all twelve seats.** Two things before quoting a number from it.
+   **(a)** `consumed` is ONE TURN's MOVED tokens including `cacheRead`, not the live head, and a measure behind a
+   `pi.compaction`/`pi.reset` is labelled `head.state:"behind-boundary"` — `advocate` prints `fraction 9.96` exactly that
+   way today (244,751 behind a boundary). That is the artifact `src/context.mjs:31` and
+   `docs/runbooks/context-over-window.md` warn about, not pressure; a guard that shouted at it gets switched off within a
+   week (#3539). **(b)** `window.candidates.measured` is `null` for every seat — only `declared` exists, which is rows 27/97
+   still open. Side finding for the doc record: the runbook's worked example ties 244,751 to a **200,000** window ("1.22×")
+   while the seat now carrying it declares **24,576**, and `check`'s `runbook-stale` finding did not fire — so a stale
+   example survives its own staleness check.
+70. **The clock-in DIGEST is over its budget, and `docs/NEXT.md`'s pointer block has a 200-line cap — both are hygiene
+   you owe, not noise.** `node scripts/clockin.mjs` printed 33,063 B against `DIGEST_BUDGET_BYTES = 20000`
+   (`scripts/clockin.mjs:37`), and its own `## COST` line reports `6210 ms, 32603 B printed`; the pointer header read
+   `## POINTER (docs/NEXT.md lines 43-265 of 265; cap 200)` — i.e. the next session's first read is **truncated**. So when
+   you add a block to `NEXT.md`, move a superseded one to `docs/NEXT-ARCHIVE.md` in the same commit (the convention the
+   file already follows), and re-run `node scripts/clockin.mjs | head -1` to see whether you made the pointer worse. A
+   digest that grows into the dumps it exists to avoid has failed at its job — that sentence is about the digest, not about
+   `NEXT.md`; do not "fix" the wrong file.

@@ -42,6 +42,96 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 
 ## NEXT SESSION
 
+**AS OF 2026-11-07T04:55Z (delegate session M) — read this block before the sections below; where it disagrees with them,
+this block is the measured current state.**
+
+**Blocker:** **no seat can be woken** — the `SKIP … reason=pending` wedge in block (W) below; `doctor` settles the
+submissions and the next pass skips the same set, so 331 (`#5306`/`#5309`/`#5310`), 338 (`#5277`) and 334 (`#5320`) cannot
+be started by anyone until it is understood.
+
+**BLOCKER (W) — no seat can be woken, and the named remedy does not fix it.** Three bounded broker starts (pid 1604076,
+1630036, 1549159) each logged `SKIP <seat> reason=pending conv=N` for pm, impl, qa, lead, scribe, devtools, auditor,
+security, qa2, architect, and `status` carried 9 `admitted_not_started` notices ("submission #319666 admitted 101s ago, no
+run started and no slot held; re-arm it with the resume/doctor verb (item 37(b))"). `doctor` with the broker stopped found
+16 and settled them (`run-cancelled` ×10, `abortSubmission:settled` ×2, `withdrawn` ×4) and the **next pass skipped the same
+set within 300 ms**. Not slots (`control.paused:false`, `streaming:{}`), not the spool (`broker.inbox` drained to 0), not the
+model flip (the same SKIP set appears at 03:25Z, before it). **The sharpest observable: those SKIP lines carry `conv=N` but
+NO `age=`** — `pendingConvIds = advancingConvIds(inspection.submissions, …)` (`src/broker.mjs:1278`) counts the conversation
+as advancing while `pendingAgeMs` (`src/broker.mjs:1338-1342`) cannot date it from the same `inspection.submissions`;
+meanwhile `src/attention.mjs:490` dates it fine ("admitted 101s ago"), so the two readers disagree about one conversation.
+`src/broker.mjs:1277` already states the invariant ("#4170: `pendingConvIds` MUST MEAN 'ADVANCING', NOT 'HAS A SUBMISSION
+ROW'") and `:805` names the shape from #2576; **#5215 (RM-314, wedged vs IDLE, claimed) is where this specimen belongs.**
+Run first, in order: (1) `cat selfdev.sqlite.broker.json` then `ps -o pid,etime,args -p <that pid>` — **do not trust
+`pgrep -a node | grep "cli.mjs serve"`, it returned nothing while the process was alive**; (2)
+`DURIG_DB=./selfdev.sqlite node cli.mjs doctor`; (3) a deliberately short start
+`node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 120` and read
+whether the `SKIP reason=pending` lines now carry `age=` — yes: the suppressor is dateable, ask why `advancingConvIds`
+counts it; no: ask which document the suppression is keyed on. A fake check exists for the assertion
+(`demo/offline.mjs` runs pm→worker→done in 0.3 s): admitted → placed → run started.
+**My three intent spools are HELD, not queued, in `.spike/delegate-20261107/held-intent/`** (ruling, wedge, and the earlier
+one) — applying an intent in this state creates a submission that suppresses its seat further. Re-spool only after (W) is
+resolved: `node intent.mjs lead --body-file .spike/delegate-20261107/intent-lead-ruling.md --request-id
+delegate-20261107-ruling` (same for `intent-wedge.md` → lead and architect, and `intent-arch-deadletters.md` +
+`intent-arch-correction.md` → architect).
+
+**RULING APPLIED (R2) — the verifiers now run the local model, and `check` says the invariant is broken.** Operator,
+2026-11-07: "The next pass can have the verifiers use the local model." Applied at `2e59dd89`: qa, qa2, advocate, auditor,
+designer moved to `local/qwen3.8-flash-next-iq3_s` via the only apply path, `up rig.selfdev.json --refresh` (after
+`--refresh --dry-run` previewed exactly 5 resets). `node cli.mjs check rig.selfdev.json` went 141 → 142 findings; the new one
+is `single-model-rig` (fix-now). **D48/D119 cross-family verification is suspended on this rig, not fixed** — the local
+server (`/v1/models`) serves exactly one model, `nvidia-smi` shows the A4000 at 15,816/16,376 MiB and the 3090 at
+23,012/24,576 MiB, so no second family fits today. Verifier spend is frozen at **$0.452053 of the $0.50 trigger** (one
+15-minute pass cost **$0.06109**; declared price $0.037/M in, `durig.config.json:16-18`, cheaper than the cheapest metered
+alternative in `src/providers/deepinfra-prices.json`, so cost is driven by call count and prompt size, not price).
+**Trap:** that loopback server answers ANY requested model id with qwen — a request for `openai/gpt-oss-120b` returned a body
+whose `model` field read `qwen3.8-flash-next-iq3_s` — and `src/checkup.mjs:599-606` compares resolved model STRINGS, so
+repointing `DURIG_VERIFIER_BASE_URL` at loopback instead would keep `check` green while the invariant is false and log a
+model that never ran. Nothing anywhere compares the requested id with the returned id (grep: no matches in `src/` or
+`vendor/pi-main/packages/{durable,ai}/src`) — fold that into #5212 (RM-315) / #5275 (329), do not mint a fourth.
+**The ruling also turned a suite gate red, and it is the gate that no longer matches the state, not the fix that broke:**
+`node scripts/test.mjs --area docs` → **5/6**, the failure is `demo/deepinfra-catalog.test.mjs:141`
+`real seats exercise BOTH exemptions (verifier=0, local=12) — the fix is not carried only by synthetic cases`, which reads
+the LIVE rig's seat models and requires ≥ 1 seat per provider exemption (the regression guard for the 2026-10-19 outage
+fix). `--area guard` is 25/25 and the rest of `--area docs` is green. Three ways out, and the choice is the operator's, not
+the delegate's: **(A)** leave it red (costs the suite's signal and hides real regressions in that file); **(B) recommended**
+— restore exactly ONE metered verifier-family seat as a canary that carries the exemption (measured $0.000414/call; keep it
+`paused` unless a landing needs it, so the $0.50 family trigger stays untouched) and leave the other four local; **(C)** give
+the test its own two-provider fixture — cheap, but the assertion's own comment refuses synthetic-only carriage.
+
+**CONSEQUENCE FOR 331 (#5306 plumbing / #5309 values / #5310 verify — all still `queued`, unclaimed).** The verifier half of
+#5309 now configures **no seat**: `DURIG_COMPACTION_MODEL_OVERRIDES` still keys `verifier/openai/gpt-oss-120b` (keep it —
+it is latent policy for a family with no seats, and restoring the family is one seat-model edit each plus `up --refresh`).
+#5310 should assert both keys AND `reserveTokens >= maxTokens` per family: my band probe
+(`.spike/delegate-20261107/context-bands.mjs`, free, output in `context-bands.out`) shows the defaults put the verifier
+behind a **compaction wall** (`keep 20,000 + summary 6,000 = 26,000 > 24,576` window) with a **negative** background
+threshold (−24,576), and #5309's accepted verifier reserve (4,096) is smaller than its declared completion (6,000). Full
+arithmetic per family: `docs/reviews/task-completion-milestone-intake-2026-11-07.md` §6. **The probes are untracked
+(`.spike/` is gitignored): they sit on disk until a scratch sweep, and a sweep is a documented act
+(`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`) — so an unpromoted probe is lost without anyone deciding to
+lose it. `#5308` owns promotion. Run both policy probes — one says WHICH policy resolves, the other says WHERE it fires and
+which band that is.**
+
+**MILESTONE (M) — its references are now fetched and quote-checked, and one of its claims contradicts its own source.**
+`inputs/fetched/MANIFEST.md` §7 pins all three URLs (200/200/200 + sha256) and lists which claims are supported verbatim
+(incl. the cookbook's `high-level 3/3 preserved, obscure 0/3 preserved`) and which are the doc's own inferences with no
+source ("an agent at 90 % of its window is the worst possible judge"; the "often 5–15k" prompt floor). §7.2 records that our
+pin exposes no `clear_tool_uses`-style primitive (grep → no matches), only
+`ContextEdit {target, action:"omit"|"replace"}` at `vendor/pi-main/packages/durable/src/types.ts:412-426` — which is what
+the held pair **#2402/#2403** already owns, so fold the doc's Economy band there rather than minting N6 beside it. New
+prompt for the questions the tree cannot answer: `docs/reviews/task-completion-followup-research-prompt.md` (operator hands
+it to the research agent; the delegate cannot).
+
+**CORRECTION to the claim in (M) below — the free arm IS recorded, just not in the ledger.** `cli.mjs status --json`'s
+`context` block carries per-seat `{consumed, usage, window, fraction, head.state}` for **all twelve** seats from the store's
+own usage entries, e.g. `auditor consumed 20,902 / window 24,576 / fraction 0.850 / head.state "current"` and `pm cacheRead
+46,691` on the free arm. What is missing is a **series** and a **measured denominator** (`window.candidates.measured` is
+`null` for every seat — that is rows 27/97, not new work). **Trap before quoting a fraction:** `consumed` is one turn's
+MOVED tokens including `cacheRead`, not the live head (`src/context.mjs:31`, and `docs/runbooks/context-over-window.md`
+says acting on the wrong reading is worse). `advocate` prints `fraction 9.96` today because its newest usage entry (244,751)
+sits **behind a compaction boundary** (`head.state:"behind-boundary"`) and its declared window is now 24,576 — while the
+runbook's worked example still ties that same 244,751 to a 200,000 window ("1.22×"), so **that runbook sentence is now
+false in its detail** (check id `runbook-stale` exists and did not fire; worth a row).
+
 **Current item — the milestone the operator named, then the build the ruling just opened.**
 
 **(M) THE MILESTONE: "ensuring LLM task completion."** The operator created
@@ -90,102 +180,7 @@ spooled to `lead`: 331 → 338 (`checkAuth` first, then the paid usability probe
 selector in config) → 336/337/341 (already funded) → then 342's spike**, which measures "does a seat hold a value or a
 grant" before any backend beyond the bare-bones one is chosen.
 
-**(0) THE CREDENTIAL QUESTION IS RESEARCHED, NOT ANSWERED — 333 is still the operator's fork, and it gates one row
-(342) but nothing else.** Read `docs/reviews/credential-architecture-options-2026-11-07.md` (§2 the option table,
-§3 the recommendation, §4 what only the operator can do). The delegate's recommendation, one line: **answer 333 as (a)
-env-only + pay the visibility tax, fund 336/337/341 now (all $0), fund 334/338 as 332-S3, then pilot 342; do not adopt a
-network secrets service before 342 is measured.** The evidence that reframes the whole question, measured in this tree:
-`src/confine.mjs` strips credential-named env from a seat's shell (`node --test demo/confine.test.mjs` → **pass 1, fail
-0, 352 ms**), **but** a seat-shaped child shell printed **92 env names from `/proc/<pid>/environ`, including
-`DURIG_VERIFIER_API_KEY` and `DURIG_LOCAL_API_KEY`**, and `refusalFor("cat /proc/$PPID/environ", {root, cwd})` returned
-**no refusal** (probe, ~6 s, canary values, names only: `.spike/delegate-20261107/envprobe/procfs-canary.mjs` — gitignored,
-so **promote it** per 312 or it is lost). So the current control is "a seat does not think to ask". The mechanism that
-makes option (b) dangerous is pi's precedence, not an opinion: `vendor/pi-main/packages/ai/src/auth/resolve.ts:28-35` —
-*"A stored credential owns the provider: ambient/env is consulted only when nothing is stored."* A stored plane would
-**ignore**, not override, `DURIG_*`, voiding the ledger's `authKeyEnv` attribution and D48/D119.
-
-**(1) STILL THE FREE PRIORITY, UNCHANGED FROM SESSION L: ROADMAP 331 (slice 1 of 332's S1 settings seam).** The fix and
-its gate are written out in the archived session-L pointer (`docs/NEXT-ARCHIVE.md`, heading line 12409): `src/config.mjs:432
-compactionSettings()` emits `modelOverrides` as a **sibling** (`:488`) of `compaction` (`:455`) while pi-durable reads it
-only from **inside** `settings.compaction`, so every family resolves pi-durable's defaults `16384 / 20000 / 32768` and the
-verifier family (window 24,576) compacts at `24576 − 16384 = 8192` while keeping 20,000 recent. Baseline probe:
-`node .spike/delegate-20261106c/compaction-policy-probe.mjs` (free, no model). Gate: a test that calls pi-durable's
-`compactionPolicy()` and asserts the configured numbers come back **per family** — `demo/config.test.mjs` passes with the
-bug in place, so it is not the gate; `node tools/what-to-test.mjs --paths=src/config.mjs,cli.mjs` derives **73 direct
-guards**. **Do not** set harness-wide `DURIG_COMPACTION_RESERVE_TOKENS` before the nesting fix. Carriers: `lead` has not
-minted them; the briefs are **spooled undelivered** as `delegate-20261106c-lead11 / -lead11b / -lead12 / -lead13` (measured:
-**5 pending intents**, oldest waiting **236 min**).
-
-**(2) THE PASS HALF IS STILL STOPPED, and the stop is routing, not capacity** (unchanged ruling, D224 R5): **do not start a
-third pass until `lead`/`pm` say how `#5273` (the 311 carrier, `impl`) gets claimed** — it sat `queued` through two full
-passes while `claimed` rose 14 → 17. Worktrees **41** at session-L close (`seat-root 8, reapable 21, live 9, locked 2,
-dirty 1`) — the leak 311 exists to stop; re-measured after the land+prune pass in **(C)**: **20** worktrees, `reapable 0`. Broker at this close: **down** ("no broker state"), `selfdev.sqlite.broker.json`
-absent, **6 dead letters** in `selfdev.sqlite.broker.inbox.error` (same 6 as session L — no new ones), verifier provider
-**answers, 174 models including `openai/gpt-oss-120b`**, local provider configured but not probed in that run. Family
-spend **$0.34959 of the $0.50 trigger (69.9 %)**, headroom **$0.15041**; this session spent **$0.00123** (3 preflight
-provider probes) — every credential canary was local and free.
-
-**(3) NEW THIS SESSION, for `lead` to decompose (rows, not orders — routing is the team's):** **336** (the
-`looksLikeSecret` floor — measured `abc123def456` → `false`, 32-char alnum → `false`), **337** (refuse `/proc/*/environ` +
-a `check` finding + a `Warn/Deny/Error` presence policy), **341** (refuse before any credential lookup; consumer config must
-not redirect broker traffic; no silent fallback), **334** (implement pi's `CredentialStore` seam with real-vs-redacted as
-**two types**), **338** (command-resolved TTL credential + an `auth check` probe; carrier `#5277` already queued for the
-prototype), **335** (a seat asks the operator for a missing secret instead of dying), **339** (keychain-first, stdin not
-argv). Free trio first: **336 → 337 → 341 ≈ half a day each, $0, gates are the existing canaries.** **340** and **342** await
-the operator (a new local listener / a new moving part). Smaller items for the same pass: **343** (`vendor-pins
---freshness` prints the drift direction inverted — ~1 h, `devtools`, gate is a fixture test on a clone with no local tags)
-and the **312**-pattern promotion of the two probes named in Blocker 5.
-
-**Next command** (host signature measured with it — Linux, Fedora Linux 45 (Forty Five), kernel
-`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
-
-```bash
-cd ~/Git/Durian-Pi
-git status --short -- .                                   # at this close: 5 modified docs + 3 new credential docs (MINE) + 1 foreign untracked doc (see Blocker 6) + selfdev.sqlite.spend.jsonl (310)
-node .spike/delegate-20261107/envprobe/procfs-canary.mjs   # 337 baseline: does a seat-shaped child shell still read the broker's environ? ~6 s, names only, canary values
-node --test demo/confine.test.mjs                          # the spawn-path canary: 0 credential names cross the child env. pass 1 / fail 0 / 352 ms
-node .spike/delegate-20261106/verifier-spend-tripwire.mjs  # family spend vs the $0.50 trigger (free) — $0.34959 at this close
-node .spike/delegate-20261106c/compaction-policy-probe.mjs # 331 baseline — free, calls pi-durable's own compactionPolicy
-node tools/vendor-pins.mjs --check                         # PIN CHECK PASS, 27 clones, incl. the review-audit clause (a review naming a present clone cites its HEAD + has a COMPETITORS entry)
-node tools/broker-serve.mjs --status                       # down? spool depth? provider reachability? — reads files, not the store, so it answers with the broker down. NOTE 295 is LANDED here: the preflight prints provider id/baseUrl/model/ctx/out, NOT values — do not re-report it as a leak
-ls selfdev.sqlite.broker.inbox.error | wc -l               # 6 at this close (no new dead letters)
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit | head -c 400   # 311 leak meter: reapable 0 after the 2026-11-07 pass (was 21 reapable / 41 worktrees)
-git rev-list --count refs/remotes/origin/main..main                   # 25 at this close; the push needs a FRESH grant (landed seat work is on local main only — single disk)
-DURIG_DB=./selfdev.sqlite node cli.mjs status --json > .spike/status-m.json   # only with the broker DOWN (329: a wedged broker makes this print nothing for 120 s)
-node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node scripts/test.mjs --area guard
-# the pass, only when lead says #5273 is claimed:
-# node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
-```
-
-**Push state (2026-11-07, after the ratifications):** the operator pushed themselves — `origin/main` = **`51f35497`**
-(measured after `git fetch`). Unpushed since then: the `item-5193` recovery commit `1cac166b`, the landing merge
-`baab6ed8`, and this record. Always re-measure rather than assuming your own `HEAD` is the remote's:
-`git fetch && git rev-list --count refs/remotes/origin/main..main`.
-
-**Blocker:**
-1. **311's message half is LANDED** (via `item-5111`/#5134 — `src/worktree.mjs:1242` now uses
-   `entry.parentPath ?? entry.path ?? worktree`), so a cleanup refusal names the real path and link target instead of
-   `undefined/<name>`. **Two halves remain:** the guard is still tripped by ordinary `node_modules` symlinks, and there is
-   still **no reap verb or schedule fed by `cli.mjs worktree audit`** — today the delegate had to remove 21 `reapable`
-   trees by hand. Leak meter after the pass: **`reapable: 0`**, worktrees **20** (was 41). New companion row: **344**.
-2. **333 is RULED (D227) — (b) as a swappable interface — and four narrower choices are open to the operator**: the
-   recommended backend, the store key shape, the precedence rule, and whether a seat may ever hold a value. None of them
-   block **331 / 334 / 336 / 337 / 338 / 341**; only **342**'s shape waits on the last one.
-3. **The $0.50 family threshold still has no rig-side enforcer (324)**; the delegate is the tripwire, headroom **$0.15041**.
-   **321 before 324** (operator ruling), and 317's calibration (`#5214`) before further verifier spend.
-4. **303's root cause is open** (`#5231`/`#5260`, architect) — a broker past its deadline keeps heartbeating with closed
-   storage, and that shape destroys reads (**329**, 6 dead letters).
-5. **Three probes are still in gitignored `.spike/` and will be lost** (312 pattern): the `/proc` canary (337), the
-   compaction-policy probe (331, `#5277` is the carrier for the keycheck, not this one), and the ledger-trajectory probe
-   the milestone review needs (N2).
-6. **RESOLVED — `docs/reviews/ensuring-llm-task-completion-research.md` is the operator's and is the next milestone**
-   ("The operator created that file. I intended … to be the next milestone we work on", 2026-11-07). The delegate now
-   tracks it as **milestone source material, not evidence** (a raw model reply; its three web references are unfetched by
-   us) and pairs it with the grounding pass `docs/reviews/task-completion-milestone-intake-2026-11-07.md`. No rows have
-   been minted from it — that is the team's act at the review (candidates N1–N7).
-7. `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**). The **327** stop-file writer is still unidentified.
-8. **`docs/SELFDEV.md` is ~258 KB / ~65k tokens and `docs/ROADMAP.md` ~681 KB.** Read headings + grep the symptom
-   (`scripts/clockin.mjs` prints the headings with anchors). Pitfalls **55–60** are the credential sweep's: the `/proc`
-   path (55), the classifier floor (56), "a secrets service is not automatically a boundary" (57), bounded upstream reads
-   and inverted pin drift (58), roadmap rows appended at the **end of the table** (59), and delegate-run provider probes
-   spending outside the ledger (60).
+**ARCHIVED THIS SESSION (2026-11-07, delegate session M): the credential-question block (0), the
+session-L 331 block (1), the pass-halting block (2), the row list (3) and the numbered operating notes
+moved VERBATIM to `docs/NEXT-ARCHIVE.md` under the heading `## from docs/NEXT.md 2026-11-07 (session M cut)` — the
+pointer cap is 200 lines (`demo/next-pointer.test.mjs`) and the 200th line must still be readable.

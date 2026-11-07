@@ -12557,3 +12557,111 @@ calibration (`#5214`) before further verifier spend. (6) **330** — shared-tree
 any broker verb. (7) `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**). (8) The **327** stop-file writer is
 still unidentified; the probe is in the row.
 
+
+
+## from docs/NEXT.md 2026-11-07 (session M cut) — verbatim
+
+**(0) THE CREDENTIAL QUESTION IS RESEARCHED, NOT ANSWERED — 333 is still the operator's fork, and it gates one row
+(342) but nothing else.** Read `docs/reviews/credential-architecture-options-2026-11-07.md` (§2 the option table,
+§3 the recommendation, §4 what only the operator can do). The delegate's recommendation, one line: **answer 333 as (a)
+env-only + pay the visibility tax, fund 336/337/341 now (all $0), fund 334/338 as 332-S3, then pilot 342; do not adopt a
+network secrets service before 342 is measured.** The evidence that reframes the whole question, measured in this tree:
+`src/confine.mjs` strips credential-named env from a seat's shell (`node --test demo/confine.test.mjs` → **pass 1, fail
+0, 352 ms**), **but** a seat-shaped child shell printed **92 env names from `/proc/<pid>/environ`, including
+`DURIG_VERIFIER_API_KEY` and `DURIG_LOCAL_API_KEY`**, and `refusalFor("cat /proc/$PPID/environ", {root, cwd})` returned
+**no refusal** (probe, ~6 s, canary values, names only: `.spike/delegate-20261107/envprobe/procfs-canary.mjs` — gitignored,
+so **promote it** per 312 or it is lost). So the current control is "a seat does not think to ask". The mechanism that
+makes option (b) dangerous is pi's precedence, not an opinion: `vendor/pi-main/packages/ai/src/auth/resolve.ts:28-35` —
+*"A stored credential owns the provider: ambient/env is consulted only when nothing is stored."* A stored plane would
+**ignore**, not override, `DURIG_*`, voiding the ledger's `authKeyEnv` attribution and D48/D119.
+
+**(1) STILL THE FREE PRIORITY, UNCHANGED FROM SESSION L: ROADMAP 331 (slice 1 of 332's S1 settings seam).** The fix and
+its gate are written out in the archived session-L pointer (`docs/NEXT-ARCHIVE.md`, heading line 12409): `src/config.mjs:432
+compactionSettings()` emits `modelOverrides` as a **sibling** (`:488`) of `compaction` (`:455`) while pi-durable reads it
+only from **inside** `settings.compaction`, so every family resolves pi-durable's defaults `16384 / 20000 / 32768` and the
+verifier family (window 24,576) compacts at `24576 − 16384 = 8192` while keeping 20,000 recent. Baseline probe:
+`node .spike/delegate-20261106c/compaction-policy-probe.mjs` (free, no model). Gate: a test that calls pi-durable's
+`compactionPolicy()` and asserts the configured numbers come back **per family** — `demo/config.test.mjs` passes with the
+bug in place, so it is not the gate; `node tools/what-to-test.mjs --paths=src/config.mjs,cli.mjs` derives **73 direct
+guards**. **Do not** set harness-wide `DURIG_COMPACTION_RESERVE_TOKENS` before the nesting fix. **Carriers, corrected at
+2026-11-07T04:55Z: `lead` HAS minted them — `#5306` (plumbing), `#5309` (values), `#5310` (non-author verify) — all `queued`
+and unclaimed, and the four `delegate-20261106c-lead11*` briefs were DELIVERED by the 02:48Z pass (37 queue rows changed
+status in that pass), so nothing of session L is still spooled. Block (W)/(R2) above says why no seat can run them yet.**
+
+**(2) THE PASS HALF IS STILL STOPPED, and the stop is routing, not capacity** (unchanged ruling, D224 R5): **do not start a
+third pass until `lead`/`pm` say how `#5273` (the 311 carrier, `impl`) gets claimed** — it sat `queued` through two full
+passes while `claimed` rose 14 → 17. Worktrees **41** at session-L close (`seat-root 8, reapable 21, live 9, locked 2,
+dirty 1`) — the leak 311 exists to stop; re-measured after the land+prune pass in **(C)**: **20** worktrees, `reapable 0`.
+Broker at this close: **down** (`EXIT pid=1630036 reason=deadline passes=-` at 04:47Z, after I killed a lingering
+`--max-duration` broker), `selfdev.sqlite.broker.inbox` empty, **12 dead letters** in
+`selfdev.sqlite.broker.inbox.error` (6 → 12 this session; each is a `<id>.error.json` payload `{"from":"cli","body":""}`
+paired with a `<id>.error.json.reason` reading `apply failed: SqliteStorage is closed` — the dead letters are the
+**delegate's own CLI reads** issued against a lingering broker, and such a read returns **empty stdout with exit code 0**).
+Verifier provider: **no seat names it any more** (block (R2)); the local server serves one model (`/v1/models`). Family
+spend **$0.452053 of the $0.50 trigger (90.4 %)**, headroom **$0.04795**, and **frozen** — one 15-minute working pass cost
+**$0.06109** (0.39124 → 0.452053) and a pass now costs $0 of verifier spend.
+
+**(3) NEW THIS SESSION, for `lead` to decompose (rows, not orders — routing is the team's):** **336** (the
+`looksLikeSecret` floor — measured `abc123def456` → `false`, 32-char alnum → `false`), **337** (refuse `/proc/*/environ` +
+a `check` finding + a `Warn/Deny/Error` presence policy), **341** (refuse before any credential lookup; consumer config must
+not redirect broker traffic; no silent fallback), **334** (implement pi's `CredentialStore` seam with real-vs-redacted as
+**two types**), **338** (command-resolved TTL credential + an `auth check` probe; carrier `#5277` already queued for the
+prototype), **335** (a seat asks the operator for a missing secret instead of dying), **339** (keychain-first, stdin not
+argv). Free trio first: **336 → 337 → 341 ≈ half a day each, $0, gates are the existing canaries.** **340** and **342** await
+the operator (a new local listener / a new moving part). Smaller items for the same pass: **343** (`vendor-pins
+--freshness` prints the drift direction inverted — ~1 h, `devtools`, gate is a fixture test on a clone with no local tags)
+and the **312**-pattern promotion of the two probes named in Blocker 5.
+
+**Next command** (host signature measured with it — Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
+
+```bash
+cd ~/Git/Durian-Pi
+git status --short -- .                                   # at this close: 5 modified docs + 3 new credential docs (MINE) + 1 foreign untracked doc (see Blocker 6) + selfdev.sqlite.spend.jsonl (310)
+node .spike/delegate-20261107/envprobe/procfs-canary.mjs   # 337 baseline: does a seat-shaped child shell still read the broker's environ? ~6 s, names only, canary values
+node --test demo/confine.test.mjs                          # the spawn-path canary: 0 credential names cross the child env. pass 1 / fail 0 / 352 ms
+node .spike/delegate-20261106/verifier-spend-tripwire.mjs  # family spend vs the $0.50 trigger (free) — $0.34959 at this close
+node .spike/delegate-20261106c/compaction-policy-probe.mjs # 331 baseline — free, calls pi-durable's own compactionPolicy
+node tools/vendor-pins.mjs --check                         # PIN CHECK PASS, 27 clones, incl. the review-audit clause (a review naming a present clone cites its HEAD + has a COMPETITORS entry)
+node tools/broker-serve.mjs --status                       # down? spool depth? provider reachability? — reads files, not the store, so it answers with the broker down. NOTE 295 is LANDED here: the preflight prints provider id/baseUrl/model/ctx/out, NOT values — do not re-report it as a leak
+ls selfdev.sqlite.broker.inbox.error | wc -l               # 6 at this close (no new dead letters)
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit | head -c 400   # 311 leak meter: reapable 0 after the 2026-11-07 pass (was 21 reapable / 41 worktrees)
+git rev-list --count refs/remotes/origin/main..main                   # 25 at this close; the push needs a FRESH grant (landed seat work is on local main only — single disk)
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json > .spike/status-m.json   # only with the broker DOWN (329: a wedged broker makes this print nothing for 120 s)
+node scripts/test.mjs --area docs && node scripts/test.mjs --area check && node scripts/test.mjs --area guard
+# the pass, only when lead says #5273 is claimed:
+# node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 600
+```
+
+**Push state (2026-11-07, after the ratifications):** the operator pushed themselves — `origin/main` = **`51f35497`**
+(measured after `git fetch`). Unpushed since then: the `item-5193` recovery commit `1cac166b`, the landing merge
+`baab6ed8`, and this record. Always re-measure rather than assuming your own `HEAD` is the remote's:
+`git fetch && git rev-list --count refs/remotes/origin/main..main`.
+
+**Blocker:**
+1. **311's message half is LANDED** (via `item-5111`/#5134 — `src/worktree.mjs:1242` now uses
+   `entry.parentPath ?? entry.path ?? worktree`), so a cleanup refusal names the real path and link target instead of
+   `undefined/<name>`. **Two halves remain:** the guard is still tripped by ordinary `node_modules` symlinks, and there is
+   still **no reap verb or schedule fed by `cli.mjs worktree audit`** — today the delegate had to remove 21 `reapable`
+   trees by hand. Leak meter after the pass: **`reapable: 0`**, worktrees **20** (was 41). New companion row: **344**.
+2. **333 is RULED (D227) — (b) as a swappable interface — and four narrower choices are open to the operator**: the
+   recommended backend, the store key shape, the precedence rule, and whether a seat may ever hold a value. None of them
+   block **331 / 334 / 336 / 337 / 338 / 341**; only **342**'s shape waits on the last one.
+3. **The $0.50 family threshold still has no rig-side enforcer (324)**; the delegate is the tripwire, headroom **$0.15041**.
+   **321 before 324** (operator ruling), and 317's calibration (`#5214`) before further verifier spend.
+4. **303's root cause is open** (`#5231`/`#5260`, architect) — a broker past its deadline keeps heartbeating with closed
+   storage, and that shape destroys reads (**329**, 6 dead letters).
+5. **Three probes are still in gitignored `.spike/` and will be lost** (312 pattern): the `/proc` canary (337), the
+   compaction-policy probe (331, `#5277` is the carrier for the keycheck, not this one), and the ledger-trajectory probe
+   the milestone review needs (N2).
+6. **RESOLVED — `docs/reviews/ensuring-llm-task-completion-research.md` is the operator's and is the next milestone**
+   ("The operator created that file. I intended … to be the next milestone we work on", 2026-11-07). The delegate now
+   tracks it as **milestone source material, not evidence** (a raw model reply; its three web references are unfetched by
+   us) and pairs it with the grounding pass `docs/reviews/task-completion-milestone-intake-2026-11-07.md`. No rows have
+   been minted from it — that is the team's act at the review (candidates N1–N7).
+7. `selfdev.sqlite.spend.jsonl` is untracked and not ignored (**310**). The **327** stop-file writer is still unidentified.
+8. **`docs/SELFDEV.md` is ~258 KB / ~65k tokens and `docs/ROADMAP.md` ~681 KB.** Read headings + grep the symptom
+   (`scripts/clockin.mjs` prints the headings with anchors). Pitfalls **55–60** are the credential sweep's: the `/proc`
+   path (55), the classifier floor (56), "a secrets service is not automatically a boundary" (57), bounded upstream reads
+   and inverted pin drift (58), roadmap rows appended at the **end of the table** (59), and delegate-run provider probes
+   spending outside the ledger (60).
