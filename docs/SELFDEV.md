@@ -2855,3 +2855,39 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
    reads these`. A pre-flight that exits non-zero gets skipped, which is how the runbook's own channel check stops being
    run; `tools/broker-serve.mjs --status --env-file=…` answered the same questions in the meantime. Register the fix
    against the channel rows (`#5236` family) rather than trusting the pre-flight's absence.
+
+## Operational pitfalls (2026-11-07T18:2xZ, delegate session N6 — the operator's five answers, a 54-minute windowed pass measured end to end, and the one row that gates ROADMAP 331; rows #5447/#5448/#5453/#5488/#5491, D231; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+96. **`hold_work` is the only park that sticks, and a *sender* can undo it in one tool call.** `src/rig.mjs:1190-1220`
+   (`hold_work`: `claimed → held`, "the item stays yours but becomes unclaimable until released") versus
+   `src/rig.mjs:1223-1247` (`release_work`: "the SENDER may release a held item it created", `held → queued`). Measured on
+   **#3128** with `node cli.mjs show 3128`: `2026-11-07T10:38:01Z held impl` (obeying the park order #5447) →
+   `10:47:15Z released pm` → `17:27:22Z claimed impl`. Because **ids ARE priority**, a row returned to `queued` is
+   re-taken by the same seat on the next pass, so a park order that relies on releasing achieves nothing and the oldest
+   row in the lane keeps gating the milestone. Read the lane before blaming the seat:
+   `cli.mjs queue --json --status claimed` + filter `r.to` and `r.id < <milestone id>`; `held` is the only non-claimable
+   state, so the choices are `complete_work` (with `{command, exitCode, artifact}`), `hold_work` that nobody releases, or
+   re-address the row out of that seat's lane. Capability gap for the queue-lifecycle carrier (**#5436**), pairs with
+   **#5438** ("a HELD row is unclaimable yet still WAKES") — register against those, do not re-mint.
+97. **Do not use `<db>.genlock.*` lease files as the stop-safety check on a `local/*` rig — they never appear.** In the
+   17:23–18:17Z window: `ls -1 selfdev.sqlite.genlock*` → 0 on every sample **while 9 `pi.generation` tasks were
+   `running`**, because the local providers take no slot (pitfall 89, **#5488**). The honest check before escalating a
+   stalled broker to `kill -TERM` is the running-task count plus which seat is on which provider
+   (`rig.selfdev.json`): with `local/*` seats in flight, SIGTERM **aborts those runs** (this window aborted 9, cleared by
+   `cli.mjs resume`, which reported `found: 9` and 9 `run-cancelled`).
+98. **`queue --json --status claimed --status queued` returns BOTH states in `items`; `counts` is store-wide.** Aggregating
+   `items` per seat without filtering `r.status` reported `impl` holding 44 claimed rows when it held 9 — a 5× error that
+   changes the conclusion about who is blocking what. Correct read: one status per call, or `if (r.status === "claimed")`.
+   And remember the read race (pitfall 92): a `--status` census returning `ok:false` is not an empty queue.
+99. **`node cli.mjs show <id> [<id>…]` is the cheapest transition instrument on the rig and is not promoted to a
+   diagnostic.** It prints one row with `body` and the full `transitions[]` (`{at, event, by}`), which is how #3128's
+   hold→release→re-claim loop was found in one command instead of a store spelunk. `cli.mjs events --since <seq>` is the
+   durable feed. Both belong in the queue-lifecycle runbook; a promote row beats re-deriving this next session.
+100. **A requested stop never completes on this store, and the log's exit reason is wrong twice over — reproduced in a
+    second consecutive window.** Window 1: `STOP-REQUESTED 10:34:57Z` → process alive **13 min 54 s** → SIGTERM →
+    `EXIT … reason=deadline passes=-`. Window 2: `STOP-REQUESTED 18:12:13Z` → `serve --stop` had already returned
+    `{"stopped":false,"reason":"did not exit within the stop grace; no forced kill"}` at ~10 s → alive **5 min 11 s** →
+    SIGTERM ~8 s later → `EXIT pid=2062064 reason=deadline passes=-` again, with `passes=-` hiding that the broker reached
+    `PASS 1568`. Plan the clock accordingly: **issue the stop 5–15 min before you need the channel down**, verify with
+    `ps -eo pid,etime,args`, and treat `reason=deadline` as untrusted. Carriers: **#5479** (the stop-wait promise),
+    **#5483** (force bound on the `.stop` file path), **#5215/#5373** (exit misattribution).

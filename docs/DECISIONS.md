@@ -9947,3 +9947,53 @@ blind spot the milestone's context work has to close before it can be tuned.
 **The pass measured, so the next session does not have to re-pay for it.** Broker `START pid=1837129` 07:33:22Z → read 09:42Z (130 min): 133 wakes; `done 3897 → 3921`; **`claimed 33 → 64`**; **0 commits landed** (`git log --all --oneline --since=2026-11-07T07:30:00` → empty) while **19 item branches carry 26 commits not on `main`** (`main..refs/heads/<branch>` — the bare `main..item-NNNN` form is ambiguous because the worktree directories share the name, pitfall 93); **worktrees 41 → 62** and **branches 43 → 63**, `worktree audit` `{seat-root 9, live 32, reapable 15, locked 1, non-item 4, dirty 1}`; **173 metered calls, $0.09892** for the window, store cumulative **$0.572539** (ledger field is `at`, and it sees only the metered family — the eleven `local/*` seats are unmetered, so the real cost of the pass is wall-clock, not dollars). The instrument that should have caught the pass's shape — `tools/channel-preflight.mjs` — **crashes against this rig's own rig file** (it passes `./rig.selfdev.json` as `DURIG_CONFIG`, and `cli.mjs queue` refuses the rig-only keys), pitfall **95**; and `scripts/clockin.mjs` died at clock-out on the same `SqliteStorage is closed` read race that manufactures the dead letters (pitfall **92**).
 
 **What stays the operator's, deliberately.** The push grant (`main` 1 ahead at `c43ec1fa`); any **capacity** change — the delegate changed no config, and #5488 must land before the cap means anything; the reset of the remaining five seats (in-flight context on `qa`/`scribe`/`architect`/`advocate`/`designer`); D227 sub-decisions **B, C, D**; and the **9** rows still parked on a human, which **#5409** will fold into one digest.
+
+## D231 — the operator **approves the push** (executed: `main` == `origin/main`), rules capacity **"(a)"** (land #5488 before any capacity change), **accepts windowed driving**, **declines credential rotation** ("unless we commit them to the repo and push publicly"), and **approves waiting** on the five un-reset seats (2026-11-07T18:2xZ, delegate recording; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, Fedora Linux 45 (Forty Five), `7.2.15-300.fc45.x86_64`, node v24.22.1, `git version 2.56.0`)
+
+**The answers, verbatim, to the delegate's five decisions of 2026-11-07T09:5xZ.** *"1. Approved"* → the two docs commits
+were pushed by the delegate under that grant: `git push origin main` printed `5bec571b..a314ddd3  main -> main`; before
+pushing, the diff was screened (`git diff origin/main..main | grep -cE "sk-[A-Za-z0-9]{20}|DURIG_[A-Z_]*API_KEY…"` → **0**),
+and the remote is SSH with no embedded credential. `main` is now **equal to** `origin/main`, which closes pm's **#5460** ask
+for the `main` half. *"2. (a)"* → **#5488** (make `DURIG_MAX_CONCURRENT_SEATS` reach the `local/*` providers) lands **before**
+any capacity change; the cap stays `1`, no config was touched, and **#5194/#5268** (backoff before capacity) still gates.
+*"3. Accepted"* → the delegate drives **windows**, gated by `docs/runbooks/session-start-cost.md` §24, and does not leave a
+broker resident unattended. *"4. i don't want to rotate credentials unless we commit them to the repo and push publicly"* →
+this **narrows RM-295** and answers pm's **#5474**: the values are not in the repo, so the exposure is **at rest and in tool
+output**, not a live credential requiring revocation; #5492/#5334/#5365/#5366 stay as masking work with rotation removed
+from their acceptance. *"5. Approved waiting."* → `qa`, `scribe`, `architect`, `advocate`, `designer` are **not** reset;
+their claimed context is preserved. Directive: *"Continue making progress on priority milestones."*
+
+**What the at-rest ruling had to be measured against, so it is not re-asked.** `grep -rlE "DURIG_[A-Z_]*API_KEY[\"=
+ :]+[A-Za-z0-9]{8}" .spike/` hits **`.spike/restore/selfdev.sqlite`** and two **`.spike/store-backup-20261029-*.sqlite`**
+files (~1.77 GB of gitignored store copies on this disk); one prior broker log (`.spike/delegate-20261107c/serve.out.prevpass`)
+carried **2** cleartext occurrences, which the delegate **masked in place** rather than deleting. Pruning or rewriting
+recovery backups is an operator act and none was taken. `.spike/` is `.gitignore:21`, so none of this is published.
+
+**The critical path moved from seat health to one queue row, and that is a routing fact, not a build fact.** Ids ARE
+priority, and `impl`'s lane at window close is **#3128 #5227 #5258 #5259 #5264 #5271 #5276 #5297 #5298** — nine rows below
+**#5306**, the oldest dated 2026-10-19. `cli.mjs show 3128` shows why the park order did not hold: `10:38:01Z held impl` →
+`10:47:15Z released pm` (the **sender** may undo a recipient's hold, `src/rig.mjs:1223-1247`) → `17:27:22Z claimed impl`
+(the lowest-id rule re-claims it). Recorded as pitfall **96** and routed to `lead`/`pm` with three shapes (close with
+evidence, hold-and-do-not-release, or re-address), since **#3128**'s hazard is now carried by #5227/#5492/#5334/#5365/#5366
+and this decision removed rotation from that cluster — it may already be satisfied. The delegate claimed, closed, held,
+released, re-addressed and re-ordered **nothing**.
+
+**One window of windowed driving, measured (17:23:37Z → 18:17:24Z, `pid=2062064`, 102 wakes, last `PASS 1568`).** It
+worked where the previous 130-minute pass did not: the two operator briefs applied (`INTENT delivered=7 dead=0 dup=0`) and
+**12 of the 21 record-shaped claimed rows left `claimed`** (`held 400 → 416`), clearing `pm` from 11 rows below **#5395** to
+0 mid-window. It still landed **0 commits**: `claimed` ended at 56, **worktrees 66 → 70 / branches 67 → 73**, and
+**118 metered calls, $0.06844** — every one `openai/gpt-oss-120b` at `api.deepinfra.com`, i.e. the verifier/auditor family,
+while the eleven `local/*` seats that churned the surface are unmetered (store cumulative **$0.640976**;
+`broker.inbox.error/` **66 → 84** files from the read race, pitfall 92). The stop defect reproduced (pitfall **100**), and
+`resume` settled 9 aborted runs at clock-out.
+
+**Durability, newly measured, and the operator's grant to change.** `git log --oneline --branches --not --remotes` →
+**30 commits exist only on this disk**; **66 local branches have no `origin` counterpart**, **1** `item-*` ref is on origin;
+of the carrier shas the queue cites, `2dfd0f95` is reachable from `origin/main` (it rode the push) but `3c4973c9 141c8307
+36689f4f 1fac24a7 0a42b985 e160ba32 6dc1a425` are **not**. So landing — **#5395**, #5440, #5444, #5465 — is the durability
+route, branch pushes remain the operator's grant, and **#5475**'s "reachability by `merge-base --is-ancestor`, not
+ref-existence" is the correct detection rule.
+
+**Still the operator's alone:** pushing new commits (the grant covered `c43ec1fa`+`a314ddd3`; this cut's commit is
+**unpushed**), any capacity or roster change, credential rotation (declined for now) and any deletion of the store backups
+that hold credential values, and the 9 rows parked on a human (**#5409** will fold them into one digest).
