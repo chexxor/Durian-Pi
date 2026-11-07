@@ -161,6 +161,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [tracked-files-missing-on-disk.md](tracked-files-missing-on-disk.md) | `git status` shows tracked DELETIONS nobody made; a whole directory (e.g. `scripts/`) is empty on disk while the index and `HEAD` still hold it | no |
 | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
+| [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
@@ -206,7 +207,8 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | A delegate-written file that was never committed | transcript-recovery (`tools/transcript-recovery.mjs`), tracked-files-missing-on-disk |
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
-| Queue / parked work | stale-held-backlog |
+| Queue / parked work | stale-held-backlog, block-shape-refused |
+| The structured park (`block`): reason → constraint-kind pairing, ref shapes (`#<id>` vs `RM-<n>` vs a `window` note), `reviewBy` defaults, and why a refused send does not half-land | block-shape-refused |
 | Which reads are free and which verb is expensive; batching a brief; promoting a `.spike` probe into `tools/` | session-start-cost, verifier-serving-headroom, run-your-area |
 | Credentials / secrets | leaked-secret |
 | Review method | security-trust-boundary-review |
