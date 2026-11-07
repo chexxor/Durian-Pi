@@ -8339,7 +8339,9 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
 - **D-5015.1 — Status: DECIDED. The cap is enforced at the PROVIDER SEAM, not at the queue-admission seam.**
   `cli.mjs:344-391` is the only place every run path (send, resume, doctor, subagent) plus **pi-durable's own
   compaction summarization** reaches a model, and it already wraps every provider (`wrapProviderWithSlots`,
-  `wrapProviderWithTrace`). Admission-only enforcement is REFUTED by measurement: the failure D196 measured fires
+  `wrapProviderWithTrace`). *[the "every provider" clause is FALSE — see the 2026-11-07 amendment directly below;
+  the DECIDED placement stands, the observed coverage did not]* Admission-only enforcement is REFUTED by
+  measurement: the failure D196 measured fires
   **inside** the turn, and D196(2) counts **one `pi.user` entry per compaction attempt left in the author's
   session** — an admission gate would not have stopped either, and each attempt costs tokens and dirties the head.
   The provider seam cannot stop *queue* spend (100 dead-on-arrival wakes), so a **projection at admission** is added
@@ -8347,6 +8349,45 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   not money). Options considered: (a) admission-only — cheap, cannot see compaction/turn spend, rejected;
   (b) provider seam + admission projection — chosen; (c) post-hoc stop-the-rig on the ledger — rejected, it is a
   meter, not a guard, and the operator has 12 seats of live work to lose.
+  - **Amended 2026-11-07 (#5491, `scribe`): the placement DECIDED above is UNCHANGED; the claim that the seam was
+    already complete was FALSE, at `c43ec1fa` and still at the tree this amendment lands against (`a314ddd3`).**
+    Amended in place rather than minted as a rival entry (numbering/landing discipline #3075 / #3186 / #3271).
+    Re-checked by `scribe` in this worktree, so the next session does not re-derive it:
+    `grep -n "wrapProviderWithSlots" cli.mjs` → **2 call sites only**, `:327` (the `faux` plane) and `:401` (the
+    default/metered provider); the `local/*` registration loop at **`cli.mjs:433-441`** registers
+    `withSpend(wrapProviderWithTrace(createLocalProvider(…)))` with **no slot wrapper**, and
+    `grep -cE "genlock|Slot" src/providers/local.mjs` → **0**. Consequence, stated plainly: on a `local/*` rig
+    `DURIG_MAX_CONCURRENT_SEATS` **gates nothing**, and the rig reads as capped anyway —
+    `durig.config.default.json:3` ships `"DURIG_MAX_CONCURRENT_SEATS": "1"` and the operator's
+    `durig.config.json` does not set the key (untracked, so absent from this worktree).
+    A second name drift sits on the same knob, recorded here once so nobody re-derives it: the docs call the key
+    **`DURIAN_PI_MAX_CONCURRENT_SEATS`** on **27 lines across 14 doc files** — including `docs/ROADMAP.md:2773`, the
+    **153** row that proposes to redesign the lock this knob drives — while that spelling has **0** matches under
+    `src/` + `cli.mjs`. The key the code reads is `DURIG_MAX_CONCURRENT_SEATS` (`src/config.mjs:115`, the comment at
+    `src/config.mjs:304`, `src/config.mjs:541`). Renaming anything is #5488's call, not this entry's; the drift is
+    recorded because a reader who greps the ROADMAP name finds no code and concludes the cap does not exist at all.
+    - **Store/log numbers, MEASURED-BY-REPORT — the auditor measured these against a live broker at `c43ec1fa`; the
+      `scribe` landing this entry rode did NOT re-run them and cannot (the broker and its store are not this tree):**
+      with the config reading `"1"`, `select count(*) from tasks where status='running'` → **9–10** concurrent
+      `pi.generation` rows, newest entries interleaved across ≥9 conversations; `ls -1 selfdev.sqlite.genlock*`
+      sampled **40× over ~16 s** → **0** on every sample; `grep -cE "genlock|slot" selfdev.sqlite.broker.log` →
+      **0** across the whole pass. The pass window 07:33:22Z→08:40Z: **0 commits landed**, worktrees **41→52**,
+      branches **43→53**, 164 metered calls / **$0.09438** (store cumulative $0.567999), 133 wakes, queue
+      done +10 / claimed +16, worktree audit `{seat-root 9, live 24, reapable 13, locked 1, non-item 4, dirty 1}`.
+      The check that settles the claim at the code level is **not** these numbers: it is **#5488**'s failing-first
+      demo test, which had **not landed** at the time of this amendment (`git log --all --grep 5488` → no build
+      commit), and what gating `local/*` costs in wall-clock seconds is #5488's to produce, not this entry's.
+    - **Lead ruling recorded (so the next question does not need a ruling): ONE seam.** The cap gates all providers
+      at the single provider-registration site; slot logic does **not** move into `src/providers/local.mjs`; **no new
+      and no renamed config key**; the "document local-engine `--parallel` ownership instead" shape is **REJECTED**
+      as the primary fix — it widens surface and leaves the knob a lie. The fix is **BACKOFF-side**, so it is not
+      subject to the capacity-adding gate **#5194/#5268** (backoff before capacity: the cap must be *made true*
+      before anything raises it), and it does **not** preempt the operator's milestone rows **#5306/#5309/#5310/#5395**.
+    - **Cited, not duplicated:** **#5488** (`lead`→`impl`, the build row that makes the claim true), **ROADMAP 153**
+      (the capacity axis, still gate-held), **#5194/#5268** (the backoff-before-capacity gate), **#2585**, **#5408**
+      (ids carried from the lead's row — `scribe` did not verify their content, so nothing is asserted about them
+      here). The narrative of the pass that measured this is **D230** and its `docs/SELFDEV.md` pitfalls; the key's
+      own comment at `src/config.mjs:304` and the `docs/SELFDEV.md` recipe are corrected by **#5488**, not here.
 - **D-5015.2 — Status: DECIDED (values proposed, pool is the operator's). Three caps, three axes.**
   `DURIG_SPEND_CAP_CALL_USD` = **0.05 USD projected per call**; `DURIG_SPEND_CAP_RUN_USD` = **0.10 USD per run**
   (the existing probe ceiling, `DURIG_PROBE_CEILING_USD`, renamed, and a **different axis** — a run total is not a
