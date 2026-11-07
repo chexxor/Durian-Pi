@@ -530,3 +530,33 @@ about four minutes** of broker time. These two reads cost ~4 s.
 un-sendable seats: no live lease blocks any of them). `node cli.mjs reset --dry-run <seat>` — flag first — answers
 `{"wouldReset":false,"reason":"unknown-seat"}` for **every** seat, including real ones. That refusal is the parser's
 shape complaint, not the rig's; reporting "the seat cannot be reset" from it would be a false verdict about the store.
+
+## 24. IS THIS PASS PRODUCING WORK? four reads, ~25 s, run them before you spend another hour driving (2026-11-07T09:5xZ, delegate session N5; Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
+
+The situation this prices: a broker pass that looks alive — 133 wakes, every seat `SKIP … reason=pending`, the pass
+counter climbing — and lands **nothing**. Measured over 130 minutes (07:33:22Z → 09:42Z):
+`done +24`, **`claimed 33 → 64`**, **0 commits**, **worktrees 41 → 62 / branches 43 → 63**, and **$0.09892** metered.
+None of that is visible in `status`, which reports health, not throughput.
+
+```bash
+# 1. concurrency vs the cap (the #5488 specimen): expect 1 on this rig, get 9–10
+node -e 'const{DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});
+ console.log("running:",db.prepare("select count(*) n from tasks where status=?").all("running")[0].n,
+             "placed:",db.prepare("select count(*) n from submissions where status=?").all("placed")[0].n)'
+for i in $(seq 1 20); do ls -1 selfdev.sqlite.genlock* 2>/dev/null | wc -l; sleep 0.4; done   # 0 on every sample = no lease is being taken
+# 2. did anything LAND, and how much is waiting to land (pitfall 93 — use refs/heads/, never the bare name)
+git log --all --oneline --since=<pass-start-ISO> | wc -l
+git for-each-ref --format='%(refname:short)' refs/heads | grep '^item-' |
+  while read b; do git rev-list --count "main..refs/heads/$b"; done | awk '{s+=$1}END{print "unlanded commits:",s+0}'
+# 3. is the queue converging or just getting claimed? compare claimed against done, both timestamps
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --status done --status claimed | head -c 400   # retry on `SqliteStorage is closed` (pitfall 92)
+# 4. what the pass actually cost (the ledger field is `at`, and it only sees the metered family)
+node -e 'const L=require("fs").readFileSync("selfdev.sqlite.spend.jsonl","utf8").split(/\n/).filter(Boolean).map(s=>JSON.parse(s));
+ const s=L.filter(r=>r.at>=<pass-start-ISO>); console.log(s.length,"calls",s.reduce((a,r)=>a+r.usd,0).toFixed(5),"cumulative",L.at(-1).totalAfter)'
+```
+
+Read the verdict this way, measured on this store: **wakes + `reason=pending` with 9–10 `running` generations and 0 lease
+files** = the concurrency cap is not gating the provider (`#5488`), so more seats does not mean more throughput;
+**`claimed` rising while `git log --all --since` stays empty** = the team is queue-plumbing, not landing, and every claim
+is minting a worktree and a branch that #5408 cannot yet reap. The two reads that cost seconds are the difference between
+stopping the pass and paying another hour for it.

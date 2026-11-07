@@ -2796,3 +2796,62 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     leak the operator's answer 2(b) buys a mechanism for (#5407). The pre-flight that would have cost less than the
     mistake: `node tools/seat-turn-shape.mjs | grep -E "^seat |counted projection" | paste - -` plus `status`'s attention
     kinds, **before** starting the broker, not after.
+
+## Operational pitfalls (2026-11-07T09:5xZ, delegate session N5 — the operator's "(c) then (b)" executed, a 130-minute driving pass measured end to end, and the mechanism behind its throughput; rows #5447/#5448/#5453/#5488/#5491, D230; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+89. **`DURIG_MAX_CONCURRENT_SEATS` does not gate the provider this selfdev rig runs on — the `local/*` providers are
+   registered without the slot wrapper.** At `c43ec1fa`: `cli.mjs:325-333` wraps `FAUX.provider` and `cli.mjs:400-408`
+   wraps `deepinfra` in `wrapProviderWithSlots(...{dbPath, slots})`, but the local loop at `cli.mjs:433-441` registers
+   `withSpend(wrapProviderWithTrace(createLocalProvider(spec, …)))` — **no slot wrapper** — and `src/providers/local.mjs`
+   has 0 matches for `genlock|Slot`. Measured while the broker drove: config `"1"`, **9–10** `pi.generation` tasks in
+   status `running` at once, `ls -1 selfdev.sqlite.genlock*` **0** on all 40 samples across ~16 s, and
+   `grep -cE "genlock|slot" selfdev.sqlite.broker.log` = **0**. So the documented recipe ("cap durig with
+   `DURIG_MAX_CONCURRENT_SEATS` at that same N so seats queue in durig rather than inside the model") does not hold for
+   `local/*`, and `docs/DECISIONS.md` **D-5015.1**'s "already wraps **every** provider" is false at this HEAD. Prove it in
+   ~20 s before believing any throughput number: read the config value, count `running` generations, sample the lease
+   files. Carried as **#5488** (build) and **#5491** (docs); do not raise concurrency first (#5194/#5268).
+90. **`SKIP <seat> reason=pending` with many `running` generations is CONCURRENCY, not a wedge — and "projection ends on
+   `user`" is not a verdict on a tolerant provider.** The N4 pointer claimed 7 of 12 seats "cannot be woken" because
+   their counted projections end on `user`; the pass it cited actually woke 133 times and ran those seats. This rig's
+   seats are all `local/qwen3.8-flash-next-iq3_s` (`rig.selfdev.json`) except `auditor`, and
+   `tools/seat-turn-shape.mjs`'s own header says a tolerant provider "accepts these shapes and its seats look healthy".
+   The discriminator is one read: `select count(*) from tasks where status='running'` plus
+   `select count(*) from submissions where status='placed'`. Non-zero both, with entries interleaving across
+   conversations (pm 339022→task 339023, lead 340064→340065, …) = in-flight runs. `admitted_not_started` **with** a zero
+   `running` count = the wedge (#5215/#5407). Do not `reset` a seat to fix a shape finding on a tolerant provider —
+   that is what burned two seat contexts of history for nothing before the shape claim was corrected.
+91. **A claim mints a worktree and a branch whether or not anything is ever committed, and the leak is fast.** Over one
+   driving pass (07:33:22Z → 09:42Z, 130 min): worktrees **41 → 62**, branches **43 → 63**, `claimed 33 → 64`, and
+   **0 commits landed**. `worktree audit` at the end: `{seat-root 9, live 32, reapable 15, locked 1, non-item 4, dirty 1}`.
+   So "the team is busy" is not evidence of progress: read **`git log --all --oneline --since=<start>` (was empty)** and
+   the unlanded-work count alongside `claimed`. The reclamation half is **#5408** (teardown refuses on a
+   `node_modules/.bin` symlink), and the hygiene pass stays unauthorized until it lands (operator: "(b) now, (a) after").
+92. **`apply failed: SqliteStorage is closed` on a broker-served read is a race, and it manufactures dead letters — retry
+   before you conclude the channel is broken.** Repeatedly during a live pass:
+   `cli.mjs queue --json` returned `{"ok":false,"error":"read queue-census: apply failed: SqliteStorage is closed"}` and
+   the **identical command succeeded seconds later**. Every such failure leaves a file in
+   `<db>.broker.inbox.error/`; that count went **6 → 9 inside this one pass** while all payloads were `op:"read"`. So a
+   dead letter with `op:"read"` and that reason is **not** evidence an intent was refused. Write reads with a bounded
+   retry (2–4 attempts, ~12–15 s apart) instead of reading a failure as state. **And the failure is not confined to your
+   own probes:** `node scripts/clockin.mjs` died at clock-out with an uncaught exception because its `read health` child
+   returned exactly this — the session-start digest has no retry and no `ok:false` path, so a racing broker takes the
+   whole digest down. Cheap workaround: run `clockin` with the broker stopped, or re-run it; the durable fix belongs on
+   the session-start-cost rows (#5398 family).
+93. **`git rev-list --count main..item-5306` fails with "both revision and filename" on this repo — every worktree
+   directory in the root has the same name as its branch.** Use the full ref:
+   `git rev-list --count "main..refs/heads/item-5306"`, and enumerate with
+   `git for-each-ref --format='%(refname:short)' refs/heads` rather than `git branch --list` (whose `+`/`*` markers break
+   a shell loop the same way). Measured with the corrected form: **19 item branches carry 26 commits not on `main`** —
+   work waiting for a landing entry (#5395), which a "0 commits today" reading would have hidden.
+94. **The spend ledger's timestamp field is `at`.** `selfdev.sqlite.spend.jsonl` rows are
+   `{at, model, host, authKeyEnv, prompt_tokens, completion_tokens, usd, totalBefore, totalAfter, status}`. Filtering a
+   pass by `r.ts` silently yields "0 calls, $0.000000" while `totalAfter` climbs — it did exactly that in this session.
+   Attribute a pass with `L.filter(r=>r.at>=<start ISO>)`, and remember the ledger only sees the **metered** family:
+   eleven `local/*` seats can be thrashing the rig while the ledger reports pennies.
+95. **`tools/channel-preflight.mjs` crashes against this rig's own rig file.** It sets
+   `env: {DURIG_DB: DB, DURIG_CONFIG: RIG}` with `RIG` defaulting to `./rig.selfdev.json`
+   (`tools/channel-preflight.mjs:38-40,55-59`), and `cli.mjs queue` then refuses:
+   `unknown config-file key(s): _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json — no code
+   reads these`. A pre-flight that exits non-zero gets skipped, which is how the runbook's own channel check stops being
+   run; `tools/broker-serve.mjs --status --env-file=…` answered the same questions in the meantime. Register the fix
+   against the channel rows (`#5236` family) rather than trusting the pre-flight's absence.
