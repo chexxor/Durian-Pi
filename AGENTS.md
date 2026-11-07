@@ -77,6 +77,10 @@ seconds** on the row that adds it. Diagnose with `docs/runbooks/slow-loop.md`.
    `.spike/` into `tools/` — an unpromoted probe is lost next session.
 6. **Write the session-closure response** — a deliverable, not a recap. The operator reads it once and decides from
    it, so it carries the decisions, not the activity log. Required sections:
+   - **Milestone** — the first line, above **Value added**: name the milestone the session worked, with its decision and
+     queue ids (e.g. *"Milestone: ensuring LLM task completion (D226) — first tranche ROADMAP 331, rows #5306 → #5569"*).
+     Required in **every** session, not only when the milestone changed (operator directive 2026-11-07, D232). Take it
+     from the `**Milestone this window worked**` line at the top of `docs/NEXT.md`'s `## NEXT SESSION` block.
    - **Value added** — what the project can do, prove, or safely do next that it could not at session start. One
      line each, each with the evidence that shows it (a command you ran, a sha, a row state, a measured number).
      Not a list of things you did.

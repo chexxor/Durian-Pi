@@ -560,3 +560,72 @@ files** = the concurrency cap is not gating the provider (`#5488`), so more seat
 **`claimed` rising while `git log --all --since` stays empty** = the team is queue-plumbing, not landing, and every claim
 is minting a worktree and a branch that #5408 cannot yet reap. The two reads that cost seconds are the difference between
 stopping the pass and paying another hour for it.
+
+## 25. IS THE WINDOW STILL ALIVE? three reads that never touch the broker, ~2 s — the only reads that work while a broker is busy or draining (2026-11-07T22:3xZ, delegate session N7; Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
+
+The situation this prices: a bounded window (`--max-duration 2100`) that outlived its deadline by 36 minutes because two
+generations were still in flight, and a delegate who could not tell, because **every CLI queue read failed** with
+`{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}` (3 consecutive attempts, ~40–60 s
+each, from ~21:19Z to 22:21Z; `SqliteStorage is closed` on the rest — pitfall 92). §24's four reads are the right read
+**at rest**; mid-window they are unavailable, and burning 6 minutes on retries is how a 35-minute window becomes 76.
+
+```bash
+# 1. is anything running, and is work queued for it? (store read, ~0.3 s, no broker round-trip)
+node -e 'const{DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});
+ console.log("running:",db.prepare("select count(*) n from tasks where status=?").all("running")[0].n,
+             "placed:",db.prepare("select count(*) n from submissions where status=?").all("placed")[0].n);db.close()'
+# 2. is the broker alive, and past its bound? (0.2 s)  — the log stops advancing when it enters the drain
+ps -eo pid,etime,args | grep '[c]li.mjs serve'; tail -2 ./selfdev.sqlite.broker.log
+# 3. is it producing, and what is it costing? (~1 s) — git and the ledger are files, not the store
+git log --all --oneline --since=<window-start-ISO> | wc -l
+node -e 'const L=require("fs").readFileSync("selfdev.sqlite.spend.jsonl","utf8").split(/\n/).filter(Boolean).map(s=>JSON.parse(s));
+ const s=L.filter(r=>String(r.at)>=<window-start-ISO>);console.log(s.length,"calls",s.reduce((a,r)=>a+(r.usd||0),0).toFixed(5),"cumulative",L.at(-1).totalAfter)'
+```
+
+Read the verdict this way, all three measured in the 21:05:17Z→22:21:52Z window: **`running > 0` with the broker log's
+last `PASS` minutes old** = the broker is draining, not working — no read will succeed until it exits, so decide the
+SIGTERM now rather than polling (the exit line will still say `reason=deadline passes=-` whatever caused it, pitfall
+100). **`running` above 1 while `DURIG_MAX_CONCURRENT_SEATS=1`** = the cap is not gating the `local/*` providers
+(**#5488**; measured 10 concurrent generations), so "wake more seats" buys nothing. **`git log --all --since` rising
+while `main` does not move** = the team is producing artifacts on item branches that still need a landing entry — which
+is exactly the shape of this window: 4 commits on `item-*` refs, 0 on `main`, and the milestone's landing entry
+**#5569** minted in the same pass.
+
+What the trio cannot see: item state. The queue is **one document** (`"durig.queue"`, revisions to seq 3,021,562), not a
+table, so there is no SQL for `claimed`/`queued` (pitfall 105). For item state use **one multi-id read** —
+`node cli.mjs show 5569 5306 5309 5310 3128 5271` — at rest, not during a drain. A probe that wraps these reads with
+read-race retry lives in `.spike/delegate-20261107f/poll3.mjs` (gitignored; needs a `lead` row to promote it to
+`tools/`, ROADMAP 233).
+
+## 26. WHAT MAKES THE DIGEST OVERFLOW IS THE DEFERRED LIST, NOT THE POINTER — measure the sections before trimming the pointer (2026-11-07T22:3xZ, delegate session N7; Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
+
+Measured at `c7e41021` + one docs commit: the digest printed **28,495 B** against its **20,000 B** budget (#5398's
+subject). Split it by section before reaching for the pointer — `scripts/clockin.mjs` prints the whole deferred backlog
+inline, and that one list is the bulk of it:
+
+```bash
+node scripts/clockin.mjs > .spike/clockin.txt 2>&1
+awk '/^## /{sec=$0; next} {n[sec]+=length($0)+1} END{for(s in n) printf "%8d  %s\n", n[s], s}' .spike/clockin.txt | sort -rn | head
+```
+
+| section | bytes (measured 22:3xZ) | note |
+|---|---|---|
+| `## QUEUE` | **15,061** | of which **14,959 B is the single inline `deferred (awaiting the operator)` list** — 52% of the whole digest |
+| `## NEXT SESSION` (the pointer) | 7,455 | the section people try to shrink |
+| `## READ MAP` | 2,924 | SELFDEV headings, with anchors |
+| `## RIG` / `## RUNBOOKS` / `## GIT` | 846 / 769 / 633 | |
+
+The list grows with a store state that itself grows: `deferred` went **174 → 207** in one window, and **206 rows are
+`deferredTo:"human"`** (34 of them manufactured by one unkeyed broker pass — pitfall 102). So every supervisor
+escalation permanently inflates the cheapest clock-in read. The fix is not a shorter pointer: it is to **aggregate that
+list** — per-seat counts plus the ids in a file the reader can grep — and it belongs with `scripts/clockin.mjs`'s
+existing digest rows (**#5398**, and the §19 byte-cap family). `lead` should mint it; this section is the measurement,
+not the build. Until then: the `awk` split above is 0.2 s and settles "what should we cut" with evidence.
+
+Two clarifications about the guard itself, both measured here. (a) `demo/clockin-digest.test.mjs`'s byte assertion runs
+against a **fixture** store, so its digest is small and that assert passes while the **live** digest prints 28,385 B —
+the live overage is visible only in `scripts/clockin.mjs`'s own stderr warning line. (b) Its
+`"the pointer still links its own archive"` assertion is evaluated on the **printed pointer range**, not the whole file:
+with the `NEXT-ARCHIVE.md` mention sitting in the header *above* `## NEXT SESSION`, the test was **red at `c7e41021`**
+(pre-change digest: 0 occurrences of `NEXT-ARCHIVE`), and naming the archive inside the `## NEXT SESSION` block makes it
+green again — one line, no re-derivation. Put the archive link in the pointer body, not the header.

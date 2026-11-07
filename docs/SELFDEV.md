@@ -2891,3 +2891,53 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `PASS 1568`. Plan the clock accordingly: **issue the stop 5–15 min before you need the channel down**, verify with
     `ps -eo pid,etime,args`, and treat `reason=deadline` as untrusted. Carriers: **#5479** (the stop-wait promise),
     **#5483** (force bound on the `.stop` file path), **#5215/#5373** (exit misattribution).
+
+## Operational pitfalls (2026-11-07T22:3xZ, delegate session N7 — a 76-minute window that minted the milestone-331 landing entry, an unkeyed broker pass the delegate caused, and the drain that made the store unreadable; #5569 #5395 #5571 #5488, D232; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+101. **`node cli.mjs serve --help` STARTS A BROKER, and piping any broker command into `head`/`less` kills it mid-pass.**
+    `serve` has no `--help` handler — an unknown flag is ignored and `cmdServe` runs (measured: the invocation wrote
+    `<db>.broker.json`, logged `START pid=2130948` at `21:02:10Z`, ran 9 passes, then `head -30` closed the pipe and
+    SIGPIPE killed the process at ~`21:02:44Z`, leaving a **stale state file** that makes the next `--start` refuse).
+    Do not probe a broker's usage string; read `node tools/broker-serve.mjs --help` (that one IS a usage printer) or
+    `docs/COMMANDS-AND-THE-BROKER.md`. Recover the stale state with `node cli.mjs serve --stop`, which answers
+    `{"stopped":false,"reason":"state was stale; cleared"}` (`cli.mjs:1943`) — it never kills a live broker.
+102. **A broker started WITHOUT `--env-file` does not fail quietly: it 401s every `local/*` seat and the supervisor then
+    parks those seats' claimed rows on the human.** Measured: 10 seats woken twice, every turn ending
+    `stopReason:"error"`, `errorMessage:"401: {\"type\":\"authentication_error\",\"message\":\"missing or wrong API key\"}"`,
+    129 conversation entries appended, **0 metered calls**, and **34 rows `deferred` by `by:"supervisor"` inside 3
+    seconds** (`21:02:41Z`–`21:02:44Z`: impl 5, pm 5, devtools 5, qa 5, lead 4, scribe 5, architect 4, security 1),
+    each with `deferredTo:"human"` and the question "…has failed 3 runs in a row and still holds #<id>…". Store-wide
+    **206 rows are `deferredTo:"human"`**. So the cost of forgetting `--env-file` is not a failed pass, it is 34 rows of
+    human-attention debt. `tools/broker-serve.mjs --start --env-file`-style starts (or `--env-file` on the CLI) are the
+    only safe form; `broker-serve --status` without the env file ALSO reports the provider BLOCKs falsely (pitfall 87).
+103. **`--max-duration` does not bound a window's wall clock when generations are in flight.** Started `21:05:17Z`
+    with `--max-duration 2100` (35 min); deadline ≈`21:40:21Z`; last real pass `PASS 1482` at `21:37:53Z`; still alive
+    at `22:19Z` with 2 `pi.generation` tasks `running`, and it exited only at `22:21:52Z` after the delegate SIGTERMed
+    it — **76 min 35 s for a 35-minute bound**. Cause: `stopGraceMs` defaults to `0` (`src/broker.mjs:1545`), so
+    `onSignal` sets `stopping` and the force timer is never armed; the loop waits for in-flight generations
+    indefinitely. `serve --stop` again returned `stopped:false` at ~10 s (pitfall 100 reproduced a third time) and the
+    exit line is again `EXIT … reason=deadline passes=-` although the signal was SIGTERM. **Budget ~2× `--max-duration`
+    and plan the SIGTERM**, checking `ps -eo pid,etime,args` and the `running` count first (pitfall 97). Carriers
+    **#5479**, **#5483**.
+104. **During that drain you cannot read the queue at all.** Every CLI queue read from ~`21:19Z` to `22:21Z` returned
+    `{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}` — 3 consecutive attempts at
+    ~40–60 s each, `SqliteStorage is closed` on the others (pitfall 92). A delegate mid-window therefore has **no**
+    instrument in the CLI; the reads that keep working are (a) SQLite `tasks.status='running'` +
+    `submissions.status='placed'`, (b) `git log --all --oneline --since=<window-start>`, (c) `<db>.spend.jsonl`.
+    That trio is `docs/runbooks/session-start-cost.md` **§25** (~2 s) — run it during the window, run the §24 four
+    reads only at rest.
+105. **There is no SQL shortcut for item state: the queue is ONE document, not a table.** `record_ids.record_type`
+    covers only `conversation`(13) `document`(74) `entry`(181,544) `submission`(60,976) `task`(121,453); queue items
+    live in the single `"durig.queue"` document (id 29) whose `document_revisions` reach **seq 3,021,562** with
+    CRDT-style patch content (6,904 B at the head), not item rows. So `select … from work_items` does not exist, and
+    parsing the queue doc is a 20 MB job the CLI already does better. The cheap instrument is **one multi-id read**:
+    `node cli.mjs show 5569 5306 5309 5310 3128 5271` — 7 rows, one broker round-trip, instead of 7 (~10–20 s each
+    under load). Pair it with `queue --json --status claimed` (one status per call, pitfall 98).
+106. **A supervisor-deferred row is answered by a SEAT, and the answer arrives as a message.** `defer_work` sets
+    `deferredTo` (`src/rig.mjs:111`, and `DEFERRED_TO_NOBODY` at `:121` records "nobody was asked"); the seat resumes
+    it with `resume_work(id)` once it has the answer (`src/rig.mjs:1144`). This is how the operator's ruling on **#3128**
+    ("Accepted (i)" — close as superseded with `{command, exitCode, artifact}`) must be executed: the delegate delivers
+    the answer to `impl`/`lead`/`pm` through the spool (`node intent.mjs <seat> --body-file <path>`), and a seat calls
+    `resume_work(3128)` then `complete_work`. The delegate defers, resumes, closes and re-addresses nothing — measured
+    this window: `claimed 56 → 35`, `deferred 174 → 207`, and the gate to ROADMAP 331 moved from **#3128** to
+    **#5271** (`impl`'s lowest claimed row), which is the point of pitfall 96: clearing one id does not clear the lane.

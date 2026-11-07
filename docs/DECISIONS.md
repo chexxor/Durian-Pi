@@ -9997,3 +9997,63 @@ ref-existence" is the correct detection rule.
 **Still the operator's alone:** pushing new commits (the grant covered `c43ec1fa`+`a314ddd3`; this cut's commit is
 **unpushed**), any capacity or roster change, credential rotation (declined for now) and any deletion of the store backups
 that hold credential values, and the 9 rows parked on a human (**#5409** will fold them into one digest).
+
+## D232 — the operator answers five more items and issues a **standing reporting directive**: **"Communicate the milestone you worked in this session above the value added, and do so for every future session"** (2026-11-07T20:5xZ, delegate recording; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, Fedora Linux 45 (Forty Five), `7.2.15-300.fc45.x86_64`, node v24.22.1, `git version 2.56.0`)
+
+**The answers, verbatim, to the delegate's five decisions of 2026-11-07T18:2xZ.** *"1. Granted"* → the push was executed:
+`git push origin main` carried `a314ddd3..c7e41021`; the diff was screened first (`git diff origin/main..main |
+grep -cE "sk-[A-Za-z0-9]{20}|DURIG_[A-Z_]*API_KEY[\"= :]+[A-Za-z0-9]{8}"` → **0**). *"2. Accepted (i)"* → the **#3128**
+disposition the delegate recommended: **close it with evidence as superseded** by the RM-295 cluster
+(#5227 #5492 #5334 #5365 #5366), the completion carrying `{command, exitCode, artifact}`; the delegate closed nothing.
+*"3. Drive another window now"* → one broker window was run, 21:05:17Z → 22:21:52Z. *"4. Approved."* → **durability by
+landing, not by pushing refs**: work becomes durable by reaching `main` through a landing entry (#5395 → **#5569**), and
+`origin` receives `main` only. *"5. Approved."* → capacity unchanged: `DURIG_MAX_CONCURRENT_SEATS` stays `1`, no config
+touched, **#5488** lands before any capacity conversation reopens.
+
+**The directive, and why it is a rule rather than a style choice.** *"Communicate the milestone you worked in this
+session above the value added, and do so for every future session."* Across N3–N7 the operator has been re-establishing
+which milestone a session served before reading what it did; the fix is structural, so it is written into
+`AGENTS.md` **§Clock out** (the session-closure response now opens with the milestone line) and the milestone is stated
+at the top of `docs/NEXT.md`'s `## NEXT SESSION` block, where the next session reads it first. The milestone in force is
+**ensuring LLM task completion** (**D226**), first tranche **ROADMAP 331**.
+
+**What the window produced, measured.** It is the first pass of the day to build rather than plumb: **`claimed` 56 → 35**
+(`done` 3939 → **3951**, `held` 416 → 423, `deferred` 174 → **207**, `queued` 129 → 123), and **#5395 is `done`** (pm,
+claimed 21:31:03Z → done 21:51:39Z) having **minted #5569 — the landing entry for milestone 331**, `queued → impl`,
+`blockedBy [5306, 5309, 5310]`, tier `feature`. pm's `resultSummary` is explicit: *"ROUTED to impl as #5569, NOT YET
+LANDED — the landing entry is minted; nothing has landed and I ran no check."* It carries the per-family two-clause band
+gate (`reserveTokens >= maxTokens`; `keepRecentTokens + summaryBudget + maxTokens + measuredFloor <= window`,
+`summaryBudget = min(floor(0.8*reserveTokens), model.maxTokens)`), the measured floors (53/55 empty-turn; 358–1,248
+local / 362–1,227 verifier) in place of the research doc's 130k, upstream-closed (pi **#8651** NOT_PLANNED), and landing
+discipline (`LANDED at <sha>`, never bare `done`). Two residuals are `lead`-only and registered as **#5571**: cancel
+**#5307** (its premise that `DURIG_LOCAL_MAX_TOKENS` is unset is false — `durig.config.default.json:6` = 16384, and the
+default overlays `durig.config.json`), and **#5390 is `done`**, so the "live carrier" body has no read path and
+#5569's amendments are restated from #5395's prose. Four commits landed on `item-*` refs (#5538 architect, #5400 ×2
+devtools, #5491 scribe); **0 on `main`**; worktrees 70 → 73, branches 73 → 76, **31 unlanded commits on item branches**.
+Money: **38 metered calls, $0.02312**, store cumulative **$0.664098**; `running` reached **10** under `maxseats=1`
+(the **#5488** specimen, reproduced).
+
+**The gate moved, and the operator's (i) answer is still unexecuted.** `node cli.mjs show 3128`: **#3128 is `deferred`,
+`deferredTo:"human"`, by `by:"supervisor"` at 21:02:42.232Z** — "impl has failed 3 runs in a row and still holds #3128 …
+cannot make progress without a human decision". That was not the ruling; it is the **supervisor reacting to the delegate's
+own error** (below). Because ids ARE priority, the next gate is now **#5271** (`impl`'s lowest claimed row: #5271 #5276
+#5297 #5298 #5301 #5447), which is pitfall 96's point — clearing one id does not clear a lane. Executing (i) is a seat
+act: deliver the answer through the spool, then `resume_work(3128)` (`src/rig.mjs:1144`) and `complete_work` with the
+artifact. The delegate deferred, resumed, closed, held, released and re-addressed nothing.
+
+**The delegate caused an incident at 21:02Z, recorded here because it contaminated the state it is quoted against.**
+`node cli.mjs serve --help` **started a broker** (no `--help` handler on `serve`), and piping it into `head -30`
+SIGPIPE-killed it at ~21:02:44Z after 9 passes; it ran **without `--env-file`**, so every `local/*` seat returned
+`401 … missing or wrong API key`, 129 conversation entries were appended, and the supervisor's `repeated_failure` rule
+**deferred 34 rows to the human in three seconds** (impl 5, pm 5, devtools 5, qa 5, lead 4, scribe 5, architect 4,
+security 1) — **$0.00000** metered, `running 0` and `placed 0` afterwards, and the stale broker state cleared with
+`serve --stop` (`cli.mjs:1943`, `"reason":"state was stale; cleared"`). Store-wide **206 rows are `deferredTo:"human"`**;
+34 of them are this incident's debt, which is a human-attention cost, not a money cost. Pitfalls **101–106** carry the
+mechanisms (unkeyed provider → supervisor deferrals; `--max-duration` does not bound the exit because `stopGraceMs`
+defaults to `0` at `src/broker.mjs:1545` — a 35-minute bound ran 76 min 35 s; the queue is unreadable through the CLI
+during a drain; the queue is one document, not a table, so there is no SQL shortcut for item state).
+
+**Still the operator's alone:** pushing new commits (the grant was consumed by `a314ddd3..c7e41021`; N7's docs commit is
+**unpushed**), any capacity or roster change, credential rotation (declined, D231), deletion of the store backups that
+hold credential values, and the 206 rows parked on a human — **#5409/#5410** (`pm`, claimed) are the digest rows for
+that backlog.
