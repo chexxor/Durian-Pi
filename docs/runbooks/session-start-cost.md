@@ -490,3 +490,43 @@ For queue hygiene, `node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` cost
 hand-count of `queued`: it separates `held` age, non-terminal LANDING rows already fully on `main`, orphan candidates and
 unresolvable citations — and `queued` itself is misleading because `notice` rows are counted as claimable work (67 of 162 on
 this rig, 2026-11-05).
+
+## 23. MAY THIS SEAT BE WOKEN AT ALL — two reads, ~4 s, and they outrank every send decision (2026-11-07T07:2xZ, delegate session N4; Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
+
+The failure this prices: the broker **admits** a wake, the provider refuses it before any window is reached, the run never
+starts, and `status` reports `admitted_not_started`. Measured live in one bounded pass: **5** such notices, plus
+`pass-failed 100% (band 1)` and `repeated_failure pm — 3 consecutive failed runs; the supervisor escalates it to the human`.
+**7 of 12 seats** were in that state (pm, impl, qa, scribe, architect, advocate, designer) while their fractions looked
+comfortable (pm 0.4546, impl 0.2402, qa 0.1284 of 200,000) — the number that decides it is the **last element of the counted
+projection**, not the fraction and not the head marker (§2b, §14).
+
+```bash
+DURIG_DB=./selfdev.sqlite node tools/seat-turn-shape.mjs 2>/dev/null | grep -E "^seat |counted projection" | paste - -
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
+ const j=JSON.parse(s.slice(s.indexOf("{")));const k={};for(const n of (j.attention||[]))k[n.kind]=(k[n.kind]||0)+1;console.log(k)})'
+```
+
+What each verdict means, measured on this store:
+
+- **projection ends on `user`** → do not send, and do not start a broker pass expecting that seat to act. `resume` clears
+  the *notice* (the `placed` submission is settled `unanswered` / `run-cancelled`, `cli.mjs:1328-1356`) but **the `pi.user`
+  entry stays** — after a successful `resume` pm went from `user,user,user` to `user,user,user,user`, because the broker
+  had already appended another wake. The only working repair is §22's `reset` with a handoff; `compact` answers `no-op`.
+- **`SKIP <seat> reason=pending` with no `age=`** in `<db>.broker.log` → the wedge, not a wait: `src/broker.mjs:118`
+  suppresses the wake because `pendingConvIds` reads any pending submission as "a run is in flight", and the design note at
+  `src/broker.mjs:790-800` says the `placed` submission "stays `placed` forever". Confirm with one **read-only** store read
+  (§2c's shape) rather than a send: a `placed` newest submission plus no `selfdev.sqlite.genlock*` entry is the signature.
+  Rows **#5215/#5373/#5407** carry the mechanism; the delegate registers none.
+- **before any `reset`**, read who holds claimed work — it is a decision about in-flight context, not hygiene (§22's rule,
+  measured again here: impl 8 claimed, pm 7, qa 5, scribe 5, devtools 4, lead 3, architect 1):
+  `DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed` then group by `to`. One read, ~1 s.
+
+And the cost of getting this wrong is not only wall-clock: a pass over un-wakeable seats still woke the **metered** family —
+`WAKE auditor` firing while `SKIP auditor reason=pending` printed for it every pass, **$0.008080 across 16 ledger rows in
+about four minutes** of broker time. These two reads cost ~4 s.
+
+**The preview of the repair, and its argument-order trap (~0.4 s per seat, writes 0).**
+`node cli.mjs reset <seat> --dry-run` → `{"wouldReset":true,"handoff":null,"writes":0}` (measured for all seven
+un-sendable seats: no live lease blocks any of them). `node cli.mjs reset --dry-run <seat>` — flag first — answers
+`{"wouldReset":false,"reason":"unknown-seat"}` for **every** seat, including real ones. That refusal is the parser's
+shape complaint, not the rig's; reporting "the seat cannot be reset" from it would be a false verdict about the store.

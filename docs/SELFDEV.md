@@ -2741,3 +2741,58 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the operator's plain question cost a full read of ROADMAP + DECISIONS + the queue to answer, and the answer is
     triangulated rather than read. A row-kind or a `check`-visible milestone label is the cheap fix — **`lead`/`pm` mint
     it; the delegate registered none.**
+
+## Operational pitfalls (2026-11-07T07:2xZ, delegate session N4 — the operator's five answers, one delivery pass, and the rig's silent wake wedge; rows #5407–#5412, D229; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+83. **`node cli.mjs resume` with NO arguments is not a query — it is the stranded-submission repair, and it writes.** Ran it
+    intending to read usage; it answered `{ok:true,command:"resume",found:6,actions:[… "action":"run-cancelled"]}` and the
+    six `placed` submissions were settled `unanswered` in the same call. That is the repair the attention notice asks for
+    ("re-arm it with the resume/doctor verb (item 37(b))"), so the side effect was benign — but it is legal **only with the
+    broker down** (it opens its own writing `Harness`), and it is the verb that produced the next pitfall, so check the
+    broker state first: `ls -1 selfdev.sqlite.genlock*` (empty = no generation in flight) and `broker: down` from
+    `tools/broker-serve.mjs --status`. Read the code before trusting the word "resume": `cli.mjs:1328-1356` — a `queued`
+    submission is `withdrawn`, a `placed` one goes through `conversation.abort()` and prints `run-cancelled`.
+84. **A `resume` clears the notice but not the transcript: the `pi.user` entry survives, and the seat stays un-sendable.**
+    After the six `run-cancelled` actions, `status` showed zero `admitted_not_started` — and `tools/seat-turn-shape.mjs`
+    still measured pm `user,user,user,user`, impl/qa/scribe/architect `user,user,user`. **7 of 12 seats** ended on `user`
+    this session (pm, impl, qa, scribe, architect, advocate, designer), which means a strict alternating template refuses
+    the next wake *before any window is reached* — their `consumed/window` fractions were small (pm 0.4546, impl 0.2402,
+    qa 0.1284 of 200,000), so this is **not** a context-size problem and no window argument will fix it. The only working
+    repair is `reset` with a handoff (§22 of `session-start-cost`); `compact` answers `no-op`. If a green `status` is your
+    only read, you will clock out claiming a sendable rig. And the preview verb's argument order is load-bearing:
+    `node cli.mjs reset --dry-run pm` answers `{"wouldReset":false,"reason":"unknown-seat"}` for EVERY seat, while
+    `node cli.mjs reset pm --dry-run` answers `{"wouldReset":true,"writes":0}` (measured for all seven un-sendable seats —
+    no live lease blocks any of them). A flag-before-seat readout of "unknown seat" is the tool refusing the shape, not the
+    rig refusing the reset; do not report "cannot be reset" from it.
+85. **`SKIP <seat> reason=pending` with NO `age=` field is the wedge, not a wait — the broker is reading a dead
+    submission as "a run is in flight".** `src/broker.mjs:118` (`if (pendingConvIds.has(convId)) continue; // a run is in
+    flight`) suppresses the wake, and the comment block at `src/broker.mjs:790-800` states the failure mode verbatim: "The
+    submission stays `placed` forever, and `selectWakes` reads any pending submission as 'in flight' and never re-wakes the
+    conversation, so the seat stalls silently as `admitted_not_started`." The truth is one read-only query, not a guess:
+    `select id,status from submissions where conversation_id=? order by id desc limit 2` on a `node:sqlite` **readOnly**
+    open (pin the path absolute — the opener creates a store at a wrong path). Rows **#5215/#5373/#5407** are this family;
+    do not mint another.
+86. **Read verbs against a *driving* broker time out and leave spool litter that later looks like a jammed channel.**
+    `DURIG_DB=./selfdev.sqlite node cli.mjs ps` while the broker ran → `{"ok":false,"error":"read seats: timed out awaiting
+    the broker's result"}`. `status`/`queue`/`ps` each drop an `op:"read"` intent file, and at close the spool held **5** of
+    them — `broker-serve --status` reported "5 pending intent(s)" as if work were backlogged. Read the `op` and `view`
+    fields before concluding anything (`op:"read"` = a viewer's health request, never work). Same file, the other half of
+    the channel: all **6 dead letters** in `selfdev.sqlite.broker.inbox.error` are `op:"read"` payloads with reason
+    `apply failed: SqliteStorage is closed` — so a dead letter is **not** evidence that an operator intent was refused.
+    Read the payload's `op` before opening a delivery-failure row.
+87. **`tools/broker-serve.mjs --status` without `--env-file="$HOME/.config/durig/env"` reports 4 blocking provider
+    findings that are false about this rig.** Un-keyed shell: `BLOCK provider-local-refuses-inference … HTTP 401: missing
+    or wrong API key`, `BLOCK provider-DURIG_LOCAL_-unauthorized`, `BLOCK provider-verifier-no-key`, `BLOCK
+    provider-verifier-refuses-inference` — and the same command with the env file: **`findings (0 blocking, 3 noted)`**,
+    verifier answers, both providers take inference. The keys live in the out-of-tree env file, not in the shell; a
+    "provider is down" verdict from the un-keyed posture is an artifact. Run **both** postures and report the pair, and
+    redact before filing anything: pitfall 79's cleartext `env:` line is still unfixed (#5334/#5365/#5366).
+88. **A pass over un-sendable seats still spends the metered family, and `--max-duration` still bounds nothing.** Started
+    `--max-duration 240` at 06:44:11Z; the last `PASS` printed at 06:47:58Z (32 passes) and the process was still alive at
+    **28 min 07 s** when stopped by hand after `ls -1 selfdev.sqlite.genlock*` came back empty — it then printed
+    `EXIT pid=1741684 reason=deadline passes=-` for a **SIGTERM** stop, dropping the pass count (fourth observation of
+    pitfall 74's mis-attribution: #5215; the overrun is #5373 — mint neither). Money in that window: **$0.008080 across 16
+    ledger rows**, every one `auditor`, woken while `SKIP auditor reason=pending` printed for it every pass — the exact
+    leak the operator's answer 2(b) buys a mechanism for (#5407). The pre-flight that would have cost less than the
+    mistake: `node tools/seat-turn-shape.mjs | grep -E "^seat |counted projection" | paste - -` plus `status`'s attention
+    kinds, **before** starting the broker, not after.
