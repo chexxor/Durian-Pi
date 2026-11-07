@@ -9914,3 +9914,66 @@ New rows from this exchange: **345** (the land helper's conflict message names a
 `PI_PROVIDER=strata PI_MODEL=qwen3.8-flash-next-iq3_s` — and the rig's spend ledger records **only metered provider calls**
 (pitfall **61**). So "the ledger did not move" is not evidence about the free arm's context growth, which is exactly the
 blind spot the milestone's context work has to close before it can be tuned.
+
+---
+
+## D-<mint> — a spooled request has a LIFECYCLE: exit must fail-over the inbox residue, and a read is routed on PROGRESS, not liveness (#5275 / ROADMAP 329)
+
+**Status:** Accepted (design). Build not yet landed — implementation routed to `impl` via `pm`; the `check`-rule half
+goes to `devtools`. D-number minted at land time in issue order (lead #3075/#3186), never hardcoded here.
+
+**Context.** The intent spool (`<db>.broker.inbox`) has no lifecycle: `drainIntentInbox` runs only at the start of a
+pass (`src/broker.mjs:1243-1249`) or in the idle read-only branch (`1712-1727`), and `runWakeLoop`'s exit path
+(`1984-2000`) never visits the inbox. Three shapes were observed: (a) a drain running against a closed
+`SqliteStorage` → dead-letter `apply failed: SqliteStorage is closed`; (b) a drain not running → the read hangs with
+no named cause (`watch --once --human`, 0 bytes on both streams, 90+ s); (c) an op enqueued during shutdown →
+**stranded forever, silently** — no answer, no `.error.json`, and the next run's answer is written to a result slot
+the caller already deleted (`src/readclient.mjs:49`). Measured at clock-in
+(`node tools/stranded-inbox.mjs <repo>/selfdev.sqlite`, 2026-11-07T03:52Z): `inbox=7 shutdownStranded=0
+drainStranded=7 hbAgeS=6 progressAgeS=2223 runSinceExit=yes` — five `read` and **two `message`** intents pending
+against a broker whose heartbeat was 6 s old and whose last completed pass was 37 min old. So the limbo state is
+reachable **without any shutdown**, and the routing boolean that sends a read there is `readData` →
+`brokerAliveFor` → `brokerAlive` (`src/readclient.mjs:109-110`, `src/broker.mjs:2097-2106`), which is pid + heartbeat
+only — the liveness-vs-progress conflation #5231/#5260 document, while `brokerHealth` (`src/broker.mjs:2138-2160`)
+already computes the progress leg.
+
+**Decision.**
+1. **Exit is a transaction over the spool.** Before `clearBrokerState` and before the harness closes: one final
+   `drainIntentInbox` bounded by the remaining grace (the #2420 `settleWithin` shape), then `deadLetterIntent`
+   (`src/broker.mjs:239-259`) every still-pending entry with `broker exited (reason=<stoppedBy>) before this intent
+   was drained`. That rides the channel `readIntentError`/`awaitIntentResult` already poll
+   (`286-328`); no new channel.
+2. **FAIL-with-named-cause is the default; requeue is the exception.** A replayed `read` answers about a session that
+   no longer exists and lands in a slot its caller deleted; the duplicate-delivery family (#3087, #3877,
+   impl-item-3192 / entry #3460) is the cost of re-enqueueing anything the caller may have retried. Requeue is
+   reserved for ops carrying an epoch tag the next run can dedupe.
+3. **One epoch primitive: `runToken`.** `writeBrokerState` already mints it per broker run
+   (`src/broker.mjs:2217-2218`). 329(c) (entry survival) and 327 (#5258, marker survival) share it; do not introduce
+   two ad-hoc "is this from the old run" conditions.
+4. **Reads are routed on `brokerHealth(state).state`, not `brokerAlive`.** Three-way table: `up` → spool;
+   `degraded` (pid alive, heartbeat fresh, no pass within the progress bound) → **refuse with
+   `broker-degraded-no-progress`**, neither spool nor open the store; `down` (state gone, or
+   `brokerProcessAlive` says the pid is gone, `2194-2204`) → `readLocal`, the caller is the sole owner. A client-side
+   fallback to a direct store open while a writer lives stays **prohibited** (`src/readclient.mjs:3-11, 61-72`).
+5. **The read's bound must be below the caller's patience**, derived from the progress bound rather than the
+   hand-picked 120 s (`src/readclient.mjs:34`); a cause that arrives after the caller left is functionally silence.
+6. **The population becomes a measure.** `tools/stranded-inbox.mjs` exits non-zero iff entries outlived the run that
+   received them; a stale `broker.json` naming a dead pid becomes a check finding
+   `broker-state-pid-not-running` (`status`/`check`), because that stale state is itself a *cause* of shape (b).
+
+**Options considered.** (A) above — chosen: small, reversible, uses only existing channels, and makes the residue
+countable. (B) *requeue everything for the next epoch* — cheapest at exit, rejected: it manufactures the stale-read and
+duplicate-delivery classes it is meant to avoid, and makes the next broker's first pass semantically load-bearing on
+work it was never asked to do. (C) *move the spool lifecycle into the store* (per-entry status/claim/lease, `dark`
+in-database) — the right destination if (c) recurs after (A), rejected now: it needs the store open at the moment the
+store is closing, and it widens the single-writer boundary far beyond the defect.
+
+**Consequences.** Operator reads become **unavailable-and-loud** during a wedge instead of slow-and-silent; that is
+the accepted price, since a refused read has a recovery path and a never-answering read does not. `brokerAlive` stays
+legitimate for *identity* and for pid-death questions — but any consumer asking "can this broker answer me?" must call
+`brokerHealth`, so call-sites that today use `brokerAlive` as a routing gate are on notice. `degraded` is now a state
+with teeth, so a rig that shows it must be acted on (restart or repair), and the progress bound
+(`DEFAULT_PASS_TIMEOUT_MS = 300_000` + margin, `src/broker.mjs:2126-2155`) becomes a user-visible promise about read
+latency. Acceptance is by probe, not by ordering argument: a demo that enqueues **mid-shutdown**, the mid-pass
+closed-storage specimen, the `watch --once` non-zero-with-cause assertion, and
+`tools/stranded-inbox.mjs` reporting zero shutdown-stranded entries on a live rig after a restart.
