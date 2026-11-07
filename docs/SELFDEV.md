@@ -2693,3 +2693,51 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     "fix" this by `git add -f`-ing megabytes of HTML: the size ruling is recorded inline and reversing it is the operator's
     call. The cheap check `check` does NOT have (worth a row for `lead`, next to `runbook-stale`): a doc that asserts a path is
     tracked, contradicted by `.gitignore`.
+
+## Operational pitfalls (2026-11-07T06:4xZ, delegate session N3 — the operator's three answers, one delivery pass, and the instruments that lied; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+77. **`tools/review-cite-check.mjs` defaults to FULL AUDIT; the number every doc quotes is the `--gate` number.** Measured
+    in the same minute, same tree: bare → `VERDICT: 297 failing, 309 not failing (of 606 findings)`; with `--gate` →
+    `206 failing, 400 not failing … 2 SUPPRESSED → exit 1`. The header prints the posture
+    (`posture: FULL AUDIT — … use --gate for the anchor-wrong-today set`), so read that line before comparing anything to a
+    doc's baseline: the +91 "regression" between those two numbers is an artifact of the posture, not a change in the tree.
+    A future session nearly opened a row for it this turn.
+78. **`cli.mjs check` prints TWO valid JSON documents, and the naive "slice from the first `{`" parses the wrong one.** The
+    first is a spend-registration notice, not an error line: run `check` without
+    `--env-file="$HOME/.config/durig/env"` and stdout opens with
+    `{"spend":"registration-refused","provider":"verifier","model":"openai/gpt-oss-120b",…,"causes":["metered-endpoint-unkeyed"]}`
+    and only then the real `{ok,findings,checks,summary}` document. Because both are valid JSON,
+    `s.slice(s.indexOf("{"))` yields a document with no `findings` at all and the reader concludes "the rule is absent" —
+    the false verdict is the absence, not a crash. Fix both ways: always pass `--env-file`, and brace-scan for the document
+    that has the key you want. (Pitfall 71 is the sibling failure: a NON-JSON line first. `wc -c` plus a `grep -o '"findings"'`
+    on the capture distinguishes them in one call.)
+79. **`tools/broker-serve.mjs --status` and `--dry-run` print the live `DURIG_*_API_KEY` values in cleartext in their `env:`
+    line.** Observed on this host; the values are the real strata/DeepInfra keys. This is RM-295's open defect with a live
+    specimen (**#5334** re-registration, **#5365** status correction, **#5366** the fix + failing-first demo) — until it
+    lands, **never paste a `--dry-run`/`--status` `env:` block into a doc, a commit message, or a report**, and prefer
+    quoting the field NAMES. The masking fix's acceptance is "key NAME + `set` survives, value never does" (#5335).
+80. **`--max-duration` does not bound the process; it bounds nothing at all.** Started
+    `--max-duration 300` at 05:58:24Z; still alive at 06:22Z (`ps -eo pid,etime,args` → `24:16`), stopped by hand at
+    06:28:03Z = **29 min 39 s of wall clock on a 300 s bound**, after 486 passes. `serve --stop` refused the grace
+    (`"stopped":false,"reason":"did not exit within the stop grace; no forced kill"`) while `broker.json` kept a fresh
+    `heartbeatAt` with `lastPassAt` frozen 20 min — the runbook's dormant signature. The sequence that worked, in order:
+    `ls -1 selfdev.sqlite.genlock*` (empty = no generation in flight, so a kill is admissible) → `serve --stop` (refused) →
+    `kill <pid>` → `ps -eo pid,etime,args | grep "cli.mjs serve" | grep -v grep` → `GONE`. The `EXIT` line it left is
+    `reason=deadline passes=-`, which is wrong in both fields (pitfall 74, third observation, row **#5215**). Reproduced
+    independently by the team as **#5373** (`serve --max-duration 240` ran 27 min past its bound) — do not mint a fourth.
+81. **A bounded pass grows the leak meter on its own, and the wake loop spends money on the seat it is skipping.** At the
+    previous close the operator-ordered cleanup left `reapable 0, dirty 0, 18 worktrees`; at this session's first read it was
+    `total 38, reapable 12`… **`total 41, reapable 12, dirty 1`** by the end, with **no** operator or delegate removal or
+    creation decision in between — 41 worktrees and 43 branches now. So `DURIG_DB=./selfdev.sqlite node cli.mjs worktree
+    audit` belongs at the END of every delegate session, not only before a cleanup. Same pass, cost side: `WAKE auditor`
+    printed **10** times in a ~30-min window while `SKIP auditor reason=pending` printed for the same seat every pass — each
+    wake a metered call at $0.0003–0.0005, **$0.009332** for the session (24 ledger rows, cumulative $0.465535). There is no
+    per-family cap to stop that (`durig.config.default.json:10-12` = per-call 0.05 / per-run 0.10 / per-store 4.00); the
+    operator's answer is a routing rule held by `lead`, not a mechanism.
+82. **"Which milestone are we in?" has no instrument, so every session re-derives it.** Measured: `ROADMAP.md:66-102` is
+    the only M-list (M1 ✅, M2 ✅, M3 ✅, M4 parked, **M5 ⏳ proposed, never ratified** — D141); **0 of the 106 `queued`
+    subjects contain "milestone"**; the team uses the word for a single row (#5395 says "MINT THE LANDING ENTRY for
+    milestone 331") and older archives use it for a cluster (a 2026-11-03 pointer names "milestone #5027"). Consequence:
+    the operator's plain question cost a full read of ROADMAP + DECISIONS + the queue to answer, and the answer is
+    triangulated rather than read. A row-kind or a `check`-visible milestone label is the cheap fix — **`lead`/`pm` mint
+    it; the delegate registered none.**
