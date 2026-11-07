@@ -1,5 +1,5 @@
 {
-  "_readme": "Durig self-development rig: send pm a durig backlog item and the team works it in an isolated checkout. No `cwd` is declared here on purpose - a committed rig that named a host path would persist a machine-specific absolute path (ROADMAP item 34) and be wrong on any other machine. Point the run at a worktree with DURIG_SEAT_ROOT instead: `node cli.mjs worktree <path>` then DURIG_SEAT_ROOT=<path>/durig. Every seat inlines the operating procedure below because durig has no skill loader yet (ROADMAP item 35) - when that lands, this block moves into a skill.",
+  "_readme": "Durig self-development rig: send pm a durig backlog item and the team works it in an isolated checkout. No `cwd` is declared here on purpose - a committed rig that named a host path would persist a machine-specific absolute path (ROADMAP item 34) and be wrong on any other machine. Point the run at a worktree with DURIG_SEAT_ROOT instead: `node cli.mjs worktree <path>` then DURIG_SEAT_ROOT=<path>/durig. Every seat inlines the operating procedure below because durig has no skill loader yet (ROADMAP item 35) - when that lands, this block moves into a skill. MODEL STATE (operator ruling 2026-11-07, delegate-applied): all 12 seats now run `local/qwen3.8-flash-next-iq3_s` — the verifier-family seats (qa, qa2, advocate, auditor, designer) were moved off `verifier/openai/gpt-oss-120b` to stop paid passes. This makes the D48/D119 cross-family author/verifier invariant FALSE on this rig, and `cli.mjs check` says so every run (`single-model-rig`, fix-now) — the finding is the record, not a regression to suppress. `DURIG_VERIFIER_*` stays configured in durig.config.json so restoring a second family is one edit per seat plus `up --refresh`. Do NOT repoint the `verifier/` provider's base URL at the loopback server instead: this server answers ANY requested model id with qwen (measured 2026-11-07: a request for `openai/gpt-oss-120b` returned a body whose `model` field read `qwen3.8-flash-next-iq3_s`), which would keep `check` green while the invariant is false and log a model that never ran.",
   "version": 2,
   "seats": [
     {
@@ -47,7 +47,7 @@
         "review"
       ],
       "instructionsFile": "prompts/qa.md",
-      "model": "verifier/openai/gpt-oss-120b"
+      "model": "local/qwen3.8-flash-next-iq3_s"
     },
     {
       "name": "qa2",
@@ -62,7 +62,7 @@
         "review"
       ],
       "instructionsFile": "prompts/qa2.md",
-      "model": "verifier/openai/gpt-oss-120b"
+      "model": "local/qwen3.8-flash-next-iq3_s"
     },
     {
       "name": "lead",
@@ -92,7 +92,7 @@
         "review",
         "advocate"
       ],
-      "model": "verifier/openai/gpt-oss-120b",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/advocate.md"
     },
     {
@@ -136,7 +136,7 @@
       "capabilities": [
         "verify"
       ],
-      "model": "verifier/openai/gpt-oss-120b",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/auditor.md"
     },
     {
@@ -150,7 +150,7 @@
       "capabilities": [
         "review"
       ],
-      "model": "verifier/openai/gpt-oss-120b",
+      "model": "local/qwen3.8-flash-next-iq3_s",
       "instructionsFile": "prompts/designer.md"
     },
     {
