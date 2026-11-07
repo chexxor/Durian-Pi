@@ -118,3 +118,95 @@ is not this rig's: our two families are **200,000** (`local`) and **24,576** (`v
   machine-enforced, needs the estimate in the row) vs seat-side (a persona instruction, cheap, unenforced). Recommendation:
   broker-side claim check, with the estimate as a queue-row field — consistent with the rig's "enforce at the seam"
   history (307, 311, 337, 341).
+
+## 6. The bands, computed PER FAMILY (delegate pass 2026-11-07T02:0–02:4xZ — the §4/§6 rule, executed)
+
+Host for every number below, measured in the same command as the probe: **Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0**. Probe: `.spike/delegate-20261107/context-bands.mjs` (output
+`.spike/delegate-20261107/context-bands.out`) — **free**: no model call, no store write, no broker, no key. It merges
+`durig.config.default.json` under `durig.config.json` (skipping the defaults is how a "`MAX_TOKENS` is unset" claim goes
+wrong: `durig.config.default.json:6` sets `DURIG_LOCAL_MAX_TOKENS=16384`; the user file sets only
+`DURIG_VERIFIER_MAX_TOKENS=6000` at `durig.config.json:8`; `src/providers/local.mjs:159` falls back to `8192`) and applies
+the substrate's own arithmetic at the pin: `types.ts:507-512` (reserve = "room kept free for the answer"; background starts
+that many tokens **below** the blocking threshold, `0` disables), `generation.ts:355-358` (blocking =
+`window − reserve`, background = `blocking − backgroundTokens`), `compaction.ts:148-152` (the summarizing call's maxTokens
+is `min(floor(0.8 · reserveTokens), model.maxTokens)`), `compaction.ts:279 selectCut` (walks back from the tail until
+`keepRecentTokens` are kept, then cuts at the first candidate that is not a tool result).
+
+Bands re-based as fractions of each family's **declared** window (the doc's 130k bands divided by 130,000 — its §1 shape
+carried onto our windows, which is what §4.6 demands):
+
+| family | window | working ≤ | economy ≤ | checkpoint ≤ | wrap-up ≤ | emergency ≤ |
+|---|---|---|---|---|---|---|
+| `local/qwen3.8-flash-next-iq3_s` (7 seats) | 200,000 | 92,308 (46.2 %) | 123,077 (61.5 %) | 146,154 (73.1 %) | 169,231 (84.6 %) | 200,000 |
+| `verifier/openai/gpt-oss-120b` (5 seats) | 24,576 | 11,343 (46.2 %) | 15,124 (61.5 %) | 17,959 (73.1 %) | 20,795 (84.6 %) | 24,576 |
+
+Where each policy's **blocking** and **background** thresholds land:
+
+| policy in force | family | blocking threshold | band | background threshold | band | post-cut floor (`keep + summary`) |
+|---|---|---|---|---|---|---|
+| today — pi-durable defaults win (331 unfixed) | local | 183,616 (91.8 %) | **emergency** | 150,848 (75.4 %) | wrap-up | 24,000→20,000 + 13,107 = 33,107 (16.6 %) |
+| today — pi-durable defaults win (331 unfixed) | verifier | 8,192 (33.3 %) | **working** | **−24,576** | (always above) | **20,000 + 6,000 = 26,000 = 105.8 % of the window** |
+| #5309 accepted values | local | 159,040 (79.5 %) | wrap-up | 126,272 (63.1 %) | checkpoint | 24,000 + 16,384 = 40,384 (20.2 %) |
+| #5309 accepted values | verifier | 20,480 (83.3 %) | wrap-up | 12,288 (50.0 %) | economy | 8,192 + 3,276 = 11,468 (46.7 %) |
+| the operator's pi schedule harness-wide (`32000/16000`) | local | 168,000 (84.0 %) | wrap-up | 135,232 (67.6 %) | checkpoint | 16,000 + 16,384 = 32,384 (16.2 %) |
+| the operator's pi schedule harness-wide (`32000/16000`) | verifier | **−7,424** | **never fires** | **−40,192** | (always above) | 16,000 + 6,000 = 22,000 (89.5 %) |
+
+**Three findings the rows do not yet carry** (spooled to `lead` as intent `delegate-20261107-bands` for #5309 / #5310 /
+#5308 — the delegate minted nothing, per protocol):
+
+1. **The verifier is behind a COMPACTION WALL today, not merely compacting early.** The smallest view a cut can leave is
+   `keepRecentTokens + min(0.8 · reserve, model.maxTokens)` = `20,000 + 6,000` = **26,000 tokens against a 24,576 window**.
+   Compaction cannot bring that family under its own window at any threshold. This is the mechanism behind the phrase
+   `src/broker.mjs:112-114` already warns of ("drift into the compaction wall while the rig reported it healthy") — and it
+   is stronger than "compacts at 8,192 while keeping 20,000".
+2. **`backgroundTokens 32768` on a 24,576 window makes the background threshold negative (−24,576)**, so by
+   `generation.ts:355-358` **every** verifier call sits above it: a background compaction is eligible on every turn for 5
+   of the 12 seats. Feed this to the compaction **cause-class vocabulary** rows (#5206 claimed, #5331) — a
+   `background`-class event on every turn is a baseline, not an anomaly, and a chart that does not know that will be
+   re-drawn within a week.
+3. **#5309's own accepted verifier reserve is smaller than the rig's declared completion: `reserveTokens 4096 <
+   DURIG_VERIFIER_MAX_TOKENS 6000`.** `types.ts:507` defines the reserve as the room kept free for the answer, so at the
+   blocking point (20,480) there is no room for the 6,000-token completion the same config asks for. #5309 should either
+   raise the reserve to ≥ 6,000 or lower the declared maxTokens, and **#5310 should assert `reserveTokens ≥ maxTokens`
+   per family** from the resolved policy. Same failure shape the rig already prints at the money seam — `maxCallExposureUsd`
+   vs `capUsd` (a live specimen printed itself to `.spike/serve.err` this session: `google/gemini-3.1-pro`,
+   "one maximal call at its own declared maxima costs $14.00 = 3.50x the $4 store cap … the row is NOT registered"). For
+   contrast the local family clears it (`40,960 ≥ 16,384`), and today's defaults sit at **exact equality** (`16,384 =
+   16,384`) on 7 seats — zero headroom, and `DURIG_LOCAL_MAX_TOKENS` set nowhere in the user file (#5307).
+
+**What the substrate cannot express, so the review must decide rather than measure.** The pinned harness has **two**
+thresholds (`blocking`, `background`) and one cut rule. The doc's **Checkpoint band — "no new work items may be
+started"** — has **no policy field**; it is a notice plus an actuator, and the actuator is explicitly unbuilt
+(`docs/runbooks/context-over-window.md`: "the notice **accepts, it never decides** (#3271/#3575). The actuator that would
+halt a seat is a separate, unbuilt row (#1781)"). So N1 splits: bands-as-thresholds is a config change (cheap, per
+family), bands-as-a-work-stoppage is a new mechanism with an owner and a refusal design. Say which one the milestone
+funds; do not let "we set per-family reserves" stand in for "we enforced bands".
+
+**The doc's Economy band ("clear old tool results, no whole-file reads") has a seam, and it is not new.** The vendor
+feature is server-side (`clear_tool_uses`, "context editing … which includes tool-result clearing" — see
+`inputs/fetched/MANIFEST.md` §7.1). At our pin there is **no such primitive**:
+`grep -rn "clear_tool\|context_management\|contextEditing" vendor/pi-main/packages/ --include="*.ts"` → **no matches**.
+What exists is `ContextEdit { target: EntryId, action: "omit" | "replace", messages }`
+(`vendor/pi-main/packages/durable/src/types.ts:412-426`, applied at `harness/context.ts:145,223`, `harness/prompt.ts:74`).
+The rows that already own that shape are the **held pair #2402/#2403** (D107 mask-only at 80 % via ContextEdit
+omit/replace; summarize-at-transition + preserve pointers + cap-2 + forced), gated behind the compaction-cluster fold
+(ROADMAP 92/94, carrier #5220 `queued`). **Recommendation: fold the milestone's Economy band into #2402/#2403 rather than
+minting N6 beside it** — a store-side clear keeps the raw entries append-only, which the server-side version does not give
+us, and it inherits D105/D107's non-destructive property.
+
+## 7. The milestone's three references are now fetched and checked (was: unfetched, so not evidence)
+
+See `inputs/fetched/MANIFEST.md` **§7** — all three URLs return **200**, the pages are pinned by sha256, and §7.1 lists
+which of the doc's claims are **supported verbatim** (context rot as a token-count effect; context as a finite resource
+with diminishing returns; subagents returning "often 1,000-2,000 tokens"; the cookbook's
+`RESULT: high-level 3/3 preserved, obscure 0/3 preserved`; proactive-vs-reactive handoffs; "a structured state object …
+significantly reduces this risk") and which are **the doc's own inferences with no source** ("an agent at 90 % of its
+window is the worst possible judge"; the "often 5–15k" system-prompt floor). §7.2 records the one place the doc
+contradicts its own citation — it prescribes hard token bands while its `[^3]` says *"Context rot doesn't hit a clean
+threshold … Token Count Isn't the Only Variable"* — which is the direct justification for §6's re-basing.
+
+**A cheap measurement the milestone should run and has not:** the doc's "measure the floor first" is executable here and
+free on the loopback provider — one request carrying the seat's system prompt + tool schemas and nothing else, reading
+`usage.prompt_tokens`. That number is the denominator every band should be relative to; today we have only the window, and
+for 7 of 12 seats we have no trajectory at all (§3, pitfall 61).

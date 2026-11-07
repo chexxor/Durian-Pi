@@ -201,3 +201,54 @@ failure mode. Two more rows are **not dead but moved**: the cited locator rots w
 **A control that matters:** a probe without `-L` (or with `redirect: "follow"` disabled) reports both moved rows above as
 `308`, which a naive checker calls *dead*. `curl -sS -o /dev/null -w '%{http_code}'` without `-L` returned **308** for both.
 Classify 3xx as *moved*, never as dead; the 404s above return 404 with or without `-L`.
+
+## 7. The milestone doc's three references, fetched by the delegate (2026-11-07) — the milestone's inputs are now checkable
+
+`docs/reviews/ensuring-llm-task-completion-research.md` arrived as **milestone source material authored by the operator**
+(a raw model reply) with three footnoted references that **neither the delegate nor the team had fetched** — so at intake
+(`docs/reviews/task-completion-milestone-intake-2026-11-07.md` §0) none of its six proposals was evidence, only task input.
+They are fetched now. Host signature measured with the fetch: **Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0** (probe: `uname -s && uname -r && (. /etc/os-release &&
+echo "$PRETTY_NAME") && node -v && git --version`). Fetch: `curl -sS -L -m 60 -D <hdr> -o <file> -w %{http_code} <url>`.
+
+| file | source URL | fetched (Z) | HTTP | bytes | sha256 (first 16) | page's own `last-modified`/`etag` |
+|---|---|---|---|---|---|---|
+| `www.anthropic.com_research_effective-context-engineering-for-ai-agents.html` | https://www.anthropic.com/research/effective-context-engineering-for-ai-agents | 2026-11-07T02:00:00Z | **200** | 206,036 | `813eba6339d268ba` | none printed |
+| `platform.claude.com_cookbook_tool-use-context-engineering-context-engineering-tools.html` | https://platform.claude.com/cookbook/tool-use-context-engineering-context-engineering-tools | 2026-11-07T02:00:01Z | **200** | 587,180 | `3463fd9d438f03a0` | none printed |
+| `www.mindstudio.ai_blog_context-rot-ai-agents-session-handoff-fix.html` | https://www.mindstudio.ai/blog/context-rot-ai-agents-session-handoff-fix | 2026-11-07T02:00:01Z | **200** | 109,172 | `d365a5726b2333f4` | `etag: "916f85a7918e1e8d95d3061058a167c1"` |
+
+**All three resolve (200).** No `last-modified` on the two vendor pages, so the sha is the only pin — which is why the
+quote-not-line-range rule (ROADMAP **243**, D159) is what makes this section usable.
+
+### 7.1 What the milestone doc claims, checked against our copies (2026-11-07T02:00Z)
+
+| the doc's claim (as written in `ensuring-llm-task-completion-research.md`) | found in our copy? | verdict |
+|---|---|---|
+| "as the number of tokens in the context window increases, the model's ability to accurately recall information … decreases" (its "context rot" premise) | `…effective-context-engineering-for-ai-agents.html` — verbatim, including "While some models exhibit more gentle degradation than others, this characteristic emerges across all models" | **supported, verbatim** |
+| "Context is a finite resource with diminishing marginal returns, not just a size limit" | same file — "Context, therefore, must be treated as a finite resource with diminishing marginal returns." | **supported, verbatim** |
+| subagents "burn tens of thousands of tokens … return a 1–2k-token digest" | same file — "Each subagent might explore extensively, using tens of thousands of tokens or more, but returns only a condensed, distilled summary of its work (often 1,000-2,000 tokens)." | **supported, verbatim** |
+| "a compaction summary preserved 3/3 high-level facts but 0/3 obscure specifics" | the cookbook page — the notebook's own printed output: `RESULT: high-level 3/3 preserved, obscure 0/3 preserved` | **supported, but it is ONE demo run's printed output on a biology-document task, not a benchmark.** Cite it as a worked example, never as a rate. |
+| "cap every tool result server-side … Token-efficient tools are a context-engineering lever" | the cookbook page names the vendor levers: `clear_tool_uses`, "server-side compaction", "**context editing** … (which includes tool-result clearing)", "the memory tool" | **supported** — and it names the exact API-side feature; see §7.2 for what our pin does and does not expose |
+| handoffs "more effective when proactive (threshold-triggered) than reactive (symptom-triggered)" | `…context-rot-ai-agents-session-handoff-fix.html` — "Proactive handoffs happen automatically, on a schedule or threshold. For example: 'Every 80,000 tokens, summarize and restart.'" | **supported, verbatim** |
+| "a structured state object reduces that risk" | same file — "Using a structured state object (rather than free-form text summaries) significantly reduces this risk." | **supported, verbatim** (it is the page's FAQ prose: `advertised-elsewhere`, not a measurement) |
+| **"an agent at 90 % of its window is the worst possible judge of how much room it has left"** | the string `90%` appears in **none** of the three copies | **NOT sourced — the doc's inference.** The pages support "recall degrades as tokens grow"; they do not support a claim about the model's *self-assessment* at 90 %. Keep the inference, label it one. |
+| **"Measure the floor first: one API call with an empty message list … (often 5–15k)"** | `5-15k` / `5–15k` in none of the three copies | **NOT sourced.** The *method* is sound and cheap (we can run it: `usage.prompt_tokens` of a system-plus-tools-only request); the "5–15k" figure is the model's own estimate and must be replaced by a measurement per family. |
+
+### 7.2 One place the doc contradicts the source it cites, and one place the substrate has no knob for it
+
+- **Bands vs "no clean threshold".** The doc §1 prescribes hard token bands (60k/80k/95k/110k) and a controller that enforces
+  them. Its own `[^3]` says the opposite about the boundary: *"Context rot doesn't hit a clean threshold. It's a gradual
+  process … Token Count Isn't the Only Variable — A 50,000-token context might still perform well if the relevant
+  information is near the beginning and end."* So the bands are a **policy choice, not an empirical boundary** — which is
+  exactly why the intake's rule ("do not adopt the doc's 130k bands; compute per family") is right, and why the bands should
+  be stated as fractions of each family's declared window. Worked per family in
+  `docs/reviews/task-completion-milestone-intake-2026-11-07.md` §6.
+- **Tool-result clearing has no substrate primitive at our pin.** `grep -rn "clear_tool\|context_management\|contextEditing"
+  vendor/pi-main/packages/ --include="*.ts"` → **no matches** at the pin. What the pin DOES have is the general
+  `ContextEdit { target: EntryId, action: "omit" | "replace", messages }` at
+  `vendor/pi-main/packages/durable/src/types.ts:412-426` (applied in `harness/context.ts:145,223` and
+  `harness/prompt.ts:74`) — which is precisely the mechanism a tool-result-clearing band needs. The rows that already own it
+  are the held pair **#2402/#2403** ("`#2233 (1/2) — D107 mask-only at 80 % via ContextEdit omit/replace … + summarize-at-
+  transition + preserve pointers + cap-2 + forced …`"), gated behind the compaction-cluster fold (ROADMAP 92/94, #5220).
+  The vendor feature is **server-side**; ours would be **store-side** — same effect, different owner, and it keeps the raw
+  entries append-only (D105/D107's non-destructive property).
