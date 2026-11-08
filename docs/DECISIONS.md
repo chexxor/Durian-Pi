@@ -10293,3 +10293,60 @@ the **LAN box, not the local box** — that was true before this edit and is not
 Q13's print fix, Q6's re-measure, Q2/Q5's releases, Q4's closure authority, Q12's BUILD row and Q11's roster act are
 delivered as intents to `lead`/`pm`/the owning seats with the rulings above quoted in them, and one bounded supervised
 window is run to let the team act (Q17).
+
+## D237 — 2026-11-08T06:3xZ: after a provider bounce the fleet is dead until BOTH the declared id and the roster strings name what the box serves; the delegate executed that on the machine plane and set the seat cap to 4
+
+Host, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+
+**The operator's instruction (06:1xZ):** "I bounced the LLM server, and raised the concurrency to 8. You'll probably
+need to poke the agents in the team to get them working again. And you'll probably need to raise the concurrency count
+for the team."
+
+**What was actually broken, measured before touching anything.** Every seat generation failed in **1 ms**
+(`startedAt 1794119569512`, `endedAt 1794119569513`) with
+`{"status":"failed","error":{"message":"Model local/qwen3.8-flash-next-iq3_s is not available","detail":{"reason":"no_model"}}}`
+— 20 wakes on `impl`, 21 on `pm`, 19 on `devtools`, and **no assistant entry at all** in any conversation. The box's
+own listing: `GET http://127.0.0.1:8080/v1/models` → `[{"id":"qwen3.8-flash-next-q2_0","status":{"value":"loaded"},
+"meta":{"n_ctx":204800},"architecture":{"input_modalities":["text","image"]}}]`, and the LAN box the same id with
+`n_ctx 131072` and `input_modalities: ["text"]` only.
+
+**Why, from the source, not from guesswork.** `createLocalProvider` (`src/providers/local.mjs:241-280`) registers
+exactly **one** model row, `spec.modelId`, which comes from `<PREFIX>MODEL`. `resolveSeatModel`
+(`src/seatmodel.mjs:13-22`) takes the model id straight from the seat string. So a seat naming an id the provider does
+not register dies as `no_model` *before any request* (`src/providers/local.mjs:233,269`). llama.cpp **reroutes an
+unknown id** — measured: request `qwen3.8-flash-next-iq3_s` → response `"model":"qwen3.8-flash-next-q2_0"`,
+`finish_reason":"stop"`, content `"OK"` — so a stale id is invisible on the wire and only shows up at registration.
+The instrument that names it is the preflight:
+`BLOCK provider-DURIG_LOCAL_-model-absent: http://127.0.0.1:8080/v1 advertises [qwen3.8-flash-next-q2_0] but the
+config names 'qwen3.8-flash-next-iq3_s'`.
+
+**Executed (machine plane and the rig's own roster; no queue act, no seat's work):**
+- `durig.config.json`: `DURIG_LOCAL_MODEL=qwen3.8-flash-next-q2_0`, `DURIG_LOCAL_CONTEXT=204800` (the box's `n_ctx`),
+  and the `DURIG_COMPACTION_MODEL_OVERRIDES` key re-pointed from `local/qwen3.8-flash-next-iq3_s` to
+  `local/qwen3.8-flash-next-q2_0` — leaving the old key would silently lose the 20,480-token compaction reserve.
+  Backup: `.spike/delegate-20261108h/durig.config.preceding.json`.
+- `rig.selfdev.json`: all 11 local seats re-pointed to `local/qwen3.8-flash-next-q2_0` (`auditor` stays
+  `verifier/openai/gpt-oss-120b` as the gate canary). Backup:
+  `.spike/delegate-20261108h/rig.selfdev.preceding.json`. Applied with `cli.mjs up rig.selfdev.json --refresh`
+  (broker stopped — `--refresh` re-points every seat) → `refreshed: pm, impl, qa, qa2, lead, advocate, scribe,
+  devtools, auditor, designer, security, architect`.
+- `.pi/settings.json` (this directory): delegate session default → `strata-server/qwen3.8-flash-next-q2_0`, freeing a
+  localhost slot. Backup: `.spike/delegate-20261108h/durian-pi-dot-pi-settings.preceding`.
+
+**The concurrency number, and why 4 rather than 8.** The operator raised provider-side concurrency; the rig's own
+admission cap was **unset**, i.e. `durig.config.default.json:3` `DURIG_MAX_CONCURRENT_SEATS: "1"`. Measured on the
+local box in one command: **4** concurrent seat-sized turns (2,460 prompt tokens, 512 max out) = **5.41 s** wall;
+**8** concurrent = **5.28 s** wall; `/props` declares `total_slots: 4`. So **4 is the number the box declares and the
+number the measurement supports without queueing**; 8 is demonstrated headroom, and per D233/D236 the cap is a dated
+operator ruling, so `4` is set as a reversible machine-plane default (one key in `durig.config.json`) with the 8
+measurement recorded for the operator to raise it to.
+
+**Boundary stated so the record is not over-read:** a `START REFUSED: live-tree-dirty` from `broker-serve.mjs` is not
+noise — a seat woken from a dirty main tree edits that tree (F12/F23). The roster edit therefore had to be committed
+before the window could start. And the LAN box is **text-only**, so any seat whose surfaces carry images cannot move
+to it (D236 (3)).
+
+**What the delegate did NOT do:** no claim/complete/defer/route, no code change. `#5655`/`#5605` (register
+`DURIG_LOCAL2_`) are still the team's, unstarted as of 06:3xZ (measured: no worktree contains `DURIG_LOCAL2`), and the
+two-seat move to the LAN box still waits on that registration.

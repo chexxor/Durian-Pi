@@ -1,8 +1,15 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-08T02:5xZ (delegate session **N9** — the operator's four approvals of `00:3xZ` were executed
-and a fifth ruling arrived mid-session: **"add two seats that we sometimes rely on to use the strata-server
-provider."** Executed: the push (`7a1b80e2..c047b767` → `origin/main`), the sweep-residue ruling (delivered; seats
+**Last update:** 2026-11-08T06:4xZ (delegate session **N10** — the operator bounced both LLM servers and raised
+provider concurrency ("*I bounced the LLM server, and raised the concurrency to 8… poke the agents… raise the
+concurrency count for the team*"). What that broke and what is now fixed: **every seat turn was dying at registration**
+with `Model local/qwen3.8-flash-next-iq3_s is not available` (`no_model`) because both boxes now advertise
+`qwen3.8-flash-next-q2_0` (`GET /v1/models`, `n_ctx 204800` local / `131072` LAN, LAN **text-only**); the roster and
+the config are re-pointed and `up --refresh` refreshed all 12 seats (**D237**), and `DURIG_MAX_CONCURRENT_SEATS` is now
+**4** (measured: 4 concurrent seat-sized turns 5.41 s wall, 8 concurrent 5.28 s wall, `/props total_slots 4`). The
+N9 rulings below still stand.
+
+**N9 in brief** — the operator's four approvals of `00:3xZ` were executed and a fifth ruling arrived mid-session: **"add two seats that we sometimes rely on to use the strata-server provider."** Executed: the push (`7a1b80e2..c047b767` → `origin/main`), the sweep-residue ruling (delivered; seats
 resumed their own rows — `queued 7 → 35`), and the capacity ruling (delivered as rows **#5605** code / **#5608**
 roster, and the `DURIG_LOCAL2_*` env block is **already written and measured**). Two of the team's fixes are now
 **verified by an independent runner and still unlanded**: **#5488** (`item-5488` = `ade0691a`, 262/262 suite green)

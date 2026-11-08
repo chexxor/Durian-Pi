@@ -373,3 +373,21 @@ price (`0` is legitimate). But `CONFIG_KEYS` has no `DURIG_LOCAL_PRICE_*` keys, 
 makes **every** CLI verb exit `unknown config-file key(s) …`. Declare them in the **environment** (`~/.config/durig/env`,
 loaded with `node --env-file=…`), and remember the consequence: a start **without** `--env-file` then registers no model
 row and the whole author family goes dark with `registration-refused`.
+
+**State 8 — the server was bounced and now serves a different model id (2026-11-08).** Symptoms: every seat turn dies
+in ~1 ms with `Model … is not available` / `reason: no_model`, the broker log looks normal (`woke=impl` on pass after
+pass), and no conversation gains an assistant entry. Diagnose in this order, all measured on this rig:
+1. `curl -s -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models` — read the **id** the box
+   advertises and its `meta.n_ctx`.
+2. `node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK'` — the
+   preflight prints `BLOCK provider-DURIG_LOCAL_-model-absent: … advertises [<served id>] but the config names
+   '<configured id>'`.
+3. `node -e 'const{DatabaseSync}=require("node:sqlite");const d=new DatabaseSync("./selfdev.sqlite",{readOnly:true});
+   for(const r of d.prepare("SELECT id,conversation_id,record FROM tasks WHERE kind=? ORDER BY id DESC LIMIT 5").all("\"pi.generation\"")){const j=JSON.parse(r.record);console.log(r.id,r.conversation_id,j.state?.outcome?.status,j.state?.outcome?.error?.message)}'`
+   — confirms the failure is at registration, not at the wire.
+Fix: set `DURIG_LOCAL_MODEL` (and `DURIG_LOCAL_CONTEXT` to the advertised `n_ctx`) in `durig.config.json`, re-point
+every `local/<id>` string in `rig.selfdev.json`, re-point the `DURIG_COMPACTION_MODEL_OVERRIDES` key, commit the roster
+(a dirty tracked tree makes `broker-serve --start` refuse: `START REFUSED: live-tree-dirty`), then
+`node --env-file="$HOME/.config/durig/env" cli.mjs up rig.selfdev.json --refresh` with the broker stopped.
+Do **not** rely on llama.cpp's rerouting: a request for an unadvertised id is answered by the served model, so the
+stale id looks fine at the wire while the rig refuses to register it.

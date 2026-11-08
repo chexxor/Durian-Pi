@@ -3083,3 +3083,25 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     either: `grep -oE '"(wake|nudge|ping)"' cli.mjs` → no hit). Leaving a spooled intent in the inbox across a session
     boundary is safe and is the cheapest way to hand the next session a moving fleet — but say so in `docs/NEXT.md`, or
     the next session reads an unexplained inbox file as a fault.
+
+## Operational pitfalls (2026-11-08T06:4xZ, delegate session N10 — the bounce that killed every seat turn, and the cap that was never set; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+122. **Bouncing a provider server changes the model *id*, and that kills every seat turn at registration, not at the
+    wire.** Measured: `GET /v1/models` returned `qwen3.8-flash-next-q2_0` on both boxes while `rig.selfdev.json` and
+    `durig.config.json` named `qwen3.8-flash-next-iq3_s`; every generation failed with
+    `Model local/qwen3.8-flash-next-iq3_s is not available` / `reason: no_model`. Fix both halves in one pass — the
+    declared id (`DURIG_LOCAL_MODEL`) **and** the seat strings in `rig.selfdev.json` — then `up --refresh` with the
+    broker stopped. **Re-point `DURIG_COMPACTION_MODEL_OVERRIDES` too**: its key is the model string, and leaving the
+    old key silently drops the 20,480-token reserve. Commit the roster before starting a window: `up` and
+    `broker-serve --start` both refuse a dirty tracked tree (`START REFUSED: live-tree-dirty`).
+123. **`no_model` failures are invisible in the broker log.** The wake lines run and `woke=impl` appears 20 times, but
+    the conversation gains only the wake user entry — no assistant turn. The instrument is the store:
+    `SELECT id,conversation_id,record FROM tasks WHERE kind='"pi.generation"' ORDER BY id DESC` and read
+    `state.outcome.status` / `state.outcome.error.message`. A `terminal` row is **not** a success.
+124. **`/props total_slots` is not the concurrency the box actually serves.** Declared `total_slots: 4`, yet **8**
+    concurrent seat-sized requests (2,460 prompt tok, 512 out) finished in **5.28 s** wall vs **5.41 s** for 4. Measure
+    throughput with real prompt sizes before setting `DURIG_MAX_CONCURRENT_SEATS`; a 64-token probe sizes the box badly.
+125. **llama.cpp reroutes an id it does not serve.** Requested `qwen3.8-flash-next-iq3_s` → served `q2_0`, `finish=stop`.
+    So a stale declared id never shows up as an HTTP error; the only signal is the preflight
+    `BLOCK provider-DURIG_LOCAL_-model-absent`. Run `tools/broker-serve.mjs --status` **after any server change**, and
+    redact in the same command (pitfall 120).
