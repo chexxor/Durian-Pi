@@ -3,9 +3,10 @@ runbook: session-start-cost
 symptom: "a session burns its first 30–60 minutes re-deriving rig state that an instrument already reports; the delegate 'verifies' numbers by hand that a tool prints in seconds"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-05
+last_verified: 2026-11-08
 verified_by: delegate, impl, devtools
 evidence: "measured 2026-10-31 on `label-withheld-per-D205` (Linux, node v24.22.1): `cli.mjs queue --json` 1.5 s and 21,710,535 B; `tools/what-to-test.mjs --base=HEAD~1` 0.13 s → 6 derived tests against a 239-test suite; `tools/doc-integrity-guard.mjs` 0.10 s exit 0; `tools/instrument-provenance.mjs` 0.07 s exit 0; `tools/seat-turn-shape.mjs` 3.6 s, 58,566 entries read, 0 writes. One batched `send` to `lead` (8 min) produced rows #4947–#4950 plus three closures; one `impl` turn (70 min) produced three rows. Rows #4947–#4950 exist because a delegate MEASUREMENT was carried to a seat instead of a re-derivation.
+  Re-read 2026-11-08 (devtools, `item-5398` linked worktree, Linux Fedora 45 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0): §26's diagnosis shipped as §27. Verify steps actually run: `node demo/clockin-digest.test.mjs` exit **0** (12.8 s), and `node scripts/clockin.mjs --db <snapshot of ./selfdev.sqlite>` printed **15,013 B · exit 0** where the same command at `7a1b80e2` printed **40,161 B · exit 0** (365 deferred rows). NOT re-runnable against the live store while a broker was attached: `cli.mjs status` inside the digest timed out twice at 120 s (`read health: timed out awaiting the broker's result`) — recorded in §27, not fixed here.
   Re-read 2026-11-05 (delegate, main checkout, Linux Fedora 45 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0): the ~7 s clock-in is still the cheap path, and `scripts/clockin.mjs` cost **6,998 ms / 22,537 B printed** at `24fe6c98`; what it CANNOT tell you is whether work exists — at that same commit `queue --status queued` printed `queued rows: 0` while `status` stayed calm and `last_run_failed` named `no_model` for all ten seats. New step 7 below closes that with two one-second reads.
   Re-read 2026-11-04 (impl, `item-4955` worktree, Linux node v24.22.1): the §Preconditions claim about a relative path was understated — a READ at an
   absent path CREATED a 118,784 B store (measured: `readData(...) -> []` with the file present afterwards, `cli.mjs status -> {ok:true, seats:0}` exit 0).
@@ -620,7 +621,9 @@ The list grows with a store state that itself grows: `deferred` went **174 → 2
 escalation permanently inflates the cheapest clock-in read. The fix is not a shorter pointer: it is to **aggregate that
 list** — per-seat counts plus the ids in a file the reader can grep — and it belongs with `scripts/clockin.mjs`'s
 existing digest rows (**#5398**, and the §19 byte-cap family). `lead` should mint it; this section is the measurement,
-not the build. Until then: the `awk` split above is 0.2 s and settles "what should we cut" with evidence.
+not the build. **Delivered 2026-11-08T01:3xZ by #5398 — the aggregation shipped; see §27 for the shape, the
+measured before/after and the gate.** The `awk` split above is still the 0.2 s way to settle "what should we cut"
+when a digest goes over budget again.
 
 Two clarifications about the guard itself, both measured here. (a) `demo/clockin-digest.test.mjs`'s byte assertion runs
 against a **fixture** store, so its digest is small and that assert passes while the **live** digest prints 28,385 B —
@@ -629,3 +632,54 @@ the live overage is visible only in `scripts/clockin.mjs`'s own stderr warning l
 with the `NEXT-ARCHIVE.md` mention sitting in the header *above* `## NEXT SESSION`, the test was **red at `c7e41021`**
 (pre-change digest: 0 occurrences of `NEXT-ARCHIVE`), and naming the archive inside the `## NEXT SESSION` block makes it
 green again — one line, no re-derivation. Put the archive link in the pointer body, not the header.
+
+## 27. THE DEFERRED LIST IS NOW AGGREGATED, AND THE BYTE BUDGET IS AN EXIT CODE (2026-11-08T01:3xZ, #5398; Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+§26's diagnosis shipped. Two changes in `scripts/clockin.mjs`, and one rule about how to make a byte guard stop
+being decorative:
+
+1. **Aggregate, do not shorten.** `deferredTerm()` prints `deferred (awaiting the operator): N rows across M seat(s)`
+   + one `seat=count` per seat + the **2 oldest ids per seat** (a seat works its own backlog oldest-first, the same
+   order the broker claims in, so those are the rows it can act on). The bound is **seats**, a design constant, never
+   rows: 160 → 4,000 deferred rows grows the inline term by < 200 B, where the old line-per-row shape grows ~10×.
+   Under 24 rows the whole list is still printed inline — indirection costs more than it saves on a small backlog.
+2. **The bytes move to a file a seat GRES, not a doc a session reads.** All 365 ids go to
+   `.durig/clockin-deferred.txt` (gitignored), one row per id: `#id <TAB> seat <TAB> deferredTo <TAB> subject`. The
+   digest names the path; it is a **snapshot**, stale the moment the store moves, and the file says so in its header.
+   Header lines carry **no real tab characters** — with them, `grep -c -P "\tdevtools\t"` counted **90** while the
+   digest said **devtools=89** (measured live); a residue sweep that over-counts by one is worse than no sweep.
+   Moving those bytes into `docs/` instead would re-create exactly the cost this tool removes.
+3. **The cap is a gate.** Over budget is **exit 1** (was a stderr comment with exit 0). The digest still prints, so
+   the session sees why it failed. `--budget <B>` is the seam that makes the cap bite on demand instead of only once
+   the store has grown — that is what let the demo prove the gate without a 561 MB store.
+
+Measured on a **snapshot copy** of the live store (561 MB, 5,636 queue rows, **365** deferred, 9 seats), same tree,
+same command, both code paths:
+
+| shape | digest bytes | exit | cost (`real`) |
+|---|---|---|---|
+| old (one inline line per row) | **40,161** | 0 | 10.6 s |
+| new (aggregate + snapshot) | **15,013** | 0 | 11.8 s |
+
+Section costs at the new shape: POINTER 7,993 · READ MAP 2,661 · QUEUE 1,562 (deferred term ~1,300 of it) · RIG 760 ·
+RUNBOOKS 735 · GIT 634 · PROVIDER 23. So the pointer people wanted to trim is 53% of the digest and the deferred list
+was 67% of it.
+
+**The vacuity rule, which is the part to carry to every byte guard:** `demo/clockin-digest.test.mjs` printed
+`PASS` for two sessions while the live digest ran 28–44 KB, because its byte assert ran on a **7-row fixture**. §8 of
+that demo now builds **160 `deferredTo:"human"` rows** plus a rest-of-digest sized like production (asserted > 10,000 B;
+production is ~13,400 B) and asserts the **old** shape is *over* budget at that size. A fixture assertion is only
+evidence when the same file shows the pre-fix shape failing on it.
+
+**Not fixed here (measured, routed):** with a broker ATTACHED, the `cli.mjs status` read the digest makes timed out
+twice at the 120 s bound (`read health: timed out awaiting the broker's result`), so `node scripts/clockin.mjs` costs
+~4 min and fails during a driving window. The 11.8 s figure is the no-broker direct-read path. A gate you cannot run
+while the rig is busy is a gate that gets skipped.
+
+**Verify (run it; exit 0 = the shape is intact):**
+
+```bash
+node demo/clockin-digest.test.mjs            # exit 0, prints "… NON-VACUOUS at a 160-row deferred backlog …"
+node scripts/clockin.mjs --db ./selfdev.sqlite | wc -c   # ≤ 20000 on the live store; exit 1 if it is not
+```
+

@@ -7,8 +7,11 @@ window was run; durability **"Approved."** → **land, do not push `item-*` refs
 `1`, **#5488** lands first. Plus a **standing directive**: *"Communicate the milestone you worked in this session above
 the value added, and do so for every future session"* — recorded as **D232** and written into `AGENTS.md` §Clock out.
 Session N6's pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md` in this cut (65 lines, byte-identical at the tail).)
-The live file is a pointer, cap 200 lines (`demo/next-pointer.test.mjs`) **and ≈16.9 KB** — the digest cap is bytes,
-not lines (`demo/clockin-digest.test.mjs`, `docs/runbooks/session-start-cost.md` §19).
+The live file is a pointer, cap 200 lines (`demo/next-pointer.test.mjs`) **and ≈16.9 KB**. That cap is on **this file**;
+the clock-in **digest** has a separate **20,000 B** budget, and what breached it was NOT this pointer but
+`scripts/clockin.mjs` printing every deferred row inline (365 rows = ~27 KB of a **40,161 B** digest) — **now
+aggregated: 15,013 B, ~11 s to re-run, over budget is exit 1** (`demo/clockin-digest.test.mjs` §8, runbook
+`session-start-cost.md` §26–§27, #5398; §19's byte-cap family).
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
