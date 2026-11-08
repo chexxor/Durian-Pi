@@ -47,16 +47,13 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    `min(floor(0.8 * reserveTokens), model.maxTokens)` — 13,107 local, **6,000 verifier** because
    `DURIG_VERIFIER_MAX_TOKENS = 6000` clamps it. Nesting the override raises local to 16,384 and cannot move the
    verifier. Intent sent: `delegate-20261108-compaction-run-cap` — pitfalls 146, 148, 149.
-9. **Shape blocks seats before size does.** `node tools/seat-turn-shape.mjs --db <copy of the store>` (read-only) at
-   22:26Z: **impl, devtools, security, designer, advocate** = `AT RISK — a strict alternating template refuses another
-   user turn here, before any window is reached`; pm, qa, lead, scribe, auditor = `ADMISSIBLE`. Intent sent:
-   `delegate-20261108-shape-before-size` — pitfall 155.
-10. **The window is holding ~100 queue items at once.** Distinct `item-\d+` refs in each seat's last 200 entries:
-   impl 108, qa 114, scribe 107, lead 89, auditor 81, devtools 13, pm 12. Impl's recent turns: `resume_work {3128}` →
-   bash in `item-5675` → `defer_work {5713}` → bash in `item-5713` — one run, four worktrees, one window. The auditor
-   shows 12 `[error] refused by durig: path …` refusals in the same slice. So 331's acceptance is not only "the
-   override resolves" — a wake must carry **one item's** context, or the 13,107-token summary ceiling keeps breaking.
-   Pitfall 157.
+9. **Two blockers that precede window size.** (a) Shape: `node tools/seat-turn-shape.mjs --db <copy>` — **impl, devtools,
+   security, designer, advocate, qa2** are `AT RISK — a strict alternating template refuses another user turn before
+   any window is reached`; pm, qa, lead, scribe, auditor `ADMISSIBLE` (intent `delegate-20261108-shape-before-size`).
+   (b) Load: distinct `item-\d+` refs in each seat's last 200 entries — impl 108, qa 114, scribe 107, lead 89, auditor
+   81, devtools 13, pm 12; impl's recent turns hop `item-3128` → `item-5675` → `item-5713`, one run four worktrees.
+   The summariser is being asked to compress ~100 unrelated tasks, which is why it hits 13,107 tokens. 331's
+   acceptance must include "one item's context per wake" — pitfalls 155, 157.
 4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
    inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
    deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
