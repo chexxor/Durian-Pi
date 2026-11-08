@@ -1231,6 +1231,14 @@ const Router = defineExtension({
 					const queue = await tx.doc(RigQueue);
 					const item = queue.items.find((it) => it.id === args.itemId);
 					if (!item) return `unknown item #${args.itemId}`;
+					// #5778 — TERMINAL BEFORE AUTHORITY. A closed row is not parked, and the authority refusal
+					// speaks about who may act on a LIVE row. Measured on the live store: `release_work` on #5488
+					// and #5398 — both already `done` — answered "item #5488 is addressed to impl (from lead); only
+					// the sender or recipient may release it". A coordinator reading that reports the row as parked
+					// and escalates work that is finished; that is how a milestone chain read as "96% parked".
+					// The refusal stays for genuinely non-terminal rows (checked next).
+					if (isTerminalItem(item))
+						return `item #${args.itemId} is already ${item.status} (terminal); there is nothing to release`;
 					if (item.to !== me && item.from !== me)
 						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender or recipient may release it`;
 					if (item.status !== "held")
