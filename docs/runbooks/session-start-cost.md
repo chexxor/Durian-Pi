@@ -621,7 +621,12 @@ The list grows with a store state that itself grows: `deferred` went **174 → 2
 escalation permanently inflates the cheapest clock-in read. The fix is not a shorter pointer: it is to **aggregate that
 list** — per-seat counts plus the ids in a file the reader can grep — and it belongs with `scripts/clockin.mjs`'s
 existing digest rows (**#5398**, and the §19 byte-cap family). `lead` should mint it; this section is the measurement,
-not the build. Until then: the `awk` split above is 0.2 s and settles "what should we cut" with evidence.
+not the build. **Shipped for the deferred list (#5596):** `scripts/clockin.mjs` now prints one greppable id line per
+seat (`deferred <seat> (<count>): #id #id …`, biggest first) instead of the inline per-row dump — measured by
+`demo/clockin-digest.test.mjs` at **12,857 B → 1,292 B** on 177 deferred rows, so the section is no longer 52% of the
+digest. Re-measure with the `awk` split above after any digest change; the remaining queue-section bytes are the
+counts line, and the pointer is the next-biggest thing. Until that re-measure: the `awk` split above is 0.2 s and
+settles "what should we cut" with evidence.
 
 Two clarifications about the guard itself, both measured here. (a) `demo/clockin-digest.test.mjs`'s byte assertion runs
 against a **fixture** store, so its digest is small and that assert passes while the **live** digest prints 28,385 B —

@@ -201,10 +201,31 @@ export function renderDigest(s) {
 	if (Object.keys(parked).length) say(`deferred_awaiting_answer: ${JSON.stringify(parked)}`);
 	say(`broker: ${s.broker.detail}`);
 	say(`\n## QUEUE  ${(s.items || []).length} rows ${JSON.stringify(s.counts)}`);
-	const human = (s.items || [])
-		.filter((i) => i.status === "deferred")
-		.map((i) => `#${i.id} (${i.to}) ${String(i.subject || "").slice(0, 55)}`);
-	if (human.length) say(`deferred (awaiting the operator): ${human.join(" · ")}`);
+	// DEFERRED ROWS AS GREPPABLE PER-SEAT ID LISTS (#5596). The old shape was ONE inline run of
+	// `#id (seat) <55-char subject>`, measured at 14,959 B — 52% of the whole digest — at 207 rows
+	// (docs/runbooks/session-start-cost.md, "what is actually big"). A sweep needs the IDS a seat
+	// holds, not the prose: one line per seat, so `grep '^deferred qa2 '` returns that seat's whole
+	// set mechanically instead of re-deriving it from a 21 MB `cli.mjs queue` dump. Ids cost ~7 B
+	// each; the subjects were the entire cost. The label is also corrected: a `deferred` row is
+	// parked on a question held by its TARGET seat, which is not always the operator.
+	const bySeat = new Map();
+	for (const i of s.items || []) {
+		if (i.status !== "deferred") continue;
+		const seat = String(i.to || "?");
+		if (!bySeat.has(seat)) bySeat.set(seat, []);
+		bySeat.get(seat).push(i.id);
+	}
+	const seatLines = [...bySeat.entries()].sort(
+		(a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
+	);
+	if (seatLines.length) {
+		const total = seatLines.reduce((n, [, ids]) => n + ids.length, 0);
+		say(
+			`deferred (parked on a question): ${total} rows across ${seatLines.length} seats — one id list per seat, grep "^deferred <seat> "`,
+		);
+		for (const [seat, ids] of seatLines)
+			say(`deferred ${seat} (${ids.length}): ${ids.map((id) => `#${id}`).join(" ")}`);
+	}
 	if (s.git) {
 		const head = s.git.head ? `${s.git.head.state}${s.git.head.at ? `@${s.git.head.at}` : ""}` : "?";
 		const baseTag = s.git.baseSha

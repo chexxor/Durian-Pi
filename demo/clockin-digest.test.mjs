@@ -108,14 +108,86 @@ try {
 	);
 	assert.match(
 		text,
-		/#4002 \(qa2\) VERIFY the digest verb/,
-		"a deferred row is named by id, target and subject",
+		/^deferred qa2 \(1\): #4002$/m,
+		"a deferred row is named by id, on ITS SEAT'S line — grep-able, not inline prose (#5596)",
 	);
 	assert.match(text, /item-4001 \+1 \[#4001 done\]/, "landing debt is joined to the row's status");
 	assert.match(
 		text,
 		/\{"impl":"model_error: 402/,
 		"the provider failure is visible without reading 22 MB",
+	);
+
+	// 1b. THE DEFERRED LIST IS A PER-SEAT AGGREGATE, AND IT IS CHEAPER (#5596). The measurement this
+	//     replaces lives in docs/runbooks/session-start-cost.md: the one-line-per-row dump was 14,959 B
+	//     of a 28.8 KB digest at 207 rows (52% of the digest). An outage window leaves exactly this shape
+	//     behind, so the fixture is 207 rows across 6 seats: ONE greppable id list per seat, NO subject
+	//     text, and a small fraction of the old cost on the SAME rows.
+	const outage = [];
+	const SEATS = ["devtools", "impl", "lead", "pm", "qa2", "opside"];
+	const SUBJECT = "OUTAGE-WINDOW-SUBJECT-THAT-MUST-NOT-REACH-THE-DIGEST ";
+	for (let n = 0; n < 207; n++)
+		outage.push({
+			id: 6000 + n,
+			to: SEATS[n % SEATS.length],
+			subject: SUBJECT + n,
+			status: n % 7 === 0 ? "held" : "deferred",
+			body: SUBJECT.repeat(30),
+		});
+	const big = renderDigest({
+		pointer: { lines: ["## NEXT SESSION (test)"], start: 1, end: 2, fileLines: 2 },
+		seats: 6,
+		attention: [],
+		broker: { detail: "NO STATE FILE" },
+		items: outage,
+		counts: queueCounts(outage),
+		config: {},
+		localEndpoint: "x",
+		selfdevLines: 1,
+		selfdevHeadings: [],
+		ms: 1,
+	});
+	const dLines = big.split("\n").filter((l) => /^deferred /.test(l));
+	assert.equal(dLines.length, SEATS.length + 1, "one header + exactly one line per seat holding rows");
+	assert.match(
+		dLines[0],
+		/^deferred \(parked on a question\): \d+ rows across 6 seats — one id list per seat, grep "\^deferred <seat> "$/,
+		"the header states the total and how to grep it",
+		);
+	for (const seat of SEATS) {
+		const ids = outage
+			.filter((i) => i.status === "deferred" && i.to === seat)
+			.map((i) => `#${i.id}`);
+		assert.ok(ids.length > 0, `${seat} holds deferred rows in the fixture — the control is not vacuous`);
+		const lines = dLines.filter((l) => l.startsWith(`deferred ${seat} `));
+		assert.equal(lines.length, 1, `exactly ONE line holds ${seat}'s deferred ids — one grep, whole set`);
+		assert.match(
+			lines[0],
+			new RegExp(`^deferred ${seat} \\(\\d+\\): #`),
+			"the line is anchored and count-prefixed",
+		);
+		assert.deepEqual(
+			lines[0].slice(lines[0].indexOf(": ") + 2).split(" "),
+			ids,
+			`${seat}'s line carries EVERY deferred id for that seat, mechanically — no re-derivation from a 21 MB dump`,
+		);
+		assert.ok(!lines[0].includes(SUBJECT), "row subjects never reach the per-seat lines");
+	}
+	// The byte claim, measured against the shape it replaced ON THE SAME ROWS — not a feeling.
+	const newBytes = Buffer.byteLength(dLines.join("\n"), "utf8");
+	const oldBytes = Buffer.byteLength(
+		`deferred (awaiting the operator): ${outage
+			.filter((i) => i.status === "deferred")
+			.map((i) => `#${i.id} (${i.to}) ${String(i.subject).slice(0, 55)}`)
+			.join(" · ")}`,
+			"utf8",
+	);
+	assert.ok(
+		newBytes * 4 < oldBytes,
+		`the per-seat aggregate must cost a fraction of the row-per-line dump: ${newBytes} B vs ${oldBytes} B`,
+	);
+	console.log(
+		`  deferred list: ${oldBytes} B (one line per row) -> ${newBytes} B (per-seat ids) at ${outage.filter((i) => i.status === "deferred").length} rows`,
 	);
 
 	// 2. A BROKER STATE FILE IS NOT PROOF OF A LIVE BROKER. On 2026-10-25 the state file named pid

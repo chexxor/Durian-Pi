@@ -45,8 +45,12 @@ measurements.
    from and the size of the file it came from. It never reads the rest of the file.
 2. `## RIG` — seat count, `attention` count, `last_run_failed` per seat (70-char reason), and which seats have
    items parked awaiting the operator.
-3. `## QUEUE` — row counts by status and the `deferred` ids with their target seat, from the same
-   `cli.mjs status` document (so the 21 MB `cli.mjs queue` dump is never run).
+3. `## QUEUE` — row counts by status and the `deferred` ids **grouped per seat, one greppable line each**
+   (#5596): a header `deferred (parked on a question): <n> rows across <m> seats`, then
+   `deferred <seat> (<count>): #id #id …` biggest-seat-first, so a sweep gets one seat's whole set from
+   `grep "^deferred <seat> "` instead of re-deriving it from the store. Subjects are never printed — they were
+   the entire cost of the old one-line-per-row list (measured 12,857 B → 1,292 B at 177 deferred rows). All of it
+   comes from the same `cli.mjs status` document (so the 21 MB `cli.mjs queue` dump is never run).
 4. `## GIT` — refs, worktrees, and **every unmerged branch joined to its queue row's status**, e.g.
    `item-4746 +1 [#4746 done]`, which is what landing debt actually looks like. The line also names the tree it
    measured and the ref it measured against: `refs=<n local branch refs> worktrees=<n|?> unmerged=<n> base=main@<sha8>
