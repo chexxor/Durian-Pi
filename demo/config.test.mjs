@@ -332,12 +332,12 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	// Per-model layering, in both shapes a config FILE and an ENVIRONMENT can each produce.
 	assert.deepEqual(
 		compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: { "local/qwen": { reserveTokens: 4096 } } }),
-		{ modelOverrides: { "local/qwen": { reserveTokens: 4096 } } },
-		"an object map passes through",
+		{ compaction: { modelOverrides: { "local/qwen": { reserveTokens: 4096 } } } },
+		"an object map nests inside `compaction` - the only key the harness reads (ROADMAP 331)",
 	);
 	assert.deepEqual(
 		compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: '{"local/qwen":{"keepRecentTokens":8192}}' }),
-		{ modelOverrides: { "local/qwen": { keepRecentTokens: 8192 } } },
+		{ compaction: { modelOverrides: { "local/qwen": { keepRecentTokens: 8192 } } } },
 		"an env value is parsed as JSON, the rule every other structured setting uses",
 	);
 	assert.throws(() => compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: "{oops" }), /must be JSON/);
