@@ -146,6 +146,9 @@ because an invisible flag set is how a tool ends up refusing a documented form (
 | `--status <state>` (repeatable) | known (#5016) | prints only rows in that state; several values OR together, and it ANDs with `--to` and `--id`. The state is checked against the CLOSED vocabulary — `queued, claimed, deferred, held, done, cancelled` (`QUEUE_STATUSES` in `src/readapi.mjs`, measured off the live store) — so `--status done2` is refused by name instead of answering "no rows" to a typo | **payload** only. `rows`, `counts` and `attention` in the same answer stay the WHOLE store's |
 | `--to <seat>` (repeatable) | known (#5016) | prints only rows addressed to that seat | **payload** only, same caveat |
 | `--no-body` | known (#5016) | a VIEWER form: the `body` field is dropped and nothing else is. It announces itself — a `projection` header as the FIRST key of the payload and a `note:` line on stderr — because a truncated view that does not label itself becomes the record someone later trusts, and acting on a subject without its body is a registered failure of this rig. The counts and the attention lines are derived over the FULL rows BEFORE the trim, so dropping bodies cannot drop a notice | **payload** only, and never the derivation |
+| `--held` | known (#5770) | shorthand for `--status held`; composes with `--to`/`--id` | **payload** only |
+| `--with-gates` | known (#5770) | the **bounded park census**: each printed row is projected to `id, from, to, status, stage, blockedBy, reason, resolver, reviewBy, heldReason, deferredTo, note, recorded, gate, basis` — no body, no subject. `gate` is a CLOSED set: `recorded` (a block, gate ids, a heldReason or a deferredTo was written) or `none` (nothing was written at all); `basis` says which. A row in `none` is NOT given the status-derived block `legacyBlock` would invent — presenting an inference as a gate is the defect this view exists to expose. The answer reports its own bound (`bounded: {limit, cap, matched, shown, truncated}`) and lists `gatelessHeld` + `gatelessIds` | **payload and payload size** |
+| `--limit <n>` | known (#5770) | caps how many rows the gate view emits. Cap 200 (`GATE_VIEW_CAP`); `--limit 0`, a non-integer, or anything above the cap is **refused** rather than silently becoming "the whole store" — the unbounded version of this read measured 25 MB in a devtools scratch export | **payload size** by construction |
 | any other flag (`--zork`, `--fields`, `--ids`) | **refused** | exit 1; a structured `{"ok":false,"error":"queue: unknown argument --zork (known flags: …)"}` on stdout and, on stderr, the offending argument plus every known flag and the usage line. It never prints the document | n/a |
 | a bare positional (`queue 5063`) | **refused** | same — there is no positional form to silently accept | n/a |
 
@@ -166,6 +169,14 @@ exited 0 and printed the same ~22 MB document — measured at `e3118fa0`: `queue
 `queue --zork` all exit 0 with byte-identical output. A typo therefore cost the full document and reported
 success: that is the fail-open ROADMAP 228 names, and it is also how a wrong `DURIG_DB` came to manufacture a
 store (see §4 and `docs/runbooks/session-start-cost.md`).
+
+**Why `--held --with-gates` exists (#5770).** A census of parked rows was previously un runnable: `claim_work` on
+a held row returns `NO_QUEUED_WORK` with no status/owner/gate, `revise_work` refuses a held row so the gate cannot
+be written into it, and `release_work` refuses a row the caller neither sent nor received. The live store at the
+time of writing holds 438 held + 384 deferred rows, and `queue --status held` prints them with bodies. Measured in
+the demo: the gate view is 17 KB where the full dump of the same fixture is 541 KB (31.8x), and it is bounded by
+construction — bodies are dropped before projection, the row count is capped, and an unbounded request is refused
+by name. `demo/queue-held-gates.test.mjs` is the regression gate for all of it.
 
 **The discipline, so this does not rot in either direction:** a flag becomes *known* only when a real call site
 uses it or a document names it, and the row that makes it known adds its **accept** line to the compat demo in the
