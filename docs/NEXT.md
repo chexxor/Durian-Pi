@@ -100,13 +100,23 @@ node tools/broker-serve.mjs --stop                     # cooperative; expect "st
 set -a; . "$HOME/.config/durig/env"; set +a
 node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes   # a fresh broker drains the spool
 grep -c "delegate-20261108-clockin-hang" selfdev.sqlite.broker.log       # did pm receive the intent?
-git rev-parse --short main                             # expect cba0ef3f or newer
+git rev-parse --short main                             # expect 39081534 or newer (docs only from the delegate)
 node scripts/land.mjs item-5648 --changed-suite        # ONLY after #5787's re-cut exists
 node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # THE gate: exit 0 only when the override
                                                      #   resolves, every window holds its policy, and no truncated/refused
-                                                     #   compactions remain. Currently exit 1 with five named reasons.
+                                                     #   compactions remain. Currently exit 1 with six named reasons.
 node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5785 lands
+node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8  # is the read path answering at all?
 ```
+
+**Read-path caveat (22:12Z).** A CLI read does not open the store while a broker is resident — `src/readclient.mjs:106-111`
+routes it to the broker. With the pass loop stalled (last pass 21:26:06.898Z, 23 `PASS-FAILED … database is locked
+errcode=5` in `selfdev.sqlite.broker.log`) every read verb blocks with 0 bytes: measured two reads at an 8 s cap,
+then eight concurrent reads at 25 s, all exit 124, all empty — while a direct read-only sqlite query answered fine
+(128,248 tasks). **"Empty queue" and "cannot read the queue" are the same output** — pitfall 152. Seats keep running
+regardless (impl conv 9: 58 generations in 10 min, last 22:12:19Z), and `genlock` is empty while generations are
+being created 11 s earlier, so it is not a safe-stop signal (pitfall 150). Spool: **21** pending intents, **56** dead
+letters.
 
 **The fix is already proven, so #5785 is a one-line change, not a design question.**
 `pi-durable/dist/harness/compaction.js:196` does `const { modelOverrides, ...policy } = settings.compaction;` — the
@@ -159,7 +169,7 @@ of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
 **Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
 anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
 
-**New traps this window** — `docs/SELFDEV.md` **130–147**: a spooled *read* intent makes `broker-serve --start`
+**New traps this window** — `docs/SELFDEV.md` **130–152**: a spooled *read* intent makes `broker-serve --start`
 refuse with `wake-not-acknowledged`; `--env-file` is not a flag that exists (pitfall 87's mechanism is gone, its
 substance stands); compaction failures are a record kind and the kind column is JSON-quoted; a broker past
 `--max-duration` keeps its heartbeat and stops passing while holding genlock slots; **the clock-in digest hangs
