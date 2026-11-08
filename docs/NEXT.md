@@ -178,3 +178,15 @@ an authorization); the print fix for **ROADMAP 295** without key rotation; **#56
 probes; **#5640** registered as the read-deadlock BUILD row; and the seat prompts must name **`bash`** — measured
 `grep -rIo "bash" prompts/ | wc -l` → **0**, the wording is in D236 (10). Duplicate code rows **#5605**/**#5655** are
 one unit; resolving them is `lead`'s.
+
+**(H) N10 ADDENDUM (06:3x–07:0xZ).** Operator answers to N10 are in **D238**: cap **4 accepted**, **push granted and
+consumed** (`7ccb2163..dc4491bf`, ahead 0), and **throughput now** is the priority. The throughput bottleneck, measured:
+local box 4 slots carrying all 11 seats (`/status {"busy":true,"queued":0}`), LAN box **4 slots, idle, 2 connections**.
+**A question the operator wants kept open, not closed:** *"We can re-evaluate later, whether we can afford to host a
+verifier model on localhost again. Don't let us forget that we want to do that."** The number that bounds it: RTX 3090
+**22,637/24,576 MiB (92 %)**, 100 % util, with six seat generations running; both boxes now serve the **same** id
+(`qwen3.8-flash-next-q2_0`), so the LAN move buys throughput, not family independence. `pm` was asked to mint the row
+that carries it. Routing defect from the same read: **one change, four live rows** — #5605/#5655/#5705 cancelled,
+re-cut as #5648 (claimed) + #5714 + #5721. Two new delegate probes live in gitignored `.spike/` and need promotion
+(#5617): `fleet-health.mjs` (completed vs failed generations per seat, ~1 s, broker-down safe) and
+`seat-turn-read.mjs` (what a seat's turn actually did). `.gitignore` now carries `*.spend.jsonl`.

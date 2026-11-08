@@ -10350,3 +10350,40 @@ to it (D236 (3)).
 **What the delegate did NOT do:** no claim/complete/defer/route, no code change. `#5655`/`#5605` (register
 `DURIG_LOCAL2_`) are still the team's, unstarted as of 06:3xZ (measured: no worktree contains `DURIG_LOCAL2`), and the
 two-seat move to the LAN box still waits on that registration.
+
+## D238 — 2026-11-08T07:0xZ: the operator's three answers to N10 — cap 4 accepted, push granted and consumed, throughput now with the localhost-verifier question parked, not closed
+
+Host, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+
+**The answers, verbatim:** "1. accepted. 2. approved. 3. I want throughput now. We can re-evaluate later, whether we
+can afford to host a verifier model on localhost again. Don't let us forget that we want to do that."
+
+**Rulings recorded.**
+1. **`DURIG_MAX_CONCURRENT_SEATS = 4` stands** (D237), accepted with the evidence that 4 is the declared slot count
+   and the 3090 sits at 22,637/24,576 MiB (92 %) with six seat generations running. The raise to 8 stays an operator
+   ruling, gated on **#5488** landing — until then the cap is inert for `local/*` and the number is a label.
+2. **Push granted and consumed:** `git push origin main` → `7ccb2163..dc4491bf`, exit 0, `origin/main` = `dc4491bf`,
+   `git rev-list --count origin/main..main` = **0**. The grant is spent; the next push needs a new grant.
+3. **Throughput is the priority, and its bottleneck is named with numbers.** Measured 06:4xZ: local box
+   `total_slots 4`, 18 TCP connections, `/status` `{"busy":true,"queued":0}`; LAN box `total_slots 4`, **2 connections,
+   idle**. 205 seat generations completed in 25 min, 0 failures. The idle box cannot be used until `DURIG_LOCAL2_` is
+   registered (**#5648**, `devtools`, claimed — its failing-first demo was run against the unfixed tree and is red,
+   exit 1: "must build 3 specs … (got 2)"). **The verifier-on-localhost question stays open on purpose**: it is a
+   capacity ruling about hosting a second model family on the loopback box, and the measurement that bounds it is the
+   92 % GPU memory. It is deliberately *not* resolved here; it goes in the parked-question digest (§D of NEXT.md) and
+   a row pm is asked to mint.
+
+**A defect worth naming, from the same read:** lead cancelled **#5605 / #5655 / #5705** and re-cut the identical change
+into **#5648** (claimed), **#5714** and **#5721** (both queued to `impl`) — one change, four live rows. That is a
+routing-deduplication gap, and it is why the queue reads that seats run inside their turns cost 25 MB and minutes.
+
+**Also fixed in this window (machine hygiene):** `.gitignore` now carries `*.spend.jsonl`. `selfdev.sqlite.spend.jsonl`
+(649,410 B, 1,796 rows) was untracked **and not ignored** — the exact shape that lost the ledger once before
+(`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`). Note the interaction: `broker-serve --start`
+refuses a dirty tracked tree (`START REFUSED: live-tree-dirty`), so an uncommitted hygiene edit is not neutral — it
+stops the fleet.
+
+**What the delegate did NOT do:** no claim/complete/defer/route. The `local2` code half, the landing of #5488/#5398,
+the dedup of #5714/#5721 and the minting of the verifier-family row are delivered as intents to `lead`, `devtools` and
+`pm` and executed by those seats in a bounded supervised window.
