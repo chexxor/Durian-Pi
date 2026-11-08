@@ -327,3 +327,18 @@ exception: 23,091 of 24,576 used, leaving **1,485 tokens** of headroom while the
 `DURIG_CONTEXT_WINDOW` (a scalar or a JSON map). It returns **null** for every seat here, because the rig declares its
 windows through `DURIG_LOCAL_CONTEXT` and `DURIG_VERIFIER_CONTEXT` instead. An instrument that calls
 `declaredContextWindow` alone will report "window not declared" for a fleet that has declared windows.
+
+## 12. Who holds the store — the lock contention is self-contention
+
+`for p in $(pgrep -f "cli.mjs|node"); do n=$(ls -l /proc/$p/fd | grep -c selfdev.sqlite); [ "$n" -gt 0 ] && echo "pid $p holds $n"; done`
+at 23:02Z returns exactly one line:
+
+```
+pid 3521203 holds 5 handle(s) on the store  cmd=... cli.mjs serve --max-duration 1800
+```
+
+fds 20/21/22 and 28/29 are two sqlite connections to the *same* file plus `-wal`/`-shm`. There is no second process
+contending for the store, so the 23 `PASS-FAILED … database is locked errcode=5` entries are the broker locking
+against its own second connection. `ps -o etime -p 3521203` also shows **02:05:25** elapsed on a broker started with
+`--max-duration 1800` — the limit is honoured only at a pass boundary, exactly like the `.stop` file
+(`src/broker.mjs:1651`), so a stalled pass loop makes the broker unkillable by design.

@@ -3308,3 +3308,15 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     pm 12. In impl's last few turns: `resume_work {3128}`, bash in `item-5675`, `defer_work {5713}`, bash in
     `item-5713` — one run, four worktrees, one window. The auditor also shows **12** `[error] refused by durig: path …`
     refusals in the same slice. Window sizing cannot fix load that is a routing decision.
+158. **A hung `cli.mjs status` is about the read path, not the data.** `src/readclient.mjs:106-111` routes a read
+    through the broker whenever one is resident; if the pass loop is stalled the read never returns (measured: 8 s cap,
+    0 bytes, exit 124) while a direct read-only SQLite query on the same store answers in milliseconds. Before
+    debugging the store, run `docs/evidence/2026-11-08-context-window/read-path-probe.mjs` — it compares both in one
+    command.
+159. **The broker locks against itself.** `ls -l /proc/<pid>/fd | grep selfdev.sqlite` shows the broker holding **5**
+    handles (two sqlite connections plus `-wal`/`-shm`) and *no other process* holding the store. That is the shape of
+    the `PASS-FAILED … database is locked errcode=5` lines: it is not a competing reader, and killing your own CLI
+    invocations cannot help.
+160. **`--max-duration` is not a kill switch.** A broker started with `--max-duration 1800` was still running
+    (`ps -o etime` → `02:05:25`) because duration, like the `.stop` file, is honoured only at a pass boundary
+    (`src/broker.mjs:1651`). With a dead pass loop only SIGTERM/SIGINT stops it, and that aborts live seat runs.

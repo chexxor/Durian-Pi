@@ -314,3 +314,29 @@ grep INTENT selfdev.sqlite.broker.log | tail -1          # the spool drains only
 **[judgement]** SIGTERM cuts live seat runs. If seats are mid-run (they were here: conv 9 generating 38 s before the
 check), the honest options are to wait for the runs to settle, or to accept the abort. This delegate chose to wait
 and report, not to kill.
+
+## Variant: the pass loop is stalled, the store is not, and nobody else holds the store
+
+Symptom: `cli.mjs status` / `cli.mjs queue` print **nothing** and exit 124 after ~8 s, while a direct read-only
+SQLite query on the same store answers in milliseconds in the same minute.
+
+Measure who holds the store before improvising (Linux; `/proc` is the instrument):
+
+```bash
+for p in $(pgrep -f "cli.mjs|node"); do n=$(ls -l /proc/$p/fd 2>/dev/null | grep -c "selfdev.sqlite");
+  [ "$n" -gt 0 ] && echo "pid $p holds $n handle(s)  $(tr '\0' ' ' < /proc/$p/cmdline | cut -c1-80)"; done
+```
+
+Measured 2026-11-08 23:02Z: **only** the broker (pid 3521203) holds the store, with **5 handles** — two sqlite
+connections (fd 20/21/22 and 28/29) plus `-wal`/`-shm`. That is the shape of the `PASS-FAILED … database is locked
+errcode=5` lines: the broker is contending **with its own second connection**, not with another process. So the
+lock is not caused by a competing reader, and stopping your own CLI invocations will not help.
+
+Why the CLI hangs anyway: `src/readclient.mjs:106-111` — if `brokerAliveFor(dbPath)` is true the read goes through
+`readViaBroker`, which waits for a pass. A stalled pass loop means the read never returns; `readLocal` is only
+reached when the broker is *not* resident. A hung read is therefore evidence about the **read path**, not the data.
+
+Also note `--max-duration` is not a kill switch. `ps -o etime -p <pid>` on a broker started with
+`--max-duration 1800` showed **02:05:25** elapsed — the duration, like the `.stop` file, is honoured only at a pass
+boundary (`src/broker.mjs:1651`), so a stalled pass loop makes the broker unkillable by design. Only SIGTERM/SIGINT
+stops it at once, and that aborts live seat runs.
