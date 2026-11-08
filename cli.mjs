@@ -430,10 +430,39 @@ function buildModels(live = null) {
   // verifier server while every other seat keeps the default provider. TWO servers is the point, not an
   // accident: an author and its verifier cannot share a blind spot only if they are different families
   // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
+  // #5488 — THE GENERATION-SLOT GATE APPLIES HERE TOO, and this block is the whole fix.
+  // `DURIG_MAX_CONCURRENT_SEATS` is documented (src/config.mjs; docs/SELFDEV.md's review recipe) as the key that
+  // makes "seats queue in durig rather than inside the model". It did not: the faux branch and the metered
+  // default above both wrap in `wrapProviderWithSlots`, this loop did not, so on a rig whose seats are ALL
+  // `local/*` the cap was inert — measured with the config reading `1`: 9-10 `pi.generation` tasks `running` at
+  // once and ZERO `<db>.genlock.<i>` files across 40 samples (docs/DECISIONS.md, the #5488 finding; reproduced
+  // in docs/NEXT.md as "`running` reached 10 while DURIG_MAX_CONCURRENT_SEATS=1"). D-5015.1's claim that EVERY
+  // provider is wrapped was false here; #5491 corrected the wording, this closes the behaviour.
+  //
+  // WHY HERE AND NOT IN src/providers/local.mjs: locality decides cost and credentials, but capacity is a
+  // property of the HOST process, and the lease needs `DB_PATH` plus the resolved cap — both already owned here.
+  // In `local.mjs` it would fork the cap (a second reader of the same key) and gate the provider even where the
+  // rig says "no limit". NO NEW KEY is minted: the gate is armed by the same `maxSeats()` the other two branches
+  // read, and `durig.config.default.json` stays at `1` — nothing is widened by default. Wrapper order matches the
+  // metered branch: spend OUTSIDE (a money refusal must never take a generation slot), the slot gate INSIDE the
+  // trace, so a queued generation is still visible while it waits.
+  //
+  // FEASIBILITY (acceptance 5): gating IS feasible on this plane — the lease wraps the provider CALL, so it is
+  // held for the whole response whether the local engine queues internally or not. The cost is MEASURED in
+  // demo/local-slot-gate.test.mjs (ungated vs gated wall-clock, in seconds), not asserted as free.
+  const localSlots = maxSeats();
   for (const spec of localProviderSpecs(CFG)) {
+    const built = createLocalProvider(spec, { createProvider, api: ocApi });
+    const gatedLocal = Number.isFinite(localSlots)
+      ? wrapProviderWithSlots(built, {
+          dbPath: DB_PATH,
+          slots: localSlots,
+          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+        })
+      : built;
     models.setProvider(
       withSpend(
-        wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
+        wrapProviderWithTrace(gatedLocal, {
           getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
         }),
       ),
