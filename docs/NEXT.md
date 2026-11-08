@@ -22,8 +22,18 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    244 % of the headroom. That is the mechanism behind the seat-level "Compaction failed" notices.
 3. **The fleet is running.** Broker started 19:43Z (refused once on `wake-not-acknowledged` because a *read* intent
    was spooled — pitfall 130), restarted 20:05Z: `INTENT delivered=8 dead=0 dup=0`, spool empty. In the 30 min
-   window: **64 generations, 0 failed**. All-time generation outcomes (store, one query): 54,353 completed /
-   16,589 failed / 333 aborted.
+   window: **145 generations completed, 0 failed** (per-seat in 15 min: devtools 46, impl 30, qa 16, scribe 6; only
+   **1** wake said "nothing claimable for you" — pitfall 136). All-time generation outcomes (store, one query):
+   54,353 completed / 16,589 failed / 333 aborted.
+5. **Clock-in now hangs while the fleet runs.** `timeout 60 node scripts/clockin.mjs` → exit 124, 0 bytes; `cli.mjs
+   status` and `cli.mjs queue --json --no-body` also time out; `cli.mjs config` answers in under a second. Cause
+   measured in the tool: `scripts/clockin.mjs:399 runCli()` has **no `timeout`** while `gitSafe` at `:413` bounds
+   every git call. Routed to `pm` (requestId `delegate-20261108-clockin-hang`). Until it is fixed, **clock in before
+   starting the broker** — pitfall 135.
+6. **`item-5737` landed mid-session** (`fb463162`): the digest cap gate is on `main` (`scripts/clockin.mjs:292-302
+   budgetVerdict`, `:608/:616` exit 1 over budget). I could **not** run it to prove exit 1 — the clock-in itself hung
+   (fact 5). Treat "the cap bites" as code-verified, not run-verified, and check whether it makes `item-5398` a
+   duplicate before landing it (pitfall 137).
 4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
    inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
    deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
@@ -38,8 +48,10 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 **Milestone this window worked** — **ensuring LLM task completion (D226)**, first tranche **ROADMAP 331**. N12 moved
 it in one way: the mechanism is now measured end to end (config → `compactionSettings()` → harness defaults → 240
 failed summaries on the verifier seat), and the operator's intent for the fix is **spooled to `pm`**
-(requestId `delegate-20261108-context-window`). What it did NOT move: no branch landed, and #331's fix is still
-not in `src/config.mjs`.
+(requestId `delegate-20261108-context-window`), and `pm` turned it into rows #5784/#5787/#5791/#5794/#5796 within
+ ten minutes. What it did NOT move: **this delegate session landed nothing** (its commits are docs-only: `2338f004`,
+`47b18e74`, `a9c651b5`), and `grep -n "out.compaction|out.modelOverrides" src/config.mjs` still shows the sibling at
+`:488` — **ROADMAP 331 is not fixed**. `main` moved under the session to **`a9c651b5`** (`fb463162` landed `item-5737`).
 
 **Current item:** the re-cut pass, now **routed by `pm`** (rows created 20:0x–20:1xZ from the delegate's intent):
 **#5784** the ROADMAP 331 nesting fix, **#5787** `devtools` re-cut of the stale `item-5648` base, **#5791** the
@@ -47,14 +59,18 @@ not in `src/config.mjs`.
 **#5796** the roster act re-issued after pm cancelled #5776 whose `blockedBy` named an id pm cancelled in the same
 pass (pitfall 128's shape, self-caught). `item-5398` and `item-5648` cannot land until their re-cuts exist.
 
-**Exact next command** (broker resident, ~70 s for the state read):
+**Exact next command** (broker resident pid 3316329 at clock-out; broker-served reads may time out — pitfall 135):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node cli.mjs status          # attention + non-terminal work, broker-down safe
+node scripts/clockin.mjs                               # run BEFORE starting the broker; it hangs otherwise
+DURIG_DB=./selfdev.sqlite node cli.mjs status          # attention + non-terminal work (times out if the broker is driving)
+git rev-parse --short main                             # expect a9c651b5 or newer
 node scripts/test.mjs --all --jobs 6                   # 261/262 on main; only verifier-arm-probe red
-node scripts/land.mjs item-5398 item-5648 --changed-suite   # ONLY after the re-cuts exist (#5787 and its siblings)
-node .spike/delegate/context-window-health.mjs             # did the compaction failure count stop growing?
+git merge-base --is-ancestor item-5737 main            # exit 0 -> the digest cap gate is already on main;
+                                                     #   then item-5398 is a duplicate, not a landing
+node scripts/land.mjs item-5648 --changed-suite        # ONLY after #5787's re-cut exists
+node .spike/delegate/compaction-policy-probe.mjs       # must print reserve=20480 once #5784 lands
 ```
 
 **The landing pass, re-measured against current `main` (not against the main the branches were cut from):**
@@ -101,10 +117,12 @@ of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
 **Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
 anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
 
-**New traps this window** — `docs/SELFDEV.md` **130–133**: a spooled *read* intent makes `broker-serve --start`
+**New traps this window** — `docs/SELFDEV.md` **130–137**: a spooled *read* intent makes `broker-serve --start`
 refuse with `wake-not-acknowledged`; `--env-file` is not a flag that exists (pitfall 87's mechanism is gone, its
-substance stands); a broker past `--max-duration` keeps its heartbeat and stops passing while holding genlock
-slots; and the two N11 delegate probes were never promoted, so they no longer exist on disk.
+substance stands); compaction failures are a record kind and the kind column is JSON-quoted; a broker past
+`--max-duration` keeps its heartbeat and stops passing while holding genlock slots; **the clock-in digest hangs
+while the fleet runs because `runCli()` has no timeout** (pitfall 135); wake counts from a stopped fleet are not
+today's throughput (136); and a landing can make an open row redundant (137).
 
 **Probes left for promotion** (gitignored `.spike/`, all read-only, no model spend, broker-down safe):
 `.spike/delegate/compaction-policy-probe.mjs` (resolves the policy through pi-durable's own resolver),
