@@ -47,6 +47,7 @@
       "demo/ratchet.test.mjs",
       "demo/rearmclaim.test.mjs",
       "demo/refresh.test.mjs",
+      "demo/release-terminal-first.test.mjs",
       "demo/repeat-call.test.mjs",
       "demo/reset.test.mjs",
       "demo/resume.test.mjs",

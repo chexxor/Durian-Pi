@@ -4,8 +4,8 @@ symptom: "a verified branch is not on main (possibly stacked on an unlanded base
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
 last_verified: 2026-11-08
-verified_by: delegate
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21"
+verified_by: devtools
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0"
 check_rule: null
 ---
 
@@ -250,6 +250,29 @@ ask "stop or not?" or "why did --suite fail?".
    ```
    A scratch **outside** the repo fails for an unrelated reason (`ERR_MODULE_NOT_FOUND
    '@earendil-works/...'`) — that is not the rule, so do not read it as a regression.
+
+   **Third look-alike cause, measured 2026-11-08 by devtools (#5778 landing): the helper's own scratch has no
+   `node_modules`.** The claim above — "the helper puts its scratch at `<repo>/.land-scratch-<pid>`, so
+   `node_modules` resolves upward" — is true only for demos that import from their own tree. Demos that COPY
+   their source into a `/tmp` directory and symlink `<root>/node_modules` into it (e.g.
+   `demo/commit-discipline-personas.test.mjs:49`) resolve against the scratch worktree, which has no
+   `node_modules` at all. Measured: `node scripts/land.mjs item-5770 --suite` returned
+   `STOPPED: demo/commit-discipline-personas.test.mjs failed in the scratch worktree (exit 1)` with
+   `ERR_MODULE_NOT_FOUND: @earendil-works/pi-durable`, while the SAME merged tree, checked out in a detached
+   scratch with the repo's `node_modules` symlinked in, ran **263/263 passed, exit 0**. So a `--suite` red is
+   not automatically a regression: link the dependencies into the scratch before believing it.
+
+   Verify this half yourself (it is the exact run that produced the claim):
+   ```bash
+   git worktree add --detach "$PWD/.gate-deps" main
+   ln -s <repo>/node_modules "$PWD/.gate-deps/node_modules"
+   ( cd .gate-deps && node scripts/test.mjs --all --jobs 6 )   # 263/263, exit 0
+   git worktree remove --force "$PWD/.gate-deps"; git worktree prune
+   ```
+   Without the symlink the same scratch reds on the dependency-importing demos. The fix (link the deps into
+   the scratch, or refuse `--suite` and say why when they are absent) is registered as #5832; until it lands,
+   a `--suite` refusal on a demo that imports `@earendil-works/*` must be re-measured with deps present before
+   the branch is blamed.
 
    **Second instance of the same tree-shape class (#4985, fixed at `c4db1fd9`).** A landing stopped the same
    way — `STOPPED: demo/clockin-digest.test.mjs failed` — and the item-4966 landing entry recorded
