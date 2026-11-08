@@ -266,3 +266,36 @@ openai/gpt-oss-120b:            reserve=6144  keepRecent=8192  sum=14336  window
 Both invariants hold: `reserve + keepRecent <= window`, and `floor(0.8 * reserve) <= model maxTokens` (4,915 <= 6,000 for the verifier, so its 6,000-token ceiling is no longer the binding constraint for the summary). Note the key spelling: the harness matches `${provider}/${modelId}`, so the verifier entry is `openai/gpt-oss-120b`, not `verifier/openai/gpt-oss-120b`. Getting that key wrong is silent — pitfall 148.
 
 **What the gate cannot verify from config alone:** the 214 truncations and 209 refusals are store facts. The config half of the gate can go green immediately after #5785 lands; the census half only goes green after real seat runs stop failing. A gate whose acceptance criteria can never be met is as useless as one that never fails, so `milestone-check.mjs` reports both separately.
+
+## 10. The window is carrying ~100 work items at once (measured 22:39Z)
+
+Count distinct `item-<n>` references in each seat's most recent 200 durable entries
+(`select record from entries where conversation_id=? order by id desc limit 200`), plus harness refusals and
+redactions in the same slice:
+
+| seat | conv | distinct item refs | harness refusals | redactions |
+|---|---|---|---|---|
+| impl | 9 | **108** | 3 | 10 |
+| qa | 15 | **114** | 2 | 5 |
+| scribe | 4924 | **107** | 3 | 1 |
+| lead | 21 | 89 | 0 | 2 |
+| auditor | 4936 | 81 | **12** | 3 |
+| devtools | 4930 | 13 | 2 | 2 |
+| pm | 3 | 12 | 0 | 0 |
+
+Read this as the third mechanism, distinct from the two above: **one context window is holding the history of a
+hundred different queue items**, so the summariser is being asked to compress a hundred unrelated tasks, and the
+13,107-token output ceiling is what breaks. Sizing the window (331) and nesting the override do not address that
+load; the load is a routing decision, not a config value.
+
+Sampled from impl's most recent turns, the pattern is visible verbatim: `resume_work {"itemId":3128}`, then bash in
+`item-5675`, then `defer_work {"itemId":5713, "question":"This entry cannot be executed as written, and I stopped
+instead of landing"}`, then bash in `item-5713` — one run, four worktrees, one window.
+
+The auditor's **12 harness refusals** in 200 entries is its own finding: `<harness> [error] refused by durig: path
+/home/chexxor/Git/Durian-Pi/item-5675/s…` — the verifier is being blocked by path rules while trying to review,
+which is a separate reason a task never reaches "done".
+
+**What follows from this:** the acceptance criterion for 331 should not be "the override resolves" alone. It should be
+"the override resolves, the schedule fits the window, **and** a wake carries one item's context" — otherwise compaction
+keeps truncating no matter how the policy is nested.

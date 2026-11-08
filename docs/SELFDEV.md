@@ -3303,3 +3303,8 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the cap, **every** compaction in that process is refused until it restarts. `milestone-check.mjs` now prints the
     live headroom (broker pid 3521203, started 20:56:53Z: spent $0.005797, ~68 compactions left at $0.001384 each).
     When compaction stops working, read that line before blaming the model or the window.
+157. **A seat's window holds ~100 queue items, so compaction is asked to summarise a hundred unrelated tasks.** Count
+    distinct `item-\d+` in the seat's last 200 entries: impl 108, qa 114, scribe 107, lead 89, auditor 81, devtools 13,
+    pm 12. In impl's last few turns: `resume_work {3128}`, bash in `item-5675`, `defer_work {5713}`, bash in
+    `item-5713` — one run, four worktrees, one window. The auditor also shows **12** `[error] refused by durig: path …`
+    refusals in the same slice. Window sizing cannot fix load that is a routing decision.
