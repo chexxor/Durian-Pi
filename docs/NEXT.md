@@ -39,6 +39,8 @@ rest of the chain: **cap → 3 waits on #5488 landing**; **#5608** (two seats on
 **ROADMAP 331's** landing entry **#5569** waits on **#5271 → #5306/#5309/#5310**; and **#5598** (the operator digest)
 waits on **#5594**. Nothing here needs the operator except the nine real questions in §D.
 
+**Where the `00:3xZ` ruling set is recorded (pointer only, no re-ask needed):** its durable entry is the **un-minted** `## D-<mint>` heading at the tail of [docs/DECISIONS.md](DECISIONS.md) — carried on `item-5615`/`item-5684`, **ROUTED, NOT YET LANDED**, and deliberately number-free (`#3075` as extended by `#3186`: mint at land time in issue order; `main` already carries **D235/D236**, so a hardcoded number inverts the order). That entry also states the class rule for the outage-window deferral residue, and its test is **causal** — "was the deferral caused by the outage?" — not an id list, and it never stands in for an operator answer (a gate is not an authority, **#3252**; a cheap signal may accept but never decides, **#3575**). Two figures from that cut are **superseded by later measurements on `main`**: the live digest is **43,967 B, exit 0 with the broker down** (not "blocked, exit 1") and **15,117 B** with **#5398**'s fix, and **#4354/#4835** have since been released while **#3350**'s gate **#3349** is `cancelled` (D236 point 7).
+
 Exact next command:
 
 ```bash
