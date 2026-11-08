@@ -1,12 +1,12 @@
 ---
 runbook: broker-down-or-stalled
-symptom: "seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale PASS (dormant); log stops after a storage error or `database is locked`"
+symptom: "seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale PASS (dormant); log stops after a storage error or `database is locked`; `cli.mjs status` exits 1 with `read health: timed out awaiting the broker's result`, or hangs to exit 124 with no output at all, while the store itself answers fine"
 writes: true
-precondition: "broker-stopped"
+precondition: "broker-stopped"   # diagnosis half is read-only; the Do half writes
 last_verified: unverified
 verified_by: delegate
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
-evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
+evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here. Addendum 2026-11-08T07:4xZ (impl, #5663): the three read shapes in the section below were reproduced deterministically in an item worktree of main `7ccb2163` on a 139,264 B store made by `node cli.mjs up rig.starter.json` — no live store, no broker process, so the shape is NOT size- or load-dependent. No state file: `node cli.mjs status --json` exit 0. Forged state naming a live pid (a `sleep 400`) with a fresh heartbeat and nothing draining the spool: exit 1 after 120 s, and exit 124 with ZERO bytes when an external `timeout 60` killed the wait. The `Do` half (kill, `resume`, restart) was NOT run in that repro and stays unverified. #5829 re-ran that recipe and found the exit-1 step does NOT reproduce when the forged heartbeat is written once and reused: by the second read it is older than the 60 s liveness gate, the routing falls back to `readLocal`, and the verb exits 0. The recipe below now refreshes the heartbeat before each read; both shapes re-measured green."
 check_rule: null
 ---
 # Broker down or stalled
@@ -153,6 +153,75 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   ```
   A foreground `serve` in the operator's shell is expected to receive Ctrl+C; if it does not, it is
   wedged, not detached. The bounded graceful stop is owed as `#2237`.
+
+## Reads when the broker is gone or dark — the three exit shapes (#5663)
+
+"There is no broker-less reader for the store" is the wrong lesson, and it has been repeated three times
+(#5574, #5636, #5637/#5640). Every CLI read verb (`status`, `queue`, `show`, `log`, `watch`, `metrics`, and
+`scripts/clockin.mjs` through `cli.mjs status`) goes through `src/readclient.mjs`'s `readData`, which
+branches on `brokerAliveFor(dbPath)`:
+
+| state of `<db>.broker.json` | what the verb actually does | exit |
+|---|---|---|
+| **no state file** | `readLocal` opens the store in this process — it is then the sole owner, exactly the condition the fallback is built for | **0**, normal payload |
+| **state file naming a pid that is alive with a heartbeat inside 60 s** (`BROKER_HEARTBEAT_TIMEOUT_MS`) | the read is spooled to the broker and this process waits up to **120 s** (`readclient.mjs`, `timeoutMs = 120_000`) for the broker's answer | **1** with `{"ok":false,"error":"read health: timed out awaiting the broker's result"}` if the broker never drains the spool |
+| **the same, and an external timeout shorter than that 120 s bound** | the process is killed mid-wait | **124**, **zero bytes of output** |
+
+`1` and `124` are different failures and must be recorded differently: `1` is the CLI reporting that the
+spool wait expired; `124` is the harness killing the wait before the CLI could say anything. Neither is a
+store fault, and neither means "the measurement is unmet".
+
+**Why the fallback does not fire when you need it.** `brokerAliveFor` is a **liveness** test — signal 0 on
+the pid plus a heartbeat within 60 s. It never asks whether the broker is draining its inbox. A broker that
+has hit its deadline, or one sitting inside a seat's own turn, keeps a fresh heartbeat and never drains, so
+the read is routed to a broker that cannot answer and the direct path is never tried. `brokerHealth` already
+computes the **progress** leg (`lastPassAt` past the pass bound ⇒ `degraded`) and `status` prints it — the
+read routing simply does not consult it. Making the routing use progress, or refuse fast instead of hanging
+120 s, is #5657 / #5699 / #5647; it is not this row.
+
+**The probe that costs nothing and opens nothing** — run it before touching the store:
+```bash
+pgrep -af 'cli.mjs serve'                      # is there a serve process at all? empty is a real answer
+cat selfdev.sqlite.broker.json                 # pid, heartbeatAt, lastPassAt — a file beside the db, no store open
+ls -1 selfdev.sqlite.broker.inbox | wc -l      # undrained intents = every routed read will time out
+```
+Fresh `heartbeatAt` + frozen `lastPassAt` + a non-empty inbox ⇒ the reads are dark: the store is readable,
+the route is not.
+
+**Do not** fix a dark read by opening the store from a second process while a wedged broker is still
+running. `readLocal` is safe only because it is the *sole* owner: pi-durable cannot open a store read-only
+and `SqliteStorage.document()` takes `BEGIN IMMEDIATE` even for a read — that contention is what this module
+exists to avoid (ROADMAP 69/item 83, `docs/incidents/2026-10-19-read-storage-handle.md`). A direct open that
+answers (the ROADMAP 303 discriminator, `select count(*) from entries` → 150,347 in 111 ms) proves the
+store is healthy; it does not license writing to it.
+
+**What to write down when an acceptance bar is a measurement on the live store.** If the broker is not
+progressing, the bar is **BLOCKED — state the exit code you got** — not unmet and not met. Verbatim sentence:
+*"not measurable with the broker down: `node cli.mjs status --json` exit 1 (`read health: timed out awaiting
+the broker's result`) or exit 124 (killed before the 120 s spool bound) — BLOCKED, not unmet."* Otherwise a
+down broker turns a missing measurement into a silent green.
+
+### Verify this section (ran 2026-11-08, Linux, node v24.22.1, item worktree of main `7ccb2163`; re-run and corrected 2026-11-09 by #5829)
+```bash
+node cli.mjs up rig.starter.json                       # makes ./rig.sqlite here; broker: started=false
+node cli.mjs status --json > status-probe.txt; echo $? # 0 — broker-less read works; broker block {"state":"down","reason":"no broker state"}
+nohup sleep 400 > probe.out 2>&1 & BPID=$!            # a live pid that is NOT a broker
+forge() { BPID=$BPID node -e "const fs=require('node:fs');fs.writeFileSync('rig.sqlite.broker.json',JSON.stringify({pid:Number(process.env.BPID),since:Date.now(),runToken:'repro',heartbeatAt:Date.now(),lastPassAt:Date.now()}))" }
+forge; timeout 60  node cli.mjs status --json > hang-probe.txt; echo $?   # 124; wc -c hang-probe.txt = 0
+forge; timeout 150 node cli.mjs status --json > dark-probe.txt; echo $?   # 1; read health: timed out awaiting the broker's result
+kill $BPID
+rm rig.sqlite rig.sqlite.broker.json status-probe.txt hang-probe.txt dark-probe.txt probe.out
+```
+All three exit codes were measured this way. The state file's pid only has to be *alive* — signal 0 plus a
+heartbeat under 60 s is the whole predicate, and that is the finding.
+
+**`forge` before EVERY read, not once.** `brokerAliveFor` decides routing the instant the verb starts, and its
+window is `BROKER_HEARTBEAT_TIMEOUT_MS = 60_000` (`src/broker.mjs`, `src/storeownership.mjs`). A heartbeat forged
+once and left in place is older than 60 s by the time the next read starts — the liveness gate fails, `readData`
+takes `readLocal`, and the verb answers normally with **exit 0**. That is not a different shape; it is the
+broker-less shape (row 1) arriving by accident, and it is what the recipe printed here used to produce when the
+heartbeat was written once and reused for both timed reads. If you are driving the probe by hand, re-run `forge`
+immediately before each read; if you are watching a real broker, refresh the probe read itself inside 60 s.
 
 ## Do
 1. If a **wedged** `serve` process exists and **no** genlock slot is held, terminate it:
