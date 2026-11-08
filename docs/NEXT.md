@@ -49,6 +49,11 @@ Host for everything below, measured in the same command as the measurements: **L
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
 echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a hostname** — D205, ROADMAP 281).
 
+**Window-pressure baseline (measured 21:3xZ, `selfdev.sqlite.spend.jsonl`):** 374 calls today, **$0.18432**,
+3,661,636 prompt tokens / 287,337 completion tokens; median prompt 9,787, max 22,963; **67** calls above the default
+`reserveTokens = 16,384`, **0** above the verifier's 24,576-token window. The overflow is the compaction step, not the
+provider. Field names are `usd` / `prompt_tokens`, not `costUSD` (pitfall 145).
+
 ## NEXT SESSION
 
 **Milestone this window worked** — **ensuring LLM task completion (D226)**, first tranche **ROADMAP 331**. N12 moved
@@ -74,8 +79,10 @@ failing-first" (**the same subject appears twice — verify they are not duplica
 **#5794** `qa` — verify the re-cut tip and name the sha. `item-5398` and `item-5648` cannot land until their re-cuts
 exist.
 
-**Exact next command** — the broker was restarted at 20:56Z (**pid 3521203**, `--max-duration 1800`, spool drained:
-`INTENT delivered=10 dead=0 dup=0`; pitfall 140). Before anything that writes the store, prove the genlock is empty.
+**Exact next command** — the broker (`pid 3521203`, started 20:56Z, `--max-duration 1800`) stopped **passing** at
+21:26:06Z while seat runs continue (generations still landing at 21:35Z on devtools/impl/qa). A `degraded` verdict from
+`broker-serve --status` is **not** proof of a stall — read the newest `pi.generation` rows first (pitfall 144), and
+never hard-stop while genlock slots are being created.
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
@@ -135,7 +142,7 @@ of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
 **Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
 anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
 
-**New traps this window** — `docs/SELFDEV.md` **130–142**: a spooled *read* intent makes `broker-serve --start`
+**New traps this window** — `docs/SELFDEV.md` **130–145**: a spooled *read* intent makes `broker-serve --start`
 refuse with `wake-not-acknowledged`; `--env-file` is not a flag that exists (pitfall 87's mechanism is gone, its
 substance stands); compaction failures are a record kind and the kind column is JSON-quoted; a broker past
 `--max-duration` keeps its heartbeat and stops passing while holding genlock slots; **the clock-in digest hangs

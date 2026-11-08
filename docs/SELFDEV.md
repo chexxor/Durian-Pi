@@ -3219,3 +3219,18 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     pointer said **#5784** was the ROADMAP 331 fix; the row that actually carries it is **#5785** (`pm -> impl`, queued):
     "ROADMAP 331 (milestone, load-bearing): nest the compaction overrides + per-family schedule, gated on pi-durable's
     compaction". Re-read the queue instead of trusting a remembered id.
+144. **"Degraded broker" is a false positive while a seat run is mid-flight.** Measured 21:3xZ, Linux Fedora 45, node
+    v24.22.1: `node tools/broker-serve.mjs --status` says `broker: degraded pid=3521203 heartbeat 18s ago last pass 418s
+    ago (no pass within the progress timeout)`, yet the store shows generations at 21:35:01, :07, :14, :23, :33, :37,
+    :39, :50 on conversations 4930 (devtools), 9 (impl) and 15 (qa). A **pass wakes a seat; the seat then runs many
+    turns inside that run**, so `lastPassAt` can be frozen for ten minutes while the fleet is plainly working. Read the
+    newest `pi.generation` rows before concluding anything is stalled: `select id,conversation_id,json_extract(record,'$.startedAt') from tasks where kind="pi.generation" order by id desc limit 8`.
+    Do **not** hard-stop a broker in that state — you abort live seat runs, and `resume` only withdraws stranded
+    submissions.
+145. **The spend ledger is `selfdev.sqlite.spend.jsonl`, and its fields are `usd`, `prompt_tokens`,
+    `completion_tokens`, `totalBefore`/`totalAfter` — not `costUSD`.** Grepping for `costUSD` finds nothing and reads as
+    "no spend data exists". Today's real numbers, one command: `node -e 'const l=require("fs").readFileSync("selfdev.sqlite.spend.jsonl","utf8").split("\n")…'` →
+    **374 calls, $0.18432, 3,661,636 prompt tokens, 287,337 completion tokens**; median prompt 9,787, max 22,963;
+    **67 calls** carried a prompt larger than the default `reserveTokens = 16,384`, and **0** exceeded the verifier's
+    24,576-token window — which is exactly why the failure mode is "summarization hit the token limit" rather than a
+    provider 400.

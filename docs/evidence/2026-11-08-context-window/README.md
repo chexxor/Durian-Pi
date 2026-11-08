@@ -76,3 +76,16 @@ looks plausible.
 
 Run the probe again on the `main` that carries #5784: it must print `reserve=20480` for `local/…`. Until it does,
 ROADMAP 331 is open regardless of what any queue row says its status is.
+
+## 3. The spend ledger as the window-pressure baseline
+
+`selfdev.sqlite.spend.jsonl` (1,916 lines lifetime). Fields: `at`, `model`, `host`, `prompt_tokens`, `completion_tokens`, `reasoning_tokens`, `usd`, `totalBefore`, `totalAfter`. Measured 21:3xZ for 2026-11-08:
+
+```
+374 calls, $0.18432, prompt 3,661,636, completion 287,337   (lifetime running total $0.885818)
+min 0  median 9,787  max 22,963
+calls with prompt > 16,384 (the default reserve): 67
+calls with prompt > 24,576 (the verifier window): 0
+```
+
+What that proves: no provider call is overflowing the window, so the overflow is the **compaction step itself** — the summariser is being handed more than the 8,192 tokens of headroom left after the 16,384-token reserve on a 24,576-token window. What it does not prove: how many of those 374 calls were compaction calls; the ledger does not label the caller.
