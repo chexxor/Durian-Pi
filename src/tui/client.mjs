@@ -76,8 +76,12 @@ function stripColors(text) {
 // floor itself is unchanged — below 44 columns the classic roster row is the honest fallback,
 // "no broken columns ever".
 const LANDING_MIN_WIDTH = 44;
-// Fixed prefix of a landing row (spec §1): sel 2 + state 13 + name 9 + queue 9.
-const LANDING_FIXED_WIDTH = 33;
+// Fixed prefix of a landing row (spec §1, rung 10 per #4354): sel 2 + state 13 + name 10 + queue 9.
+// The name rung is 10 because there is NO separate separator cell between the name and the queue column:
+// the padding edge of the name field IS the separator, so a name that fills a 9-cell field renders glued
+// (`architect4q · 175p`). The rung's general form is rung >= longest seat name + 1; the cell is bought in
+// the name field, not by compressing the parked pole (`4q · 175p` -> `4q·175p`).
+const LANDING_FIXED_WIDTH = 34;
 
 /** The brief cap at `width` CONTENT cells: the spec's MEASURED ladder (§4), not a guess. */
 // #4233: THE ACTION RUNT BAND — the minimum room (in cells) below which the action token is HIDDEN
@@ -232,10 +236,10 @@ function renderSeatList(seats, activityMap, width, selectedSeat = null, color = 
 		if (landingRow) {
 			const entry = landing.get(seat.name);
 			// Columns are padded to fixed widths so the action column aligns; the brief is
-			// the one flexible cell (spec §1: sel 2 + state 13 + name 9 + queue 9 = 33).
+			// the one flexible cell (spec §1, rung 10: sel 2 + state 13 + name 10 + queue 9 = 34).
 			const sel = isSelected ? "▸ " : "  ";
 			const stateCol = `${paint(act.tone, act.glyph, color)} ${pad(act.state, 11)}`;
-			const nameCol = pad(truncate(sanitizeTerminalText(seat.name), 9), 9);
+			const nameCol = pad(truncate(sanitizeTerminalText(seat.name), 10), 10);
 			const queueCol = pad(entry ? queueColumn(entry) : "0q", 9);
 			const brief = pad(briefColumn(entry ?? { claimed: null, deferred: null }, cap), cap);
 			// The ACTION cell is the FIRST to collapse: gone below the 51-col rung (spec §4),
