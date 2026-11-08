@@ -3193,3 +3193,22 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     (`docs/runbooks/broker-down-or-stalled.md`, third signature) is a hard stop **only when `ls selfdev.sqlite.genlock*`
     is empty**, then `cli.mjs resume`, then a restart with a longer `--max-duration`. Never infer "the queue is empty"
     from an unreadable read.
+140. **The deadline-linger clears by itself, and the clock-in digest budget is now real.** The resident broker exited
+    on its own at 20:54:22Z — `EXIT pid=3316329 reason=max-duration passes=31` — no kill needed, no stranded run.
+    A fresh broker drained the whole spool: `INTENT delivered=10 dead=0 dup=0`. And with the broker stopped,
+    `node scripts/clockin.mjs` printed **15,552 B and exited 0** — inside the 20,000 B budget it used to blow
+    (41,439 B earlier the same day). That is `item-5737`'s cap gate verified by running it, not just reading the code.
+141. **`SqliteStorage is closed` is the dead-letter reason, and it is intermittent.** `node cli.mjs queue --json`
+    returned `{"ok":false,"error":"read queue: apply failed: SqliteStorage is closed"}` twice around the restart, then
+    **10 consecutive reads succeeded**. Every one of the 55 files in `selfdev.sqlite.broker.inbox.error` carries the
+    same reason line (`cat` a `.error.json.reason`). So: an intent you spooled while the pass loop is frozen may be
+    applied after the harness's storage handle closes and be lost. After a restart, **confirm delivery from the log**
+    (`grep INTENT selfdev.sqlite.broker.log`), never from the fact that `intent.mjs` returned `ok:true`.
+142. **The default compaction policy does not fit the verifier's window — the arithmetic, not the model.**
+    `DURIG_VERIFIER_CONTEXT = 24576` with pi-durable's defaults (reserve 16,384, keepRecent 20,000): headroom is
+    24,576 − 16,384 = **8,192**, and `keepRecentTokens = 20,000` is **244 %** of it. Any compaction attempt on that
+    seat is guaranteed to emit the store's most common failure string, "Summarization hit the token limit; the
+    summary is incomplete" (240 records, conversation 4936 = `auditor`). Nesting the override is necessary but not
+    sufficient; a per-window feasibility check (`reserveTokens + keepRecentTokens <= declaredWindow`, fail loudly at
+    config load) is the half that actually stops the failures. The local family is fine: the server reports
+    `n_ctx: 204800` for `qwen3.8-flash-next-q2_0` and `DURIG_LOCAL_CONTEXT = 204800` matches it.
