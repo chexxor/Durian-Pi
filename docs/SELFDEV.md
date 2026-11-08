@@ -3105,3 +3105,23 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     So a stale declared id never shows up as an HTTP error; the only signal is the preflight
     `BLOCK provider-DURIG_LOCAL_-model-absent`. Run `tools/broker-serve.mjs --status` **after any server change**, and
     redact in the same command (pitfall 120).
+
+## Operational pitfalls (2026-11-08T08:4xZ, delegate session N11 — the fleet is awake but 96 % of the queue is parked, and the wake body lies about capability; host: Linux, Fedora Linux 45, 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
+
+126. **"Check `status`" is not an instruction a seat can follow.** `WAKE_CONTENT_PARKED` (`src/driver.mjs:55`) tells a
+    parked seat to check `status`; the seat registry has only `claim_work`, `peek_queue`, `release_work`,
+    `resume_work`. `lead` notices it in its own reasoning ("It's the fifth repetition… I don't have a `status` tool").
+    Count the waste, don't guess it: `SELECT count(*) FROM entries WHERE record LIKE '%there is nothing claimable for
+    you%'` — **174 parked wakes vs 72 claimable wakes** in one afternoon. #4607 fixed the wake that lied about *work*;
+    this one lies about *capability*.
+127. **A fleet can be fully awake and still do nothing.** Counts from the queue doc: `held 438, deferred 384` against
+    `queued 34, claimed 16`. Wakes are not throughput; claimable rows are. The instrument is one line:
+    `cli.mjs queue --json --no-body` → per-seat `queued/claimed/held/deferred`, then compare with the wake reasons in
+    `selfdev.sqlite.broker.log`.
+128. **Concurrency oversubscription is visible in the store, not in `/props`.** `GET /status` reports `queued: 0`
+    while **11 `pi.generation` rows are `running`** against a box declaring `total_slots: 4`, with seat turns aged
+    100–290 s. `queued: 0` means llama.cpp is accepting them, not that it is serving them in parallel. The admission
+    gate is `DURIG_MAX_CONCURRENT_SEATS` and it is inert for `local/*` until **#5488** lands (pitfall 122's sibling).
+129. **Engine exit -11 shows up as a seat-level `last_run_failed`, not a broker error.** `cli.mjs status` attention
+    list carried `qa2` and `architect`: `model_error: the engine stopped unexpectedly (exit code -11); the next request
+    restarts it`. Read it under load: 3090 at 22,387/24,576 MiB with eleven concurrent generations.
