@@ -10160,8 +10160,28 @@ carry credential values (**30** `.bak.*` sidecars in `~/.durig-backup/`, largest
 **(2) STANDING RULING on the parked rows — options (ii) + (iii) approved, stated ONCE as a class rule so no future window re-litigates 365 rows.**
 
 - **(ii) the sweep residue is answered by the ruling itself.** Every deferral written `by: "supervisor"` inside the sweeps (transition stamps **`2026-11-07T23:17:40.785Z–23:18:05.788Z`**, plus the second window) whose cause is `last_run_failed: stranded: Connection error.` + `repeated_failure: 5 consecutive failed runs; the supervisor escalates it to the human` was caused by **planned model-server maintenance**, not by an ambiguous ask. Those rows therefore need **no human answer**: each **owning seat** clears its own with `resume_work(<id>)` (pitfall 106 — the delegate still resumes nothing; `resume`/`defer`/`cancel` stay seat acts). The rule is about a **cause class**, so the next outage does not re-open a 365-row question.
-- **(iii) the operator digest carries ONLY the nine genuine operator questions — one line each, NO answers proposed:** **#4976** `pm`, **#4354** `impl`, **#3350** `qa`, **#4881** `lead`, **#4835** `scribe`, **#4817** `devtools`, **#4954** `auditor`, **#4827** `security`, **#4814** `qa2`. And explicitly: **nothing in this ruling answers them** — all nine are **still open**, and D234 must not be read as clearing them. The carrier for publishing them is **#5598** (`scribe`, gated on **#5594**).
-- **Not re-checkable in this session, and labelled as such:** the nine ids and the sweep stamps live in the store, and this session had **no broker** (`pgrep -af broker-serve` → no process; `DURIG_DB=./selfdev.sqlite node cli.mjs status` → **exit 124**, killed at a 90 s timeout) and **no `sqlite3` CLI** (`which sqlite3` → not found). The store-side figures are therefore recorded as **measured by pm/N8 in their own session**, not re-verified here. The gap itself is worth a row: the store is **560,422,912 B** and the only reader, `cli.mjs`, asks a broker that may not be up.
+- **(iii) the operator digest carries ONLY the genuine operator questions — one line each, NO answers
+  proposed. INTAKE list at the 00:3xZ cut — the nine:** **#4976** `pm`, **#4354** `impl`, **#3350** `qa`,
+  **#4881** `lead`, **#4835** `scribe`, **#4817** `devtools`, **#4954** `auditor`, **#4827** `security`,
+  **#4814** `qa2`. **STANDING surface as of the SAME DAY's later notice (2026-11-08T03:3xZ): FOUR** —
+  **#4976** `pm`, **#4881** `lead`, **#4817** `devtools`, **#4827** `security`. The other five are not
+  open asks, each closed by the notice with its reason: **#4814** `done`; **#4954** `cancelled`; and
+  **#4354 / #4835 / #3350** are **no longer operator questions at all** — they became ordinary seat work
+  because their gates measured gone (**#4352** `done`, **#4849** `done`, **#3349** `cancelled`), and the
+  carrier rows that EXECUTE that reclassification are **#5687** (`impl`, incl. #4354), **#5689** (`qa`,
+  incl. #3350), **#5691** (`scribe`, for #4835). **#4817's operator half is a measured no-op**: 81 root
+  `item-*` directories, 81 registered worktrees, **0 strays** — measured in that 03:3xZ notice, not
+  re-measured by this recording. And explicitly: **nothing in this ruling answers the four** — all four
+  remain open, and D234 must not be read as clearing them. **Why the enumeration is not housekeeping:**
+  publishing nine when four are open re-asks the operator about three closed or reclassified items — the
+  same double-ask recorded for the cap row in **#5622** ("publishing it as pending asks the same human the
+  same question twice"). The carrier for publishing them is **#5598** (`scribe`, gated on **#5594**), and
+  its body must be re-pointed at the FOUR before anything is printed.
+- **Not re-checkable in this session, and labelled as such:** the ids above — the nine intake ids, the
+  four standing ones, and every closure named in (iii) — and the sweep stamps live in the store, and this
+  session had **no broker** (`pgrep -af broker-serve` → no process; `DURIG_DB=./selfdev.sqlite node cli.mjs status` → **exit 124**, killed at a 90 s timeout) and **no `sqlite3` CLI** (`which sqlite3` → not found). The store-side figures are therefore recorded as **measured by pm/N8 in their own session**, not re-verified here. The gap itself is worth a row: the store is **560,422,912 B** and the only reader, `cli.mjs`, asks a broker that may not be up. The 03:3xZ re-count in (iii) is sourced to that operator notice, not to
+  a store read from this recording session; the carrier rows #5687/#5689/#5691 are reported by pm and were
+  likewise not observed from this session's queue.
 
 **(3) CONCURRENCY — the D233 gate holds; both halves approved.**
 
