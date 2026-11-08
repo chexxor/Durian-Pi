@@ -3,7 +3,7 @@ runbook: land
 symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
-last_verified: 2026-10-21
+last_verified: 2026-11-08
 verified_by: delegate
 evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21"
 check_rule: null
@@ -807,3 +807,27 @@ the landing — inverted gate), `impl-item-3056` (M1b HELD by ruling #3112), `de
 cleared-to-land was superseded by #3260's rebase pass — ownership ambiguous), and the CONFLICT set
 (`impl-item-3017`, `impl-item-3192`, `impl-item-2483`, `architect-item-2730`, `devtools-item-2073`,
 `scribe-item-2143`).
+
+## Why a landing stalls even when the helper is available (measured 2026-11-08T19:1xZ, delegate N11)
+
+**The verified fix exists, the guard allows the command, and nobody runs it.** Three measurements, in order:
+
+1. **The branch is green on a current base.** `item-5736` (`f4554164`, the current-base re-cut of #5488) forks at
+   `37651f23`: `node demo/local-slot-gate.test.mjs` → exit 0, 11 assertions; `node scripts/test.mjs --all --jobs 6`
+   → 261/262 (the only red is the digest test, which is #5398's own gate).
+2. **The seat guard does not block landing.** Probed directly, without writing anything:
+   `node -e 'import("./src/seatguard.mjs").then(({shellWriteRefusal})=>console.log(shellWriteRefusal({command:"node scripts/land.mjs item-5736 --repo /home/chexxor/Git/Durian-Pi --changed-suite", root:"/home/chexxor/Git/Durian-Pi/item-5736"})))'`
+   → `block: null`. Git operations on tracked paths are in the allowed class (`src/seatguard.mjs:495-509` refuses
+   *text rewrites* outside the worktree, not git). So the hesitation a seat reports ("Is that permitted by my
+   guard?") is uncertainty, not a rule.
+3. **The seat then hand-rolled the landing.** `impl` created `item-5663/.land-scratch2`, ran
+   `git worktree add --detach .land-scratch2 main` + `git cherry-pick f4554164`, ran the suite by hand in that
+   scratch tree (both of main's red tests are green there), and left a **detached HEAD with no ref** (`45f7943f`,
+   `ab1f8ca8`). A landing attempt that ends in a dangling commit is not a landing: `main` never moved, and the work
+   is one `git worktree prune` away from being lost.
+
+**The shortening, stated as a rule:** run the helper, don't reconstruct it. `scripts/land.mjs <branch>
+--changed-suite` does the scratch merge, the derived suite, and the `main` advance in one call, and it refuses
+rather than leaving the shared tree mid-merge. If `main` is red before the pass, land the row that *fixes* the red
+first (today that is **#5398**, whose 28 KB deferred dump is the whole digest overrun). After the pass, re-fast-forward
+the seat root to `main`, or the next `prepare_workspace` forks from a stale base.
