@@ -2941,3 +2941,62 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `resume_work(3128)` then `complete_work`. The delegate defers, resumes, closes and re-addresses nothing — measured
     this window: `claimed 56 → 35`, `deferred 174 → 207`, and the gate to ROADMAP 331 moved from **#3128** to
     **#5271** (`impl`'s lowest claimed row), which is the point of pitfall 96: clearing one id does not clear the lane.
+
+## Operational pitfalls (2026-11-08, delegate session N8 — the digest-budget + provider-capacity session)
+
+107. **A planned model-server maintenance inside a broker window makes the supervisor park the whole team on the
+   human.** Measured: the operator took `http://127.0.0.1:8080/v1` down mid-window for maintenance; `cli.mjs status`
+   then reports for 9 of 12 seats `last_run_failed: stranded: Connection error.` + `repeated_failure: 5 consecutive
+   failed runs; the supervisor escalates it to the human`, and `deferred` went **207 -> 376** in 25 seconds
+   (transitions stamped `2026-11-07T23:17:40.785Z -> 23:18:05.788Z`, `by: supervisor`) — including the two rows the
+   window was there to land (devtools #5398, impl #5271/#5488/#5569, pm #5409). Cheapest witness: `cli.mjs status`
+   attention (the broker log contains none of those strings — grepping it for `401`/`model_error` returns nothing).
+   Prevention: prove the provider is up and count its slots BEFORE `--start` (§27), and stop the broker before any
+   planned server work. Repair: a seat answers a supervisor deferral with `resume_work(<id>)` (pitfall 106); the
+   delegate carries an operator ruling that the batch is **answerable-by-ruling**, and says so in the brief before
+   the sweep, because a brief delivered mid-window does not un-defer rows the sweep defers later in that window (#110).
+
+108. **`broker-serve --start` refuses on a single 1-token probe sample, and a transient 429 looks like a dead
+   provider.** Measured 22:52Z: first preflight `BLOCK provider-verifier-refuses-inference: verifier answers
+   /v1/models but refused a 1-token completion — HTTP 429: Model busy, retry later`; two further `--status` runs
+   25 s and 55 s later printed `verifier: completes (finish=stop, prompt=59 tok, completion=60 tok)` and the start
+   succeeded. The same shape is `auditor`'s standing `last_run_failed model_error: 429: Model busy, retry later`.
+   Do not read one refusal as a verdict and do not work around it with `--no-probe` — re-run `--status` (0.5 s each).
+   Carrier: **#549** (`preflight provider probes are single-sample`, held, devtools).
+
+109. **Correction to pitfalls 103 and 100: `--max-duration` DOES bound the exit when no generation is in flight.**
+   Measured: window started `22:54:31Z`, bound 1800 s, `EXIT pid=2226333 reason=max-duration passes=1979` at
+   `23:28:36.303Z` = **34 min 5 s wall for a 30-min bound**, and the reason string was correct. The 76-min overrun in
+   N7 was two in-flight generations plus `stopGraceMs = 0` (`src/broker.mjs:1545`), not the bound itself. Keep
+   budgeting ~1.15x when seats are idle and ~2x when generations are in flight, and read `running`/`placed` from
+   SQLite before deciding to SIGTERM (§25).
+
+110. **A delivered brief does not un-defer rows the supervisor defers after it.** The N7 answers were delivered at
+   `22:55:47Z` (lead claimed #5571 the same second, done `23:03:05Z`), yet the same seats' rows were re-parked at
+   `23:17:4xZ`. Before concluding a seat ignored a ruling, read the transition stamps: `deferred@<t> (supervisor)`
+   with `t` after the brief means the sweep, not the seat, moved the row.
+
+111. **Project `.pi/settings.json` does not load in print/JSON/RPC mode unless a saved trust decision covers the
+   path** (`docs/security.md` §Project trust without an interactive prompt). Here `~/.pi/agent/trust.json` is
+   `{"/home/chexxor/Git": true}`, so it loads. A/B that proves the pin without a token of spend cost:
+   `pi --no-tools --print "Reply with exactly: OK"` inside the project vs in `/tmp`, then read the newest session
+   file's assistant `provider`/`model`: project run -> `strata / qwen3.8-flash-next-iq3_s`; `/tmp` run ->
+   `strata-server / qwen3.8-flash-next-iq3_s` (the user default in `~/.pi/agent/settings.json`). `.pi/` is
+   gitignored in this repo (`.gitignore:11`), so this is machine-scoped config, never a commit.
+
+112. **The local seat provider and the delegate's own pi model are the same server.** `durig.config.json`
+    `DURIG_LOCAL_BASE_URL=http://127.0.0.1:8080/v1` and pi's `strata` provider (`.pi/settings.json` pin) point at
+    the same llama.cpp server; `GET /props` is the instrument: `total_slots: 3`, `n_ctx: 204800`. So a seat window
+    and a delegate session contend for 3 slots, and `GET /v1/models` without the key answers
+    `authentication_error: missing or wrong API key` — which is the SAME string as pitfall 102's 401 flood. Probe
+    with the key from `~/.config/durig/env` before calling a 401 an incident.
+
+113. **`tools/what-to-test.mjs` can never call a docs change doc-only on a live rig, and the reason is the spend
+   ledger.** Measured after a docs-only commit (`git diff --name-only HEAD~1..HEAD` → five `docs/` paths, nothing
+   else): the tool printed `not doc-only: 1 non-doc path(s) changed` and prescribed the full 261-test suite (**51.5 s**
+   at `--jobs 8`) instead of the 6-test `docs` area (**1.0 s**). Its `changedPaths` list includes **untracked** files,
+   and `<db>.spend.jsonl` is untracked and is created by every window that spends a call — so on any tree that has just
+   run a broker, `docOnly` is false for every commit. Read the tool's own `changedPaths` output before obeying the
+   prescription: if the only non-doc entry is the ledger, the honest gate is the area plus the doc guards
+   (`scripts/test.mjs --area docs`, `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`,
+   `tools/doc-integrity-guard.mjs`) — and say in the report that you ran them, because the tool did not tell you to.

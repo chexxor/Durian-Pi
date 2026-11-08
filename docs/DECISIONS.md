@@ -10057,3 +10057,96 @@ during a drain; the queue is one document, not a table, so there is no SQL short
 **unpushed**), any capacity or roster change, credential rotation (declined, D231), deletion of the store backups that
 hold credential values, and the 206 rows parked on a human — **#5409/#5410** (`pm`, claimed) are the digest rows for
 that backlog.
+
+## D233 — the operator grants the push, ratifies the four N7 answers, **re-orders the window onto the clock-in digest**, and makes provider capacity a real question: *"the server now allows batching of 3 requests at once … Consider updating the team to support concurrency of 2 or 3"* and *"Can you put 2 seats on the strata-server provider, when it's easy to do so?"* (2026-11-08T00:4xZ, delegate recording; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, Fedora Linux 45 (Forty Five), `7.2.15-300.fc45.x86_64`, node v24.22.1, `git version 2.56.0`)
+
+**The answers, verbatim, and what was executed.** *"1. granted"* → `git push origin main` carried
+**`c7e41021..7a1b80e2`**; the diff was screened first (`git diff origin/main..main | grep -cE
+"sk-[A-Za-z0-9]{20}|DURIG_[A-Z_]*API_KEY[\"= :]+[A-Za-z0-9]{8}"` → **0**), and `main` == `origin/main` == `7a1b80e2`
+afterwards. *"2. approved"* (#3128 → close as superseded with `{command, exitCode, artifact}`), *"3. approved"* (drive
+another window), *"4. approved"* (**durability by landing, not by pushing refs** — `LANDED at <sha>`, never bare
+`done`; `origin` receives `main` only), *"5. approved"* (capacity unchanged: `DURIG_MAX_CONCURRENT_SEATS` stays `1`,
+**#5488** lands first). The grant was consumed by that push: **N8's docs commit is unpushed** and needs a new grant.
+
+**The operator's priority ruling, verbatim: *"Will you be resolving the 'digest still over budget' issue? If not, that
+sounds serious, and we should prioritize resolving it."*** It was made this window's first item and it is **not
+resolved**. Measured: `node scripts/clockin.mjs` printed **29,046 B** at `22:4xZ` and **40,404 B** at `00:1xZ`, against
+`DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:37`), with the warning on stderr: *"clockin: digest is 40404 B,
+over its 20000 B budget — a digest that grows into the dumps it exists to avoid has failed at its job."* The driver is
+measured: `scripts/clockin.mjs:203-207` emits **one line per `deferredTo:"human"` row** — **15,244 of 29,045 B (52%)**
+at 207 rows — so the growth tracks the deferral backlog exactly (+11.4 KB for +158 rows). Carrier **#5398**
+(`devtools`) was re-armed by the delegate's brief: `deferred@2026-11-07T23:17:41.785Z (supervisor)` →
+**`resumed@2026-11-07T23:43:58.831Z (devtools)`**, but **no ref carries a change to `scripts/clockin.mjs` or
+`demo/clockin-digest.test.mjs`** (`git log --all --since=2026-11-07T23:00:00Z --name-only -- scripts/clockin.mjs
+demo/clockin-digest.test.mjs` → empty). The acceptance the operator should hold the team to is stated in
+`docs/NEXT.md` (A): aggregate the deferral section (counts + capped id list), and **make the cap fail something** —
+at 40,404 B live, `demo/clockin-digest.test.mjs` prints `CLOCKIN DIGEST TEST PASS` because it builds a **7-row
+fixture** store; the gate is `node scripts/clockin.mjs | wc -c` on a live-shaped store, not the fixture (pitfall 88's
+vacuity rule).
+
+**An operator action inside a live window parked the team's whole actionable surface on a human, and it is the most
+expensive thing that happened.** The local model server was taken down for ~4 minutes of maintenance while the broker
+drove passes. Seats returned `last_run_failed: stranded: Connection error.` + `repeated_failure: 5 consecutive failed
+runs; the supervisor escalates it to the human` for **9 of 12 seats**, and the supervisor deferred **169 rows in 25
+seconds** (`deferred 207 → 376`, transition stamps `23:17:40.785Z–23:18:05.788Z`, all `by:"supervisor"`), including
+the rows the window existed to land (#5398 devtools; #5271/#5488/#5569 impl; #5409 pm; #3128 impl). Cumulative store
+movement across both windows: **`queued 123 → 7`, `claimed 35 → 11`, `deferred 207 → 365`, `done 3951 → 3957`**. None
+of it appears in the broker log (only `WAKE`/`SKIP`/`STRANDED`); it is visible only in `cli.mjs status` attention
+(`last_run_failed`, `repeated_failure`) and in the transition stamps. Prevention is now
+`docs/runbooks/session-start-cost.md` **§27**: probe `GET /props` for `total_slots` and liveness and re-run
+`broker-serve --status` before `--start` (≈3 s), and stop the broker before any planned server work. Repair is a seat
+act (`resume_work`, pitfall 106) carrying the operator's ruling that the batch is **answerable-by-ruling**; the
+delegate deferred, resumed, closed, held and re-addressed nothing.
+
+**Capacity is now real capacity, and the rig's cap is not the constraint.** Both servers measured with one command
+(`curl -H "authorization: Bearer $DURIG_LOCAL_API_KEY" …/props`, and 96-token completions): the seat box
+`http://127.0.0.1:8080` has **`total_slots: 3`**, model `qwen3.8-flash-next-iq3_s`, **`n_ctx: 204800`**, and served
+**3 concurrent calls in 3,436 ms wall** (3,115/3,179/3,408 ms individually) against **3 sequential in 799 ms**
+(282/257/260 ms) — so the operator's "batching of 3" is genuine. The second box
+`http://192.168.1.52:8080` (pi's `strata-server`) has **`total_slots: 4`**, model
+**`qwen3.8-flash-next-iq3_xxs`** — a different, smaller quant — **`n_ctx: 131072`**, text-only, at
+**2 concurrent = 5,271 ms wall** (each 4.9–5.3 s). The blocking fact is the rig side: `running` reached **10** (window
+A) and **9** (window B) with `DURIG_MAX_CONCURRENT_SEATS=1`, because the cap does not gate `local/*` — that is
+**#5488** (`impl`, `queued`, priority 19999, no `blockedBy`), whose gate says no cap conversation reopens until it
+lands. So "concurrency 2 or 3" is a **config change that currently does nothing**; the sequence the delegate ran to
+is: land **#5488** → set the cap to the **3** slots the seat box actually has → only then widen further.
+
+**"Put 2 seats on the strata-server provider" is not config-only, and the cheap route was rejected on policy
+grounds.** A seat selects a provider **only** through the leading segment of its `model` string
+(`src/seatmodel.mjs:13-22`), and exactly two locally-served providers are registered — `local` and `verifier`
+(`src/providers/local.mjs:36-44`, `LOCAL_ENV_PREFIXES`, from which the provider id is derived). Therefore a third
+endpoint requires registering a third prefix (`DURIG_LOCAL2_*` → `local2/qwen3.8-flash-next-iq3_xxs`): the two
+constants in `local.mjs` plus `CONFIG_KEYS` (`src/config.mjs:118-121`), a failing-first demo, and the existing
+pointer tests (`demo/local-model-pointer.test.mjs`, `demo/second-local-provider.test.mjs`) — i.e. a **devtools** row
+to mint, which the delegate briefed rather than wrote, since base-product code is the team's work (AGENTS.md
+non-negotiables, D212). The no-code alternative — repointing `DURIG_VERIFIER_*` at the second box — was **rejected**:
+`auditor` is the rig's only cross-family verifier, `single-model-rig` is a `fix-now` finding
+(`src/checkup.mjs:80, 604-607`), and D-5015 / `docs/runbooks/verifier-independence.md` make author≠verifier family a
+safety property, not a preference; it would also put a *verifier* on the weaker `_xxxs` quant. Two side facts for the
+record: the seat box's and the delegate's own pi model are **the same server** (pitfall 112 — a delegate session and
+the fleet contend for the same 3 slots), and pi's `~/.pi/agent/models.json` declares `strata-server` →
+`qwen3.8-flash-next-iq3_s` while that server's `/v1/models` answers `qwen3.8-flash-next-iq3_xxs`.
+
+**What the two windows produced, stated thin because it is thin.** A: `22:54:31Z → 23:28:36.303Z`
+(`EXIT pid=2226333 reason=max-duration passes=1979`, 34 min 5 s wall for a 30-min bound) — **1 commit** (`24e29528`,
+architect, #5501 docs), **lead `done` #5571 at 23:03:05Z** (so cancelling #5307 is now reachable), 42 calls
+**$0.02240**. B: `23:40:40Z → 00:11:27.532Z` (`EXIT reason=deadline passes=-` after a requested stop + SIGTERM with
+10 generations in flight; `resume` settled them to `running 0`, `placed 0`) — **0 commits**, 35 calls **$0.01917**,
+the only durable effect being devtools resuming #5398. Session money **77 metered calls $0.04157**, store cumulative
+**$0.705665**. At cut: worktrees **70 → 74**, branches **76 → 77**, **32 unlanded commits on `item-*` refs** — which
+is the number to watch under "durability by landing" (D232 (4)).
+
+**Also decided this window (machine-scoped, not repo state).** The workspace now pins pi to the local **`strata`**
+provider: `docs/../.pi/settings.json` = `{"$schema": …, "defaultProvider": "strata", "defaultModel":
+"qwen3.8-flash-next-iq3_s"}`, replacing the user default `strata-server` (declared `192.168.1.52:8080`,
+`contextWindow 131072`) for this project. Proof it is in force, not a token of spend: `pi auth check --provider
+strata --json` → `ready`; the print-mode A/B (`pi --no-tools --print …` inside the project vs in `/tmp`) shows
+`strata / qwen3.8-flash-next-iq3_s` in-project and `strata-server / qwen3.8-flash-next-iq3_s` outside it (pitfall
+111 — project settings load only under a saved trust decision; `~/.pi/agent/trust.json` =
+`{"/home/chexxor/Git": true}`). `.pi/` is gitignored (`.gitignore:11`), so the next session must not expect this in
+the repo.
+
+**Still the operator's alone:** pushing new commits (grant consumed; N8's docs commit unpushed), any capacity or roster
+change beyond the config the operator ordered, credential rotation (declined, D231), deleting the store backups that
+carry credential values (**30** `.bak.*` sidecars in `~/.durig-backup/`, largest 20,536,188 B, mode `0600`), and the
+**365** rows parked on a human — whose digest rows are **#5409/#5410** (`pm`, claimed).
