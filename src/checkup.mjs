@@ -637,11 +637,15 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   //    no longer match the code; one whose header/skeleton does not conform to _template.md is
   //    fix-now, because the block is how a seat or a rule retrieves the procedure's assumptions.
   //    Omitting `runbooks` leaves all three rules SKIPPED with a reason - never a false pass.
+  // #5767 — "skipped" and "not judged" are DIFFERENT facts, and a seat reading the
+  // output cannot tell them apart if both print the same word. A rule skipped because the
+  // rig legitimately has no such block (ownership) has DECIDED something; these three have
+  // judged nothing, because the caller supplied no runbook data. So they report UNKNOWN.
   if (!Array.isArray(runbooks)) {
     const why = "no runbook data was supplied, so no runbook can be judged";
-    skipped.push({ id: "runbook-stale", why });
-    skipped.push({ id: "runbook-unverified", why });
-    skipped.push({ id: "runbook-front-matter", why });
+    for (const id of ["runbook-stale", "runbook-unverified", "runbook-front-matter"]) {
+      skipped.push({ id, why, unknown: true });
+    }
   } else {
     for (const runbook of runbooks) {
       const file = runbook?.file ?? "(unnamed runbook)";
@@ -991,7 +995,9 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
   const checks = RULES.map((r) => {
     const skip = skipped.find((s) => s.id === r.id);
     const found = findings.filter((f) => f.id === r.id).length;
-    return { id: r.id, status: skip ? "skipped" : found > 0 ? "fail" : "pass", found, ...(skip ? { why: skip.why } : {}) };
+    // "unknown" is the could-not-judge state; "skipped" is the not-applicable state (#5767).
+    const status = skip ? (skip.unknown ? "unknown" : "skipped") : found > 0 ? "fail" : "pass";
+    return { id: r.id, status, found, ...(skip ? { why: skip.why } : {}) };
   });
   const pass = summary.error === 0;
   return { findings, checks, summary, pass, exitCode: pass ? 0 : 1 };
@@ -1025,10 +1031,13 @@ export function formatCheck(result, { rigDisplay = "rig", color = false, width =
   lines.push("");
   const passed = result.checks.filter((c) => c.status === "pass").length;
   const skipped = result.checks.filter((c) => c.status === "skipped");
+  const unknown = result.checks.filter((c) => c.status === "unknown");
   lines.push(
     `${result.pass ? paint("green", "PASS") : paint("red", "FAIL")}  ${result.summary.error} error · ${result.summary["fix-now"]} fix-now · ${passed} passed` +
+      (unknown.length ? ` · ${unknown.length} UNKNOWN (not judged)` : "") +
       (skipped.length ? ` · ${skipped.length} skipped` : ""),
   );
+  for (const c of unknown) lines.push(paint("yellow", `      · ${c.id} UNKNOWN: ${c.why}`));
   for (const c of skipped) lines.push(paint("dim", `      · ${c.id} skipped: ${c.why}`));
   lines.push(paint("dim", rule));
   return lines.join("\n");
