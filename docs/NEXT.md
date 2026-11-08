@@ -129,6 +129,8 @@ map must live **inside** `compaction`. `src/config.mjs:488` currently emits `out
 `docs/evidence/2026-11-08-context-window/README.md` §5. The key must be spelled exactly
 `local/qwen3.8-flash-next-q2_0`, because the harness matches `${provider}/${modelId}`.
 
+**The schedule that makes the gate green, already checked against the shipped resolver** (`docs/evidence/2026-11-08-context-window/README.md` §9): local `reserve 20480 / keepRecent 20000` (fits 204,800, ceiling 16,384); verifier `reserve 6144 / keepRecent 8192` (fits 24,576, ceiling 4,915 ≤ 6,000). The override key is `openai/gpt-oss-120b`, not `verifier/openai/gpt-oss-120b`.
+
 **The landing pass, re-measured against current `main` (not against the main the branches were cut from):**
 
 | row | branch | tip | merge-tree vs `main` | note |
