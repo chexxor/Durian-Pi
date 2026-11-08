@@ -291,3 +291,26 @@ node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const
 **And the correction to the `genlock` rule above:** an empty `ls -1 <db>.genlock*` is **not** proof no generation is in
 flight — measured empty at 22:06:57Z while a generation record was created at 22:06:48Z. Require both: no genlock
 slots **and** no `pi.generation` record in the last two minutes. Otherwise a hard stop aborts live seat runs.
+
+### When `serve --stop` cannot be honoured (added 2026-11-08, delegate)
+
+`cli.mjs serve --stop` writes a stop **file**, and `src/broker.mjs:1651` is explicit about what that means:
+"A raised SIGNAL (SIGINT/SIGTERM) stops at once. A `.stop` FILE is deliberately NOT [immediate]" — the file is
+honoured at a **pass boundary**. So if the pass loop is dead, `--stop` deadlocks by design: the stop request can
+never reach a pass. Measured 22:22Z: `serve --stop` twice, both times `pid 3521203 STILL ALIVE — not stopped`,
+while the last pass was 21:26:06Z.
+
+**The ladder, in order, with the safety check the old ladder lacked:**
+```bash
+node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 3").all())'
+#   proceed only if the newest generation is more than ~2 minutes old. genlock being empty is NOT enough (see above).
+node cli.mjs serve --stop            # will not take effect while the pass loop is dead — expect "STILL ALIVE"
+kill -TERM <pid>; sleep 30; pgrep -af "cli.mjs serve"   # SIGTERM drains at once; prove the pid is gone
+node tools/broker-serve.mjs --resume # clear stranded runs
+set -a; . "$HOME/.config/durig/env"; set +a
+node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes
+grep INTENT selfdev.sqlite.broker.log | tail -1          # the spool drains only after a real pass
+```
+**[judgement]** SIGTERM cuts live seat runs. If seats are mid-run (they were here: conv 9 generating 38 s before the
+check), the honest options are to wait for the runs to settle, or to accept the abort. This delegate chose to wait
+and report, not to kill.

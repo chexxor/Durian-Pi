@@ -3283,3 +3283,9 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     "today" number from it must be time-boxed: `grep "PASS-FAILED" selfdev.sqlite.broker.log | grep -c "^2026-11-08"`.
     The same trap applies to compaction failure counts in the store: a lifetime count and a rolling-24 h count tell
     different stories (pitfall 146), which is why `milestone-check.mjs` prints both.
+154. **`serve --stop` cannot work when the pass loop is dead.** It writes a stop *file*, and `src/broker.mjs:1651` says a
+    file stop is honoured at a pass boundary while only SIGINT/SIGTERM "stops at once". With no pass since 21:26:06Z,
+    two `serve --stop` attempts both reported `pid 3521203 STILL ALIVE`. The working ladder is: check the newest
+    `pi.generation` timestamp (empty `genlock` is not enough, pitfall 150) -> `serve --stop` (expect refusal) ->
+    `kill -TERM <pid>` -> prove the pid is gone -> `--resume` -> start. `[judgement]` SIGTERM aborts live seat runs,
+    so it is a decision, not a reflex.
