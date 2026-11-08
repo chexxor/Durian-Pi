@@ -154,6 +154,7 @@ try {
   const s = new DatabaseSync(DB, { readOnly: true });
   const seatWindow = new Map((rig.seats ?? []).map((st) => [st.name, Number(config[String(st.model ?? "").startsWith("local/") ? "DURIG_LOCAL_CONTEXT" : "DURIG_VERIFIER_CONTEXT"])]));
   const nearFull = [];
+  const stuck = [];
   for (const st of j.seats ?? []) {
     const mk = st.marker?.id;
     if (!mk) { console.log(`  ${String(st.seat).padEnd(9)} no head marker — the whole transcript is in the window`); continue; }
@@ -161,11 +162,17 @@ try {
     const tok = Math.round((row.chars || 0) / 4);
     const win = seatWindow.get(st.seat) ?? 0;
     if (!win) { console.log(`  ${String(st.seat).padEnd(9)} window not declared for its model — occupancy unmeasurable`); continue; }
+    const calls = {};
+    for (const e of s.prepare("select record from entries where conversation_id=? and id>=?").all(st.conversationId, mk)) {
+      for (const m of JSON.parse(e.record).model || []) for (const c of m.content || []) if (c.type === "toolCall") calls[c.name] = (calls[c.name] || 0) + 1;
+    }
     const pct = Math.round((100 * tok) / win);
-    console.log(`  ${String(st.seat).padEnd(9)} conv ${st.conversationId} head ${st.marker.kind}@${mk}: ${st.windowMessages} msgs, ~${tok} tokens = ${pct}% of its ${win}-token window`);
+    console.log(`  ${String(st.seat).padEnd(9)} conv ${st.conversationId} head ${st.marker.kind}@${mk}: ${st.windowMessages} msgs, ~${tok} tokens = ${pct}% of its ${win}-token window | items completed in this window: ${calls.complete_work || 0} (claimed ${calls.claim_work || 0}, deferred ${calls.defer_work || 0}), bash ${calls.bash || 0}`);
     if (pct > 80) nearFull.push(`${st.seat} at ${pct}% of its declared window`);
+    if ((calls.claim_work || 0) > 0 && (calls.complete_work || 0) === 0) stuck.push(`${st.seat} claimed ${(calls.claim_work || 0)} item(s) in its current window and completed none`);
   }
   if (nearFull.length) failures.push(`${nearFull.join("; ")} — the window is nearly full, so the recent turns and the summary cannot both fit.`);
+  if (stuck.length) failures.push(`${stuck.join("; ")} — the window is spent on tool traffic that never lands an item.`);
   console.log("  note: token count is chars/4 over durable entries; the provider's own tokenizer is the ground truth.");
 } catch (e) { console.log(`  occupancy probe failed: ${e.message}`); }
 

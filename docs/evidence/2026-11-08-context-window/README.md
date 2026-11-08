@@ -367,3 +367,26 @@ assert.deepEqual(compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: { "local
 ```
 
 A fix that only changes `src/config.mjs` turns this test red. #5785 must change **all three**: `out.compaction.modelOverrides = layered` at `:488`, the `@returns` docstring at `:430`, and the two assertions at `:333` and `:339`. The docstring at `src/config.mjs:410-414` even flags "UNVERIFIED IN THIS TREE: … I could not re-read the pinned file to confirm" — the author knew the layering was unconfirmed and shipped it anyway. That is the drift class the rig keeps hitting: a setting assembled for one API, read by another, pinned by a test that asserts the wrong shape.
+
+## 14. How many tasks a window actually carries (measured 23:09Z)
+
+The gate now counts `toolCall` entries between each seat's head marker and the head of its transcript:
+
+| seat | msgs in window | ~tokens | % window | items **completed** | claimed | deferred | bash |
+|---|---|---|---|---|---|---|---|
+| pm | 209 | 110,923 | 54 % | **11** | 13 | 0 | 0 |
+| lead | 134 | 91,173 | 45 % | **8** | 9 | 0 | 0 |
+| qa | 221 | 117,999 | 58 % | 5 | 4 | 0 | 89 |
+| scribe | 203 | 124,007 | 61 % | 5 | 6 | 0 | 56 |
+| devtools | 188 | 85,775 | 42 % | 2 | 1 | 0 | 42 |
+| architect | 165 | 76,060 | 37 % | 2 | 1 | 0 | 26 |
+| qa2 | 134 | 80,387 | 39 % | 1 | 1 | 0 | 29 |
+| auditor | 99 | 23,091 | **94 %** | **0** | 2 | 0 | 1 |
+| security | 105 | 56,612 | 28 % | 0 | 0 | 0 | 20 |
+| impl | 124 | 17,023 | 8 % | 0 | 0 | 0 | 10 |
+| advocate / designer | 1 | 100 | 0 % | 0 | 0 | 0 | 0 |
+
+Two things fall out:
+
+1. **A window carries between one and eleven tasks, not one.** "Task completion within a single context window" is not what the rig does today: pm's window has completed 11 items, qa's 5. That is why the summariser is asked to compress ~100 item references (§10) and why its 13,107-token output ceiling is the binding constraint.
+2. **Compaction works for local seats and fails for the auditor.** impl compacted at 23:08Z and its live window is now **17,023 tokens (8 % of 204,800)** — the mechanism is functioning there. The auditor sits at **94 % of 24,576** and has claimed 2 items in its current window while completing **none**, which the gate now flags as a distinct failure: `auditor claimed 2 item(s) in its current window and completed none — the window is spent on tool traffic that never lands an item.`
