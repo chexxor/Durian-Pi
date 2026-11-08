@@ -195,6 +195,58 @@ try {
     );
   }
 
+  // =============================================================== 2b. THE CAP BITES AT THE OPERATOR'S NUMBER (4)
+  // "11 assertions exit 0" is not the acceptance. The gate must be seen to REFUSE the (N+1)-th
+  // generation at the cap the operator declared (4, D238). Four leases are held by THIS process
+  // through the same `withGenerationSlot` the rig uses (one harness at a time on the store, so no
+  // second writing Harness is opened), and a FIFTH `local/*` generation is launched from a spawned
+  // `cli.mjs` while those four are live. If the gate works, the stub sees NO request until a holder
+  // releases. The cap-0 CONTROL repeats the same shape with the gate disarmed: the request DOES
+  // reach the wire. Without the control, a stub that serialised for its own reasons would look like
+  // a working gate.
+  {
+    const HOLD = 2200;
+    const burst = async (cap) => {
+      const before = requests;
+      const holds = Array.from({ length: 4 }, (_, i) =>
+        withGenerationSlot({ dbPath: db, slots: 4, seat: `holder-${i}` }, () => sleep(HOLD)),
+      );
+      const leasesHeld = readGenerationSlots(db, 8).filter((s) => s.generatingSeat).length;
+      const send = spawnSend("alpha", cliEnv({ DURIG_MAX_CONCURRENT_SEATS: String(cap) }));
+      await sleep(HOLD - 500); // still inside the hold window: this is the sample that must be 0 at cap 4
+      const during = requests - before;
+      await Promise.all(holds);
+      const res = await send.done;
+      const after = requests - before;
+      return { during, after, leasesHeld, code: res.code, stderr: res.stderr };
+    };
+    const capped = await burst(4);
+    const control = await burst(0);
+    check(
+      "four live leases are visible to the rig (the precondition for the refusal)",
+      capped.leasesHeld === 4,
+      `readGenerationSlots saw ${capped.leasesHeld} live leases`,
+    );
+    check(
+      "at cap 4 the 5th local generation is REFUSED the wire while the four slots are held",
+      capped.during === 0,
+      `the stub received ${capped.during} request(s) with four leases live — the cap does not bite`,
+    );
+    check(
+      "refused means QUEUED, not dropped: the generation lands once a slot frees",
+      capped.after === 1 && capped.code === 0,
+      `requests=${capped.after}, send exit ${capped.code}; stderr: ${capped.stderr.slice(0, 200)}`,
+    );
+    check(
+      "CONTROL (cap disarmed): the same generation reaches the wire while four leases are held, proving the refusal is the gate and not the stub",
+      control.during === 1,
+      `control reached the wire with ${control.during} request(s) during the hold; if this were also 0 the stub, not the gate, is serialising`,
+    );
+    console.log(
+      `CAP-4 BITING (measured, hold ${HOLD}ms): cap 4 -> 0 requests during the hold, 1 after release | cap 0 control -> ${control.during} request(s) during the hold`,
+    );
+  }
+
   // =============================================================== 3. THE COST, IN SECONDS
   // The baseline is measured in the SAME run against the SAME stub with the cap DISARMED
   // (`DURIG_MAX_CONCURRENT_SEATS=0` means no limit, by `maxSeats()`'s own rule — a test
