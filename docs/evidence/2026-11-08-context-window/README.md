@@ -299,3 +299,31 @@ which is a separate reason a task never reaches "done".
 **What follows from this:** the acceptance criterion for 331 should not be "the override resolves" alone. It should be
 "the override resolves, the schedule fits the window, **and** a wake carries one item's context" — otherwise compaction
 keeps truncating no matter how the policy is nested.
+
+## 11. Only one seat is actually at the wall (measured 22:47Z, read-only)
+
+`milestone-check.mjs` now computes each seat's **live** window: the durable entries after its head marker
+(`select count(*), sum(length(record)) from entries where conversation_id=? and id>=<head marker id>`, tokens ≈ chars/4):
+
+| seat | head marker | msgs | ~tokens | declared window | % |
+|---|---|---|---|---|---|
+| auditor | `pi.compaction@404797` | 99 | **23,091** | 24,576 | **94 %** |
+| scribe | `pi.reset@402817` | 203 | 124,007 | 204,800 | 61 % |
+| impl | `pi.compaction@408833` | 245 | 119,088 | 204,800 | 58 % |
+| qa | `pi.reset@404473` | 221 | 117,999 | 204,800 | 58 % |
+| pm | `pi.reset@401756` | 209 | 110,923 | 204,800 | 54 % |
+| lead | `pi.reset@401995` | 134 | 91,173 | 204,800 | 45 % |
+| devtools | `pi.compaction@407936` | 188 | 85,775 | 204,800 | 42 % |
+| qa2 | `pi.reset@400360` | 134 | 80,387 | 204,800 | 39 % |
+| architect | `pi.compaction@405173` | 165 | 76,060 | 204,800 | 37 % |
+| security | `pi.reset@403961` | 105 | 56,612 | 204,800 | 28 % |
+| advocate / designer | `pi.reset@…` | 1 | 100 | 204,800 | 0 % (never woken) |
+
+**Conclusion:** no local-family seat is close to its window — the fleet has enormous slack, and the 214 truncated
+summaries are therefore the summariser's **output ceiling** and the **run cap**, not a full window. The auditor is the
+exception: 23,091 of 24,576 used, leaving **1,485 tokens** of headroom while the policy wants `reserve 16,384 + keepRecent 20,000`. Any compaction it attempts is guaranteed to fail. That is why its six truncations and 209 refusals cluster on conversation 4936.
+
+**Trap found while building this:** `src/config.mjs:370 declaredContextWindow(config, modelKey)` reads only
+`DURIG_CONTEXT_WINDOW` (a scalar or a JSON map). It returns **null** for every seat here, because the rig declares its
+windows through `DURIG_LOCAL_CONTEXT` and `DURIG_VERIFIER_CONTEXT` instead. An instrument that calls
+`declaredContextWindow` alone will report "window not declared" for a fleet that has declared windows.

@@ -148,6 +148,27 @@ try {
   failures.push("the shape instrument could not run, so the fleet's ability to be woken is unverified.");
 }
 
+console.log("== live window occupancy (entries after each seat's head marker) ==");
+try {
+  const j = JSON.parse(execFileSync(process.execPath, ["tools/seat-turn-shape.mjs", "--db", DB, "--json"], { encoding: "utf8", timeout: 60000, stdio: ["ignore", "pipe", "ignore"] }));
+  const s = new DatabaseSync(DB, { readOnly: true });
+  const seatWindow = new Map((rig.seats ?? []).map((st) => [st.name, Number(config[String(st.model ?? "").startsWith("local/") ? "DURIG_LOCAL_CONTEXT" : "DURIG_VERIFIER_CONTEXT"])]));
+  const nearFull = [];
+  for (const st of j.seats ?? []) {
+    const mk = st.marker?.id;
+    if (!mk) { console.log(`  ${String(st.seat).padEnd(9)} no head marker — the whole transcript is in the window`); continue; }
+    const row = s.prepare("select count(*) n, coalesce(sum(length(record)),0) chars from entries where conversation_id=? and id>=?").get(st.conversationId, mk);
+    const tok = Math.round((row.chars || 0) / 4);
+    const win = seatWindow.get(st.seat) ?? 0;
+    if (!win) { console.log(`  ${String(st.seat).padEnd(9)} window not declared for its model — occupancy unmeasurable`); continue; }
+    const pct = Math.round((100 * tok) / win);
+    console.log(`  ${String(st.seat).padEnd(9)} conv ${st.conversationId} head ${st.marker.kind}@${mk}: ${st.windowMessages} msgs, ~${tok} tokens = ${pct}% of its ${win}-token window`);
+    if (pct > 80) nearFull.push(`${st.seat} at ${pct}% of its declared window`);
+  }
+  if (nearFull.length) failures.push(`${nearFull.join("; ")} — the window is nearly full, so the recent turns and the summary cannot both fit.`);
+  console.log("  note: token count is chars/4 over durable entries; the provider's own tokenizer is the ground truth.");
+} catch (e) { console.log(`  occupancy probe failed: ${e.message}`); }
+
 console.log("");
 if (failures.length === 0) {
   console.log("PASS — the override reaches the harness and every declared window can hold its policy.");

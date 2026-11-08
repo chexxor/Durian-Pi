@@ -53,7 +53,8 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    (b) Load: distinct `item-\d+` refs in each seat's last 200 entries — impl 108, qa 114, scribe 107, lead 89, auditor
    81, devtools 13, pm 12; impl's recent turns hop `item-3128` → `item-5675` → `item-5713`, one run four worktrees.
    The summariser is being asked to compress ~100 unrelated tasks, which is why it hits 13,107 tokens. 331's
-   acceptance must include "one item's context per wake" — pitfalls 155, 157.
+   acceptance must include "one item's context per wake" — pitfalls 155, 157. Occupancy says which seat is really at
+   the wall: auditor 23,091 of 24,576 (94 %); every local seat 28–61 % of 204,800.
 4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
    inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
    deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
