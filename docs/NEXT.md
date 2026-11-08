@@ -63,15 +63,19 @@ override emitted as a sibling — `:455 if (Object.keys(policy).length > 0) out.
 (fixed in `2362d20a`, the pointer must contain `node cli.mjs`), `seat-turn-shape.test.mjs` (a live-store sha pin that
 races a driving broker — pitfall 138), `verifier-arm-probe.test.mjs` (open, unexplained by this session).
 
-**Current item:** the re-cut pass, now **routed by `pm`** (rows created 20:0x–20:1xZ from the delegate's intent):
-**#5784** the ROADMAP 331 nesting fix, **#5787** `devtools` re-cut of the stale `item-5648` base, **#5791** the
-`local2` landing act (`impl`), **#5794** `qa` told to verify the **re-cut tip** and to name the sha it ran against,
-**#5796** the roster act re-issued after pm cancelled #5776 whose `blockedBy` named an id pm cancelled in the same
-pass (pitfall 128's shape, self-caught). `item-5398` and `item-5648` cannot land until their re-cuts exist.
+**Current item:** the milestone pass, **routed by `pm`** (read with `node cli.mjs queue --status queued --json
+--no-body` at 21:1xZ — 56 queued, 13 claimed). The rows that matter to "task completion inside one window":
+**#5785** `pm -> impl` — "ROADMAP 331 (milestone, load-bearing): nest the compaction overrides + per-family schedule,
+gated on pi-durable's compaction"; **#5787**
+`devtools` — re-cut `item-5648` onto current main; **#5786** `devtools` — disposition: is `item-5398` superseded by
+#5737; **#5789** `devtools` — promote the two `.spike/delegate/` fleet instruments into `tools/`; **#5813 and #5814**
+`devtools` — "CLOCK-IN HANG (milestone): bound `runCli()` like `gitSafe` and report unavailable reads in the digest,
+failing-first" (**the same subject appears twice — verify they are not duplicates before either is claimed**); **#5802 / #5810** `lead` — landing entries for #5398 and item-5488;
+**#5794** `qa` — verify the re-cut tip and name the sha. `item-5398` and `item-5648` cannot land until their re-cuts
+exist.
 
-**Exact next command** — the broker is in the **deadline-linger** state (pid 3316329: fresh heartbeat, `lastPassAt`
-frozen at 20:11:27Z, 8 intents stuck in the spool, every broker-served read returning 0 bytes — pitfall 139). Clear
-it first, and only hard-stop when the genlock is empty:
+**Exact next command** — the broker was restarted at 20:56Z (**pid 3521203**, `--max-duration 1800`, spool drained:
+`INTENT delivered=10 dead=0 dup=0`; pitfall 140). Before anything that writes the store, prove the genlock is empty.
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi

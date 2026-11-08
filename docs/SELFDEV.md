@@ -3212,3 +3212,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     sufficient; a per-window feasibility check (`reserveTokens + keepRecentTokens <= declaredWindow`, fail loudly at
     config load) is the half that actually stops the failures. The local family is fine: the server reports
     `n_ctx: 204800` for `qwen3.8-flash-next-q2_0` and `DURIG_LOCAL_CONTEXT = 204800` matches it.
+143. **Read the queue before you name a row, and check for twins before one is claimed.** At 21:1xZ
+    `node cli.mjs queue --status queued --json --no-body` returned **56 queued / 13 claimed** rows, and two of them —
+    **#5813** and **#5814** — carry the *same* subject ("CLOCK-IN HANG (milestone): bound runCli() like gitSafe and report
+    unavailable reads in the digest, failing-first", both `queued` by pm, #5813 at 21:00:40Z). Two rows for one defect is a landing hazard, not a doubled effort. Ids also drift: the
+    pointer said **#5784** was the ROADMAP 331 fix; the row that actually carries it is **#5785** (`pm -> impl`, queued):
+    "ROADMAP 331 (milestone, load-bearing): nest the compaction overrides + per-family schedule, gated on pi-durable's
+    compaction". Re-read the queue instead of trusting a remembered id.
