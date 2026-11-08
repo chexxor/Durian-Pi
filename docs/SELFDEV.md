@@ -3289,3 +3289,11 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `pi.generation` timestamp (empty `genlock` is not enough, pitfall 150) -> `serve --stop` (expect refusal) ->
     `kill -TERM <pid>` -> prove the pid is gone -> `--resume` -> start. `[judgement]` SIGTERM aborts live seat runs,
     so it is a decision, not a reflex.
+155. **Turn shape can block a seat before its window ever matters.** `node tools/seat-turn-shape.mjs --db <copy>`
+    (read-only; copy the store first and diff the SHA — pitfall 143) prints, per seat, the replay window the next
+    provider call is built from and a verdict. Measured 2026-11-08T22:26Z: **impl, devtools, security, designer,
+    advocate** are `AT RISK — a strict alternating template refuses another user turn here, before any window is
+    reached`; pm, qa, lead, scribe, auditor are `ADMISSIBLE`. It also says plainly: "a head marker HIDES these from
+    the window, it does not remove them" — the auditor's transcript behind its `pi.compaction@404797` marker still
+    shows >= 2,621 user turns and >= 1,600 errored assistant turns. Before diagnosing "the seat is idle", check the
+    shape; a seat in this state cannot be spoken to, so no window sizing will make it complete work.

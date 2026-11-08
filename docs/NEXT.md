@@ -47,6 +47,10 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    `min(floor(0.8 * reserveTokens), model.maxTokens)` — 13,107 local, **6,000 verifier** because
    `DURIG_VERIFIER_MAX_TOKENS = 6000` clamps it. Nesting the override raises local to 16,384 and cannot move the
    verifier. Intent sent: `delegate-20261108-compaction-run-cap` — pitfalls 146, 148, 149.
+9. **Shape blocks seats before size does.** `node tools/seat-turn-shape.mjs --db <copy of the store>` (read-only) at
+   22:26Z: **impl, devtools, security, designer, advocate** = `AT RISK — a strict alternating template refuses another
+   user turn here, before any window is reached`; pm, qa, lead, scribe, auditor = `ADMISSIBLE`. Intent sent:
+   `delegate-20261108-shape-before-size` — pitfall 155.
 4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
    inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
    deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
@@ -169,7 +173,7 @@ of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
 **Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
 anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
 
-**New traps this window** — `docs/SELFDEV.md` **130–152**: a spooled *read* intent makes `broker-serve --start`
+**New traps this window** — `docs/SELFDEV.md` **130–155**: a spooled *read* intent makes `broker-serve --start`
 refuse with `wake-not-acknowledged`; `--env-file` is not a flag that exists (pitfall 87's mechanism is gone, its
 substance stands); compaction failures are a record kind and the kind column is JSON-quoted; a broker past
 `--max-duration` keeps its heartbeat and stops passing while holding genlock slots; **the clock-in digest hangs
