@@ -76,6 +76,11 @@ if (existsSync(DB)) {
   const capAll = age("%spend_cap_exceeded%");
   const trunc24 = db.prepare("select count(*) n from tasks where kind=? and record like ? and json_extract(record,'$.startedAt')>=?").get('"pi.compaction"', "%hit the token limit%", day).n;
   const cap24 = db.prepare("select count(*) n from tasks where kind=? and record like ? and json_extract(record,'$.startedAt')>=?").get('"pi.compaction"', "%spend_cap_exceeded%", day).n;
+  const split = db.prepare("select conversation_id, sum(record like ?) cap, sum(record like ?) trunc from tasks where kind=? group by 1 order by (cap+trunc) desc limit 6").all("%spend_cap_exceeded%", "%hit the token limit%", '"pi.compaction"');
+  console.log("  by conversation (cap refusals | truncations):");
+  for (const s of split) console.log(`    conv ${s.conversation_id}: ${s.cap} | ${s.trunc}`);
+  const localTrunc = split.filter((s) => s.trunc > 0 && s.cap === 0).reduce((a, s) => a + s.trunc, 0);
+  if (localTrunc > 0) failures.push(`${localTrunc} truncations on seats with no cap refusals — their summary ceiling (0.8 x reserveTokens) is the binding constraint, not the budget.`);
   console.log(`  truncations: ${truncAll.n} lifetime, first ${new Date(truncAll.mn).toISOString()}, last ${new Date(truncAll.mx).toISOString()}; ${trunc24} in the last 24 h`);
   console.log(`  cap refusals: ${capAll.n} lifetime, first ${new Date(capAll.mn).toISOString()}, last ${new Date(capAll.mx).toISOString()}; ${cap24} in the last 24 h`);
   if (trunc24 > 0) failures.push(`${trunc24} truncated summaries in the last 24 h — the window/policy mismatch is still live, not historical.`);

@@ -151,3 +151,42 @@ already implements the layering — there is nothing else to build for the overr
 key must be exactly `local/qwen3.8-flash-next-q2_0`. `DURIG_COMPACTION_MODEL_OVERRIDES` currently has that spelling;
 if a family is renamed, the override silently does nothing — the same "set and ignored" class pitfall 146 warns
 about, and worth a load-time assertion rather than a silent miss.
+
+## 6. The mechanism, corrected: two different seats fail for two different reasons
+
+Split the 426 failures **by conversation** (`select conversation_id, count(*) … where record like '%spend_cap_exceeded%'`
+and the same for `'%hit the token limit%'`):
+
+| conversation | seat | cap refusals | truncations |
+|---|---|---|---|
+| 4936 | **auditor** (verifier family) | **209** | 6 |
+| 4930 | devtools (local family) | 0 | 134 |
+| 9 | impl (local) | 0 | 42 |
+| 21 | lead (local) | 0 | 16 |
+| 3 | pm (local) | 0 | 10 |
+
+Every one of the 209 run-cap refusals is the **auditor**; the truncations are mostly the **local-family seats**
+(these five conversations account for 208 of the 214). The auditor's own record is 542 compaction attempts, **216
+failed — 40 %** (209 refusals + 6 truncations + 1 provider 429). So §4's attribution to "the verifier window" was
+wrong for the truncations, and is corrected here.
+
+**Why a summary truncates, from the harness source** (`pi-durable/dist/harness/compaction.js:95` and `:301-303`):
+
+```js
+maxTokens: Math.min(Math.floor(0.8 * policy.reserveTokens), model.maxTokens > 0 ? model.maxTokens : Infinity)
+...
+if (message.stopReason === "length") return "Summarization hit the token limit; the summary is incomplete";
+```
+
+So the summariser's **output ceiling** is `0.8 × reserveTokens`, clamped by the model's own max output tokens. Measured
+with the resolved config (`DURIG_LOCAL_MAX_TOKENS` 16384 default, `DURIG_VERIFIER_MAX_TOKENS` 6000 in `durig.config.json`):
+
+| family | reserve now | output ceiling now | ceiling if the override nests (reserve 20480) |
+|---|---|---|---|
+| local | 16,384 | **13,107** | 16,384 |
+| verifier | 16,384 | **6,000** (clamped by `DURIG_VERIFIER_MAX_TOKENS`) | **still 6,000** |
+
+**Consequence for #5785:** nesting the override raises the local family's summary budget from 13,107 to 16,384 and
+should cut its 188 truncations. It **cannot** fix the verifier: `DURIG_VERIFIER_MAX_TOKENS = 6000` is the binding
+ceiling, so a long auditor transcript will still truncate no matter what `reserveTokens` says. Raising that ceiling is
+a capacity decision, not a code change — and it belongs to the operator.

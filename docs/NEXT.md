@@ -40,11 +40,13 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    fine: `curl -H "Authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models` reports
    `qwen3.8-flash-next-q2_0`, `n_ctx: 204800`, matching `DURIG_LOCAL_CONTEXT`. Intent routed to `pm`
    (requestId `delegate-20261108-verifier-window`, log `INTENT delivered=1` at 21:12:11Z) — pitfall 142.
-8. **Half the compaction failures are the rig's own budget, not the window.** Grouping the 426 failed
-   `pi.compaction` records by error: **214** truncated summaries, **209** refused with
-   `spend_cap_exceeded … would cross DURIG_SPEND_CAP_RUN_USD $0.1000 (this process, spent $0.098924)`. The caps are
-   **defaults** (`0.05` call / `0.10` run / `4.00` store in `durig.config.default.json`; `durig.config.json` sets none),
-   and the lifetime ledger is $0.885818. Intent sent: `delegate-20261108-compaction-run-cap` — pitfall 146.
+8. **Two seats fail for two different reasons.** Splitting the 426 failed `pi.compaction` records by conversation: all
+   **209** `spend_cap_exceeded` refusals are the **auditor** (conversation 4936 — 216 of its 542 compaction attempts
+   fail, 40 %), while the **214** truncations sit on the local-family seats (devtools 134, impl 42, lead 16, pm 10,
+   auditor 6). Mechanism, from `pi-durable/dist/harness/compaction.js:95`: the summariser's output ceiling is
+   `min(floor(0.8 * reserveTokens), model.maxTokens)` — 13,107 local, **6,000 verifier** because
+   `DURIG_VERIFIER_MAX_TOKENS = 6000` clamps it. Nesting the override raises local to 16,384 and cannot move the
+   verifier. Intent sent: `delegate-20261108-compaction-run-cap` — pitfalls 146, 148, 149.
 4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
    inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
    deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
