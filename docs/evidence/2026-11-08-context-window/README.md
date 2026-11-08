@@ -190,3 +190,38 @@ with the resolved config (`DURIG_LOCAL_MAX_TOKENS` 16384 default, `DURIG_VERIFIE
 should cut its 188 truncations. It **cannot** fix the verifier: `DURIG_VERIFIER_MAX_TOKENS = 6000` is the binding
 ceiling, so a long auditor transcript will still truncate no matter what `reserveTokens` says. Raising that ceiling is
 a capacity decision, not a code change — and it belongs to the operator.
+
+## 7. The arithmetic #5785 has to satisfy, with measured accrual rates
+
+Context added to the **live** conversation in the last hour (entries whose id is at or after the first task id
+created in that hour, `sum(length(record))/4`):
+
+| conversation | seat | ~tokens added per hour | declared window | % of window per hour |
+|---|---|---|---|---|
+| 4930 | devtools | 139,266 | 204,800 | **68 %** |
+| 9 | impl | 111,442 | 204,800 | **54 %** |
+| 15 | qa | 24,738 | 204,800 | 12 % |
+| 4936 | auditor | 2,913 | 24,576 | 12 % |
+
+Compaction is therefore not a nicety: the two busiest seats need a successful compaction roughly **every 1.5 hours**
+to stay inside their window, and 18 % of all compactions fail fleet-wide (426 of 2,326), 40 % for the auditor.
+
+**Invariant that must hold for every family** (from `compaction.js:95` and the window clamp):
+
+```
+reserveTokens + keepRecentTokens  <=  declared window
+floor(0.8 * reserveTokens)        <=  model maxTokens        (else the summary truncates)
+```
+
+The verifier violates the first today: 16,384 + 20,000 = 36,384 against a 24,576 window. A schedule that satisfies
+both lines, using what the rig already declares:
+
+| family | window | reserve | keepRecent | summary ceiling | fits |
+|---|---|---|---|---|---|
+| local | 204,800 | 20,480 (already configured) | 20,000 | 16,384 ≤ 16,384 | yes |
+| verifier | 24,576 | 6,144 | 8,192 | 4,915 ≤ 6,000 (`DURIG_VERIFIER_MAX_TOKENS`) | yes |
+
+With the current defaults the verifier line is 36,384 > 24,576 — a seat on a 24,576-token window cannot keep a
+20,000-token tail and still reserve for a summary. That is the number the impl seat should write into the per-family
+schedule; the gate prints it as `headroom` and `keepRecentTokens = N% of headroom` so a regression is visible in one
+command.
