@@ -4,13 +4,18 @@
 // pi-durable's OWN resolver (dist/harness/compaction.js compactionPolicy) what it resolves per model.
 // Never re-derives the policy. Broker-down safe; no model spend.
 // usage: node .spike/delegate/compaction-policy-probe.mjs [--rig rig.selfdev.json]
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { loadConfig, loadShippedDefaults, compactionSettings, declaredContextWindow } from "../../src/config.mjs";
-import { DEFAULT_COMPACTION_POLICY } from "../../node_modules/@earendil-works/pi-durable/dist/harness/agent.js";
-import { compactionPolicy } from "../../node_modules/@earendil-works/pi-durable/dist/harness/compaction.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const CLI_PATH = join(process.cwd(), "cli.mjs");
+// Locate the repo root from wherever this file lives, so the probe runs from .spike/, docs/evidence/ or the root.
+let ROOT = dirname(fileURLToPath(import.meta.url));
+while (!existsSync(join(ROOT, "src", "config.mjs")) && ROOT !== "/") ROOT = dirname(ROOT);
+const { loadConfig, loadShippedDefaults, compactionSettings, declaredContextWindow } = await import(pathToFileURL(join(ROOT, "src", "config.mjs")).href);
+const { DEFAULT_COMPACTION_POLICY } = await import(pathToFileURL(join(ROOT, "node_modules", "@earendil-works", "pi-durable", "dist", "harness", "agent.js")).href);
+const { compactionPolicy } = await import(pathToFileURL(join(ROOT, "node_modules", "@earendil-works", "pi-durable", "dist", "harness", "compaction.js")).href);
+
+const CLI_PATH = join(ROOT, "cli.mjs");
 const readFile = (p, enc) => readFileSync(p, enc); // sync is fine for a probe
 
 const shipped = await loadShippedDefaults({ readFile, anchors: [join(dirname(CLI_PATH), "durig.config.default.json")] });
@@ -26,7 +31,7 @@ console.log(`compactionSettings() returns: ${JSON.stringify(settings)}`);
 console.log(`settings.compaction (the ONLY key the harness reads): ${settings.compaction === undefined ? "UNDEFINED -> pi-durable defaults apply; the modelOverrides map is dropped" : JSON.stringify(settings.compaction)}`);
 console.log("");
 
-const rigPath = process.argv.find((a) => a.startsWith("--rig="))?.split("=")[1] || "rig.selfdev.json";
+const rigPath = process.argv.find((a) => a.startsWith("--rig="))?.split("=")[1] || join(ROOT, "rig.selfdev.json");
 const rig = JSON.parse(readFileSync(rigPath, "utf8"));
 const seen = new Map();
 for (const seat of rig.seats ?? []) {

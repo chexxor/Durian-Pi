@@ -3181,3 +3181,15 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     store moved because the fleet was committing during the demo. A test that pins the bytes of a live store must
     snapshot first or re-read the baseline after opening; otherwise "REAL STORE bytes changed" is a false red that
     every delegate will re-investigate.
+139. **A broker past its `--max-duration` deadline keeps seats generating while its pass loop is frozen, and that makes
+    the queue unreadable.** Measured 20:5xZ, Linux Fedora 45, node v24.22.1, pid 3316329: `heartbeatAt` 20:53:53Z
+    (fresh), `lastPassAt` frozen at **20:11:27Z** (passAge 2,421 s, the preflight says `degraded`), genlock slots
+    appearing and clearing as generations run, **320 generations completed / 0 failed in 60 min**. Every read that
+    routes through the broker is dark: `node cli.mjs status` and `node cli.mjs queue --json --no-body` exit 124 with
+    0 bytes, and `node tools/queue-drain-audit.mjs` printed only its header ("one broker-served read") and returned
+    nothing. Eight intents sat undrained in the spool, including `delegate-20261108-clockin-hang` (14 min waiting) —
+    so an intent you spooled is **not** delivered just because the fleet is busy. `node tools/broker-serve.mjs --stop`
+    returns `"stopped": false … did not exit within the stop grace; no forced kill`. The runbook's remedy
+    (`docs/runbooks/broker-down-or-stalled.md`, third signature) is a hard stop **only when `ls selfdev.sqlite.genlock*`
+    is empty**, then `cli.mjs resume`, then a restart with a longer `--max-duration`. Never infer "the queue is empty"
+    from an unreadable read.

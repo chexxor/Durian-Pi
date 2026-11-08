@@ -50,8 +50,12 @@ it in one way: the mechanism is now measured end to end (config → `compactionS
 failed summaries on the verifier seat), and the operator's intent for the fix is **spooled to `pm`**
 (requestId `delegate-20261108-context-window`), and `pm` turned it into rows #5784/#5787/#5791/#5794/#5796 within
  ten minutes. What it did NOT move: **this delegate session landed nothing** (its commits are docs-only: `2338f004`,
-`47b18e74`, `a9c651b5`), and `grep -n "out.compaction|out.modelOverrides" src/config.mjs` still shows the sibling at
-`:488` — **ROADMAP 331 is not fixed**. `main` moved under the session to **`a9c651b5`** (`fb463162` landed `item-5737`).
+`47b18e74`, `a9c651b5`, `2362d20a`, `cba0ef3f`), and `grep -n "out.compaction" src/config.mjs` still shows the
+override emitted as a sibling — `:455 if (Object.keys(policy).length > 0) out.compaction = policy;` with the
+`modelOverrides` block below it — **ROADMAP 331 is not fixed**. `main` = **`cba0ef3f`** (`fb463162` landed
+`item-5737` mid-session). Suite on that main: **259/262 passed in 74.3 s**, reds named: `next-pointer.test.mjs`
+(fixed in `2362d20a`, the pointer must contain `node cli.mjs`), `seat-turn-shape.test.mjs` (a live-store sha pin that
+races a driving broker — pitfall 138), `verifier-arm-probe.test.mjs` (open, unexplained by this session).
 
 **Current item:** the re-cut pass, now **routed by `pm`** (rows created 20:0x–20:1xZ from the delegate's intent):
 **#5784** the ROADMAP 331 nesting fix, **#5787** `devtools` re-cut of the stale `item-5648` base, **#5791** the
@@ -59,18 +63,22 @@ failed summaries on the verifier seat), and the operator's intent for the fix is
 **#5796** the roster act re-issued after pm cancelled #5776 whose `blockedBy` named an id pm cancelled in the same
 pass (pitfall 128's shape, self-caught). `item-5398` and `item-5648` cannot land until their re-cuts exist.
 
-**Exact next command** (broker resident pid 3316329 at clock-out; broker-served reads may time out — pitfall 135):
+**Exact next command** — the broker is in the **deadline-linger** state (pid 3316329: fresh heartbeat, `lastPassAt`
+frozen at 20:11:27Z, 8 intents stuck in the spool, every broker-served read returning 0 bytes — pitfall 139). Clear
+it first, and only hard-stop when the genlock is empty:
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/clockin.mjs                               # run BEFORE starting the broker; it hangs otherwise
-DURIG_DB=./selfdev.sqlite node cli.mjs status          # attention + non-terminal work (times out if the broker is driving)
-git rev-parse --short main                             # expect a9c651b5 or newer
-node scripts/test.mjs --all --jobs 6                   # 261/262 on main; only verifier-arm-probe red
-git merge-base --is-ancestor item-5737 main            # exit 0 -> the digest cap gate is already on main;
-                                                     #   then item-5398 is a duplicate, not a landing
+node scripts/clockin.mjs                               # BEFORE starting a broker; it hangs while one drives
+ls -1 selfdev.sqlite.genlock*                          # EMPTY => safe to stop; non-empty => a generation is in flight
+node tools/broker-serve.mjs --stop                     # cooperative; expect "stopped": false on a lingered broker
+# still alive and genlock empty =>  kill 3316329  then  DURIG_DB=./selfdev.sqlite node cli.mjs resume
+set -a; . "$HOME/.config/durig/env"; set +a
+node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes   # a fresh broker drains the spool
+grep -c "delegate-20261108-clockin-hang" selfdev.sqlite.broker.log       # did pm receive the intent?
+git rev-parse --short main                             # expect cba0ef3f or newer
 node scripts/land.mjs item-5648 --changed-suite        # ONLY after #5787's re-cut exists
-node .spike/delegate/compaction-policy-probe.mjs       # must print reserve=20480 once #5784 lands
+node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5784 lands
 ```
 
 **The landing pass, re-measured against current `main` (not against the main the branches were cut from):**
