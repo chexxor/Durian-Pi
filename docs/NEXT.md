@@ -106,6 +106,13 @@ node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # THE gat
 node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5785 lands
 ```
 
+**The fix is already proven, so #5785 is a one-line change, not a design question.**
+`pi-durable/dist/harness/compaction.js:196` does `const { modelOverrides, ...policy } = settings.compaction;` — the
+map must live **inside** `compaction`. `src/config.mjs:488` currently emits `out.modelOverrides = layered`; nesting it
+(`out.compaction.modelOverrides = layered`) makes the harness resolve `reserve=20480` — shown side by side in
+`docs/evidence/2026-11-08-context-window/README.md` §5. The key must be spelled exactly
+`local/qwen3.8-flash-next-q2_0`, because the harness matches `${provider}/${modelId}`.
+
 **The landing pass, re-measured against current `main` (not against the main the branches were cut from):**
 
 | row | branch | tip | merge-tree vs `main` | note |

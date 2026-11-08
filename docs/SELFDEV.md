@@ -3251,3 +3251,11 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     census, then exits **0** only when the override reaches `settings.compaction`, every declared window can hold its
     policy, and no truncated/refused compactions remain. As of this session it exits 1 with five named reasons. Do not
     report "331 fixed" without running it.
+148. **The harness already implements per-model layering; only the placement is wrong.**
+    `node_modules/@earendil-works/pi-durable/dist/harness/compaction.js:195-202` reads
+    `const { modelOverrides, ...policy } = settings.compaction;` and matches the key
+    `` `${model.provider}/${model.modelId}` ``. So a compaction override emitted as a *sibling* of `compaction` is
+    invisible, and a key spelled differently from the resolved `provider/modelId` silently does nothing. Proven in one
+    command (see `docs/evidence/2026-11-08-context-window/README.md` §5): nested -> `reserveTokens: 20480`, sibling ->
+    `reserveTokens: 16384`. Before writing any "compaction is broken" claim, run that two-line comparison; it settles
+    the question without touching a seat or spending a token.
