@@ -56,6 +56,13 @@ Readings that follow from the table:
    dirtying the scheduler, then the candidate being suppressed by cooldown, then `cooldownRevisitAt` forcing the
    next pass. Self-sustaining.
 
+**Fleet scale, from the live log** (`grep -c 'WAKE ' /home/chexxor/Git/Durian-Pi/selfdev.sqlite.broker.log` →
+**4,455** lines; window `2026-11-08T18:*`–`19:10` per seat): `auditor` **24**, `security` 7, `pm` 3, `lead` 3,
+`architect` 1, `qa` 1, `scribe` 1, `impl` 1, `devtools` 1. One seat waking 24 times in an hour while holding
+nothing claimable is the probe's 30 s cadence multiplied by real seats. The `stalled-claim` branch does not show
+the same shape because the seat's own activity keeps a submission in flight; the parked branch does, because the
+wake is the only activity.
+
 The earlier "~5 in 120 s" figure in #5729 was a derivation from the cooldown, not a measurement. The measured
 number is **4 in 120 s**, and it should be quoted as such wherever the defect is cited.
 
@@ -141,9 +148,22 @@ its own wakes. Making submission commits non-wake-relevant would be a change to 
 general revisit gap — that is a **lead** ruling, not a design detail, and it is deliberately not decided here. If
 dedup turns out insufficient and the semantics must change, route it to lead before implementing.
 
-## 7. What this seat did not do
+## 7. Suite evidence for this change
 
-- Did not run the full demo suite; the probe above was run in this worktree with `faux` and a throwaway store
+Docs-only diff, so the derived guard ladder (`node tools/what-to-test.mjs --base=main --run`, exit 0) selected 6
+tests — `degeneration-duration`, `git-guard-census`, `queue-lifecycle-m1`, `queue-lifecycle-m1a`,
+`seat-instruction-encoding`, `skill-admission-gate` — all PASS.
+
+Full suite in this fork (`node scripts/test.mjs --all`): **260/261 in 58.3 s, exit 1**. The one red is
+`demo/clockin-digest.test.mjs`: the clock-in digest is 20,848 B against its 20,000 B budget, and 15,828 B of it is
+the `## POINTER` section of `docs/NEXT.md` at this fork base (193 lines). `renderDigest` reads NEXT.md, SELFDEV.md,
+rig status, git debt and runbooks — not `docs/DECISIONS.md` or `docs/reviews/` — so this item cannot be the cause.
+Measured check: the same test in a detached scratch worktree at `main` (`a7fc5758`) **passes, exit 0**; main's
+`docs/NEXT.md` is 114 lines with a 7,499 B pointer. The red is a fork-base state, not a landed regression.
+
+## 8. What this seat did not do
+
+- Did not verify the fix; the probe above was run in this worktree with `faux` and a throwaway store
   (`.spike/wake-probe/`), which is not the seat-root dependency set.
 - Did not implement anything; #5741 owns the code cut, #5745 verifies it.
 - Did not measure the real fleet. The 4-wakes-per-120 s number is from a synthetic single-seat rig, not from
