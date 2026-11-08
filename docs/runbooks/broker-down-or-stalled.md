@@ -315,6 +315,28 @@ grep INTENT selfdev.sqlite.broker.log | tail -1          # the spool drains only
 check), the honest options are to wait for the runs to settle, or to accept the abort. This delegate chose to wait
 and report, not to kill.
 
+## The ladder, exercised successfully at 2026-11-08 23:30Z
+
+Sequence that worked on Linux/Fedora 45, node v24.22.1, with one seat mid-run:
+
+```bash
+kill -TERM <pid>; sleep 10; pgrep -af "cli.mjs serve" | grep -v "bin/bash"   # expect: nothing
+grep -E "STOP-REQUESTED|EXIT" <db>.broker.log | tail -2                        # expect an EXIT line
+node tools/broker-serve.mjs --status                                            # preflight; "broker: down"
+set -a; . "$HOME/.config/durig/env"; set +a                                    # keys live out of tree
+node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes
+grep -E "START|INTENT|PASS" <db>.broker.log | tail -6
+```
+
+Evidence from the run: `EXIT pid=3521203 reason=deadline passes=-` (the wedged process exited with **zero** passes
+recorded), then `START pid=3941969`, then **`INTENT delivered=37 dead=0 dup=0`** and `PASS 1 ms=12633 woke=qa,lead,scribe,devtools,auditor,security,architect`
+— seven seats woke on the first pass and the spool went to **0** pending intents. `node cli.mjs status` returned
+`{"ok": true, ...}` in **2.0 s** where it had just spent 120 s timing out.
+
+Two things the ladder does **not** fix, so do not expect them: the **56 dead letters** stay in
+`<db>.broker.inbox.error` (they are history, not a live block), and `--max-duration` still only bites at a pass
+boundary — set it, but do not treat it as a kill switch (pitfall 160).
+
 ## Variant: the pass loop is stalled, the store is not, and nobody else holds the store
 
 Symptom: `cli.mjs status` / `cli.mjs queue` print nothing for a long time. Measured exactly, they are **bounded,
