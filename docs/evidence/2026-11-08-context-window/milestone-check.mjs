@@ -91,6 +91,40 @@ if (existsSync(DB)) {
 }
 
 /* ---- and the other blocker: a seat whose turn SHAPE is refused before any window is reached ---- */
+console.log("== run-cap headroom for the summariser (the budget that starves compaction) ==");
+try {
+  const defaults = JSON.parse(readFileSync(join(ROOT, "durig.config.default.json"), "utf8"));
+  const capRun = Number(cfg.resolveConfig?.()?.DURIG_SPEND_CAP_RUN_USD ?? defaults.DURIG_SPEND_CAP_RUN_USD);
+  const logPath = `${DB}.broker.log`;
+  const lines = existsSync(logPath) ? readFileSync(logPath, "utf8").split("\n") : [];
+  const start = lines.filter((l) => l.includes(" START pid=")).pop();
+  const ledgerPath = join(ROOT, "selfdev.sqlite.spend.jsonl");
+  if (start && existsSync(ledgerPath)) {
+    const at = start.slice(0, 24);
+    const rows = readFileSync(ledgerPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    const spent = rows.filter((r) => r.at >= at).reduce((a, r) => a + (r.usd || 0), 0);
+    const costs = rows.filter((r) => r.model === "openai/gpt-oss-120b").slice(-50).map((r) => r.usd || 0).filter((v) => v > 0);
+    const mean = costs.length ? costs.reduce((a, v) => a + v, 0) / costs.length : 0.001384;
+    const headroom = Math.max(0, Math.floor((capRun - spent) / mean));
+    console.log(`  broker process since ${start.trim()}: spent $${spent.toFixed(6)} of the $${capRun} run cap; mean verifier call $${mean.toFixed(6)}`);
+    console.log(`  summariser calls this process can still afford before EVERY compaction is refused: ~${headroom} (optimistic, at mean call cost)`);
+    // conservative: use the actual projected summariser cost recorded in the refusal messages
+    let proj = [];
+    if (existsSync(DB)) {
+      const s = new DatabaseSync(DB, { readOnly: true });
+      proj = s.prepare("select record from tasks where kind=? and record like ? order by id desc limit 20").all('"pi.compaction"', "%spend_cap_exceeded%").map((r) => Number(/projects \$([0-9.]+)/.exec(r.record)?.[1] ?? 0)).filter((v) => v > 0);
+      s.close();
+    }
+    if (proj.length) {
+      const worst = Math.max(...proj);
+      console.log(`  conservative: refusals projected summariser calls at $${Math.min(...proj).toFixed(6)}–$${worst.toFixed(6)}; at $${worst.toFixed(6)} this process has ~${Math.max(0, Math.floor((capRun - spent) / worst))} compactions left before every one is refused`);
+    }
+    if (capRun - spent < mean * 5) failures.push("the resident broker is within 5 summariser calls of its run cap: compaction will be refused before any seat finishes its task.");
+  } else {
+    console.log("  no spend ledger or START line — headroom unmeasurable");
+  }
+} catch (e) { console.log(`  headroom probe failed: ${e.message}`); }
+
 console.log("== turn shape (tools/seat-turn-shape.mjs, read-only) ==");
 try {
   const out = execFileSync(process.execPath, ["tools/seat-turn-shape.mjs", "--db", DB], { encoding: "utf8", timeout: 30000, stdio: ["ignore", "pipe", "ignore"] });

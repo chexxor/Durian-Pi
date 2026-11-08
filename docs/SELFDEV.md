@@ -3297,3 +3297,9 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the window, it does not remove them" — the auditor's transcript behind its `pi.compaction@404797` marker still
     shows >= 2,621 user turns and >= 1,600 errored assistant turns. Before diagnosing "the seat is idle", check the
     shape; a seat in this state cannot be spoken to, so no window sizing will make it complete work.
+156. **Compaction has a per-process budget that can be measured before it fails.** Every one of the 209 refusals
+    carries the same number: the process had spent **$0.098924** of `DURIG_SPEND_CAP_RUN_USD = $0.10`, with the
+    summariser call projected at **$0.001368–$0.001384**. Once a broker process gets within one summariser call of
+    the cap, **every** compaction in that process is refused until it restarts. `milestone-check.mjs` now prints the
+    live headroom (broker pid 3521203, started 20:56:53Z: spent $0.005797, ~68 compactions left at $0.001384 each).
+    When compaction stops working, read that line before blaming the model or the window.

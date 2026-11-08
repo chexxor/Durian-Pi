@@ -111,6 +111,8 @@ node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # THE gat
                                                      #   compactions remain. Currently exit 1 with six named reasons.
 node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5785 lands
 node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8  # is the read path answering at all?
+node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # also prints the run-cap headroom: how many
+                                                     #   compactions the resident broker can still afford (pitfall 156)
 ```
 
 **Read-path caveat (22:12Z).** A CLI read does not open the store while a broker is resident — `src/readclient.mjs:106-111`
