@@ -10387,3 +10387,13 @@ stops the fleet.
 **What the delegate did NOT do:** no claim/complete/defer/route. The `local2` code half, the landing of #5488/#5398,
 the dedup of #5714/#5721 and the minting of the verifier-family row are delivered as intents to `lead`, `devtools` and
 `pm` and executed by those seats in a bounded supervised window.
+
+**D238 addendum (07:3xZ) — the concurrency number must be measured under load, and under load it collapses.** The
+"8 concurrent seat-sized turns in 5.28 s" figure in D237 was taken in the quiet gap while the fleet was dead. Re-measured
+with the fleet running: **8 concurrent requests = 60,013 ms wall**, and **one** 128-token request = **12,563 ms**, while
+`GET /status` shows a seat turn with **79,886 prompt tokens** in flight (`{"busy":true,"queued":0}`). So the local box
+is **prompt-processing bound, not slot bound**: the binding constraint is the size of each seat's prompt, not the
+number of slots. Consequence for the throughput ask: raising `DURIG_MAX_CONCURRENT_SEATS` to 8 would queue, not
+speed; the two levers that actually move throughput are (a) landing **#5648** so the idle LAN box (4 slots, 2
+connections) can carry seats, and (b) making each seat turn cheaper — which is the compaction/context work the team
+owns. Record both numbers with the load state, or the 5.28 s figure will be quoted as capacity it is not.
