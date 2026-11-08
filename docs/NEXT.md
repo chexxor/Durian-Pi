@@ -27,10 +27,12 @@ session is a **landing pass**, not another build: land **#5488** then **#5398**,
 #5306/#5309/#5310 → #5569** (`impl`, the ROADMAP-331 landing entry).
 
 **Current item:** the landing pass above, owned by `lead` (row **#5619/#5624** carry the landing list; qa holds
-**#5641** to verify #5488 independently; my numbers are in §A). **Two intents are already spooled for this** — to `lead`
-and `impl`, written while the broker was down, sitting in `selfdev.sqlite.broker.inbox/` (their body:
-`.spike/delegate-20261108h/n9-closing-lead-land-now.md`); the next `--start` delivers them. That inbox file is not a
-fault, and it is the reason the closing window woke nobody (pitfall 121: a `claimed` row never wakes a seat).
+**#5641** to verify #5488 independently; my numbers are in §A). **Intents are already spooled for this** — to `lead`,
+`impl`, `pm`, `security`, `auditor`, `devtools`, written while the broker was down, sitting in
+`selfdev.sqlite.broker.inbox/`; the next `--start` delivers them (bodies in `.spike/delegate-20261108h/`). That inbox
+file is not a fault, and it is the reason the closing window woke nobody (pitfall 121: a `claimed` row never wakes a
+seat). **D236 is now the governing ruling set: the operator accepted all seventeen N9 recommendations verbatim
+("I accept your recommendations. Please act on them.") and the acts are enumerated there — read D236 before routing.**
 
 **Blocker:** none for the landing pass itself — both fixes are green and `main` is reachable. What is blocked is the
 rest of the chain: **cap → 3 waits on #5488 landing**; **#5608** (two seats onto `local2`) waits on **#5605** landing;
@@ -140,3 +142,15 @@ windows), store cumulative **$0.769304** over 1,660 ledger rows — all of it `a
 seat runs free on the local box. The four windows produced **1 commit (D234) + 1 (#5488) + 2 (#5398) + 2 (this
 record)**; the honest read is that the windows are being spent, not the work — which is what (C) costs. Full history
 of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
+
+**(G) WHAT D236 CHANGED FOR THE QUEUE (so nobody re-asks the operator).** Released as ordinary seat work now:
+**#4354** (gate **#4352** is `done`), **#4835** (blocker **#4849** is `done`), **#3350** (gate **#3349** is
+**`cancelled`** — re-point it, a dead row cannot gate anything). Granted and consumed: the **push** for the record
+batch (`#5580`'s "11 unpushed" is stale — measured 2). A **no-op**: the stray-`item-*` cleanup half of **#4817** —
+measured **81** root `item-*` dirs, **81** registered worktrees, **0** strays. Ruled, awaiting an owner's act:
+independence by risk class (verifier cannot carry `auditor` turns: slot 8192×4 vs p50 16,518 — never read
+`status.context` as health, #4957); the two memory boundaries for **#4827** (quarantine never rendered; memory never
+an authorization); the print fix for **ROADMAP 295** without key rotation; **#5617** widened to promote **both**
+probes; **#5640** registered as the read-deadlock BUILD row; and the seat prompts must name **`bash`** — measured
+`grep -rIo "bash" prompts/ | wc -l` → **0**, the wording is in D236 (10). Duplicate code rows **#5605**/**#5655** are
+one unit; resolving them is `lead`'s.

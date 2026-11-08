@@ -10230,3 +10230,66 @@ bound — a 2.07× overrun** (per window 72.2/30, 41.9/20, 26.2/15, 15.0/10 min)
 zero generations, with 10 rows `claimed` and 35 `queued` — a `claimed` row does not wake a seat, so an idle fleet after
 a kill+`resume` is a delivery problem, and the cheap fix is an intent spooled while the broker is **down** and applied
 on the next `--start` (pitfall 121).
+
+## D236 — the operator **accepts all seventeen recommendations** of the N9 question set and orders them executed; the delegate executes the machine plane, records the rulings, and routes the rest (2026-11-08T03:3xZ, delegate recording; host measured in the same command as the edits: `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0`)
+
+**Source:** the operator, `2026-11-08T03:2xZ`, verbatim: *"I accept your recommendations. Please act on them."* That
+adopts the N9 recommendation list (Q1–Q17) as rulings. Recorded here so a later session cites a decision, not a chat.
+
+**Rulings now in force** (one line each, with the row or file that carries it):
+
+1. **Push is granted for the record batch** (`origin/main..main`). Consumed this session — see §Execution.
+   `#5580`'s "11 unpushed commits" is **stale**: measured `git log --oneline origin/main..main` → **2** docs commits.
+2. **Landing first, always**: land **#5488** (rebase onto current `main` first — the branch predates `c047b767`) and
+   **#5398**; only then the approved **cap → 3**, which is a `durig.config.json` act by a seat, never by the delegate.
+3. **Two seats move to `local2`, pair = `qa2` + `security`,** and the capability cut is **accepted explicitly**:
+   `_xxxs` quant, **131,072** context, **text-only**, 4 slots on a second box. `designer`/`advocate` remain excluded
+   (text-only work), `impl`/`architect`/`pm`/`lead`/`qa`/`scribe` remain excluded (204,800 window, faster quant).
+   Row **#5608** stays parked until the code half lands; the duplicate code rows **#5605** (`devtools`, queued) and
+   **#5655** (`impl`, claimed) are one unit and their resolution is `lead`'s, not the delegate's.
+4. **Independence is by risk class, not by default**: a non-author independent leg is required for **behaviour
+   changes**, optional for docs/verify rows; where it is required and the verifier cannot carry it, it runs **on the
+   local model** (seat-level independence), and `status.context` is **not** trusted as health — `auditor` declares
+   24,576 while the verifier slot is 8192×4 and real auditor turns run p50 16,518 / max 23,419 (`#4957`, done). No new
+   GPU capacity, no bigger slot (standing since `#4954`), so option (a) is off the table unless the operator changes it.
+5. **Memory write gate — two boundaries ruled by the operator** (by adoption of the recommendation, phrased as the
+   delegate's text, restatable): **quarantine content is NEVER rendered in a prompt section**, and **no memory record
+   may ever satisfy a permission check — memory informs reasoning only.** `security` writes the ROADMAP 167/179
+   position against these two sentences; nothing in **165/166/167** is buildable until that position lands.
+6. **The read-deadlock is a real defect and gets a row** (`#5640` is the gap): a broker-routed read issued inside a
+   seat's own turn cannot be answered. Interim discipline: seats stop issuing `cli.mjs queue` / `clockin.mjs --db …`
+   from inside a turn; use one multi-id `show` (pitfall 105) or the recorded numbers.
+7. **Docs-only rows release now, not later**: **#4354** (its gate **#4352** is `done`), **#4835** (its stated blocker
+   **#4849** is `done`), **#3350** (its gate **#3349** is **`cancelled`** — the gate names a dead row and must be
+   re-pointed). The `$?`-clobber prover pitfall (**#4976**) gets its own small docs row off the live tree.
+8. **Landing gate: re-measure then land one at a time.** The operator's side of **#4817** — reclaiming stray plain
+   `item-*` directories — is a **no-op**: measured 03:2xZ, **81** root `item-*` directories, **81** registered
+   worktrees, **0** strays (probe in the next paragraph). Batch landing stays forbidden.
+9. **`--status` prints credential values: fix the print, do NOT rotate** on the strength of this recurrence (terminal
+   output only; re-scope grep found only ROADMAP **295**'s own elided example). Redaction rule stands (pitfall 120).
+10. **ROADMAP 217's remaining half is shipped as operator-owned text**: the seat prompts must name the shell tool
+    (`bash` on Linux hosts). Measured before the act: `grep -rIo "bash" prompts/ | wc -l` → **0**.
+11. **Both probes get promoted to `tools/`** — widen **#5617** to cover the digest-scale probe too; an unpromoted
+    probe in gitignored `.spike/` is lost next session.
+12. **Windows are short and supervised**: one 900 s landing-first window, judging it by `woke=` and a moving
+    `lastPassAt` (pitfalls 116/121), because tonight cost **155.3 min of broker time against 75 min of bound (2.07×)**.
+
+**EXECUTED BY THE DELEGATE (machine plane, no repo file).** Correction to pi's model registry, the act of Q15. Before:
+`~/.pi/agent/models.json` declared `qwen3.8-flash-next-iq3_s` for the provider `strata-server`
+(`http://192.168.1.52:8080/v1`) while `GET /v1/models` answers exactly `["qwen3.8-flash-next-iq3_xxs"]`;
+`settings.json` repeated the same id in `defaultModel` (its `defaultProvider` is `strata-server`) and in the model
+settings key. **Severity, measured — this is a false claim, not a broken call:** a completion requested with the WRONG
+id is served by the box with the RIGHT one —
+`{"model":"qwen3.8-flash-next-iq3_s", …}` → `"model": "qwen3.8-flash-next-iq3_xxs"`, `content: "OK"`, so llama.cpp
+re-routes the id and pi's own session was never failing on it. After the edit both files agree with the box:
+`strata` = `qwen3.8-flash-next-iq3_s` ctx **204,800** (unchanged), `strata-server` = `qwen3.8-flash-next-iq3_xxs`
+ctx **131,072** max **24,576**, settings default `strata-server/qwen3.8-flash-next-iq3_xxs`. Both files were copied
+first to gitignored `.spike/delegate-20261108h/pi-{models.json,settings.json,models-store.json}.preceding` (mode
+`0600` source, backups in the same tree); JSON re-parsed after each write. **Note for the operator:** pi's declared
+`maxTokens 24576` for that box still exceeds this rig's `DURIG_LOCAL2_MAX_TOKENS=16384`, and pi's default provider is
+the **LAN box, not the local box** — that was true before this edit and is not changed by it.
+
+**What the delegate did NOT do.** No queue act (no claim/complete/defer/route), no seat's work, no code change:
+Q13's print fix, Q6's re-measure, Q2/Q5's releases, Q4's closure authority, Q12's BUILD row and Q11's roster act are
+delivered as intents to `lead`/`pm`/the owning seats with the rulings above quoted in them, and one bounded supervised
+window is run to let the team act (Q17).
