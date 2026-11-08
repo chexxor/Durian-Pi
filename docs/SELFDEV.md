@@ -3234,3 +3234,20 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     **67 calls** carried a prompt larger than the default `reserveTokens = 16,384`, and **0** exceeded the verifier's
     24,576-token window — which is exactly why the failure mode is "summarization hit the token limit" rather than a
     provider 400.
+146. **Most compaction failures are not the window — they are the rig's own run cap.** Grouping the 426 failed
+    `pi.compaction` records by error message splits them cleanly (measured 21:4xZ, `./selfdev.sqlite`): **214**
+    `Summarization hit the token limit; the summary is incomplete` and **209**
+    `Summarization failed: spend_cap_exceeded (durig's own cap, out of budget under it - NOT the provider's):
+    verifier/openai/gpt-oss-120b projects $0.001384 and would cross DURIG_SPEND_CAP_RUN_USD $0.1000 (this process,
+    spent $0.098924). No request was sent and no ledger row was written.` The caps are **defaults, not operator
+    settings**: `durig.config.default.json` carries `DURIG_SPEND_CAP_CALL_USD = 0.05`, `DURIG_SPEND_CAP_RUN_USD = 0.10`,
+    `DURIG_SPEND_CAP_STORE_USD = 4.00`, and `durig.config.json` sets none of them. The lifetime ledger is $0.885818 —
+    nowhere near the $4 pool. So a long-lived broker process walks up to its $0.10 run cap, and from that point **every
+    compaction on every seat in that process is refused**: the window keeps growing and the seat can never settle. If
+    a seat's task does not finish, check the cap before blaming the model.
+147. **There is now one command that answers "is the milestone met?"**
+    `node docs/evidence/2026-11-08-context-window/milestone-check.mjs` — read-only, no model spend, broker-down safe.
+    It prints what the harness resolves per family, the headroom of each declared window, and the store's failure
+    census, then exits **0** only when the override reaches `settings.compaction`, every declared window can hold its
+    policy, and no truncated/refused compactions remain. As of this session it exits 1 with five named reasons. Do not
+    report "331 fixed" without running it.

@@ -40,6 +40,11 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    fine: `curl -H "Authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models` reports
    `qwen3.8-flash-next-q2_0`, `n_ctx: 204800`, matching `DURIG_LOCAL_CONTEXT`. Intent routed to `pm`
    (requestId `delegate-20261108-verifier-window`, log `INTENT delivered=1` at 21:12:11Z) — pitfall 142.
+8. **Half the compaction failures are the rig's own budget, not the window.** Grouping the 426 failed
+   `pi.compaction` records by error: **214** truncated summaries, **209** refused with
+   `spend_cap_exceeded … would cross DURIG_SPEND_CAP_RUN_USD $0.1000 (this process, spent $0.098924)`. The caps are
+   **defaults** (`0.05` call / `0.10` run / `4.00` store in `durig.config.default.json`; `durig.config.json` sets none),
+   and the lifetime ledger is $0.885818. Intent sent: `delegate-20261108-compaction-run-cap` — pitfall 146.
 4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
    inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
    deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
@@ -95,7 +100,10 @@ node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes   # a fre
 grep -c "delegate-20261108-clockin-hang" selfdev.sqlite.broker.log       # did pm receive the intent?
 git rev-parse --short main                             # expect cba0ef3f or newer
 node scripts/land.mjs item-5648 --changed-suite        # ONLY after #5787's re-cut exists
-node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5784 lands
+node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # THE gate: exit 0 only when the override
+                                                     #   resolves, every window holds its policy, and no truncated/refused
+                                                     #   compactions remain. Currently exit 1 with five named reasons.
+node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5785 lands
 ```
 
 **The landing pass, re-measured against current `main` (not against the main the branches were cut from):**
@@ -142,7 +150,7 @@ of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
 **Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
 anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
 
-**New traps this window** — `docs/SELFDEV.md` **130–145**: a spooled *read* intent makes `broker-serve --start`
+**New traps this window** — `docs/SELFDEV.md` **130–147**: a spooled *read* intent makes `broker-serve --start`
 refuse with `wake-not-acknowledged`; `--env-file` is not a flag that exists (pitfall 87's mechanism is gone, its
 substance stands); compaction failures are a record kind and the kind column is JSON-quoted; a broker past
 `--max-duration` keeps its heartbeat and stops passing while holding genlock slots; **the clock-in digest hangs
