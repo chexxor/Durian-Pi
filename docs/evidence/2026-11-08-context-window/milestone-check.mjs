@@ -3,6 +3,7 @@
 // One command, no model spend, broker-down safe. Exit 0 = the milestone is met; exit 1 = it is not, with the reason.
 // usage: node docs/evidence/2026-11-08-context-window/milestone-check.mjs [--db ./selfdev.sqlite]
 import { readFileSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -87,6 +88,30 @@ if (existsSync(DB)) {
   db.close();
 } else {
   console.log(`  no store at ${DB} — skipped (pass --db)`);
+}
+
+/* ---- and the other blocker: a seat whose turn SHAPE is refused before any window is reached ---- */
+console.log("== turn shape (tools/seat-turn-shape.mjs, read-only) ==");
+try {
+  const out = execFileSync(process.execPath, ["tools/seat-turn-shape.mjs", "--db", DB], { encoding: "utf8", timeout: 30000, stdio: ["ignore", "pipe", "ignore"] });
+  const seats = out.split("\n").filter((l) => l.startsWith("seat "));
+  const risk = [];
+  // pair each seat line with the "next send:" line that follows it
+  const lines = out.split("\n");
+  let current = null;
+  for (const l of lines) {
+    if (l.startsWith("seat ")) current = l.trim();
+    if (l.includes("next send:") && current) {
+      const v = l.split("next send:")[1].trim();
+      if (v.startsWith("AT RISK")) risk.push(current.split("  ")[0]);
+      current = null;
+    }
+  }
+  console.log(`  ${risk.length} of ${seats.length} seats cannot be spoken to right now: ${risk.join(", ") || "none"}`);
+  if (risk.length > 0) failures.push(`${risk.length} seats are AT RISK on turn shape — a strict alternating template refuses a user turn before any window limit, so no window sizing can make them complete work.`);
+} catch (e) {
+  console.log(`  shape probe failed: ${e.message}`);
+  failures.push("the shape instrument could not run, so the fleet's ability to be woken is unverified.");
 }
 
 console.log("");
