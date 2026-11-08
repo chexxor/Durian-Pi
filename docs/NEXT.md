@@ -24,6 +24,10 @@ pass is now blocked by **stale bases**, not by unverified work. `main` = `origin
    was spooled — pitfall 130), restarted 20:05Z: `INTENT delivered=8 dead=0 dup=0`, spool empty. In the 30 min
    window: **64 generations, 0 failed**. All-time generation outcomes (store, one query): 54,353 completed /
    16,589 failed / 333 aborted.
+4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
+   inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
+   deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
+   `.durig/clockin-deferred.txt` (`demo/clockin-digest.test.mjs` §8, `docs/runbooks/session-start-cost.md` §26–§28).
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
