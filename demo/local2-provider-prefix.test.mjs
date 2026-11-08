@@ -18,7 +18,12 @@
 //     implementation fails here;
 //   * the key inventory is generated per prefix and compared against `CONFIG_KEYS`, so a partially
 //     registered family (4 operational keys, price keys forgotten) is caught rather than discovered when
-//     a metered endpoint refuses an unpriced spec.
+//     a metered endpoint refuses an unpriced spec;
+//   * the model id is pinned to what the box actually advertises, AND the guard asserts the boundary it
+//     cannot cross: the provider layer passes the model string through verbatim, and the box reroutes an
+//     unknown id to whatever is loaded (measured 2026-11-08: a completion asked for
+//     `this-model-does-not-exist-abc123` returned `"model": "qwen3.8-flash-next-q2_0"`, `finish_reason:
+//     "stop"`). A stale id is invisible at the wire, so registration plus a pinned string is the only control.
 //
 // Fixture-supplied config only (ROADMAP 294): argv, env and the config file are pinned here; the host's
 // real `~/.config/durig/env` and `durig.config.json` are never read.
@@ -84,13 +89,14 @@ assert.ok(
 );
 
 // 3. THE REGISTERED DIRECTION, on the values the operator's LAN box actually serves (measured 2026-11-08:
-//    GET /v1/models serves `qwen3.8-flash-next-iq3_xxs`, /props n_ctx 131072, total_slots 4). A LAN host is
-//    METRED by endpoint (`src/providers/local.mjs:60-77`), so an unpriced spec is a REFUSAL — hence the
-//    declared zeros, priced 0 rather than unpriced.
+//    GET /v1/models serves `qwen3.8-flash-next-q2_0` with `meta.n_ctx` 131072 and
+//    `architecture.input_modalities ["text"]` — text-only; GET /props reports `total_slots` 4 and
+//    `modalities.vision` false). A LAN host is METRED by endpoint (`src/providers/local.mjs:60-77`), so an
+//    unpriced spec is a REFUSAL — hence the declared zeros, priced 0 rather than unpriced.
 const lan = {
 	...twoOnly,
 	[`${THIRD_PREFIX}BASE_URL`]: "http://192.168.1.52:8080/v1",
-	[`${THIRD_PREFIX}MODEL`]: "qwen3.8-flash-next-iq3_xxs",
+	[`${THIRD_PREFIX}MODEL`]: "qwen3.8-flash-next-q2_0",
 	[`${THIRD_PREFIX}CONTEXT`]: "131072",
 	[`${THIRD_PREFIX}MAX_TOKENS`]: "16384",
 	[`${THIRD_PREFIX}PRICE_USD_IN`]: "0",
@@ -113,7 +119,7 @@ assert.equal(third.id, "local2", "the provider id is derived from the prefix, no
 assert.equal(third.apiKeyEnv, "DURIG_LOCAL2_API_KEY", "each server keeps its OWN key variable");
 assert.equal(third.contextWindow, 131072, "the LAN box's declared window reaches the spec");
 assert.equal(third.maxTokens, 16384, "the output budget is per provider, not a constant");
-assert.equal(third.modelId, "qwen3.8-flash-next-iq3_xxs", "the served model id, not a declared guess");
+assert.equal(third.modelId, "qwen3.8-flash-next-q2_0", "the model id the box advertises, verbatim — a wrong id never errors at the wire, it reroutes");
 assert.equal(third.endpoint, "metered", "a LAN host is metered, not loopback — so it must be priced");
 assert.ok(third.price !== null && third.price !== undefined, "the declared zeros price the row");
 assert.match(String(third.priceSource), /DURIG_LOCAL2_PRICE_USD_IN/, "the price names its own source key");
@@ -143,7 +149,7 @@ assert.deepEqual(
 // 6. THE ROSTER DEPENDENCY: a seat whose model names the third provider gets ITS declared window.
 //    Without this, moving `qa2`/`security` to `local2/…` silently drops their window declaration.
 assert.equal(
-	declaredLocalWindow(specs, "local2/qwen3.8-flash-next-iq3_xxs"),
+	declaredLocalWindow(specs, "local2/qwen3.8-flash-next-q2_0"),
 	131072,
 	"declaredLocalWindow resolves the THIRD provider's window, not only the first two",
 );
@@ -160,6 +166,18 @@ assert.equal(
 
 // 7. A PREFIX WITH NO BASE URL builds nothing — "off unless the base URL names a server" is unchanged.
 assert.equal(localProviderSpec(lan, "DURIG_NOTHING_"), null, "an unknown prefix builds no spec");
+
+// 8. THE BOUNDARY THIS GUARD CANNOT CROSS, asserted so nobody trusts it further than it goes.
+//    `localProviderSpec` is pure config reading: it hands ANY model string through. Measured on the live box:
+//    a completion requested for `this-model-does-not-exist-abc123` returned 200 with `"model":
+//    "qwen3.8-flash-next-q2_0"` and `finish_reason: "stop"` — llama.cpp/Strata reroutes an unknown id to the
+//    loaded model. So a seat moved to the spare box with a stale id looks healthy forever. What protects a seat
+//    is (a) the prefix being registered and (b) the rig's model strings matching the registered specs — which
+//    is exactly what demo/local-model-pointer.test.mjs compares, and it reads LOCAL_PROVIDER_IDS, so this
+//    registration is what makes that guard able to judge a `local2/...` seat at all.
+const stale = localProviderSpec({ ...lan, [`${THIRD_PREFIX}MODEL`]: "qwen3.8-flash-next-iq3_s" }, THIRD_PREFIX);
+assert.equal(stale.modelId, "qwen3.8-flash-next-iq3_s", "the declared id passes through verbatim: the provider layer does not and cannot validate it against the server");
+assert.equal(stale.baseUrl, lan[`${THIRD_PREFIX}BASE_URL`], "the endpoint is the only thing the spec knows about the machine");
 
 console.log(
 	`LOCAL2 PROVIDER PREFIX PASS (2 specs ungated, 3 with the prefix configured; id derived to "local2"; local3 still false; ${
