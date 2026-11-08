@@ -70,6 +70,15 @@ if (existsSync(DB)) {
   const now = db.prepare("select count(*) n from tasks where kind=? and json_extract(record,'$.startedAt')>=?").get('"pi.compaction"', since).n;
   const nowFail = db.prepare("select count(*) n from tasks where kind=? and json_extract(record,'$.startedAt')>=? and record like ?").get('"pi.compaction"', since, "%hit the token limit%").n;
   console.log(`  last 60 min: ${now} compactions, ${nowFail} truncated`);
+  const day = Date.now() - 24 * 3600000;
+  const age = (pat) => db.prepare("select count(*) n, min(json_extract(record,'$.startedAt')) mn, max(json_extract(record,'$.startedAt')) mx from tasks where kind=? and record like ?").get('"pi.compaction"', pat);
+  const truncAll = age("%hit the token limit%");
+  const capAll = age("%spend_cap_exceeded%");
+  const trunc24 = db.prepare("select count(*) n from tasks where kind=? and record like ? and json_extract(record,'$.startedAt')>=?").get('"pi.compaction"', "%hit the token limit%", day).n;
+  const cap24 = db.prepare("select count(*) n from tasks where kind=? and record like ? and json_extract(record,'$.startedAt')>=?").get('"pi.compaction"', "%spend_cap_exceeded%", day).n;
+  console.log(`  truncations: ${truncAll.n} lifetime, first ${new Date(truncAll.mn).toISOString()}, last ${new Date(truncAll.mx).toISOString()}; ${trunc24} in the last 24 h`);
+  console.log(`  cap refusals: ${capAll.n} lifetime, first ${new Date(capAll.mn).toISOString()}, last ${new Date(capAll.mx).toISOString()}; ${cap24} in the last 24 h`);
+  if (trunc24 > 0) failures.push(`${trunc24} truncated summaries in the last 24 h — the window/policy mismatch is still live, not historical.`);
   db.close();
 } else {
   console.log(`  no store at ${DB} — skipped (pass --db)`);

@@ -89,3 +89,17 @@ calls with prompt > 24,576 (the verifier window): 0
 ```
 
 What that proves: no provider call is overflowing the window, so the overflow is the **compaction step itself** — the summariser is being handed more than the 8,192 tokens of headroom left after the 16,384-token reserve on a 24,576-token window. What it does not prove: how many of those 374 calls were compaction calls; the ledger does not label the caller.
+
+## 4. Which failure is live and which is episodic (time-boxed)
+
+`node docs/evidence/2026-11-08-context-window/milestone-check.mjs` now prints both, per category:
+
+| category | lifetime | first | last | last 24 h |
+|---|---|---|---|---|
+| truncated summaries (`hit the token limit`) | 214 | 2026-10-18T20:55:08Z | 2026-11-08T08:41:03Z | **6** |
+| refused by the run cap (`spend_cap_exceeded`) | 209 | 2026-11-07T08:50:25Z | 2026-11-07T10:34:40Z | **0** |
+
+Read it this way: the **cap starvation is a 104-minute burst from one broker process** and is not happening today;
+the **window/policy mismatch is chronic and still firing** (6 in the last day). A gate that reports only lifetime
+counts would let both hide. Acceptance for ROADMAP 331 is therefore: zero truncations in a rolling 24 h **and** the
+override resolving to `reserve=20480`.
