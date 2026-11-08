@@ -225,3 +225,16 @@ With the current defaults the verifier line is 36,384 > 24,576 — a seat on a 2
 20,000-token tail and still reserve for a summary. That is the number the impl seat should write into the per-family
 schedule; the gate prints it as `headroom` and `keepRecentTokens = N% of headroom` so a regression is visible in one
 command.
+
+## 8. Correction to §7: eleven of twelve seats are local-family, so this is not a "small window" problem
+
+Read `rig.selfdev.json` against `durig.config.json` (node one-liner, no store access):
+
+| family | seats | declared window | reserve + keepRecent | fits? | summariser output ceiling |
+|---|---|---|---|---|---|
+| `local/qwen3.8-flash-next-q2_0` | pm, impl, qa, qa2, lead, advocate, scribe, devtools, designer, security, architect (**11**) | 204,800 | 16,384 + 20,000 = 36,384 | **yes** | 13,107 (0.8 × 16,384, under `DURIG_LOCAL_MAX_TOKENS` 16,384) |
+| `verifier/openai/gpt-oss-120b` | auditor (**1**) | 24,576 | 36,384 | **no** | 6,000 (clamped by `DURIG_VERIFIER_MAX_TOKENS`) |
+
+So the **207 truncations on local seats cannot be explained by a window that is too small** — 36,384 fits inside 204,800 with room to spare. What those seats hit is the **summariser's output ceiling**: the harness sets `maxTokens = min(floor(0.8 * reserveTokens), model.maxTokens)` and treats `stopReason === "length"` as a failed compaction (`compaction.js:95`, `:301-303`). A long transcript produces a summary that runs to 13,107 tokens and is declared incomplete, so the compaction is discarded and the window keeps growing.
+
+**What that means for #5785:** nesting the override raises the local ceiling from 13,107 to 16,384 (a 25 % increase) — helpful but not sufficient. The durable fix is a summary budget that scales with the transcript being summarised, plus a retry with a smaller scope when the first attempt truncates. The auditor's own record shows both failure modes in one day: six consecutive truncations 08:29–08:41Z, then successes at 08:42Z and 18:55–18:58Z — the compaction sometimes lands, which is why "compaction is broken" is the wrong diagnosis and "compaction is unreliable at the margin" is the right one.
