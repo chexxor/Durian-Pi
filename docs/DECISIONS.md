@@ -10397,3 +10397,39 @@ number of slots. Consequence for the throughput ask: raising `DURIG_MAX_CONCURRE
 speed; the two levers that actually move throughput are (a) landing **#5648** so the idle LAN box (4 slots, 2
 connections) can carry seats, and (b) making each seat turn cheaper — which is the compaction/context work the team
 owns. Record both numbers with the load state, or the 5.28 s figure will be quoted as capacity it is not.
+
+## D239 — 2026-11-08T18:5xZ: the fleet runs, the queue is parked, and a wake body that names a tool no seat has is a throughput defect
+
+**Decision.** "Ensure the team is operating as expected" is answered with instruments, not vibes: per-seat
+completed/failed generations (`fleet-health.mjs`), the wake-reason census from the broker log, and the queue census.
+Three findings follow, each with the measurement attached.
+
+1. **The fleet is working, and its throughput is bounded by admission, not by slots.** Since 08:00Z: **216 completed
+   generations, 20 failed, 9 commits** across 12 seats. Failure classes: engine exit **-11** (llama crash under load),
+   "the engine stopped while this request waited; it was not sent", and **`auditor` 6 × `Compaction failed:
+   Summarization hit the token limit; the summary is incomplete`** — the verifier seat compacts against a slot shape it
+   cannot satisfy. Meanwhile **11 `pi.generation` rows were `running` against a box declaring `total_slots: 4`** while
+   `GET /status` said `queued: 0`. Admission is `DURIG_MAX_CONCURRENT_SEATS`, and it is inert for `local/*` until the
+   gate lands (**#5488**, re-cut as **#5736**, `item-5736` = `f4554164`, verified green on a current base by an
+   independent runner: `demo/local-slot-gate.test.mjs` exit 0, 11 assertions, suite 261/262).
+2. **A wake body that names a capability the seat lacks is a defect, not a wording nit.** `WAKE_CONTENT_PARKED`
+   (`src/driver.mjs:55`) says "Check `status` for which rows are parked"; the seat registry has ten tools and no `status`
+   (`src/rig.mjs:632–1327`: `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `hold_work`,
+   `release_work`, `revise_work`, `cancel_work`, `peek_queue`). Counted today: **174 parked wakes vs 72 claimable wakes**. `lead`'s own
+   reasoning: "It's the fifth repetition… I don't have a `status` tool." **#4607** fixed the wake that lied about
+   *work*; this one lies about *capability*. The failing-first demo writes itself: cross-check every tool name
+   mentioned in a wake body against the registry.
+3. **`main` is red for two reasons, and neither is a regression.** `node scripts/test.mjs --all --jobs 6` → **259/261**:
+   `demo/clockin-digest.test.mjs` (live digest **41,614 B** vs a 20,000 B budget — the whole excess is the 28 KB
+   deferred dump **#5398** replaces, so landing #5398 is the fix) and `demo/verifier-arm-probe.test.mjs` (**ROADMAP
+   294**, cause pinned: the demo scrubs only `API_KEY|SECRET|TOKEN$` from the environment while the probe reads
+   `durig.config.json` at the repo root, which on this host legitimately carries verifier prices; the tool already
+   supports `--config=PATH`, the demo does not pass it). **A `--suite` landing is therefore refused today** — the
+   landing pass must carry #5398 with it.
+4. **Recorded, not closed:** the operator's "re-evaluate whether we can afford to host a verifier model on localhost
+   again — don't let us forget" has **no queue row** (`SELECT … record LIKE '%localhost%verifier%'` → 0 rows). It is
+   carried here and in `docs/NEXT.md`, bounded by RTX 3090 **22,387/24,576 MiB (91 %)** with eleven generations in
+   flight. Minting the row is a seat act (`pm`), not a delegate act.
+
+**Why.** Every one of these is the same milestone question — *can the rig finish the work it admits* — and each answer
+came from a number, not from a wake count.
