@@ -110,3 +110,44 @@ names as the **auditor** seat (`grep -oE "SKIP <seat> reason=pending conv=[0-9]+
 (`DURIG_VERIFIER_MODEL = openai/gpt-oss-120b`, `DURIG_VERIFIER_CONTEXT = 24576`), clustered 08:29:17Z–08:41:03Z.
 That is the choke point: the seat whose job is to verify the team's work cannot compact its own context, so
 verification — the step that lets a task be marked complete — is the one that stalls.
+
+## 5. The exact shape of the fix, proven against the shipped harness
+
+`node_modules/@earendil-works/pi-durable/dist/harness/compaction.js:195-202` (vendored source:
+`vendor/pi-main/packages/durable/dist/harness/compaction.js:196`):
+
+```js
+export function compactionPolicy(settings, model) {
+    const { modelOverrides, ...policy } = settings.compaction;      // <-- inside `compaction`, not beside it
+    const override = modelOverrides?.[`${model.provider}/${model.modelId}`];
+    return { enabled: override?.enabled ?? policy.enabled, reserveTokens: override?.reserveTokens ?? policy.reserveTokens, ... };
+}
+```
+
+Run this and the difference is unambiguous — no source change, no model spend:
+
+```bash
+node -e 'const m=require("./node_modules/@earendil-works/pi-durable/dist/harness/compaction.js");
+const a=require("./node_modules/@earendil-works/pi-durable/dist/harness/agent.js");
+const D=a.DEFAULT_COMPACTION_POLICY; const model={provider:"local",modelId:"qwen3.8-flash-next-q2_0"};
+const nested  ={compaction:{...D,modelOverrides:{"local/qwen3.8-flash-next-q2_0":{reserveTokens:20480}}}};
+const sibling ={compaction:{...D},modelOverrides:{"local/qwen3.8-flash-next-q2_0":{reserveTokens:20480}}};
+console.log("NESTED ", m.compactionPolicy(nested,model));
+console.log("SIBLING", m.compactionPolicy(sibling,model));'
+```
+
+Output:
+
+```
+NESTED  { enabled: true, reserveTokens: 20480, keepRecentTokens: 20000, backgroundTokens: 32768 }
+SIBLING { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000, backgroundTokens: 32768 }
+```
+
+So #5785's change is: in `src/config.mjs:488`, put the layered map **inside** `out.compaction`
+(`out.compaction.modelOverrides = layered`) instead of `out.modelOverrides = layered`. One line, and the harness
+already implements the layering — there is nothing else to build for the override half.
+
+**What this does not settle:** the key. The harness matches on `${model.provider}/${model.modelId}`, so the config
+key must be exactly `local/qwen3.8-flash-next-q2_0`. `DURIG_COMPACTION_MODEL_OVERRIDES` currently has that spelling;
+if a family is renamed, the override silently does nothing — the same "set and ignored" class pitfall 146 warns
+about, and worth a load-time assertion rather than a silent miss.
