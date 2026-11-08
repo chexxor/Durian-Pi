@@ -103,3 +103,10 @@ Read it this way: the **cap starvation is a 104-minute burst from one broker pro
 the **window/policy mismatch is chronic and still firing** (6 in the last day). A gate that reports only lifetime
 counts would let both hide. Acceptance for ROADMAP 331 is therefore: zero truncations in a rolling 24 h **and** the
 override resolving to `reserve=20480`.
+
+**Where the live truncations are, exactly:** all 6 in the last 24 h are conversation **4936**, which the broker log
+names as the **auditor** seat (`grep -oE "SKIP <seat> reason=pending conv=[0-9]+" selfdev.sqlite.broker.log | sort -u`
+→ `SKIP auditor reason=pending conv=4936`), i.e. the verifier family
+(`DURIG_VERIFIER_MODEL = openai/gpt-oss-120b`, `DURIG_VERIFIER_CONTEXT = 24576`), clustered 08:29:17Z–08:41:03Z.
+That is the choke point: the seat whose job is to verify the team's work cannot compact its own context, so
+verification — the step that lets a task be marked complete — is the one that stalls.
