@@ -90,10 +90,10 @@ check(
 	"no surface re-declares its own isGitObject (a second predicate re-arms the drift)",
 	spawnSync("git", ["grep", "-c", "function isGitObject", "--", "src/secretdetect.mjs", "src/secretredact.mjs"], {
 		encoding: "utf8",
-	}).stdout
-		.trim()
+	}).stdout // no matches at all (exit 1, empty stdout) is the passing case
 		.split("\n")
-		.every((line) => line.endsWith(":0")),
+		.filter((line) => line.trim() !== "")
+		.length === 0,
 );
 
 /* ─── 2. THE MATRIX: the same token, the same verdict on both surfaces ────────── */

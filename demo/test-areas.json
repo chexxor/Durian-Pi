@@ -220,6 +220,7 @@
       "demo/seattools.test.mjs",
       "demo/secretdetect.test.mjs",
       "demo/secretredact.test.mjs",
+      "demo/sha-object-verdict.test.mjs",
       "demo/secrets.test.mjs",
       "demo/shared-cwd-read-verbs.test.mjs",
       "demo/shared-tree-on-main.test.mjs",
