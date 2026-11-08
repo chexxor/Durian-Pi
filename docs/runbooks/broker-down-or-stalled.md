@@ -90,6 +90,15 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   — this is the alarm. **Automatic recovery IS coming, and is not here yet:** an admission deadline
   exists (`admissionVerdict` / `ADMISSION_DEADLINE_MS`); once the reconciler consults it, a
   never-started submission is withdrawn without an operator. Until that lands, `resume` is the remedy.
+- **A brand-new broker can read `up` before it has done any work (#5698, re-issue of #4819).** `lastPassAt`
+  is the stamp of a COMPLETED pass. When the loop takes over a state file with no numeric `lastPassAt` it
+  used to seed it with `now()` — the ATTEMPT to start counted as progress — so a broker that throws on
+  every pass read `up` for one whole progress bound (default 300 s + 60 s margin) while doing nothing, and
+  `queue`/`watch`/`status` routed to it and hung for the full 120 s inside that window. It now stays `null`
+  until a pass completes, and `brokerHealth` says `degraded` with the reason `no pass has completed yet`.
+  **How to tell them apart:** `PASS-FAILED` lines in `<db>.broker.log` plus `"lastPassAt": null` in
+  `<db>.broker.json` = the broker never progressed, no matter how fresh the heartbeat is. Prove it:
+  `node demo/broker-progress-is-a-completed-pass.test.mjs` (exit 0).
   **Separate clause — the suppression-semantics fix:** a suppression-semantics fix is on a branch with
   its own landing entry and is not on main yet. When it lands it changes how a suppression is READ, not
   the recovery path — `resume` remains the remedy for a never-started submission.
