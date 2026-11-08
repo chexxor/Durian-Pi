@@ -3259,3 +3259,15 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     command (see `docs/evidence/2026-11-08-context-window/README.md` §5): nested -> `reserveTokens: 20480`, sibling ->
     `reserveTokens: 16384`. Before writing any "compaction is broken" claim, run that two-line comparison; it settles
     the question without touching a seat or spending a token.
+150. **`genlock` being empty is not proof that no generation is in flight.** Measured 22:06:57Z: `ls -1 selfdev.sqlite.genlock*` returned
+    **zero** files while the store showed `pi.generation` records created at 22:06:48.655Z (impl, conv 9) and
+    22:05:21.612Z (devtools, conv 4930). A seat's run can be live with no genlock slot held, so the runbook's "prove
+    genlock is empty before stopping" check is necessary but not sufficient. Before a hard stop, also require that no
+    `pi.generation` record has been created in the last ~2 minutes:
+    `node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 3").all())'`
+151. **The pass loop can stop while seats keep working.** `grep -c PASS-FAILED selfdev.sqlite.broker.log` = **23** today, each
+    `SessionFailed: Session failed after a storage error; close and reopen it cause=Error: database is locked errcode=5`.
+    The last successful pass was 21:26:06Z; after that the broker kept waking nothing while devtools and impl kept
+    generating for another 40 minutes. Consequences: no new queue rows get claimed, and spooled intents pile up
+    (`ls selfdev.sqlite.broker.inbox | wc -l`). This is the same lock that surfaces as `read queue: apply failed:
+    SqliteStorage is closed` on the read side (row #5807). It is a pass-loop failure, not a seat failure.
