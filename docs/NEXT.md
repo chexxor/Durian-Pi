@@ -41,8 +41,11 @@ failed summaries on the verifier seat), and the operator's intent for the fix is
 (requestId `delegate-20261108-context-window`). What it did NOT move: no branch landed, and #331's fix is still
 not in `src/config.mjs`.
 
-**Current item:** the re-cut pass. `item-5398` and `item-5648` must be re-cut onto current `main` by their author
-seat (`devtools`) before any landing; the compaction nesting fix is the row `pm` now holds.
+**Current item:** the re-cut pass, now **routed by `pm`** (rows created 20:0x–20:1xZ from the delegate's intent):
+**#5784** the ROADMAP 331 nesting fix, **#5787** `devtools` re-cut of the stale `item-5648` base, **#5791** the
+`local2` landing act (`impl`), **#5794** `qa` told to verify the **re-cut tip** and to name the sha it ran against,
+**#5796** the roster act re-issued after pm cancelled #5776 whose `blockedBy` named an id pm cancelled in the same
+pass (pitfall 128's shape, self-caught). `item-5398` and `item-5648` cannot land until their re-cuts exist.
 
 **Exact next command** (broker resident, ~70 s for the state read):
 
@@ -50,7 +53,8 @@ seat (`devtools`) before any landing; the compaction nesting fix is the row `pm`
 cd /home/chexxor/Git/Durian-Pi
 DURIG_DB=./selfdev.sqlite node cli.mjs status          # attention + non-terminal work, broker-down safe
 node scripts/test.mjs --all --jobs 6                   # 261/262 on main; only verifier-arm-probe red
-node scripts/land.mjs item-5398 item-5648 --changed-suite   # ONLY after the re-cuts exist
+node scripts/land.mjs item-5398 item-5648 --changed-suite   # ONLY after the re-cuts exist (#5787 and its siblings)
+node .spike/delegate/context-window-health.mjs             # did the compaction failure count stop growing?
 ```
 
 **The landing pass, re-measured against current `main` (not against the main the branches were cut from):**
@@ -58,7 +62,7 @@ node scripts/land.mjs item-5398 item-5648 --changed-suite   # ONLY after the re-
 | row | branch | tip | merge-tree vs `main` | note |
 |---|---|---|---|---|
 | **#5736** | `item-5736` | `ef5613ea` | **LANDED** — `git rev-list --count main..item-5736` = 0 | the `DURIG_MAX_CONCURRENT_SEATS` gate for `local/*` is on `main` via `4efce137` |
-| **#5398** | `item-5398` | `6d5c126d` | **CONFLICT** (docs/NEXT.md), base stale (`merge-base --is-ancestor main item-5398` exit 1) | the defect it fixes is live: `node scripts/clockin.mjs` prints "digest is 41,439 B, over its 20,000 B budget" and **exits 0** |
+| **#5398** | `item-5398` | `6d5c126d` | **CONFLICT** (docs/NEXT.md), base stale (`merge-base --is-ancestor main item-5398` exit 1) — re-cut needed; no row routes it yet (`merge-base --is-ancestor main item-5398` exit 1) | the defect it fixes is live: `node scripts/clockin.mjs` prints "digest is 41,439 B, over its 20,000 B budget" and **exits 0** |
 | **#5648** | `item-5648` | `8fb668ec` | **CONFLICT** (demo/test-areas.json), base stale | `grep -n "LOCAL2" src/config.mjs` on `main` → **no hits**; the registration is not there |
 | **#5488** | `item-5488` | `ade0691a` | do **not** land | forks at `7a1b80e2`, renders D234's docs as deletions; #5736 is its current-base re-cut |
 
