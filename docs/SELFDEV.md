@@ -3033,6 +3033,9 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     asking "what is in the queue?" burn a whole turn to a timeout; `scripts/clockin.mjs` fails mid-window for the same
     reason (its `health` read); and there is no store-side escape, because the newest `durig.queue` revision is
     **5,819 B** against **5,661** rows in the store (pitfall 105 holds — one multi-id `show` is the only read).
+    The fourth window (03:00:18Z, bound 600 s) overran by less — **15.0 min** — with its passes still flowing
+    (`ms` 87–163), which is the discriminator: a **frozen `lastPassAt`** is this defect, a **moving `lastPassAt` with
+    `woke=-` on every line** is pitfall 121.
     Recovery when you must end such a window: `kill <pid from broker.json>` (never `pkill -f`, pitfall 49) →
     `cli.mjs resume` (settles `placed`/`queued` submissions) → confirm `broker.json` is gone.
 
@@ -3056,3 +3059,27 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     Summing `cost_usd_usd`/`costUsd` (plausible names) returned `0.00000` for 91 calls; the real field is **`usd`**:
     this session = **91 calls, $0.05703**, store cumulative **$0.762695** over 1,640 rows. Cross-check the total
     against a prior recorded figure (D233 recorded $0.705665) so a zero can't pass as a cheap session.
+
+120. **`tools/broker-serve.mjs --status` prints live credential VALUES, and it is the first command every recovery
+    runbook names — redact before you paste.** Reproduced again at 03:1xZ: the report ends with
+    `env: {"DURIG_DB":…,"DURIG_LOCAL_API_KEY":"sk-…","DURIG_VERIFIER_API_KEY":"…"}`. This is already registered as
+    **docs/ROADMAP.md 295** (cause pinned at `tools/broker-serve.mjs:467-471`, where `envNotes` filters
+    `/^DURIG_(LOCAL|VERIFIER)_/` and that family now includes `*_API_KEY`, `src/providers/local.mjs:88`) — so do not
+    re-derive it, and do not paste the output into a doc, a report, or a row. If you must capture it, filter it in the
+    same command: `… --status | sed -E 's/"(DURIG_[A-Z0-9_]*KEY)":"[^"]*"/\1:"«redacted»"/g'`. Scope re-checked after
+    this occurrence: `grep -rInE "<the two key values>" --include='*.md' --include='*.mjs' --include='*.json' .` → the
+    only hits are ROADMAP 295's own **elided** example, in the live tree and in item worktrees; nothing else carries a
+    value. Rotation is the operator's call, not a cleanup (ROADMAP 295, D231 declined rotation once).
+
+121. **A `claimed` row does not wake a seat: after a kill+`resume`, the fleet idles with `woke=-` on every pass.**
+    Observed in the 03:00:18Z window (bound 600 s): **351 passes, every one `PASS N ms=… woke=-`**, zero generations,
+    while 10 rows sat `claimed` and 35 `queued`. Nothing is broken — the broker wakes a seat when a **submission or an
+    intent** lands for it, and killing a window mid-turn consumes the intents that were driving those rows. So an
+    idle-fleet window is not a stall to debug, it is a delivery problem, and the fix is a 3-line intent, spooled while
+    the broker is **down** and applied on the next `--start`:
+    `DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --body-file <path> --request-id <fresh-uuid>` → the file sits in
+    `<db>.broker.inbox/` and `--status` prints it with its age (`node intent.mjs --help` lists the ops: message, stop,
+    reset, compact, pause, unpause, read, configure — **there is no `wake` op**, and `cli.mjs` has no `wake` verb
+    either: `grep -oE '"(wake|nudge|ping)"' cli.mjs` → no hit). Leaving a spooled intent in the inbox across a session
+    boundary is safe and is the cheapest way to hand the next session a moving fleet — but say so in `docs/NEXT.md`, or
+    the next session reads an unexplained inbox file as a fault.

@@ -10223,5 +10223,10 @@ answers `{"ok":false,"error":"read queue-census: timed out awaiting the broker's
 `scripts/clockin.mjs` fails mid-window (its `health` read times out). And there is no way around it through the store:
 the newest `durig.queue` revision holds **5,819 B** while the store has **5,661** rows, so pitfall 105's "no SQL
 shortcut for item state" is a property, not a missing tool. Scribe filed the gap as **#5640**. This is the mechanism
-behind "the windows are being spent, not the work": 91 metered calls, $0.05703, and 3 commits across three windows
-that spent 4.4 hours of wall clock inside passes.
+behind "the windows are being spent, not the work": **111 metered calls, $0.06364** across four windows (00:29:45Z,
+01:43:18Z, 02:26:55Z, 03:00:18Z) whose **broker wall clock was 155.3 min against 75 min of nominal `--max-duration`
+bound — a 2.07× overrun** (per window 72.2/30, 41.9/20, 26.2/15, 15.0/10 min) — and they produced 4 commits
+(D234, #5488, #5398 ×2, this record). The last window is its own evidence: **351 passes, `woke=-` on every one**,
+zero generations, with 10 rows `claimed` and 35 `queued` — a `claimed` row does not wake a seat, so an idle fleet after
+a kill+`resume` is a delivery problem, and the cheap fix is an intent spooled while the broker is **down** and applied
+on the next `--start` (pitfall 121).

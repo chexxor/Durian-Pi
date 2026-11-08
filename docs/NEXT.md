@@ -27,7 +27,10 @@ session is a **landing pass**, not another build: land **#5488** then **#5398**,
 #5306/#5309/#5310 → #5569** (`impl`, the ROADMAP-331 landing entry).
 
 **Current item:** the landing pass above, owned by `lead` (row **#5619/#5624** carry the landing list; qa holds
-**#5641** to verify #5488 independently; my numbers are in §A).
+**#5641** to verify #5488 independently; my numbers are in §A). **Two intents are already spooled for this** — to `lead`
+and `impl`, written while the broker was down, sitting in `selfdev.sqlite.broker.inbox/` (their body:
+`.spike/delegate-20261108h/n9-closing-lead-land-now.md`); the next `--start` delivers them. That inbox file is not a
+fault, and it is the reason the closing window woke nobody (pitfall 121: a `claimed` row never wakes a seat).
 
 **Blocker:** none for the landing pass itself — both fixes are green and `main` is reachable. What is blocked is the
 rest of the chain: **cap → 3 waits on #5488 landing**; **#5608** (two seats onto `local2`) waits on **#5605** landing;
@@ -114,19 +117,26 @@ questions — **#4976** pm, **#4354** impl, **#3350** qa, **#4881** lead, **#483
 Also waiting on a `lead`/`pm` act: **#5617** (promote the provider-slot probe out of gitignored `.spike/` into
 `tools/`), and the landing list rows **#5619/#5624**.
 
-**(E) TRAPS NEW THIS SESSION** — `docs/SELFDEV.md` **114–119** (see (C) for the read deadlock): **`cli.mjs send` is
+**(E) TRAPS NEW THIS SESSION** — `docs/SELFDEV.md` **114–121** (see (C) for the read deadlock): **`cli.mjs send` is
 deprecated and refuses on this rig** (`spend: catalog-refused … $14 exposure vs a $4 cap`); the route is
 `node intent.mjs <seat> --body-file <path>` (pitfall 114). The clock-in digest **does** work with the broker down
-(`43,967 B`, exit 0) — D234 (4)'s "blocked, needs a broker" does not reproduce (pitfall 115). Two delegate probes
-live in gitignored `.spike/` and are lost unless promoted: `digest-scale-probe.mjs` (calls the exported
+(`43,967 B`, exit 0) — D234 (4)'s "blocked, needs a broker" does not reproduce (pitfall 115). **`broker-serve.mjs
+--status` prints live credential VALUES** — already **ROADMAP 295**, redact in the same command before any paste
+(pitfall 120). And a closing idle window is a delivery problem, not a stall: **351 passes, `woke=-` on every one**,
+because a `claimed` row does not wake a seat — spool an intent instead (pitfall 121). Two delegate probes live in
+gitignored `.spike/` and are lost unless promoted: `digest-scale-probe.mjs` (calls the exported
 `renderDigest`/`deferredTerm` at a 365-row backlog: **24,107 B old-shape vs 856 B new-shape**, <1 s, no broker) and
 `queue-state.mjs` (proves pitfall 105 the other way).
 
-**(F) STATE AT CUT** — store `{done 3981, cancelled 847, held 426, deferred 362, claimed 10, queued 35}` over 5,661
-rows; **worktrees 74 → 85**, **branches 77 → 86**, `unmerged=23`; no broker running (`resume` settled the interrupted
-turns, `running 0`); `selfdev.sqlite.broker.inbox` empty, `inbox.error` 96 (all `apply failed: SqliteStorage is
-closed`, all pre-existing). Money: **91 metered calls, $0.05703** this session, store cumulative **$0.762695** — all
-of it `auditor` on the metered verifier; every seat runs free on the local box. The three windows produced
-**1 commit (D234) + 1 commit (#5488) + 2 commits (#5398)** across 91 metered calls; the honest read is that the
-windows are being spent, not the work — which is what (C) costs. Full history of this pointer, verbatim:
-[docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
+**(F) STATE AT CUT** — store **5,685 rows** `{done 3995, cancelled 850, held 431, deferred 358, claimed 13,
+queued 38}` (session start: `{done 3957, cancelled 842, held 422, deferred 365, claimed 11, queued 7}` — so **+38 done,
+−7 deferred, +31 queued**, the residue ruling working); **87 worktrees, 90 branches, `unmerged=23`** (session start: 74
+worktrees, 77 branches); no broker
+running (`resume` settled the interrupted turns, `running 0`); `selfdev.sqlite.broker.inbox` holds **3** files — the 2
+spooled landing intents above and one stale unanswered `op=read from=cli` left by an interrupted turn (the (C) defect,
+in file form), `inbox.error` 96 (all `apply failed: SqliteStorage is closed`, all pre-existing). Money: **111 metered
+calls, $0.06364** this session (4
+windows), store cumulative **$0.769304** over 1,660 ledger rows — all of it `auditor` on the metered verifier; every
+seat runs free on the local box. The four windows produced **1 commit (D234) + 1 (#5488) + 2 (#5398) + 2 (this
+record)**; the honest read is that the windows are being spent, not the work — which is what (C) costs. Full history
+of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
