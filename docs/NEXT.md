@@ -17,7 +17,10 @@ and **#5398** (`item-5398` = `9ae25f09`, digest **43,967 B → 15,117 B on the l
 `c047b767`. The N8 pointer moved **verbatim** to [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md) in this cut (header + pointer,
 145 lines, 13,487 B, sha256[12] `c87865d86f5b`; the pointer text is byte-identical in the archive tail.) The live file
 is a pointer, cap 200 lines (`demo/next-pointer.test.mjs`) **and ≈17 KB** — the digest cap is bytes, not lines
-(`demo/clockin-digest.test.mjs`, `docs/runbooks/session-start-cost.md` §19/§27).
+(`demo/clockin-digest.test.mjs`, `docs/runbooks/session-start-cost.md` §19, §26–§28). **#5398 is landed**: the deferred
+list is now **aggregated** rather than line-per-row — measured **40,161 B → 15,013 B** on a snapshot of the live store
+(5,636 queue rows, 365 deferred, 9 seats), ~11 s to re-run, and **over budget is exit 1**, with the ids greppable at
+`.durig/clockin-deferred.txt`.
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
