@@ -91,6 +91,13 @@ not family independence. `8` concurrent remains the operator's call.
 verifier model on localhost again. Don't let us forget that we want to do that."* Still **no queue row** for it;
 minting it is a seat act. Bounding number: RTX 3090 22,387/24,576 MiB (91 %) with eleven generations in flight.
 
+**Broker posture at clock-out (measured 20:2xZ):** resident pid **3316329**, started 20:04:41Z with
+`--max-duration 600`. Its last logged `PASS` is 20:11:27Z yet generations are still being created (newest
+`pi.generation` id 406503 at 20:28:40Z, 3 slots held) — the ROADMAP 303 linger is *not* idle here, so
+**do not kill it**; `serve --stop` correctly refused ("did not exit within the stop grace") while generations
+were in flight. Before any landing, run `node tools/broker-serve.mjs --status` and prove the genlock is empty
+of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
+
 **Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
 anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
 
