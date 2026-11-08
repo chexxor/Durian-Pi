@@ -3127,3 +3127,45 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
 129. **Engine exit -11 shows up as a seat-level `last_run_failed`, not a broker error.** `cli.mjs status` attention
     list carried `qa2` and `architect`: `model_error: the engine stopped unexpectedly (exit code -11); the next request
     restarts it`. Read it under load: 3090 at 22,387/24,576 MiB with eleven concurrent generations.
+
+## Operational pitfalls (2026-11-08T20:1xZ, delegate session N12 — the compaction override that never reaches the harness, and three instrument traps found while measuring it; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+130. **A spooled *read* intent makes the next `broker-serve --start` refuse.** Measured 19:4xZ: `--start` printed
+    `BLOCK wake-not-acknowledged: a start delivers 1 intent(s) to ?` and exited `START REFUSED`. The single spool
+    file was `{"op":"read","view":"queue-census","from":"cli"}` — a viewer's health request, not work (pitfall 86
+    already says a dead letter is not a refused operator intent; the same reading applies to the pending set).
+    So **every `cli.mjs status`/`queue` call taken while the broker is down guarantees a refusal on the next start.**
+    Remedy, measured: pass `--yes-pm-wakes`; the broker then started and logged `INTENT delivered=8 dead=0 dup=0`.
+    Do not "clean" the spool by hand.
+131. **`--env-file` is not a flag that exists.** `grep -rn "env-file|envFile" tools/*.mjs cli.mjs src/*.mjs` →
+    **0 hits**; `node tools/broker-serve.mjs --status --env-file="$HOME/.config/durig/env"` prints the usage block
+    and reports nothing. Pitfall 87's *substance* is right and its *mechanism* is dead: the working posture is shell
+    sourcing — `set -a; . "$HOME/.config/durig/env"; set +a; node tools/broker-serve.mjs --status` →
+    **findings (0 blocking, 3 noted)**; un-sourced → 4 blocking provider findings that are artifacts of an un-keyed
+    shell. Report the pair, never one.
+132. **Compaction failure is a record kind, not a log line, and the kind column is JSON-quoted.** `select kind,
+    count(*) from tasks group by kind` → `"pi.generation"` 71,277 · `"pi.tool"` 53,301 · `"pi.compaction"` 2,323.
+    `where kind='durig.queue'` matches **nothing** because the column stores `"durig.queue"` with the quotes. Per
+    outcome: 1,897 completed, **426 failed**, of which **240** carry the exact text "Summarization hit the token
+    limit; the summary is incomplete", clustered on conversation 4936 (`auditor`, verifier family,
+    `DURIG_VERIFIER_CONTEXT = 24576`). The mechanism, measured with pi-durable's own resolver
+    (`node_modules/@earendil-works/pi-durable/dist/harness/compaction.js:195 compactionPolicy`, fed the object
+    `cli.mjs:516` hands `Harness.open`): `src/config.mjs:488` returns `{modelOverrides}` with **no `compaction`
+    key**, `agent.js:47` merges only `settings?.compaction`, so `DURIG_COMPACTION_MODEL_OVERRIDES` is dropped and
+    every seat resolves reserve 16384 / keepRecent 20000 — a 24,576-token window with 8,192 tokens of headroom and a
+    20,000-token keep budget. Probe: `.spike/delegate/compaction-policy-probe.mjs` (promote it with the fix).
+133. **`done` rows pile up worktrees because npm's `.bin` symlinks trip the cleanup guard.** `broker-serve --status`
+    printed, verbatim: `complete_work: workspace cleanup for #5740 failed: refusing to remove worktree
+    /home/chexxor/Git/Durian-Pi/item-5740: junction/symlink detected at .../item-5740/node_modules/.bin/anthropic-ai-sdk
+    -> ../@anthropic-ai/sdk/bin/cli`. Consequence measured after one day of normal operation: **102 `item-*/`
+    directories at the repo root, 113 registered worktrees**. The lander's stray test is registration-based, not
+    name-based, so this is NOT a landing block (`stray_count = 0` here) — but it is a growing disk and inventory
+    cost nobody sees in `status`, and `git status` never mentions any of it because `/item-*/` is gitignored.
+134. **A broker past `--max-duration` keeps the heartbeat, stops passing, and still holds genlock slots.** Started
+    19:43:27Z with `--max-duration 240`; at 19:59Z `broker.json` had a fresh `heartbeatAt` and a `lastPassAt` frozen
+    at 19:47:22, three `selfdev.sqlite.genlock.*` files naming pid 3279083, and `select ... where
+    json_extract(record,'$.state.status')='running'` returning **0 rows** — no generation was in flight. `serve
+    --stop` returned `"stopped": false … no forced kill`. The runbook's remedy (ROADMAP 303) applies only after
+    you have *proven* the genlock is empty of live generations: check the store, then `kill <pid>`. Reading the
+    genlock files alone says "a generation is in flight" and would make a delegate wait for work that does not
+    exist — and `scripts/land.mjs` refuses on exactly that signal, so this signature silently blocks landings.
