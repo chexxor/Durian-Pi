@@ -6,7 +6,7 @@ precondition: "broker-stopped"
 last_verified: unverified
 verified_by: delegate
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
-evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303."
+evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after 23 `PASS-FAILED … database is locked errcode=5`. Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
 check_rule: null
 ---
 # Broker down or stalled
@@ -267,3 +267,26 @@ in `rig.selfdev.json` names `C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801` 
 `up --refresh --dry-run` reports `changes:{}` for all 12 seats because the rig file itself carries it — ROADMAP 210),
 and 3 tracked files are modified in the live tree that a woken seat would edit (F12/F23). Full evidence:
 `docs/reviews/delivery-channel-linux-2026-10-28.md`.
+
+2026-11-08T22:12Z (delegate, **Linux Fedora 45**, kernel `7.2.15-300.fc45.x86_64`, `node v24.22.1`): **the silent
+variant — reads hang with 0 bytes and no error text at all.** `node docs/evidence/2026-11-08-context-window/read-path-probe.mjs
+--n=2 --timeout=8` printed `broker: degraded pid=3521203 heartbeat 17s ago last pass 2757s ago`, `spool: 21 pending
+intent(s) … 56 DEAD-LETTER(s)`, then `read 1: 8009 ms, 0 bytes, HUNG (killed at cap)` and `read 2: 8009 ms, 0 bytes,
+HUNG (killed at cap)` — while a direct read-only sqlite query in the same minute answered (128,248 tasks). Eight
+concurrent `cli.mjs queue --json --no-body` at a 25 s cap all exited 124 with 0 bytes. No `read health: timed out`
+message appeared, so this reads as an empty queue.
+
+**Why:** `src/readclient.mjs:106-111` routes every read to the broker when one is alive
+(`if (brokerAliveFor(dbPath)) return await readViaBroker(...)`). The pass loop had not run since 21:26:06.898Z after
+23 `PASS-FAILED SessionFailed: Session failed after a storage error … errcode=5 errstr=database is locked` entries.
+The run loop was still alive — conv 9 (impl) made 58 generations in 10 minutes, last at 22:12:19Z — so the fleet
+looked busy while being unable to read anything.
+
+**Two checks that this runbook did not have before, do them before naming a cause:**
+```bash
+node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8
+node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 4").all())'
+```
+**And the correction to the `genlock` rule above:** an empty `ls -1 <db>.genlock*` is **not** proof no generation is in
+flight — measured empty at 22:06:57Z while a generation record was created at 22:06:48Z. Require both: no genlock
+slots **and** no `pi.generation` record in the last two minutes. Otherwise a hard stop aborts live seat runs.
