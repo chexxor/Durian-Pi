@@ -3109,8 +3109,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
 ## Operational pitfalls (2026-11-08T08:4xZ, delegate session N11 — the fleet is awake but 96 % of the queue is parked, and the wake body lies about capability; host: Linux, Fedora Linux 45, 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
 
 126. **"Check `status`" is not an instruction a seat can follow.** `WAKE_CONTENT_PARKED` (`src/driver.mjs:55`) tells a
-    parked seat to check `status`; the seat registry has only `claim_work`, `peek_queue`, `release_work`,
-    `resume_work`. `lead` notices it in its own reasoning ("It's the fifth repetition… I don't have a `status` tool").
+    parked seat to check `status`; the seat registry has ten tools and no `status` (`src/rig.mjs:632–1327`:
+    `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `hold_work`, `release_work`,
+    `revise_work`, `cancel_work`, `peek_queue`). `lead` notices it in its own reasoning ("It's the fifth repetition… I
+    don't have a `status` tool").
     Count the waste, don't guess it: `SELECT count(*) FROM entries WHERE record LIKE '%there is nothing claimable for
     you%'` — **174 parked wakes vs 72 claimable wakes** in one afternoon. #4607 fixed the wake that lied about *work*;
     this one lies about *capability*.

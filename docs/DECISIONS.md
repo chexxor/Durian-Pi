@@ -10413,8 +10413,9 @@ Three findings follow, each with the measurement attached.
    gate lands (**#5488**, re-cut as **#5736**, `item-5736` = `f4554164`, verified green on a current base by an
    independent runner: `demo/local-slot-gate.test.mjs` exit 0, 11 assertions, suite 261/262).
 2. **A wake body that names a capability the seat lacks is a defect, not a wording nit.** `WAKE_CONTENT_PARKED`
-   (`src/driver.mjs:55`) says "Check `status` for which rows are parked"; the seat registry has only `claim_work`,
-   `peek_queue`, `release_work`, `resume_work`. Counted today: **174 parked wakes vs 72 claimable wakes**. `lead`'s own
+   (`src/driver.mjs:55`) says "Check `status` for which rows are parked"; the seat registry has ten tools and no `status`
+   (`src/rig.mjs:632–1327`: `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `hold_work`,
+   `release_work`, `revise_work`, `cancel_work`, `peek_queue`). Counted today: **174 parked wakes vs 72 claimable wakes**. `lead`'s own
    reasoning: "It's the fifth repetition… I don't have a `status` tool." **#4607** fixed the wake that lied about
    *work*; this one lies about *capability*. The failing-first demo writes itself: cross-check every tool name
    mentioned in a wake body against the registry.
