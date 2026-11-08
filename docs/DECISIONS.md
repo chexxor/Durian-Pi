@@ -10424,7 +10424,9 @@ one field, reversible, and preserves the informative wake #4607 exists to delive
 `peek_queue` call away from refreshing it, and the wake would have carried no new information anyway. Rejected:
 the unbounded alternative, which spends a seat turn every 30 s per parked seat, contends with the single
 generation slot under the shipped `DURIG_MAX_CONCURRENT_SEATS: 1`, erodes the meaning of a wake, and never
-converges. Suppression must be legible: `PARKED-WAKE seat=<n> reason=<set-changed|deduped>`. Release still wakes,
+converges. Suppression must be legible: `PARKED-WAKE seat=<n> reason=<set-changed|deduped>`, and the existing
+`WAKE ${name}` line (`src/broker.mjs:1798`) must carry `reason=<queued|stalled-claim|parked>` — today it does not,
+so the parked-vs-work split is not measurable from the log and the defect has to be argued from prose. Release still wakes,
 because `held → queued` is a wake condition; a parked row whose gate cleared but nobody released remains invisible
 — that is the attention-kind gap, deliberately not solved here. The parked wake body must also stop telling the
 seat to "check `status`", a CLI verb no seat tool provides and which the cwd guard makes unreachable from a

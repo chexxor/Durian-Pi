@@ -63,6 +63,19 @@ nothing claimable is the probe's 30 s cadence multiplied by real seats. The `sta
 the same shape because the seat's own activity keeps a submission in flight; the parked branch does, because the
 wake is the only activity.
 
+**The fleet cannot currently count this.** `src/broker.mjs:1798` logs `WAKE ${name}` with no reason, so the
+parked-vs-work split pm quotes (**174 parked vs 72 work** wakes since entry 400000) is recoverable only by reading
+conversation bodies. That is a defect in its own right: no acceptance probe for this fix can be a log grep until
+the line carries the branch. **Fold into #5741:** log `WAKE <seat> reason=<queued|stalled-claim|parked>` and a
+`PARKED-WAKE seat=<n> reason=<set-changed|deduped>` suppression line.
+
+**The wake body names a tool no seat has — verified against the registry, not from the incident report.** Seat
+tools are defined in `src/rig.mjs` at lines 632, 768, 932, 1064, 1163, 1190, 1223, 1250, 1300, 1327: `send_work`,
+`claim_work`, `complete_work`, `defer_work`, `resume_work`, `hold_work`, `release_work`, `revise_work`,
+`cancel_work`, `peek_queue`. There is no `status`. So `src/driver.mjs:54`'s "Check `status` for which rows are
+parked" is not executable by a seat, and the comment above it ("the seat learns which rows from `status`") is
+wrong for the same reason.
+
 The earlier "~5 in 120 s" figure in #5729 was a derivation from the cooldown, not a measurement. The measured
 number is **4 in 120 s**, and it should be quoted as such wherever the defect is cited.
 
@@ -147,6 +160,12 @@ The loop is closed by dedup alone, so nothing here requires redefining wake-rele
 its own wakes. Making submission commits non-wake-relevant would be a change to wake semantics and to the
 general revisit gap — that is a **lead** ruling, not a design detail, and it is deliberately not decided here. If
 dedup turns out insufficient and the semantics must change, route it to lead before implementing.
+
+**Relationship to #5438** (still held, gated on #2712): that registration argued wake selection should use the
+same `workable` predicate claim uses. This ruling is the minimal cut that does not wait for that axis — parked rows
+are by definition not workable, so the defect is not that they wake at all but that they wake *repeatedly with no
+change*. If #2712's axis lands, the dedup becomes the floor it needs; if it never lands, the loop is still closed
+here.
 
 ## 7. Suite evidence for this change
 
