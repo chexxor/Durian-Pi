@@ -36,6 +36,19 @@ ordered first. Exact next command: `node scripts/clockin.mjs | wc -c`, against
 `deferredTo:"human"` after two supervisor sweeps (cause and repair in **B**); and the capacity change the operator asked
 for is gated by **#5488**, which has not landed.
 
+**(RULED at 2026-11-08T00:3xZ — do not re-ask these four; the record is D234 in
+[docs/DECISIONS.md](DECISIONS.md), pointer-only here).** **Push grant:** granted, and **consumed** by
+`git push origin main` = **`7a1b80e2..c047b767`** (5 doc paths, credential screen 0 hits) — a fresh grant is needed for
+anything new. **Parked-row residue:** the `by:"supervisor"` sweep rows from the planned server maintenance are
+**answerable by that one ruling** — each **owning seat** calls `resume_work(<id>)`; only the **nine** real operator
+questions stay open, and **nothing in the ruling answers them** (publish carrier: **#5598**, gated on **#5594**).
+**Capacity:** land **#5488** first, THEN set the cap to the **3** measured slots (`GET /props` at 00:26Z:
+`total_slots: 3`, `n_ctx 204800`, `qwen3.8-flash-next-iq3_s`); the cap value is **closed until #5488 lands**; the third
+registered prefix `DURIG_LOCAL2_*` is **approved as a row** (three envelopes spooled 00:5xZ, deliver on the next
+`--start`). **#5398 acceptance = BOTH bars:** `node scripts/clockin.mjs | wc -c` ≤ 20,000 B on the LIVE store
+(**44,102 B at 00:26Z**, grown from 40,404 B — the delegate's own re-measure was BLOCKED by a down broker, exit 1,
+so treat it as session-measured) **and** a demo that goes **RED** on a fixture with **≥150** `deferredTo:"human"` rows.
+
 **(0) RUN FIRST** — the four reads, in order, before touching anything:
 
 ```bash
