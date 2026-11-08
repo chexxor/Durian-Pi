@@ -3320,3 +3320,8 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
 160. **`--max-duration` is not a kill switch.** A broker started with `--max-duration 1800` was still running
     (`ps -o etime` → `02:05:25`) because duration, like the `.stop` file, is honoured only at a pass boundary
     (`src/broker.mjs:1651`). With a dead pass loop only SIGTERM/SIGINT stops it, and that aborts live seat runs.
+161. **A test can pin a bug.** `demo/config.test.mjs:333-341` asserts `compactionSettings()` returns
+    `{ modelOverrides: … }` as a **sibling** of `compaction`, while pi-durable reads it only from
+    `settings.compaction.modelOverrides` (`compaction.js:196-197`; `agent.js` mentions it nowhere). Fixing
+    `src/config.mjs:488` alone makes that test red. When a setting "silently does nothing", read the test that
+    asserts its shape before blaming the consumer.

@@ -342,3 +342,28 @@ contending for the store, so the 23 `PASS-FAILED … database is locked errcode=
 against its own second connection. `ps -o etime -p 3521203` also shows **02:05:25** elapsed on a broker started with
 `--max-duration 1800` — the limit is honoured only at a pass boundary, exactly like the `.stop` file
 (`src/broker.mjs:1651`), so a stalled pass loop makes the broker unkillable by design.
+
+## 13. Why the override never reached the harness — and why a config-only fix will fail the suite
+
+Three reads, no inference:
+
+```
+src/config.mjs:488        if (Object.keys(layered).length > 0) out.modelOverrides = layered;
+src/config.mjs:430        @returns {{compaction?: object, modelOverrides?: Record<string, object>}}
+pi-durable compaction.js:196   const { modelOverrides, ...policy } = settings.compaction;
+pi-durable compaction.js:197   const override = modelOverrides?.[`${model.provider}/${model.modelId}`];
+```
+
+`grep -rn modelOverrides node_modules/@earendil-works/pi-durable/dist/harness/agent.js` returns **nothing**: the
+resolver only ever looks inside `settings.compaction`. So the rig's `DURIG_COMPACTION_MODEL_OVERRIDES` is emitted in
+the right shape but in the wrong place, and `settings.compaction` is otherwise undefined — pi-durable's documented
+defaults (`reserve 16384 / keepRecent 20000 / background 32768`) silently win.
+
+**The test is what let this survive.** `demo/config.test.mjs:333-341` asserts the sibling shape:
+
+```js
+assert.deepEqual(compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: { "local/qwen": { reserveTokens: 4096 } } }),
+  { modelOverrides: { "local/qwen": { reserveTokens: 4096 } } }, "an object map passes through");
+```
+
+A fix that only changes `src/config.mjs` turns this test red. #5785 must change **all three**: `out.compaction.modelOverrides = layered` at `:488`, the `@returns` docstring at `:430`, and the two assertions at `:333` and `:339`. The docstring at `src/config.mjs:410-414` even flags "UNVERIFIED IN THIS TREE: … I could not re-read the pinned file to confirm" — the author knew the layering was unconfirmed and shipped it anyway. That is the drift class the rig keeps hitting: a setting assembled for one API, read by another, pinned by a test that asserts the wrong shape.
