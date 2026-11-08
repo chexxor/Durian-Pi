@@ -169,6 +169,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
 | [branch-cleanup.md](branch-cleanup.md) | so many local git branches; merged branches were never pruned | no |
 | [land.md](land.md) | a verified branch must go onto `main`; land it with the helper (never mid-merge) | no |
+| [false-green-shell-prover.md](false-green-shell-prover.md) | a check you ran reported `exit 0` but you cannot say which command produced that 0; the same gate is reported as `1` somewhere else; your `Verify` block pipes the runner or reads `$?` after an intervening command (`git merge-base …; git log -1; echo $?`) | no |
 | [resolve-merge-conflict.md](resolve-merge-conflict.md) | a merge/landing pass stopped with conflict markers; the tree is mid-merge | no |
 | [daemon-not-running.md](daemon-not-running.md) | the host daemon is down (items 61–64; pre-written) | yes |
 | [local-provider-down.md](local-provider-down.md) | a `local/<id>` seat (`qa`/`devtools`) fails with `Connection error.` or `No API key for provider: local`; nothing listens on `127.0.0.1:8080` | no |

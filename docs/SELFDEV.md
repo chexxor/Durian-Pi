@@ -3105,3 +3105,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     So a stale declared id never shows up as an HTTP error; the only signal is the preflight
     `BLOCK provider-DURIG_LOCAL_-model-absent`. Run `tools/broker-serve.mjs --status` **after any server change**, and
     redact in the same command (pitfall 120).
+126. **A shell prover that reads `$?` after an intervening command proves the intervening command, not the thing
+    under proof.** Measured 2026-11-08 in the `item-5702` worktree at `f1be5157`: `git merge-base --is-ancestor main
+    item-4967` exits **1** (stale base), then `git log -1 --oneline` exits 0, and `echo "gate exit=$?"` prints **0** —
+    a green that proved nothing. Same class as the pipe variant in `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §6.1.
+    Fix: capture the code on the same statement as the prover (`prover; rc=$?; …; echo "exit=$rc"`) or assert in-line
+    (`prover && echo GREEN || echo RED`); for the suite, redirect to a file, capture, then read the file. Full
+    procedure with the re-runnable verify: `docs/runbooks/false-green-shell-prover.md`.
