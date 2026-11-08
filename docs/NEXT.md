@@ -110,8 +110,8 @@ node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout
 ```
 
 **Read-path caveat (22:12Z).** A CLI read does not open the store while a broker is resident — `src/readclient.mjs:106-111`
-routes it to the broker. With the pass loop stalled (last pass 21:26:06.898Z, 23 `PASS-FAILED … database is locked
-errcode=5` in `selfdev.sqlite.broker.log`) every read verb blocks with 0 bytes: measured two reads at an 8 s cap,
+routes it to the broker. With the pass loop stalled (last pass 21:26:06.898Z, 11 `PASS-FAILED … database is locked
+errcode=5` dated 2026-11-08 out of 23 in the cumulative log (pitfall 153)) every read verb blocks with 0 bytes: measured two reads at an 8 s cap,
 then eight concurrent reads at 25 s, all exit 124, all empty — while a direct read-only sqlite query answered fine
 (128,248 tasks). **"Empty queue" and "cannot read the queue" are the same output** — pitfall 152. Seats keep running
 regardless (impl conv 9: 58 generations in 10 min, last 22:12:19Z), and `genlock` is empty while generations are

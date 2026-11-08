@@ -6,7 +6,7 @@ precondition: "broker-stopped"
 last_verified: unverified
 verified_by: delegate
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
-evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after 23 `PASS-FAILED … database is locked errcode=5`. Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
+evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
 check_rule: null
 ---
 # Broker down or stalled
@@ -278,7 +278,8 @@ message appeared, so this reads as an empty queue.
 
 **Why:** `src/readclient.mjs:106-111` routes every read to the broker when one is alive
 (`if (brokerAliveFor(dbPath)) return await readViaBroker(...)`). The pass loop had not run since 21:26:06.898Z after
-23 `PASS-FAILED SessionFailed: Session failed after a storage error … errcode=5 errstr=database is locked` entries.
+23 `PASS-FAILED SessionFailed: Session failed after a storage error … errcode=5 errstr=database is locked` entries in
+the log — **11** of them dated 2026-11-08; the log is cumulative since store creation, so time-box the count.
 The run loop was still alive — conv 9 (impl) made 58 generations in 10 minutes, last at 22:12:19Z — so the fleet
 looked busy while being unable to read anything.
 

@@ -3265,15 +3265,21 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     genlock is empty before stopping" check is necessary but not sufficient. Before a hard stop, also require that no
     `pi.generation` record has been created in the last ~2 minutes:
     `node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 3").all())'`
-151. **The pass loop can stop while seats keep working.** `grep -c PASS-FAILED selfdev.sqlite.broker.log` = **23** today, each
+151. **The pass loop can stop while seats keep working.** `grep -c PASS-FAILED selfdev.sqlite.broker.log` = **23** in the
+    cumulative log, **11** of them on 2026-11-08 (20:05:11Z–21:26:01Z), each
     `SessionFailed: Session failed after a storage error; close and reopen it cause=Error: database is locked errcode=5`.
     The last successful pass was 21:26:06Z; after that the broker kept waking nothing while devtools and impl kept
-    generating for another 40 minutes. Consequences: no new queue rows get claimed, and spooled intents pile up
+    generating for another 40 minutes. Consequences: no new queue rows get claimed, and spooled intents pile up (24 in the inbox at 22:17Z)
     (`ls selfdev.sqlite.broker.inbox | wc -l`). This is the same lock that surfaces as `read queue: apply failed:
-    SqliteStorage is closed` on the read side (row #5807). It is a pass-loop failure, not a seat failure.
+    SqliteStorage is closed` on the read side (row #5807). It is a pass-loop failure, not a seat failure. Correlation observed, cause NOT proven: every PASS-FAILED fell in a 5-minute bucket that also contained 13-66 generations. The log is cumulative, so time-box the count (pitfall 153).
 152. **A CLI read does not read the store while a broker is resident — it asks the broker.** `src/readclient.mjs:106-111`
     routes `readData` to `readViaBroker` when `brokerAliveFor(dbPath)`. If the pass loop has stalled, the read verb
     **blocks** rather than erroring: measured 22:12Z, two reads at an 8 s cap each returned 0 bytes and `HUNG`, eight
     concurrent reads at 25 s all returned exit 124 with 0 bytes, while a direct read-only sqlite query in the same
     minute answered (128,248 tasks). "Empty queue" and "cannot read the queue" are the same output. Probe:
     `node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8`.
+153. **`selfdev.sqlite.broker.log` is cumulative, not daily.** `grep -c PASS-FAILED` counts every pass failure since the
+    store was created (measured 2026-11-08: 23 total, **11** dated 2026-11-08, the earliest 2026-11-06T03:49:53Z). Any
+    "today" number from it must be time-boxed: `grep "PASS-FAILED" selfdev.sqlite.broker.log | grep -c "^2026-11-08"`.
+    The same trap applies to compaction failure counts in the store: a lifetime count and a rolling-24 h count tell
+    different stories (pitfall 146), which is why `milestone-check.mjs` prints both.
