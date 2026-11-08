@@ -3271,3 +3271,9 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     generating for another 40 minutes. Consequences: no new queue rows get claimed, and spooled intents pile up
     (`ls selfdev.sqlite.broker.inbox | wc -l`). This is the same lock that surfaces as `read queue: apply failed:
     SqliteStorage is closed` on the read side (row #5807). It is a pass-loop failure, not a seat failure.
+152. **A CLI read does not read the store while a broker is resident — it asks the broker.** `src/readclient.mjs:106-111`
+    routes `readData` to `readViaBroker` when `brokerAliveFor(dbPath)`. If the pass loop has stalled, the read verb
+    **blocks** rather than erroring: measured 22:12Z, two reads at an 8 s cap each returned 0 bytes and `HUNG`, eight
+    concurrent reads at 25 s all returned exit 124 with 0 bytes, while a direct read-only sqlite query in the same
+    minute answered (128,248 tasks). "Empty queue" and "cannot read the queue" are the same output. Probe:
+    `node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8`.
