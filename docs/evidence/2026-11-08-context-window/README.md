@@ -238,3 +238,31 @@ Read `rig.selfdev.json` against `durig.config.json` (node one-liner, no store ac
 So the **207 truncations on local seats cannot be explained by a window that is too small** — 36,384 fits inside 204,800 with room to spare. What those seats hit is the **summariser's output ceiling**: the harness sets `maxTokens = min(floor(0.8 * reserveTokens), model.maxTokens)` and treats `stopReason === "length"` as a failed compaction (`compaction.js:95`, `:301-303`). A long transcript produces a summary that runs to 13,107 tokens and is declared incomplete, so the compaction is discarded and the window keeps growing.
 
 **What that means for #5785:** nesting the override raises the local ceiling from 13,107 to 16,384 (a 25 % increase) — helpful but not sufficient. The durable fix is a summary budget that scales with the transcript being summarised, plus a retry with a smaller scope when the first attempt truncates. The auditor's own record shows both failure modes in one day: six consecutive truncations 08:29–08:41Z, then successes at 08:42Z and 18:55–18:58Z — the compaction sometimes lands, which is why "compaction is broken" is the wrong diagnosis and "compaction is unreliable at the margin" is the right one.
+
+## 9. The gate is satisfiable — this is the configuration that passes it (run before writing the code)
+
+Passing a candidate schedule through the shipped resolver costs one command and no tokens:
+
+```bash
+node -e 'const m=require("./node_modules/@earendil-works/pi-durable/dist/harness/compaction.js");
+const a=require("./node_modules/@earendil-works/pi-durable/dist/harness/agent.js");
+const D=a.DEFAULT_COMPACTION_POLICY;
+const proposed={compaction:{...D,reserveTokens:16384,keepRecentTokens:20000,modelOverrides:{
+  "local/qwen3.8-flash-next-q2_0":{reserveTokens:20480,keepRecentTokens:20000},
+  "openai/gpt-oss-120b":{reserveTokens:6144,keepRecentTokens:8192}}}};
+const windows={"local/qwen3.8-flash-next-q2_0":204800,"openai/gpt-oss-120b":24576};
+const maxTok={"local/qwen3.8-flash-next-q2_0":16384,"openai/gpt-oss-120b":6000};
+for(const k of Object.keys(windows)){const [p,mo]=k.split("/");const q=m.compactionPolicy(proposed,{provider:p,modelId:mo});
+  console.log(`${k}: reserve=${q.reserveTokens} keepRecent=${q.keepRecentTokens} sum=${q.reserveTokens+q.keepRecentTokens} window=${windows[k]} fits=${q.reserveTokens+q.keepRecentTokens<=windows[k]} ceiling=${Math.min(Math.floor(0.8*q.reserveTokens),maxTok[k])}`);}'
+```
+
+Output:
+
+```
+local/qwen3.8-flash-next-q2_0:  reserve=20480 keepRecent=20000 sum=40480  window=204800 fits=true ceiling=16384
+openai/gpt-oss-120b:            reserve=6144  keepRecent=8192  sum=14336  window=24576  fits=true ceiling=4915
+```
+
+Both invariants hold: `reserve + keepRecent <= window`, and `floor(0.8 * reserve) <= model maxTokens` (4,915 <= 6,000 for the verifier, so its 6,000-token ceiling is no longer the binding constraint for the summary). Note the key spelling: the harness matches `${provider}/${modelId}`, so the verifier entry is `openai/gpt-oss-120b`, not `verifier/openai/gpt-oss-120b`. Getting that key wrong is silent — pitfall 148.
+
+**What the gate cannot verify from config alone:** the 214 truncations and 209 refusals are store facts. The config half of the gate can go green immediately after #5785 lands; the census half only goes green after real seat runs stop failing. A gate whose acceptance criteria can never be met is as useless as one that never fails, so `milestone-check.mjs` reports both separately.
