@@ -3333,3 +3333,8 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `BROKER_HEARTBEAT_MS`) and `lastPassAt` (PROGRESS, the last COMPLETED pass). A broker wedged in a stuck await
     keeps a fresh heartbeat with a frozen pass — `src/broker.mjs:1628-1631`. Compare the two ages before deciding
     whether to restart.
+164. **Broker-served CLI reads are bounded at 120 s, not hung.** `src/readclient.mjs:35` defaults to
+    `timeoutMs = 120_000`; measured `cli.mjs status` took **2 m 0.569 s** and returned
+    `{"ok": false, "error": "read health: timed out awaiting the broker's result"}`. Any script that caps the call at
+    a few seconds sees 0 bytes and exit 124 and concludes "hung". Seats do **not** pay this: their queue read is
+    `tx.doc(RigQueue)` (`src/seattools.mjs:133`), not the broker read path. Only the operator's CLI does.

@@ -413,3 +413,18 @@ Consequences worth naming: (1) `cli.mjs status/queue` hanging is explained — t
 waits its whole cap for a result that will never arrive; (2) the 34 intents in the spool cannot be routed because
 **only a pass drains the inbox** (`src/broker.mjs:1698`); (3) `--max-duration` and `.stop` are checked at the top of
 the loop and at idle, so a wedged progress leg means neither can take effect (`src/broker.mjs:1651-1660`).
+
+## 16. The read path reports, after exactly 120 seconds
+
+`time timeout 130 node cli.mjs status` on the wedged broker:
+
+```
+real    2m0.569s
+{"ok": false, "error": "read health: timed out awaiting the broker's result"}   (exit 1)
+```
+
+`src/readclient.mjs:35 readViaBroker(..., { timeoutMs = 120_000 })`. So the correct statement is not "the read hangs"
+but "the read waits 120 s and then says so". Anything wrapped in a shorter timeout sees 0 bytes and exit 124 — my own
+earlier probes did exactly that, which is why §12 said the CLI prints nothing. It does print, just too late for a
+seat's turn budget or a 20-second script to see it. Seats themselves are unaffected: their queue read is
+`tx.doc(RigQueue)` at `src/seattools.mjs:133`, not the broker read path — the 120 s cost lands on the operator.

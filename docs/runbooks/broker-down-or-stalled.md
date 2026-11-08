@@ -317,8 +317,18 @@ and report, not to kill.
 
 ## Variant: the pass loop is stalled, the store is not, and nobody else holds the store
 
-Symptom: `cli.mjs status` / `cli.mjs queue` print **nothing** and exit 124 after ~8 s, while a direct read-only
-SQLite query on the same store answers in milliseconds in the same minute.
+Symptom: `cli.mjs status` / `cli.mjs queue` print nothing for a long time. Measured exactly, they are **bounded,
+not hung**:
+
+```
+$ time timeout 130 node cli.mjs status
+real    2m0.569s   exit 1
+{"ok": false, "error": "read health: timed out awaiting the broker's result"}
+```
+
+`src/readclient.mjs:35 readViaBroker(..., { timeoutMs = 120_000 })` — the CLI waits **120 s** and then reports the
+timeout. Cut it off earlier (as a seat or a script with an 8 s cap would) and you see 0 bytes and exit 124, which
+reads like a hang but is not. Meanwhile a direct read-only SQLite query on the same store answers in milliseconds.
 
 Measure who holds the store before improvising (Linux; `/proc` is the instrument):
 
