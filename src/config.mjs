@@ -126,6 +126,31 @@ export const CONFIG_KEYS = [
 	"DURIG_VERIFIER_MODEL",
 	"DURIG_VERIFIER_CONTEXT",
 	"DURIG_VERIFIER_MAX_TOKENS",
+	// THE THIRD LOCAL BOX (#5648). Registering the PREFIX is not enough: `localProviderSpec` reads these keys and
+	// `assertNoUnknownFileKeys` refuses a config file that sets a key no code reads, so an unregistered key is
+	// accepted-and-ignored - the same inert-key class as `--json` (#5071) and the half-armed roster ROADMAP 272
+	// records. The box is LAN-served, so `endpointClass` calls it `metered` (src/providers/local.mjs:60-77) and
+	// a metered row without a declared price REFUSES registration: hence the price keys, not just the four
+	// operational ones. `DURIG_LOCAL2_API_KEY` is deliberately NOT here - a credential belongs in the
+	// environment (demo/config-credential-surface.test.mjs enforces that rule for every family).
+	"DURIG_LOCAL2_BASE_URL",
+	"DURIG_LOCAL2_MODEL",
+	"DURIG_LOCAL2_CONTEXT",
+	"DURIG_LOCAL2_MAX_TOKENS",
+	"DURIG_LOCAL2_PRICE_USD_IN",
+	"DURIG_LOCAL2_PRICE_USD_OUT",
+	"DURIG_LOCAL2_PRICE_USD_CACHE_READ",
+	"DURIG_LOCAL2_PRICE_AS_OF",
+	"DURIG_LOCAL2_PRICE_JSON",
+	// The FIRST local box's price family: `declaredPrice` reads `<PREFIX>PRICE_*` for every registered prefix
+	// (src/providers/local.mjs:97-104), and the verifier family was inventoried by #5125 while this one was not.
+	// Measured before this change: `DURIG_LOCAL_PRICE_USD_IN` is read by the code but absent from the inventory,
+	// so a config file that set it was silently ignored - inert-by-name, the exact shape the guard exists for.
+	"DURIG_LOCAL_PRICE_USD_IN",
+	"DURIG_LOCAL_PRICE_USD_OUT",
+	"DURIG_LOCAL_PRICE_USD_CACHE_READ",
+	"DURIG_LOCAL_PRICE_AS_OF",
+	"DURIG_LOCAL_PRICE_JSON",
 	"DURIG_STREAM_TIMEOUT_MS",
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",

@@ -273,6 +273,7 @@
       "demo/local-model-pointer.test.mjs",
       "demo/local-provider.test.mjs",
       "demo/local-slot-gate.test.mjs",
+      "demo/local2-provider-prefix.test.mjs",
       "demo/probe-metered-ledger.test.mjs",
       "demo/probe-shim-import-form.test.mjs",
       "demo/second-local-provider.test.mjs",
