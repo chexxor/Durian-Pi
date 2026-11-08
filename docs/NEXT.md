@@ -1,18 +1,16 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-08T00:4xZ (delegate session **N8** — the digest-budget + provider-capacity session. The
-operator's five answers of 2026-11-07T22:4xZ, verbatim: push **"granted"** → executed, `c7e41021..7a1b80e2` on
-`main`, diff screened for secrets (0 hits); #3128 disposition **"approved"**; "drive another window now"
-**"approved"**; durability **"approved"** → **land, do not push `item-*` refs**; capacity **"approved"** → cap stays
-`1` until **#5488** lands. Then the priority order, verbatim: *"Will you be resolving the 'digest still over budget'
-issue? If not, that sounds serious, and we should prioritize resolving it."* Then two capacity intents mid-session:
-the local server had ~4 min of planned maintenance and *"now allows batching of 3 requests at once … Consider
-updating the team to support concurrency of 2 or 3"*, and *"Can you put 2 seats on the strata-server provider, when
-it's easy to do so? It has two slots available, and only two are being used right now."* All recorded as **D233**.
-Session N7's pointer moved VERBATIM to `docs/NEXT-ARCHIVE.md` in this cut (86 lines, 8,101 B,
-sha256[12] `50d22ff925ea`, byte-identical at the tail.) The live file is a pointer, cap 200 lines
-(`demo/next-pointer.test.mjs`) **and ≈16.9 KB** — the digest cap is bytes, not lines
-(`demo/clockin-digest.test.mjs`, `docs/runbooks/session-start-cost.md` §19).
+**Last update:** 2026-11-08T02:5xZ (delegate session **N9** — the operator's four approvals of `00:3xZ` were executed
+and a fifth ruling arrived mid-session: **"add two seats that we sometimes rely on to use the strata-server
+provider."** Executed: the push (`7a1b80e2..c047b767` → `origin/main`), the sweep-residue ruling (delivered; seats
+resumed their own rows — `queued 7 → 35`), and the capacity ruling (delivered as rows **#5605** code / **#5608**
+roster, and the `DURIG_LOCAL2_*` env block is **already written and measured**). Two of the team's fixes are now
+**verified by an independent runner and still unlanded**: **#5488** (`item-5488` = `ade0691a`, 262/262 suite green)
+and **#5398** (`item-5398` = `9ae25f09`, digest **43,967 B → 15,117 B on the live store**). `main` is still
+`c047b767`. The N8 pointer moved **verbatim** to [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md) in this cut (header + pointer,
+145 lines, 13,487 B, sha256[12] `c87865d86f5b`; the pointer text is byte-identical in the archive tail.) The live file
+is a pointer, cap 200 lines (`demo/next-pointer.test.mjs`) **and ≈17 KB** — the digest cap is bytes, not lines
+(`demo/clockin-digest.test.mjs`, `docs/runbooks/session-start-cost.md` §19/§27).
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
@@ -21,124 +19,114 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 ## NEXT SESSION
 
 **Milestone this window worked** — the milestone in force is **ensuring LLM task completion** (**D226**), first
-tranche **ROADMAP 331**. N8 did **not** move 331: the operator re-ordered the window onto **the clock-in digest
-budget** (#5398) and then onto **provider capacity** (slots, `DURIG_MAX_CONCURRENT_SEATS`, a second model server).
-Treat 331 as parked-but-gated: **#5488** → `local/*` concurrency → **#5271** → **#5306/#5309/#5310** → **#5569**
-(`impl`, blockedBy those three). Prior pointers are verbatim at [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md) — this cut
-moved 86 lines / 8,101 B there.
+tranche **ROADMAP 331**. N9 moved it the way 331 has to move: **#5488 is `done`** (the row that makes
+`DURIG_MAX_CONCURRENT_SEATS` real for `local/*`, the gate on every capacity ask) and **#5398's fix is written and
+measured green**. Neither is on `main` — `main` = `origin/main` = **`c047b767`**. So the first act of the next
+session is a **landing pass**, not another build: land **#5488** then **#5398**, then take the cap to the measured
+**3 slots** (operator-approved, gated only on #5488 landing). Gate chain unchanged: **#5488 → cap → #5271 →
+#5306/#5309/#5310 → #5569** (`impl`, the ROADMAP-331 landing entry).
 
-**Current item:** **#5398** (`devtools`, `claimed`) — the clock-in digest over its byte budget, which the operator
-ordered first. Exact next command: `node scripts/clockin.mjs | wc -c`, against
-`DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:37`); measured **40,404 B**. The row was re-armed
-(`resumed@2026-11-07T23:43:58.831Z`) but no ref carries the change.
+**Current item:** the landing pass above, owned by `lead` (row **#5619/#5624** carry the landing list; qa holds
+**#5641** to verify #5488 independently; my numbers are in §A).
 
-**Blocker:** the team's actionable surface is parked on a human — `queued 123 → 7`, `claimed 35 → 11`, and 365 rows
-`deferredTo:"human"` after two supervisor sweeps (cause and repair in **B**); and the capacity change the operator asked
-for is gated by **#5488**, which has not landed.
+**Blocker:** none for the landing pass itself — both fixes are green and `main` is reachable. What is blocked is the
+rest of the chain: **cap → 3 waits on #5488 landing**; **#5608** (two seats onto `local2`) waits on **#5605** landing;
+**ROADMAP 331's** landing entry **#5569** waits on **#5271 → #5306/#5309/#5310**; and **#5598** (the operator digest)
+waits on **#5594**. Nothing here needs the operator except the nine real questions in §D.
 
-**(0) RUN FIRST** — the four reads, in order, before touching anything:
+Exact next command:
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-# 1. BEFORE `--start`: is the seat provider answering, and how many slots does it have? (§27, ~3 s, prevents a 158-row sweep)
+# (0) the four reads, in order, before touching anything (§27 preflight, ~8 s)
 set -a; . "$HOME/.config/durig/env"; set +a
+DURIG_DB=./selfdev.sqlite node cli.mjs status   # attention + non-terminal work; broker-down safe
+git log --oneline -1 main && git log --oneline -1 item-5488 && git log --oneline -1 item-5398
 curl -s --max-time 15 -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/props | head -c 200
-node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK'
-# 2. the digest the operator ordered, measured on the live store
-node scripts/clockin.mjs | wc -c     # stderr carries the budget warning; budget 20,000 B
-# 3. store at rest (§24) — queue counts and `claimed` per seat
-DURIG_DB=./selfdev.sqlite node cli.mjs show 5398 | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s.slice(s.indexOf("{")));console.log(JSON.stringify(j.counts))})'
-# 4. worktree/branch inventory + diff vs the last snapshot (§22)
-git worktree list --porcelain > .spike/wt-$(date -u +%Y%m%dT%H%MZ).txt; ls .spike | wc -l
+node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK|local providers'
+node scripts/clockin.mjs | wc -c        # budget 20,000 B, exit 1 if over — measured 15,117 B once #5398 lands
+git worktree list --porcelain > .spike/wt-$(date -u +%Y%m%dT%H%MZ).txt; git branch --list | wc -l
 ```
 
-**(A) THE ITEM THE OPERATOR ORDERED FIRST — the clock-in digest is over budget, and it got worse.** Measured at
-`2026-11-08T00:1xZ`: `node scripts/clockin.mjs` prints **40,404 B** against
-`DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:37`), stderr: *"clockin: digest is 40404 B, over its 20000 B
-budget — a digest that grows into the dumps it exists to avoid has failed at its job"*. Carrier: **#5398**
-(`devtools`) — `deferred@2026-11-07T23:17:41.785Z (supervisor)` → **`resumed@2026-11-07T23:43:58.831Z (devtools)`**,
-so it is `claimed` and live, but **no commit on any ref touches the file**:
-`git log --all --since=2026-11-07T23:00:00Z --name-only -- scripts/clockin.mjs demo/clockin-digest.test.mjs` → empty.
-The driver is measured, not guessed: `scripts/clockin.mjs:203-207` prints **one line per `deferredTo:"human"` row**
-— **15,244 B of 29,045 B (52%)** when there were 207 such rows; at 365 rows the digest is 40,404 B. So the fix is
-aggregate-then-list (counts + ids, capped), and **the cap must fail something**: at 40,404 B live,
-`demo/clockin-digest.test.mjs` prints `CLOCKIN DIGEST TEST PASS` because it builds a **7-row fixture** store
-(5 deferred rows) and never sees a real backlog — same class as the `--filter` vacuity rule (pitfall 88). State the
-budget in seconds and bytes on the row: `node scripts/clockin.mjs | wc -c` is the gate, not the fixture.
+**(A) WHAT IS VERIFIED AND WAITING TO BE LANDED (the only thing standing between this session and durability).**
+`main` = `origin/main` = `c047b767`; the two fixes live on item refs and are green under a runner that is not their
+author's loop:
 
-**(B) THE BLOCKER — the team's actionable surface is now parked on a human.** Store counts moved
-`queued 123 → 7`, `claimed 35 → 11`, `deferred 207 → 365`, `done 3951 → 3957`, `held 416 → 422`: the supervisor
-swept **~158 queued/claimed rows to `deferredTo:"human"`** — in the maintenance minutes (23:17:40.785Z–23:18:05.788Z,
-169 transitions) and again in the second window. Cause, from `cli.mjs status` attention (the broker log shows none
-of it): `last_run_failed: stranded: Connection error.` + `repeated_failure: 5 consecutive failed runs; the supervisor
-escalates it to the human` for **9 of 12 seats** — the operator's planned local-server maintenance inside a live
-broker window. First act next session: deliver the sweep brief again (`.spike/delegate-20261107g/brief-lead-sweep-and-concurrency.md`)
-and have **seats** call `resume_work(<id>)` (pitfall 106); the delegate resumes nothing. The **nine real operator
-questions** are still unanswered — **#4976** pm, **#4354** impl, **#3350** qa, **#4881** lead, **#4835** scribe,
-**#4817** devtools, **#4954** auditor, **#4827** security, **#4814** qa2 — and `pm`'s digest row **#5409** is
-`claimed` with its earlier deferral already resumed (`resumed@2026-11-07T22:44:53Z (pm)`).
+- **#5488 — `DURIG_MAX_CONCURRENT_SEATS` gates `local/*`** (`item-5488` = `ade0691a`, row `done`).
+  `node demo/local-slot-gate.test.mjs` **(that demo exists only on `item-5488`, not on `main`** — run it in that
+  worktree**)** → exit 0, 11 assertions: the lease `<db>.genlock.0` is **held** for the
+  generation naming seat + pid, **released** at the end, and a second local generation **QUEUES** (no byte reached
+  the wire) then goes through; **acquire overhead 0.070 s** (ungated 1.135 s vs gated-and-free 1.205 s).
+  `node scripts/test.mjs --all --jobs 6` → **262/262 in 81.5 s**. `durig.config.default.json` untouched → the default
+  cap is still 1 (acceptance bar 3). Non-vacuity is observed on `main`: with the cap at 1 I sampled 5× in one window
+  and saw **6 `running` `pi.generation` rows with 0 `genlock` files** and 12 TCP connections to a 3-slot box.
+  **Caution: that branch predates `c047b767`** (`git diff main..item-5488` renders D234's docs as deletions) — land on
+  a current `main`, and re-run the full suite after the rebase, per `tools/what-to-test.mjs`.
+- **#5398 — the clock-in digest inside its budget** (`item-5398` = `9ae25f09` code + `6d5c126d` docs; row `claimed`
+  by devtools under **#5607**). Both operator-approved bars, measured by me with the broker stopped:
+  (a) `DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node scripts/clockin.mjs | wc -c` → **15,117 B** in the
+  item tree vs **43,967 B** in the `main` tree, same store, same minute, budget 20,000 B, and over-budget is now
+  **exit 1** not a stderr comment; (b) `node demo/clockin-digest.test.mjs` → exit 0 with **160 `deferredTo:"human"`
+  rows** and a production-sized rest-of-digest, asserting the OLD shape is **over** budget at that size while the
+  aggregate shape fits and stays bounded from 160 → 4,000 rows. The unbounded list moved to a gitignored grep file
+  (`.durig/clockin-deferred.txt`, 366 lines for 362 rows) — grep it, never read it whole.
 
-**(C) PROVIDER CAPACITY — what was asked, and what the code actually allows.** Both servers, measured in one command:
+**(B) THE OPERATOR'S FIFTH RULING — two seats on `strata-server`; the code half is the only missing piece.**
+Verbatim, `2026-11-08T00:4xZ`: *"If you haven't yet, please add two seats that we sometimes rely on to use the
+strata-server provider."* State at cut: the **machine half is done** — `~/.config/durig/env` (mode 600) carries a
+complete `DURIG_LOCAL2_*` block, every value measured: `BASE_URL=http://192.168.1.52:8080/v1`,
+`MODEL=qwen3.8-flash-next-iq3_xxs` (what `GET /v1/models` actually serves — pi's `~/.pi/agent/models.json` claims
+`…_s` for that host and is **wrong**), `CONTEXT=131072` (= `/props n_ctx`), `MAX_TOKENS=16384`,
+`PRICE_USD_IN/OUT=0` **declared** (a LAN host is `metered`, not loopback — `src/providers/local.mjs:60-77` — so an
+unpriced spec is a refusal), and the box's own key (the LOCAL key gets `authentication_error`). Probe:
+`total_slots: 4`, text-only, a 57-token prompt completes with content (`finish=stop`, 26 completion tokens).
+The **code half is row #5605** (`devtools`, `queued`): add `DURIG_LOCAL2_` to `LOCAL_ENV_PREFIXES` /
+`LOCAL_PROVIDER_IDS` (`src/providers/local.mjs:41,44`) and `CONFIG_KEYS` (`src/config.mjs:118-128`) — the id
+`local2` is derived from the prefix (`local.mjs:131-133`), so nothing else can drift. **Roster half = #5608**
+(`pm`, `held`): set `"model": "local2/qwen3.8-flash-next-iq3_xxs"` on two seats in `rig.selfdev.json` and `up
+--refresh` (which re-points EVERY seat) with the **broker stopped**. Recommended pair and the exclusions are in the
+delegate's `00:4xZ` brief: **qa2 + security**; never `designer`/`advocate` for this (the box is **text-only**);
+never `impl`/`architect`/`pm`/`lead`/`qa`/`scribe` (they need the 204,800 window and the faster quant).
+**Trap for #5605:** a tiny-token probe against that box returns `finish_reason=length` with `content: null` — at 8
+tokens it produced 8 tokens and no content, at 64 it produced `OK`. A 1-token preflight probe (#549, pitfall 108)
+will therefore BLOCK the broker start on a healthy server.
 
-| endpoint | slots | model alias | `n_ctx` | measured |
-|---|---|---|---|---|
-| `http://127.0.0.1:8080` (`local/*`) | **3** | `qwen3.8-flash-next-iq3_s` | **204,800** | 3 concurrent 96-token calls **3,436 ms** wall vs 3 sequential **799 ms** |
-| `http://192.168.1.52:8080` (`strata-server` in pi's `models.json`) | **4** | **`qwen3.8-flash-next-iq3_xxs`** | **131,072**, text-only | 2 concurrent **5,271 ms** wall (each 4.9–5.3 s) |
+**(C) THE DEFECT THAT ATE THREE WINDOWS — file it before it becomes folklore.** A **broker-routed read issued from
+inside a seat's own turn cannot be answered**, because the broker is inside the pass waiting for that turn. Three
+windows, three overruns: last passes at `00:59:45`, `02:03:17`, `02:41:55`; each broker then sat inside that pass
+until killed (`EXIT … reason=deadline` at `01:41:57` = **42 min past a 1800 s bound**, `02:25:12` = 22 min past a
+1200 s bound, `02:53:06`). Cmdlines in hand, two reproductions: seats hung in
+`node cli.mjs queue --id N` (90 s timeout) and in `node scripts/clockin.mjs --db …`, and from outside the same
+shape answers `{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}` — which is also why
+`scripts/clockin.mjs` fails mid-window (its `health` read times out). The instrument is 0.3 s:
+`ps --ppid <broker pid>` plus the nonterminal `tasks` rows (`status <> 'terminal'`). Scribe registered the same gap
+as **#5640**. Related standing fact: **there is no SQL shortcut for item state** (pitfall 105) — the newest
+`durig.queue` revision is **5,819 B** while the store holds 5,661 rows, so a broker-free queue read cannot be written
+either; use one multi-id `cli.mjs show`.
 
-Two facts decide the sequencing. (1) **`DURIG_MAX_CONCURRENT_SEATS=1` does not gate `local/*`** — `running` reached
-**10** and **9** in the two windows with the cap at 1; the carrier is **#5488** (`impl`, `queued`, priority 19999,
-no `blockedBy`), and its gate sentence is *"no seat cap conversation reopens until it lands."* So raising the cap to
-2–3 before #5488 changes nothing: today the concurrency is bounded only by server slots. (2) **"Put 2 seats on
-strata-server" is not config-only**: a seat's provider comes **only** from the leading segment of its `model` string
-(`src/seatmodel.mjs:13-22`) and only `local` and `verifier` are registered locally-served providers
-(`src/providers/local.mjs:36-44`, `LOCAL_ENV_PREFIXES`). Adding a third endpoint means registering a third prefix
-(`DURIG_LOCAL2_*` → `local2/qwen3.8-flash-next-iq3_xxs`) — a small devtools change to those two constants plus
-`CONFIG_KEYS` (`src/config.mjs:118-121`) with a failing-first demo and the existing pointer tests
-(`demo/local-model-pointer.test.mjs`, `demo/second-local-provider.test.mjs`). Note the two traps the row will hit:
-`endpointClass` is derived from the **host**, so a LAN address is `metered`, not `loopback`
-(`src/providers/local.mjs:60-77`) — the provider must then carry a **declared price** (`DURIG_LOCAL2_PRICE_USD_IN/OUT`,
-where `0` is legitimate "free by declaration", `local.mjs:83-95`) and a real key from the environment
-(`apiKeyEnv: <PREFIX>API_KEY`, `local.mjs:174`; API keys are deliberately **not** config keys, `src/config.mjs:122-124`);
-and adding the id to `LOCAL_PROVIDER_IDS` makes it "local" by id while it stays metered by endpoint, which is exactly
-the D-5015.3 confusion `local.mjs:83-95` warns about. The no-code alternative (repoint
-`DURIG_VERIFIER_*`) is **rejected** because `auditor` is the rig's only cross-family verifier and `single-model-rig`
-is `fix-now` (`src/checkup.mjs:80, 604-607`, D-5015 independence, `docs/runbooks/verifier-independence.md`).
-Also note the declared-vs-loaded mismatch on the pi side: `~/.pi/agent/models.json` declares
-`strata-server` → `qwen3.8-flash-next-iq3_s` while that server's `/v1/models` answers
-`qwen3.8-flash-next-iq3_xxs` (machine config, not repo state).
+**(D) WHAT THE TEAM DID WITH THE RULINGS (evidence the residue ruling is working).** 57 new rows since #5604.
+`queued 7 → 35`, `deferred 365 → 362`, `claimed 11 → 10`, `done 3957 → 3981`. The sweep-residue rows were minted to
+each owner (**#5609** qa, **#5610** qa2, **#5612** lead, **#5613** security, **#5607** devtools, **#5606** impl) and
+the four "unpark or restate" rows (#5572/#5574/#5575/#5576) went through **#5603/#5634**. **#5615** recorded the four
+approvals as **D234**; **#5595** is the standing class ruling. Still open, unchanged: the **nine** real operator
+questions — **#4976** pm, **#4354** impl, **#3350** qa, **#4881** lead, **#4835** scribe, **#4817** devtools,
+**#4954** auditor, **#4827** security, **#4814** qa2 — scribe's digest carrier is **#5598** (gated on **#5594**).
+Also waiting on a `lead`/`pm` act: **#5617** (promote the provider-slot probe out of gitignored `.spike/` into
+`tools/`), and the landing list rows **#5619/#5624**.
 
-**(D) WHAT THE TWO WINDOWS PRODUCED (honest, and it is thin).** **A**: started `22:54:31Z`, 1800 s bound,
-`EXIT pid=2226333 reason=max-duration passes=1979` at `23:28:36.303Z` = 34 min 5 s wall; **1 commit** landed on an
-`item-*` ref (`24e29528`, architect, #5501 docs), and **lead took #5571 to `done` at 23:03:05Z** (so cancelling
-**#5307** is now reachable — the next `lead` turn should run `node cli.mjs show 5307`); **42 metered calls,
-$0.02240**. Mid-window the operator took the server down, which produced the sweep in (B). **B**: started
-`23:40:40Z`, 1500 s bound, last PASS `00:05:41Z`, `EXIT pid=2248247 reason=deadline passes=-` at `00:11:27.532Z`
-after a requested stop + SIGTERM (10 generations in flight; `resume` settled them — `running 0`, `placed 0`);
-**0 commits**, **35 metered calls $0.01917**, and the one durable effect is devtools **resuming #5398**. Session
-money: **77 metered calls, $0.04157** (store cumulative **$0.705665**). State at cut: `main` = `origin/main` =
-`7a1b80e2`; **worktrees 70 → 74**, **branches 76 → 77**, **32 unlanded commits on item refs** — durability is by
-landing (#5569, D232 (4)), so the number to watch is unlanded commits, not `done`.
+**(E) TRAPS NEW THIS SESSION** — `docs/SELFDEV.md` **114–119** (see (C) for the read deadlock): **`cli.mjs send` is
+deprecated and refuses on this rig** (`spend: catalog-refused … $14 exposure vs a $4 cap`); the route is
+`node intent.mjs <seat> --body-file <path>` (pitfall 114). The clock-in digest **does** work with the broker down
+(`43,967 B`, exit 0) — D234 (4)'s "blocked, needs a broker" does not reproduce (pitfall 115). Two delegate probes
+live in gitignored `.spike/` and are lost unless promoted: `digest-scale-probe.mjs` (calls the exported
+`renderDigest`/`deferredTerm` at a 365-row backlog: **24,107 B old-shape vs 856 B new-shape**, <1 s, no broker) and
+`queue-state.mjs` (proves pitfall 105 the other way).
 
-**(E) TRAPS** — `docs/SELFDEV.md` **107–113**: a planned model-server maintenance inside a broker window makes the
-supervisor park the team on the human, 169 rows in 25 s, and only `status` attention shows it (#107);
-`broker-serve --start` refuses on ONE 1-token probe sample, and a transient `429 Model busy` looks like a dead
-provider — re-run `--status`, never `--no-probe` (#108); **correction** to 100/103: `--max-duration` *does* bound the
-exit when nothing is in flight (1800 s bound → exit at 34 min 5 s with the correct reason) (#109); a delivered brief
-does not un-defer rows the sweep defers later in the same window (#110); project `.pi/settings.json` does not load in
-print/JSON/RPC mode without a saved trust decision, and the A/B that proves the pin (#111); the delegate's own pi
-model and the seat provider are **the same server** — probe `/props`, and remember an unkeyed `GET /v1/models`
-answers the same 401 string as the incident (#112); `tools/what-to-test.mjs` reports every post-window commit as non-doc-only because the untracked `<db>.spend.jsonl` counts as a changed path, so read its `changedPaths` before obeying the full-suite prescription (#113). Earlier: 96–106, 87–95, 83–86.
-
-**(F) WATCH-LIST (delegate)** — (1) the human-attention backlog and its digest rows **#5409/#5410**
-(`pm`, claimed) are unchanged in kind and worse in count: store-wide `deferredTo:"human"` moved **206 → 365 rows** (2) the three standing
-gates from D227 remain unexecuted: 113 (`tools/what-to-test.mjs --base=HEAD~1` must run), 114
-(`tools/review-cite-check.mjs --pr <id>` before merging a reviewable PR), 115 (`tools/instrument-provenance.mjs
---json` every window); (3) this workspace pins pi to the **`strata`** provider in `.pi/settings.json`
-(`defaultProvider strata`, `defaultModel qwen3.8-flash-next-iq3_s`, `pi auth check` → ready, A/B-proven); `.pi/` is
-**gitignored** (`.gitignore:11`) so that pin is machine-scoped, never a commit — and it means a delegate session and
-the seat fleet contend for the same 3 slots (pitfall 112); (4) a **probe worth promoting** sits at
-`.spike/delegate-20261107g/provider-slots-probe.mjs` (gitignored, so it is lost next session unless `lead` mints a
-promotion row into `tools/`): in ~5 s, with no seat turn and no metered call, it prints `slots`, the model id an
-endpoint **actually** serves, `n_ctx`, and the concurrent-vs-sequential wall shape — re-run clean at `00:5xZ` on this
-box: `slots 3`, `qwen3.8-flash-next-iq3_s`, `n_ctx 204800`, 3 concurrent **2,306 ms** vs 3 sequential **905 ms**. It is
-the instrument behind **§27**, and it is what makes any "add a second server" decision cheap to re-check.
+**(F) STATE AT CUT** — store `{done 3981, cancelled 847, held 426, deferred 362, claimed 10, queued 35}` over 5,661
+rows; **worktrees 74 → 85**, **branches 77 → 86**, `unmerged=23`; no broker running (`resume` settled the interrupted
+turns, `running 0`); `selfdev.sqlite.broker.inbox` empty, `inbox.error` 96 (all `apply failed: SqliteStorage is
+closed`, all pre-existing). Money: **91 metered calls, $0.05703** this session, store cumulative **$0.762695** — all
+of it `auditor` on the metered verifier; every seat runs free on the local box. The three windows produced
+**1 commit (D234) + 1 commit (#5488) + 2 commits (#5398)** across 91 metered calls; the honest read is that the
+windows are being spent, not the work — which is what (C) costs. Full history of this pointer, verbatim:
+[docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).

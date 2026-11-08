@@ -10150,3 +10150,78 @@ the repo.
 change beyond the config the operator ordered, credential rotation (declined, D231), deleting the store backups that
 carry credential values (**30** `.bak.*` sidecars in `~/.durig-backup/`, largest 20,536,188 B, mode `0600`), and the
 **365** rows parked on a human — whose digest rows are **#5409/#5410** (`pm`, claimed).
+
+## D235 — the operator converts the standing capacity option into an instruction: *"add two seats that we sometimes rely on to use the strata-server provider"*; the delegate executes the machine half, the team owes the code half; and both of the session's verified fixes are recorded as **verified-but-unlanded** (2026-11-08T02:5xZ, delegate recording; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0` — the same signature as D233/D234, so runs are attributable to this machine without naming it)
+
+**Source:** the operator, `2026-11-08T00:4xZ`, verbatim: *"If you haven't yet, please add two seats that we sometimes
+rely on to use the strata-server provider."* That sentence follows the four approvals of the D234 cut
+(*"1. approved. 2. Approved. 3. Approved. 4. Approved. Please continue making good progress on the milestone."*) and
+**ratifies D233's option (ii)** — the third registered local prefix — as a directive rather than an option. Capacity
+and roster remain operator-granted; the grant was given here, so the delegate executes the roster act and does not
+re-ask it.
+
+**What was executed (machine config, no repo file touched).** `~/.config/durig/env` (mode `0600`, backup of the prior
+file kept in gitignored `.spike/delegate-20261108h/durig-env.preceding`) now carries a complete third-provider block,
+every value measured on the box rather than copied from a config that disagrees with it:
+
+| key | value | how it was established |
+|---|---|---|
+| `DURIG_LOCAL2_BASE_URL` | `http://192.168.1.52:8080/v1` | the LAN box the operator calls `strata-server` |
+| `DURIG_LOCAL2_MODEL` | `qwen3.8-flash-next-iq3_xxs` | `GET /v1/models` answers **exactly** `["qwen3.8-flash-next-iq3_xxs"]` and `/props model_alias` agrees — **pi's `~/.pi/agent/models.json` declares `…_s` for this host and is false** |
+| `DURIG_LOCAL2_CONTEXT` | `131072` | `= /props default_generation_settings.n_ctx` |
+| `DURIG_LOCAL2_MAX_TOKENS` | `16384` | matches the seat plane's existing posture |
+| `DURIG_LOCAL2_PRICE_USD_IN/OUT` | `0` / `0`, `_AS_OF=2026-11-08` | **required, not optional**: a LAN host is `metered` by endpoint (`src/providers/local.mjs:60-77`), so an unpriced spec is a refusal; `0` is a legitimate *declared* price for operator-owned hardware (`local.mjs:83-95`) |
+| `DURIG_LOCAL2_API_KEY` | the box's own key | taken from the operator's `~/.pi/agent/auth.json` entry for `strata-server`; the **local** key is rejected there — `GET /props` with it returns `authentication_error: missing or wrong API key` |
+
+Endpoint facts measured with that key, in the same command as the write: `total_slots: 4`, `n_ctx 131072`,
+text-only; a 57-token prompt completes with real content (`finish=stop`, 26 completion tokens vs 27 on the seat box
+for the same prompt).
+
+**What is still owed, and by whom.** A seat's provider comes **only** from the leading segment of its `model` string
+(`src/seatmodel.mjs:13-22`), and `LOCAL_ENV_PREFIXES` / `LOCAL_PROVIDER_IDS` (`src/providers/local.mjs:41,44`) still
+name exactly two locally-served providers, so `local2/…` cannot resolve and **no seat can move until the code lands**
+— confirmed by `grep -rn "DURIG_LOCAL2" --include=*.mjs` over the repo → **0 hits**. The team minted both halves
+within one pass of the brief: **#5605** (`devtools`, `queued`) registers the prefix (the two constants plus
+`CONFIG_KEYS`, `src/config.mjs:118-128`; the id `local2` is DERIVED from the prefix, `local.mjs:131-133`, so id and
+key cannot drift), and **#5608** (`pm`, `held`) is the roster act — set `"model":
+"local2/qwen3.8-flash-next-iq3_xxs"` on two seats in `rig.selfdev.json` and `up --refresh` **with the broker stopped**
+(`--refresh` re-points EVERY seat). Recommended pair, with the reason on the row so `lead` can overrule it on
+knowledge the delegate does not have: **`qa2` + `security`** (text-only work; `auditor` stays on the metered
+cross-family verifier so D-5015 independence survives; the no-code "repoint `DURIG_VERIFIER_*`" route stays
+rejected). Excluded on purpose: `designer` and `advocate` — the box is **text-only** and those seats review UI/CLI
+surfaces where an image can be in the turn; and `impl`/`architect`/`pm`/`lead`/`qa`/`scribe`, which need the
+204,800-token window and the faster quant. The capability cut is stated, not hidden: `_xxxs` quant,
+**131,072** context, text-only, 2 concurrent calls measured at **5,271 ms** on that box; what is bought is **4 slots
+on a different machine**, which also stops the seat fleet and the delegate's own pi session contending for the same
+3 loopback slots (pitfall 112).
+
+**TRAP recorded so #5605 does not rediscover it.** A tiny-token probe against that box returns
+`finish_reason=length` with `message.content = null`: at an 8-token budget it produced 8 completion tokens and **no
+content**; at 64 it returned `OK`. A 1-token preflight probe (pitfall 108, held row **#549** — single-sample probes)
+will therefore read a healthy server as "answers but refuses inference" and **BLOCK** the broker start.
+
+**VERIFIED, NOT LANDED — the durability rule (D232 (4)) applied to this session's two fixes.** `main` =
+`origin/main` = **`c047b767`** at cut; both fixes sit on item refs, each green under a runner that is not its author's
+loop: **#5488** (`item-5488` = `ade0691a`, row `done`) — `demo/local-slot-gate.test.mjs` exit 0 with 11 assertions
+(lease held naming seat+pid, released at end, second `local/*` generation QUEUES and never reaches the wire, acquire
+overhead **0.070 s**), `node scripts/test.mjs --all --jobs 6` → **262/262 in 81.5 s**, `durig.config.default.json`
+untouched (default cap still 1); non-vacuity observed on `main`, where with the cap at 1 the delegate sampled
+**6 `running` `pi.generation` rows with 0 `genlock` lease files** and 12 TCP connections to a 3-slot box.
+**#5398** (`item-5398` = `9ae25f09` + docs `6d5c126d`) — both operator-approved bars met on the live store with the
+broker stopped: `node scripts/clockin.mjs | wc -c` → **15,117 B** in the item tree against **43,967 B** in the `main`
+tree at the same minute on the same store (budget 20,000 B; over-budget is now **exit 1**), and
+`demo/clockin-digest.test.mjs` exit 0 with a **160-row `deferredTo:"human"`** fixture asserting the old
+one-line-per-row shape is **over** budget while the aggregate shape stays bounded from 160 to 4,000 rows.
+
+**A STRUCTURAL HAZARD found by watching windows, not logs.** **A broker-routed read issued from inside a seat's own
+turn cannot be answered**, because the broker is inside the very pass waiting for that turn to settle. Three windows,
+three overruns (last passes `00:59:45`, `02:03:17`, `02:41:55`; killed with `EXIT … reason=deadline` at `01:41:57` =
+**42 min past a 1800 s bound**, `02:25:12` = 22 min past 1200 s, `02:53:06`). The proof is the child cmdlines
+(`ps --ppid <broker pid>`): seats sat in `node cli.mjs queue --id N` (90 s timeout) and
+`node scripts/clockin.mjs --db …` while `tasks` showed their `pi.tool` rows `running`; from outside the same read
+answers `{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}`, which is also why
+`scripts/clockin.mjs` fails mid-window (its `health` read times out). And there is no way around it through the store:
+the newest `durig.queue` revision holds **5,819 B** while the store has **5,661** rows, so pitfall 105's "no SQL
+shortcut for item state" is a property, not a missing tool. Scribe filed the gap as **#5640**. This is the mechanism
+behind "the windows are being spent, not the work": 91 metered calls, $0.05703, and 3 commits across three windows
+that spent 4.4 hours of wall clock inside passes.

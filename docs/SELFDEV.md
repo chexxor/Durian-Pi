@@ -3000,3 +3000,59 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
    prescription: if the only non-doc entry is the ledger, the honest gate is the area plus the doc guards
    (`scripts/test.mjs --area docs`, `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`,
    `tools/doc-integrity-guard.mjs`) — and say in the report that you ran them, because the tool did not tell you to.
+
+## Operational pitfalls (2026-11-08T02:5xZ, delegate session N9 — the operator's four approvals executed, the two-seats-on-strata-server directive, and the read deadlock that ate three windows; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+114. **`cli.mjs send` is deprecated AND refuses on this rig — `intent.mjs` is the route, and the refusal is about
+    money, not about the seat.** Measured 00:3xZ: four `send <seat> --body-file …` calls printed
+    `send is DEPRECATED (opens a full writing harness = a second owner)` then
+    `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
+    "maxCallExposureUsd":14,…}` and **changed nothing in the store** (queue counts identical afterwards). Correct
+    route, and it spools safely while the broker is down:
+    `DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --body-file <path> --request-id <fresh-uuid>` →
+    `{"ok":true,"op":"message","spooled":"selfdev.sqlite.broker.inbox/…"}`, delivered on the next `--start`
+    (`tools/broker-serve.mjs --status` prints the spool with age, and `--status` also lists dead-letters).
+
+115. **Correction to D234 (4): the clock-in digest does NOT need a broker, and its bar (a) is measurable at rest.**
+    With the broker stopped and `broker.json` gone: `node scripts/clockin.mjs | wc -c` → **43,967 B, exit 0** (stderr
+    carries the over-budget warning); `DURIG_DB=./selfdev.sqlite node cli.mjs status` → **exit 0**. The D234 sentence
+    that `status` exits 124 at 90 s and that the digest "fails without a broker" was measured **under load**, not
+    structurally: the same commands DO fail with `read health: timed out awaiting the broker's result` while the
+    broker is inside a long pass. Rule: measure at-rest numbers with the broker **stopped**, and say which state you
+    measured in.
+
+116. **A broker-routed read issued from inside a seat's own turn cannot be answered — the broker is inside the pass
+    waiting for that turn.** Three windows, three overruns: last passes `00:59:45`, `02:03:17`, `02:41:55`, each
+    followed by a `EXIT pid=… reason=deadline` only after the delegate killed the pid (`01:41:57` = **42 min past an
+    1800 s bound**; `02:25:12` = 22 min past 1200 s; `02:53:06`). The proof is not in the log (the log just stops
+    mid-pass) — it is two reads run in the same breath: the nonterminal `tasks` rows
+    (`SELECT id,conversation_id,kind,status FROM tasks WHERE status <> 'terminal'`, here `pi.tool` `running`) and
+    `ps --ppid <broker pid> -o pid,args`, whose children were
+    `node cli.mjs queue --id N` (90 s timeout) and `node scripts/clockin.mjs --db …`. From outside the same shape
+    answers `{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}`. Corollaries: seats
+    asking "what is in the queue?" burn a whole turn to a timeout; `scripts/clockin.mjs` fails mid-window for the same
+    reason (its `health` read); and there is no store-side escape, because the newest `durig.queue` revision is
+    **5,819 B** against **5,661** rows in the store (pitfall 105 holds — one multi-id `show` is the only read).
+    Recovery when you must end such a window: `kill <pid from broker.json>` (never `pkill -f`, pitfall 49) →
+    `cli.mjs resume` (settles `placed`/`queued` submissions) → confirm `broker.json` is gone.
+
+117. **A tiny-token probe on a llama.cpp box can return `content: null` and read as a dead provider.** Measured on
+    the LAN box: `max_tokens: 8` → `finish_reason=length`, `completion_tokens: 8`, `message.content = null`;
+    `max_tokens: 64` → `finish=stop`, `content: "OK"`, 26 completion tokens. So the preflight's 1-token probe class
+    (held row **#549**, pitfall 108) will BLOCK a broker start against a healthy second server. When you register a
+    new local provider, probe at a budget that can produce content, and put that in the row's own acceptance.
+
+118. **A probe copied into a linked worktree can measure the tree you think it did not — prove it with a
+    differential, not by reading the import path.** A `.spike` probe importing `../../scripts/clockin.mjs` printed
+    **identical bytes (41,489 B)** when run from the main tree and from `item-5398`, which would have "disproved" the
+    fix. The differential settled it in one command: render the SAME synthetic 365-deferred-row fixture through both
+    trees' `renderDigest()` → **24,107 B (main) vs 856 B (item-5398)**, and `deferredTerm(items)` → **1,125–1,548 B**
+    for 365 rows. Rule: when a probe's job is to compare two trees, run the fixture through both in the same call and
+    print both numbers; a single number from a copied file is not evidence about a tree.
+
+119. **Read the spend ledger's field names before reporting money — summing the wrong key prints a confident $0.00000.**
+    `<db>.spend.jsonl` rows are
+    `{at,model,host,authKeyEnv,prompt_tokens,completion_tokens,reasoning_tokens,cached_tokens,priceSource,priceAsOf,usd,totalBefore,totalAfter,status}`.
+    Summing `cost_usd_usd`/`costUsd` (plausible names) returned `0.00000` for 91 calls; the real field is **`usd`**:
+    this session = **91 calls, $0.05703**, store cumulative **$0.762695** over 1,640 rows. Cross-check the total
+    against a prior recorded figure (D233 recorded $0.705665) so a zero can't pass as a cheap session.
