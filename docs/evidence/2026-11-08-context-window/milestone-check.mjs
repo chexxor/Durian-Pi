@@ -2,7 +2,7 @@
 // MILESTONE GATE — "does a seat's task fit inside its context window?" (D226 / ROADMAP 331)
 // One command, no model spend, broker-down safe. Exit 0 = the milestone is met; exit 1 = it is not, with the reason.
 // usage: node docs/evidence/2026-11-08-context-window/milestone-check.mjs [--db ./selfdev.sqlite]
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -147,6 +147,47 @@ try {
   console.log(`  shape probe failed: ${e.message}`);
   failures.push("the shape instrument could not run, so the fleet's ability to be woken is unverified.");
 }
+
+console.log("== broker progress leg: alive vs healthy (src/broker.mjs:1628-1631, BROKER_HEARTBEAT_MS 20000) ==");
+try {
+  const stPath = `${DB}.broker.json`;
+  if (!existsSync(stPath)) { console.log("  no broker state file — no resident broker"); }
+  else {
+    const st = JSON.parse(readFileSync(stPath, "utf8"));
+    const hbAge = Math.round((Date.now() - st.heartbeatAt) / 1000);
+    const passAge = Math.round((Date.now() - st.lastPassAt) / 1000);
+    const inbox = existsSync(`${DB}.broker.inbox`) ? readdirSync(`${DB}.broker.inbox`).length : 0;
+    const dead = existsSync(`${DB}.broker.inbox.error`) ? readdirSync(`${DB}.broker.inbox.error`).length : 0;
+    let open = -1;
+    if (existsSync(DB)) {
+      const s = new DatabaseSync(DB, { readOnly: true });
+      open = s.prepare("select count(*) n from tasks where json_extract(record,'$.state.status') != 'terminal'").get().n;
+      s.close();
+    }
+    console.log(`  pid ${st.pid} since ${st.since}: heartbeat ${hbAge}s ago, last COMPLETED pass ${passAge}s ago (${new Date(st.lastPassAt).toISOString()})`);
+    console.log(`  spool: ${inbox} pending intent(s), ${dead} dead letter(s); ${open} task(s) still in flight in the store`);
+    if (dead) {
+      const dir = `${DB}.broker.inbox.error`;
+      const reasons = readdirSync(dir).filter((f) => f.endsWith(".reason")).map((f) => readFileSync(join(dir, f), "utf8").trim());
+      const group = {};
+      for (const r of reasons) group[r] = (group[r] || 0) + 1;
+      const ops = readdirSync(dir).filter((f) => !f.endsWith(".reason")).map((f) => { try { return JSON.parse(readFileSync(join(dir, f), "utf8")).op; } catch { return "unknown"; } });
+      const opGroup = {};
+      for (const o of ops) opGroup[o] = (opGroup[o] || 0) + 1;
+      console.log(`  dead letters by reason: ${Object.entries(group).map(([k, v]) => `${v} × ${k}`).join(" | ")}`);
+      console.log(`  dead letters by op: ${Object.entries(opGroup).map(([k, v]) => `${k} ${v}`).join(" | ")}`);
+      if (opGroup.read) failures.push(`${opGroup.read} read intents were dead-lettered with "apply failed: SqliteStorage is closed" (pi-durable storage.js:670) — that is why cli.mjs status/queue print nothing and time out: the read is dead-lettered, so the CLI waits its whole cap for a result that will never arrive.`);
+    }
+    if (hbAge <= 2 * 20 && passAge > 120) {
+      console.log("  verdict: WEDGED — the event loop is turning but the progress leg is frozen; only a pass drains the spool (src/broker.mjs:1698). “Busy” is ruled out only if the in-flight count is small and refreshes.");
+      failures.push(`the resident broker has not completed a pass in ${Math.round(passAge / 60)} minutes, so no intent, claim or wake can be routed — the milestone cannot advance while it is wedged.`);
+    } else if (passAge <= 120) {
+      console.log("  verdict: HEALTHY — passes are advancing.");
+    } else {
+      console.log("  verdict: DEGRADED — passes are slow; watch the trend.");
+    }
+  }
+} catch (e) { console.log(`  broker progress probe failed: ${e.message}`); }
 
 console.log("== live window occupancy (entries after each seat's head marker) ==");
 try {

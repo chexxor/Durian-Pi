@@ -3325,3 +3325,11 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `settings.compaction.modelOverrides` (`compaction.js:196-197`; `agent.js` mentions it nowhere). Fixing
     `src/config.mjs:488` alone makes that test red. When a setting "silently does nothing", read the test that
     asserts its shape before blaming the consumer.
+162. **A hung CLI read is a dead-lettered read, not a slow query.** `selfdev.sqlite.broker.inbox.error/*.reason` said
+    `apply failed: SqliteStorage is closed` for all 56 dead letters, every one `op: "read"`
+    (`pi-durable dist/storage/sqlite/storage.js:670`). `src/readclient.mjs:106-111` still waits for a broker result
+    after the intent was rejected. Read the `.reason` files first — they name the failure class in one line.
+163. **Alive ≠ healthy.** `<db>.broker.json` carries two legs: `heartbeatAt` (LIVENESS, rewritten every 20 s by
+    `BROKER_HEARTBEAT_MS`) and `lastPassAt` (PROGRESS, the last COMPLETED pass). A broker wedged in a stuck await
+    keeps a fresh heartbeat with a frozen pass — `src/broker.mjs:1628-1631`. Compare the two ages before deciding
+    whether to restart.

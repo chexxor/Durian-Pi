@@ -390,3 +390,26 @@ Two things fall out:
 
 1. **A window carries between one and eleven tasks, not one.** "Task completion within a single context window" is not what the rig does today: pm's window has completed 11 items, qa's 5. That is why the summariser is asked to compress ~100 item references (§10) and why its 13,107-token output ceiling is the binding constraint.
 2. **Compaction works for local seats and fails for the auditor.** impl compacted at 23:08Z and its live window is now **17,023 tokens (8 % of 204,800)** — the mechanism is functioning there. The auditor sits at **94 % of 24,576** and has claimed 2 items in its current window while completing **none**, which the gate now flags as a distinct failure: `auditor claimed 2 item(s) in its current window and completed none — the window is spent on tool traffic that never lands an item.`
+
+## 15. The read path is not slow — its intents are being rejected
+
+`milestone-check.mjs` now reads the spool's error directory and groups it:
+
+```
+== broker progress leg: alive vs healthy (src/broker.mjs:1628-1631, BROKER_HEARTBEAT_MS 20000) ==
+  pid 3521203 since 2026-11-08T20:56:53.350Z: heartbeat 10s ago, last COMPLETED pass 6710s ago (2026-11-08T21:26:06.898Z)
+  spool: 34 pending intent(s), 112 dead letter(s); 1 task(s) still in flight in the store
+  dead letters by reason: 56 × apply failed: SqliteStorage is closed
+  dead letters by op: read 56
+  verdict: WEDGED — the event loop is turning but the progress leg is frozen; only a pass drains the spool (src/broker.mjs:1698)
+```
+
+(112 files = 56 `.error.json` + 56 `.error.json.reason`.) Every dead letter is a **read** intent rejected by
+`pi-durable dist/storage/sqlite/storage.js:670` — `SqliteStorage is closed`. Meanwhile `heartbeatAt` is 10 s old and
+`lastPassAt` is 6,710 s old: the product's own comment (`src/broker.mjs:1628-1631`) calls this exact pattern a broker
+"wedged in a stuck await", and says the heartbeat exists precisely so a reader can tell **alive** from **healthy**.
+
+Consequences worth naming: (1) `cli.mjs status/queue` hanging is explained — the read was dead-lettered, so the CLI
+waits its whole cap for a result that will never arrive; (2) the 34 intents in the spool cannot be routed because
+**only a pass drains the inbox** (`src/broker.mjs:1698`); (3) `--max-duration` and `.stop` are checked at the top of
+the loop and at idle, so a wedged progress leg means neither can take effect (`src/broker.mjs:1651-1660`).

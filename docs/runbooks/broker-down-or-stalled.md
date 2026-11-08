@@ -340,3 +340,29 @@ Also note `--max-duration` is not a kill switch. `ps -o etime -p <pid>` on a bro
 `--max-duration 1800` showed **02:05:25** elapsed — the duration, like the `.stop` file, is honoured only at a pass
 boundary (`src/broker.mjs:1651`), so a stalled pass loop makes the broker unkillable by design. Only SIGTERM/SIGINT
 stops it at once, and that aborts live seat runs.
+
+## Why a hung `cli.mjs status` prints nothing: the read was dead-lettered
+
+The spool's error directory holds one pair of files per failed intent: `<id>.error.json` (the request) and
+`<id>.error.json.reason` (why it failed). Census, read-only:
+
+```bash
+node -e 'const fs=require("node:fs");const d="selfdev.sqlite.broker.inbox.error";
+const r=fs.readdirSync(d).filter(f=>f.endsWith(".reason")).map(f=>fs.readFileSync(d+"/"+f,"utf8").trim());
+const g={};for(const x of r)g[x]=(g[x]||0)+1;console.log(r.length,"dead letters",g);'
+```
+
+Measured 2026-11-08 23:21Z: **56** dead letters, **all** with the same reason, **all** `op: "read"`:
+
+```
+56 × apply failed: SqliteStorage is closed
+```
+
+which is thrown at `node_modules/@earendil-works/pi-durable/dist/storage/sqlite/storage.js:670`. So the CLI is not
+slow — its read intent was rejected, and `src/readclient.mjs:106-111` still waits for a broker result that will never
+arrive. Read the reason files before debugging the store; they name the failure class.
+
+**Do not confuse this with the pass loop being merely slow.** `<db>.broker.json` separates the two legs
+(`src/broker.mjs:1628-1631`): `heartbeatAt` is LIVENESS (the event loop is turning, every 20 s), `lastPassAt` is
+PROGRESS (the last COMPLETED pass). A fresh heartbeat with a frozen `lastPassAt` is the documented wedge signature —
+"alive" is not "healthy".
