@@ -28,10 +28,22 @@ echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a host
 **Milestone this window worked** — the milestone in force is **ensuring LLM task completion** (**D226**), first
 tranche **ROADMAP 331**. N9 moved it the way 331 has to move: **#5488 is `done`** (the row that makes
 `DURIG_MAX_CONCURRENT_SEATS` real for `local/*`, the gate on every capacity ask) and **#5398's fix is written and
-measured green**. Neither is on `main` — `main` = `origin/main` = **`c047b767`**. So the first act of the next
-session is a **landing pass**, not another build: land **#5488** then **#5398**, then take the cap to the measured
-**3 slots** (operator-approved, gated only on #5488 landing). Gate chain unchanged: **#5488 → cap → #5271 →
-#5306/#5309/#5310 → #5569** (`impl`, the ROADMAP-331 landing entry).
+measured green**. Neither is on `main` — `main` = `origin/main` = **`cc4d85d4`** (N10's roster/config fix). So the first
+act of the next session is a **landing pass**, not another build: land **#5488** then **#5398**.
+
+**N10 (06:3xZ) — the fleet was dead and is now alive, and the cap the operator asked for is set but inert.** The
+operator bounced both LLM servers and raised provider concurrency to 8. Measured consequence: every seat generation
+died in ~1 ms with `Model local/qwen3.8-flash-next-iq3_s is not available` (`no_model`), because both boxes now
+advertise **`qwen3.8-flash-next-q2_0`** (`GET /v1/models`: local `n_ctx 204800`, text+image; LAN `n_ctx 131072`,
+**text only**). Re-pointed: 11 seat strings in `rig.selfdev.json`, `DURIG_LOCAL_MODEL`/`DURIG_LOCAL_CONTEXT` and the
+`DURIG_COMPACTION_MODEL_OVERRIDES` key in `durig.config.json`; `up --refresh` refreshed all 12 seats (**D237**).
+Afterwards: **111 completed generations, 0 failures across 10 seats in 10 minutes**, and the box reports
+`{"busy":true,"queued":0}`. **`DURIG_MAX_CONCURRENT_SEATS` is now 4** (was unset → default 1) — but it is **inert for
+`local/*` until #5488 lands**, which is exactly the row still unlanded: 6 seat generations were observed running at once
+with the cap at 4. GPU state at that moment: RTX 3090 **22,637/24,576 MiB (92%)**, 100 % util; A4000 13,034/16,376 MiB.
+So 8 concurrent seat turns is measured fine at small prompts (5.28 s wall for 8) but is **not safe at full context**
+until #5488 makes the cap real. Gate chain unchanged: **#5488 → cap real → #5271 → #5306/#5309/#5310 → #5569**
+(`impl`, the ROADMAP-331 landing entry).
 
 **Current item:** the landing pass above, owned by `lead` (row **#5619/#5624** carry the landing list; qa holds
 **#5641** to verify #5488 independently; my numbers are in §A). **Intents are already spooled for this** — to `lead`,
@@ -42,9 +54,13 @@ seat). **D236 is now the governing ruling set: the operator accepted all sevente
 ("I accept your recommendations. Please act on them.") and the acts are enumerated there — read D236 before routing.**
 
 **Blocker:** none for the landing pass itself — both fixes are green and `main` is reachable. What is blocked is the
-rest of the chain: **cap → 3 waits on #5488 landing**; **#5608** (two seats onto `local2`) waits on **#5605** landing;
-**ROADMAP 331's** landing entry **#5569** waits on **#5271 → #5306/#5309/#5310**; and **#5598** (the operator digest)
-waits on **#5594**. Nothing here needs the operator except the nine real questions in §D.
+rest of the chain: **the cap is only real after #5488 lands**; the `local2` code half is now **#5648** (`devtools`,
+`claimed`, `demo/local2-provider-prefix.test.mjs` already written in `item-5648`) after lead cancelled the duplicates
+**#5605/#5655/#5705**; the roster half is **#5651** (`held`, lead's re-cut replacing **#5608**), and **#5708**
+(`pm`, queued) is its release gate; **ROADMAP 331's** landing entry **#5569** waits on **#5271 → #5306/#5309/#5310**;
+**#5598** (the operator digest) waits on **#5594**. **One thing only the operator can decide: whether the team cap goes
+to 8** — the provider measured 8 concurrent seat-sized turns at 5.28 s wall, but the 3090 is at 92 % memory with 6
+seat turns running, so my recommendation is 4 until #5488 lands, then raise it as a dated ruling.
 
 Exact next command:
 
@@ -54,7 +70,8 @@ cd /home/chexxor/Git/Durian-Pi
 set -a; . "$HOME/.config/durig/env"; set +a
 DURIG_DB=./selfdev.sqlite node cli.mjs status   # attention + non-terminal work; broker-down safe
 git log --oneline -1 main && git log --oneline -1 item-5488 && git log --oneline -1 item-5398
-curl -s --max-time 15 -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/props | head -c 200
+curl -s --max-time 15 -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models   # the id the box ADVERTISES must equal DURIG_LOCAL_MODEL and every seat string — D237/pitfall 122
+node .spike/delegate-20261108h/fleet-health.mjs $(date -u +%FT%TZ -d '-10 min')   # completed vs failed generations per seat (promote to tools/ per #5617)
 node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK|local providers'
 node scripts/clockin.mjs | wc -c        # budget 20,000 B, exit 1 if over — measured 15,117 B once #5398 lands
 git worktree list --porcelain > .spike/wt-$(date -u +%Y%m%dT%H%MZ).txt; git branch --list | wc -l
