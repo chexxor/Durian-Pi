@@ -85,6 +85,7 @@ import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES } from "./src/readapi.mjs";
+import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -1160,6 +1161,14 @@ const QUEUE_FLAGS = {
   // record a later reader trusts, and acting on a subject without its body is a failure this rig has registered
   // repeatedly. The attention/count derivation still runs over the FULL rows: projection is after derivation.
   "--no-body": { kind: "flag", usage: "[--no-body]" },
+  // #5770 — the BOUNDED park view. `--held` is shorthand for `--status held`; `--with-gates` projects each row
+  // to ONLY the fields that answer "who parked it, on what, when do we look again" (no body, no subject); `--limit`
+  // caps how many rows are emitted. Bounded by construction: bodies are dropped, the count is capped, and an
+  // unbounded request (`--limit 0`, or above the cap) is REFUSED rather than silently dumping the store — the
+  // unbounded version of this read reached 25 MB in a devtools scratch export.
+  "--held": { kind: "flag", usage: "[--held]" },
+  "--with-gates": { kind: "flag", usage: "[--with-gates]" },
+  "--limit": { kind: "value", usage: "[--limit <n>]", valueName: "n" },
 };
 const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
 
@@ -1178,6 +1187,8 @@ async function cmdQueue(args = []) {
   const statuses = [];
   const to = [];
   let noBody = false;
+  let gates = false;
+  let limit = GATE_VIEW_CAP;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     const spec = QUEUE_FLAGS[a];
@@ -1185,7 +1196,10 @@ async function cmdQueue(args = []) {
     // silently accept, and `main` accepting one was part of the fail-open.
     if (!spec) refuseQueueArgument(`unknown argument ${a}`);
     if (spec.kind === "flag") {
-      noBody = true;
+      // #5770: `--held` is a status filter (not a separate vocabulary), so it composes with `--to`/`--id`.
+      if (a === "--held") statuses.push("held");
+      else if (a === "--with-gates") gates = true;
+      else noBody = true;
       continue;
     }
     if (spec.kind === "value") {
@@ -1197,7 +1211,16 @@ async function cmdQueue(args = []) {
         refuseQueueArgument(`${a} takes a queue state, not "${v}" (states: ${spec.values.join(", ")})`);
       if (a === "--id") ids.push(v);
       else if (a === "--status") statuses.push(v);
-      else to.push(v);
+      else if (a === "--limit") {
+        // Bounded by construction: `--limit 0` is not a limit, and a limit above the cap is the unbounded dump
+        // this instrument exists to avoid. Refuse and name the cap instead of quietly printing the store.
+        const n = Number(v);
+        if (!Number.isInteger(n) || n <= 0)
+          refuseQueueArgument(`--limit must be a positive integer (1..${GATE_VIEW_CAP}); "all" is not a limit`);
+        if (n > GATE_VIEW_CAP)
+          refuseQueueArgument(`--limit ${n} exceeds the bounded park view's cap of ${GATE_VIEW_CAP}`);
+        limit = n;
+      } else to.push(v);
       i += 1;
       continue;
     }
@@ -1221,7 +1244,7 @@ async function cmdQueue(args = []) {
   // THE DEFAULT IS TODAY'S BYTES (#5016): no flags, or only the `--json` no-op, and the answer is the whole
   // document — `{ok, command, items}`, unchanged — so anything that parses `queue` today keeps parsing it. Every
   // extra key below appears ONLY once a caller asked for a narrower view.
-  if (ids.length === 0 && !filtered && !noBody) {
+  if (ids.length === 0 && !filtered && !noBody && !gates) {
     const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
     out({ ok: true, command: "queue", items });
     return;
@@ -1286,6 +1309,32 @@ async function cmdQueue(args = []) {
   // printed. `rows`/`counts`/`attention` above are still the whole store's.
   const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
   const items = filterQueueItems(all, { statuses, to });
+  if (gates) {
+    // THE BOUNDED CENSUS (#5770). Bodies are gone before projection, so this view cannot become the 25 MB
+    // dump; the count is capped and the cap is REPORTED, so a caller who sees 200 rows knows 438 matched.
+    const view = items.map(gateView);
+    const gateless = view.filter((v) => v.gate === "none");
+    out({
+      ok: true,
+      command: "queue",
+      view: "gates",
+      bounded: { limit, cap: GATE_VIEW_CAP, matched: items.length, shown: Math.min(items.length, limit), truncated: items.length > limit },
+      filter: { statuses, ...(to.length ? { to } : {}) },
+      rows: census.rows,
+      counts: census.counts,
+      // The number the census was asked for: held rows with NOTHING recorded about why they are parked.
+      gatelessHeld: view.filter((v) => v.status === "held" && v.gate === "none").length,
+      items: view.slice(0, limit),
+      ...(gateless.length ? { gatelessIds: gateless.map((v) => v.id) } : {}),
+      narrowed: "payload",
+    });
+    if (items.length > limit) {
+      process.stderr.write(
+        `queue: --with-gates is capped at ${GATE_VIEW_CAP} rows; ${items.length} matched, ${limit} shown. Raise it with --limit <= ${GATE_VIEW_CAP} or filter with --to <seat>.\n`,
+      );
+    }
+    return;
+  }
   out({ ...doc, items: noBody ? items.map(stripBody) : items });
 }
 
@@ -3290,6 +3339,7 @@ usages:
   node cli.mjs queue --id <id> [--id <id>…]   ONE (or a few) queue rows, body included, nothing else printed
   node cli.mjs queue --status <state> [--to <seat>…]  filter the printed rows; the counts/attention stay the whole store's (#5016)
   node cli.mjs queue --no-body               VIEWER form: bodies omitted, loudly headed, notices still derived over full rows (#5016)
+  node cli.mjs queue --held --with-gates     bounded park census (#5770): per row id/from/to/status/stage/blockedBy/reason/resolver/reviewBy, NO bodies, capped at 200 rows, and it reports how many held rows have no recorded gate
   node cli.mjs show <id>       the same row-scoped read, as a verb
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing

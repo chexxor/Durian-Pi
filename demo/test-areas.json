@@ -129,7 +129,8 @@
       "demo/wake-trace-wiring.test.mjs",
       "demo/queue-row-read.test.mjs",
       "demo/queue-compat-args.test.mjs",
-      "demo/queue-filter-attention.test.mjs"
+      "demo/queue-filter-attention.test.mjs",
+      "demo/queue-held-gates.test.mjs"
     ],
     "worktree": [
       "demo/complete-teardown-root.test.mjs",
