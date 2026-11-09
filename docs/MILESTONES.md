@@ -21,14 +21,16 @@ decides it.
 
 Queue semantics, org edges, the Router at harness open, seat prompts, real-model end-to-end (D3, D4, D5, D16).
 
-**How it is checked today:** `node cli.mjs doctor` plus the `rig` and `broker` test areas.
+**How it is checked today:** `node cli.mjs doctor` (returns `{ok:true, command:"resume", found:0}` on a quiet rig)
+plus `node scripts/test.mjs --area rig` (68) and `--area broker` (68).
 
 ## M2 — the operator can see the rig. ✅ done
 
 `watch`/`log` human views, the live stream on `send`, turn-grouped transcripts, the wrong-database guardrail
 (D18, D19, D20).
 
-**How it is checked today:** the `tui` test area (45 demos).
+**How it is checked today:** the `tui` test area — `node scripts/test.mjs --area tui` → **47/47 in 10.1 s**
+(measured 2026-11-09, Linux Fedora 45, node v24.22.1).
 
 ## M3 — seats can do work, and the rig verifies it. ✅ delivered, one gap open
 
