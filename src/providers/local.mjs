@@ -54,8 +54,8 @@ export const LOCAL2_ENV_PREFIX = "DURIG_LOCAL2_";
 /** The one price-catalog key shared by every family (a DeepInfra-shaped snapshot, stamped `fetchedAt`). */
 export const SHARED_PRICE_JSON_KEY = "DURIG_PRICE_JSON";
 
-/** Registration order: authors first, verifiers second. */
-export const LOCAL_ENV_PREFIXES = [LOCAL_ENV_PREFIX, VERIFIER_ENV_PREFIX];
+/** Registration order: authors first, verifiers second, the spare box last. */
+export const LOCAL_ENV_PREFIXES = [LOCAL_ENV_PREFIX, VERIFIER_ENV_PREFIX, LOCAL2_ENV_PREFIX];
 
 /** The ids this module can build - DERIVED from the prefix list, never enumerated. A hand-written id list is
  * how a registered prefix becomes a silently EXCLUDED provider: `broker.mjs` (the D105 between-items context
