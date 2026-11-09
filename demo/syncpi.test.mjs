@@ -12,8 +12,12 @@ import {
 	applyPinUpdate,
 	behindAhead,
 	decideDrift,
+	dependencySet,
 	describePinRef,
 	driftReport,
+	inspectBuildTree,
+	inspectBuilt,
+	inspectLinked,
 	linkSpecs,
 	parseArgs,
 	parseLsRemote,
@@ -303,6 +307,121 @@ try {
 	assert.match(threwShape.message, /is malformed/, "the shape error is also named");
 } finally {
 	rmSync(dir2, { recursive: true, force: true });
+}
+
+// --- the report INSPECTS state (#5282) -------------------------------------
+// THE DEFECT this pins: `buildTree`/`built`/`linked` were ACTION OUTPUTS, so the
+// no-flag report printed `null`/`[]`/`null` in a fully built AND linked tree and
+// `built: []` read as "unbuilt" when it was only "this call did not build".
+// Fixtures, not a real build: the three inspection functions take the tree as
+// an argument, so the report can be pinned without network or npm.
+// spawnSync, mkdtempSync, tmpdir and join are already imported above (#5094's fixture layer);
+// only the four names below are new to this file, so the merge does not re-import them.
+import { mkdirSync, realpathSync, rmSync as rmFixtures, symlinkSync } from "node:fs";
+
+const fxRoot = mkdtempSync(join(tmpdir(), "syncpi-inspect-"));
+const fakePin = {
+	sha: "a".repeat(40),
+	packages: [
+		{ name: "@earendil-works/alpha", dir: "packages/alpha" },
+		{ name: "@earendil-works/beta", dir: "packages/beta" },
+		{ name: "@earendil-works/gamma", dir: "packages/gamma" },
+	],
+};
+try {
+	const buildDir = join(fxRoot, "vendor", "pi-main");
+	// alpha and beta have a built entry; gamma is checked out but unbuilt.
+	for (const p of ["alpha", "beta"]) {
+		mkdirSync(join(buildDir, "packages", p, "dist"), { recursive: true });
+		writeFileSync(join(buildDir, "packages", p, "dist", "index.js"), "export {};\n");
+	}
+	mkdirSync(join(buildDir, "packages", "gamma"), { recursive: true });
+
+	assert.deepEqual(
+		inspectBuilt(fakePin, buildDir),
+		["@earendil-works/alpha", "@earendil-works/beta"],
+		"built lists the packages that HAVE a dist entry, in pin order",
+	);
+	assert.deepEqual(
+		inspectBuilt(fakePin, join(fxRoot, "no-such-build-dir")),
+		[],
+		"an absent build tree reports built:[] - and now that IS evidence, because the report measures disk",
+	);
+
+	// node_modules: alpha is a LINK into the built tree, beta is a REAL directory
+	// (the released package from the lockfile - NOT a link), gamma is absent.
+	const nm = join(fxRoot, "node_modules", "@earendil-works");
+	mkdirSync(join(nm, "beta"), { recursive: true });
+	let linkMade = true;
+	try {
+		symlinkSync(join(buildDir, "packages", "alpha"), join(nm, "alpha"), "junction");
+	} catch {
+		linkMade = false; // unprivileged Windows: the link assertions are skipped, the rest still run
+	}
+	if (linkMade) {
+		const linked = inspectLinked(fakePin, fxRoot, buildDir);
+		assert.deepEqual(
+			linked.map((l) => l.name),
+			["@earendil-works/alpha"],
+			"only an entry that RESOLVES into the built tree counts as linked; a real directory does not",
+		);
+		assert.equal(
+			linked[0].target,
+			realpathSync(join(buildDir, "packages", "alpha")).replace(/\\/g, "/"),
+			"the report names the directory the link actually resolves to",
+		);
+		assert.equal(
+			linked[0].spec,
+			`@earendil-works/alpha@file:${join(buildDir, "packages", "alpha").replace(/\\/g, "/")}`,
+			"the --link spec string is still there, so the old prose reading still works",
+		);
+		assert.equal(dependencySet(fakePin, fxRoot, buildDir), "mixed", "1 of 3 linked is not 'built-pin'");
+		// All three linked is 'built-pin' - the dependency set a suite green is
+		// comparable in, and the one the harness provisions worktree to.
+		for (const p of ["beta", "gamma"]) {
+			rmSync(join(nm, p), { recursive: true, force: true });
+			symlinkSync(join(buildDir, "packages", p), join(nm, p), "junction");
+		}
+		assert.equal(inspectLinked(fakePin, fxRoot, buildDir).length, 3, "all three now resolve into the built tree");
+		assert.equal(dependencySet(fakePin, fxRoot, buildDir), "built-pin");
+		// --unlink shape: npm restores REAL directories, so the links vanish.
+		for (const p of ["alpha", "beta", "gamma"]) {
+			rmSync(join(nm, p), { recursive: true, force: true });
+			mkdirSync(join(nm, p), { recursive: true });
+		}
+	}
+	// Installed from the lockfile (real directories, no links) is a DIFFERENT
+	// dependency set from the built pin, and the report must say which.
+	assert.equal(inspectLinked(fakePin, fxRoot, buildDir).length, 0, "real directories are not links");
+	assert.equal(dependencySet(fakePin, fxRoot, buildDir), "lockfile-released", "installed but not linked");
+	assert.equal(dependencySet(fakePin, join(fxRoot, "nowhere"), buildDir), "not-installed");
+
+	// build tree: present means a .git and a HEAD sha, and atPin is its own field.
+	assert.deepEqual(
+		inspectBuildTree(fakePin, buildDir),
+		{ present: false, head: null, atPin: false },
+		"a vendor/pi-main with no .git is no build tree",
+	);
+	const treeDir = join(fxRoot, "vendor", "pi-tree");
+	mkdirSync(treeDir, { recursive: true });
+	// A REAL repo, so this exercises the exact code path the report uses on disk
+	// (`git rev-parse HEAD`), not a hand-made .git that git itself refuses.
+	const gitFx = (args) => spawnSync("git", args, { cwd: treeDir, encoding: "utf8" });
+	gitFx(["init", "--quiet"]);
+	gitFx(["-c", "user.name=fixture", "-c", "user.email=fixture@example", "commit", "--allow-empty", "-qm", "fixture"]);
+	const treeHead = (gitFx(["rev-parse", "HEAD"]).stdout || "").trim();
+	assert.match(treeHead, /^[0-9a-f]{40}$/, "the fixture repo has a HEAD");
+	assert.deepEqual(
+		inspectBuildTree({ ...fakePin, sha: treeHead }, treeDir),
+		{ present: true, head: treeHead, atPin: true },
+		"a tree at the pin reads as atPin",
+	);
+	const stale = inspectBuildTree(fakePin, treeDir);
+	assert.equal(stale.head, treeHead, "a tree at another sha reports the sha it is at");
+	assert.equal(stale.atPin, false, "and says plainly that it is NOT the pin");
+	console.log("INSPECT OK");
+} finally {
+	rmFixtures(fxRoot, { recursive: true, force: true });
 }
 
 console.log("SYNCPI TEST PASS — args refuse unknown flags and misplaced refs; a ref resolves against upstream's real refs and an unknown one names the known tags instead of falling back to a branch tip; drift reports behind/ahead COUNTS, pin age and the tags in between, and calls out a pin that names no ref; the git facts (counts, tags-between, shallow-clone uncertainty) are pinned against a fixture repo with a gap we control; and a tag pin round-trips through readPin with its move history capped at 10 (#5094).");

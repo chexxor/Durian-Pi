@@ -18,7 +18,7 @@
 // queue-args refusal and #4955's `no_store`).
 //
 // Commands (JSON on stdout, like every other durig entry point):
-//   node scripts/sync-pi.mjs                     report drift vs the pin (default)
+//   node scripts/sync-pi.mjs                     INSPECT the tree + report drift vs the pin (default)
 //   node scripts/sync-pi.mjs --sync              build the pinned commit
 //   node scripts/sync-pi.mjs --update            move the pin to the branch tip, then build
 //                                                (LOUD policy gap: prefer a ref, below)
@@ -34,8 +34,24 @@
 // --link installs with `npm install --no-save`, so package.json stays clean
 // and nothing un-installable-by-others can be committed; a plain `npm install`
 // reverts to the released packages.
+//
+// THE REPORT IS A MEASUREMENT, NOT A RUN LOG (#5282): `buildTree`, `built` and
+// `linked` describe what is ON DISK after the call, whatever the call did. The
+// default path used to print `buildTree: null, built: [], linked: null` in a
+// fully built AND linked tree, because those fields were filled only by the
+// action that produced them - so `built: []` read as "unbuilt" and was not
+// evidence of anything. Every caller can now ask "what state is this tree in?"
+// with one no-side-effect command.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	lstatSync,
+	mkdirSync,
+	readFileSync,
+	readlinkSync,
+	realpathSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -413,19 +429,108 @@ export function ensureBuildTree(pin) {
 	return head;
 }
 
+/** The file that says a pin package is built (one definition, used by the
+ *  build and by the report, so "built" cannot mean two different things). */
+export function builtEntry(pkg, buildDir = BUILD_DIR) {
+	return join(buildDir, pkg.dir, "dist", "index.js");
+}
+
 /** Install workspace deps and build each package in dependency order. */
 export function buildPackages(pin) {
 	run("npm", ["install", "--include-workspace-root"], BUILD_DIR);
 	const built = [];
 	for (const pkg of pin.packages) {
 		run("npm", ["run", "build", "-w", pkg.name], BUILD_DIR);
-		const entry = join(BUILD_DIR, pkg.dir, "dist", "index.js");
+		const entry = builtEntry(pkg);
 		if (!existsSync(entry)) {
 			throw new Error(`${pkg.name} built without ${entry}`);
 		}
 		built.push(pkg.name);
 	}
 	return built;
+}
+
+// --- inspection (read-only: no fetch, no install, no build) ----------------
+
+function pathKey(path) {
+	const key = resolve(path).replace(/\\/g, "/");
+	// Windows paths are case-insensitive; a link written as vendor/Pi-Main and
+	// the pin's vendor/pi-main are the same directory there.
+	return process.platform === "win32" ? key.toLowerCase() : key;
+}
+
+/**
+ * What the build tree is, as opposed to what a run made it:
+ * `{present, head, atPin}` - `head` is the checked-out sha (null when the tree
+ * is absent or has no HEAD), `atPin` says whether it is the commit durig is
+ * validated against. A tree left at an older sha is a finding on its own.
+ */
+export function inspectBuildTree(pin, buildDir = BUILD_DIR) {
+	if (!existsSync(join(buildDir, ".git"))) {
+		return { present: false, head: null, atPin: false };
+	}
+	const res = git(buildDir, ["rev-parse", "HEAD"], { allowFail: true });
+	const head = res.status === 0 ? (res.stdout || "").trim() : "";
+	if (!head) return { present: false, head: null, atPin: false };
+	return { present: true, head, atPin: head === pin.sha };
+}
+
+/** Which pin packages have a built entry on disk (a subset, in pin order). */
+export function inspectBuilt(pin, buildDir = BUILD_DIR) {
+	return pin.packages.filter((pkg) => existsSync(builtEntry(pkg, buildDir))).map((pkg) => pkg.name);
+}
+
+/**
+ * Which pin packages `node_modules` currently resolves to the BUILT tree, and
+ * the directory each link actually resolves to. A real entry (a released
+ * package from the lockfile) is NOT a link. npm uses junctions as well as
+ * symlinks on Windows, where `lstat` does not report a reparse point as a
+ * symlink, so the decisive test is what the entry resolves to.
+ */
+export function inspectLinked(pin, durigDir = DURIG, buildDir = BUILD_DIR) {
+	const linked = [];
+	for (const pkg of pin.packages) {
+		const entry = join(durigDir, "node_modules", ...pkg.name.split("/"));
+		const builtDir = join(buildDir, pkg.dir);
+		let resolved;
+		try {
+			resolved = realpathSync(entry);
+		} catch {
+			continue; // not installed at all
+		}
+		if (pathKey(resolved) !== pathKey(builtDir)) continue;
+		// `link` keeps the raw link text when there is one, so a relative or
+		// oddly-written target is still visible; `spec` keeps the same string
+		// --link has always reported.
+		let link = null;
+		try {
+			if (lstatSync(entry).isSymbolicLink()) link = readlinkSync(entry);
+		} catch {
+			/* junction or plain dir: realpath above already decided it */
+		}
+		linked.push({
+			name: pkg.name,
+			target: resolved.replace(/\\/g, "/"),
+			link,
+			spec: `${pkg.name}@file:${builtDir.replace(/\\/g, "/")}`,
+		});
+	}
+	return linked;
+}
+
+/**
+ * One-line answer to "which pi does a suite run in this tree test?" - the
+ * verdict-bearing question after a pin move, and the reason a green in a
+ * linked tree is not comparable with a green in an unlinked one (#3821).
+ */
+export function dependencySet(pin, durigDir = DURIG, buildDir = BUILD_DIR) {
+	const linked = inspectLinked(pin, durigDir, buildDir).length;
+	if (linked === pin.packages.length) return "built-pin";
+	if (linked > 0) return "mixed";
+	const installed = pin.packages.some((pkg) =>
+		existsSync(join(durigDir, "node_modules", ...pkg.name.split("/"))),
+	);
+	return installed ? "lockfile-released" : "not-installed";
 }
 
 function out(payload) {
@@ -435,7 +540,6 @@ function out(payload) {
 function main(argv) {
 	const args = parseArgs(argv);
 	let pin = readPin();
-	let linked = null;
 	let pinWritten = false;
 	let observedTip = null; // upstream tip seen on THIS run, so drift costs no second round-trip
 
@@ -523,17 +627,22 @@ function main(argv) {
 	};
 
 	// The build tree must exist and be at the pin before anything is built.
-	const head = args.sync || args.update ? ensureBuildTree(pin) : null;
-	const built = args.sync || args.update ? buildPackages(pin) : [];
+	if (args.sync || args.update) {
+		ensureBuildTree(pin);
+		buildPackages(pin);
+	}
 
 	if (args.link) {
 		if (!existsSync(join(BUILD_DIR, "packages", "durable", "dist", "index.js"))) {
 			throw new Error("nothing built yet; run --sync before --link");
 		}
 		run("npm", ["install", "--no-save", ...linkSpecs(pin)], DURIG);
-		linked = linkSpecs(pin);
 	}
 
+	// Every field below is READ BACK FROM DISK after the action, so the report
+	// states the resulting state and a reader never has to guess whether the
+	// action ran in an earlier call (#5282).
+	const tree = inspectBuildTree(pin);
 	out({
 		ok: true,
 		command: "sync-pi",
@@ -543,9 +652,12 @@ function main(argv) {
 		pinFileWritten: pinWritten,
 		drift,
 		upstream: drift, // kept: the old key name, same finding, so an existing reader still finds it
-		buildTree: head,
-		built,
-		linked,
+		upstream: drift,
+		buildTree: tree.head,
+		buildTreeAtPin: tree.atPin,
+		built: inspectBuilt(pin),
+		linked: inspectLinked(pin),
+		dependencySet: dependencySet(pin),
 	});
 }
 
