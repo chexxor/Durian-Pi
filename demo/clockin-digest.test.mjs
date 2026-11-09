@@ -118,8 +118,8 @@ try {
 	);
 	assert.match(
 		text,
-		/^deferred qa2 \(1\): #4002$/m,
-		"a deferred row is named by id, on ITS SEAT'S line — grep-able, not inline prose (#5596)",
+		/^deferred \(awaiting the operator\): 2 rows across 2 seat\(s\): lead=1 qa2=1$/m,
+		"the deferred backlog is a per-seat aggregate, not a row-per-line dump (#5398) — and each row is still named by id and seat (#5596)",
 	);
 	assert.match(text, /item-4001 \+1 \[#4001 done\]/, "landing debt is joined to the row's status");
 	assert.match(
@@ -144,6 +144,7 @@ try {
 			status: n % 7 === 0 ? "held" : "deferred",
 			body: SUBJECT.repeat(30),
 		});
+	const snapFile = join(dir, "deferred-ids.txt");
 	const big = renderDigest({
 		pointer: { lines: ["## NEXT SESSION (test)"], start: 1, end: 2, fileLines: 2 },
 		seats: 6,
@@ -156,32 +157,60 @@ try {
 		selfdevLines: 1,
 		selfdevHeadings: [],
 		ms: 1,
+		deferredFile: snapFile,
 	});
-	const dLines = big.split("\n").filter((l) => /^deferred /.test(l));
-	assert.equal(dLines.length, SEATS.length + 1, "one header + exactly one line per seat holding rows");
+	const section = big.split("\n").filter((l) => /^deferred |^  (rows|act next|all) /.test(l));
+	assert.equal(
+		section.length,
+		3,
+		"the deferred backlog is THREE lines at 177 rows — header, act-next, snapshot pointer — not one line per row (#5398)",
+	);
+	const dLines = section;
 	assert.match(
-		dLines[0],
-		/^deferred \(parked on a question\): \d+ rows across 6 seats — one id list per seat, grep "\^deferred <seat> "$/,
-		"the header states the total and how to grep it",
-		);
+		section[0],
+		/^deferred \(awaiting the operator\): (\d+) rows across (\d+) seat\(s\): (.+)$/,
+		"the header states the total and the per-seat counts",
+	);
 	for (const seat of SEATS) {
 		const ids = outage
 			.filter((i) => i.status === "deferred" && i.to === seat)
-			.map((i) => `#${i.id}`);
+			.map((i) => i.id);
 		assert.ok(ids.length > 0, `${seat} holds deferred rows in the fixture — the control is not vacuous`);
-		const lines = dLines.filter((l) => l.startsWith(`deferred ${seat} `));
-		assert.equal(lines.length, 1, `exactly ONE line holds ${seat}'s deferred ids — one grep, whole set`);
-		assert.match(
-			lines[0],
-			new RegExp(`^deferred ${seat} \\(\\d+\\): #`),
-			"the line is anchored and count-prefixed",
+		assert.match(section[0], new RegExp(`${seat}=${ids.length}`), `${seat}'s deferred count is on the header line`);
+	}
+	assert.match(
+		section[1],
+		/^  act next \(lowest 2 id\(s\) per seat\): #\d+ \(\w+\)/,
+		"the digest names the ids a session can act on without printing every row",
+	);
+	assert.match(
+		section[2],
+		new RegExp(`^  all \\d+ ids: ${snapFile}`),
+		"the digest points at the snapshot file that carries EVERY id (#5596)",
+	);
+	assert.ok(!big.includes(SUBJECT.repeat(3)), "row BODIES never reach the digest — only the 55-char subject slice");
+	const namedRows = (section.join("\n").match(/#/g) || []).length;
+	assert.ok(
+		namedRows <= DEFERRED_INLINE_MAX,
+		`the digest names at most ${DEFERRED_INLINE_MAX} rows whatever the backlog size — here ${namedRows} of 177; the rest live in the snapshot file`,
+	);
+	// #5596's real ask — "one grep returns a seat's whole deferred set" — is answered by the snapshot the
+	// digest points at, so the test greps that file the way a session would.
+	writeDeferredList(outage.filter((i) => i.status === "deferred"), snapFile, "fixture.sqlite");
+	const snap = readFileSync(snapFile, "utf8").split("\n").filter((l) => /^#\d+\t/.test(l));
+	for (const seat of SEATS) {
+		const want = outage
+			.filter((i) => i.status === "deferred" && i.to === seat)
+			.map((i) => i.id)
+			.sort((a, b) => a - b);
+		const got = snap
+			.filter((l) => l.split("\t")[1] === seat)
+			.map((l) => Number(l.split("\t")[0].slice(1)));
+		assert.deepEqual(got, want, `${seat}'s deferred ids are ALL in the snapshot — one grep, the whole set (#5596)`);
+		assert.ok(
+			!snap.some((l) => l.includes(SUBJECT.repeat(3))),
+			"the snapshot carries truncated subjects only; row bodies never reach it",
 		);
-		assert.deepEqual(
-			lines[0].slice(lines[0].indexOf(": ") + 2).split(" "),
-			ids,
-			`${seat}'s line carries EVERY deferred id for that seat, mechanically — no re-derivation from a 21 MB dump`,
-		);
-		assert.ok(!lines[0].includes(SUBJECT), "row subjects never reach the per-seat lines");
 	}
 	// The byte claim, measured against the shape it replaced ON THE SAME ROWS — not a feeling.
 	const newBytes = Buffer.byteLength(dLines.join("\n"), "utf8");

@@ -6,12 +6,23 @@
 // Run: node demo/verifier-arm-probe.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const TOOL = "tools/verifier-arm-probe.mjs";
 const BASE = "https://api.deepinfra.com/v1/openai";
 const MODEL = "openai/gpt-oss-120b";
 
+// The rig is now PRICED: durig.config.json carries DURIG_VERIFIER_PRICE_USD_IN/OUT (asOf 2026-11-06), so a test
+// that runs the probe in the shared tree gets a price from the operator's config and can never observe the
+// unpriced shape it exists to pin (ROADMAP 272). Isolate the config file: an empty one EXISTS, so the probe is
+// not refused with exit 2, but nothing in it can supply a price.
+const EMPTY_CONFIG = join(mkdtempSync(join(tmpdir(), "arm-probe-")), "empty-config.json");
+writeFileSync(EMPTY_CONFIG, "{}");
+
 function run(env = {}, args = []) {
+  if (!args.some((a) => a.startsWith("--config="))) args = [`--config=${EMPTY_CONFIG}`, ...args];
 	// A controlled env: the family keys come from the caller, and NO credential of the operator's shell is copied
 	// in, so the demo cannot spend anything and cannot leak anything.
 	const scrubbed = { ...process.env };
