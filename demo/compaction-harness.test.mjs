@@ -1,4 +1,4 @@
-﻿// demo/compaction-harness.test.mjs — ROADMAP 97: compaction evaluation harness
+// demo/compaction-harness.test.mjs — ROADMAP 97: compaction evaluation harness
 //
 // Reconstructs ContextView from the append-only store, swaps in the compacted artifact,
 // and fires recall/artifact/continuation/decision probes graded by src/judge.mjs.

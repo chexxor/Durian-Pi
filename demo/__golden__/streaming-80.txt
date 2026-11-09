@@ -1,9 +1,9 @@
   durig · 4 seats · TUI
   ────────────────────────────────────────────────────────────────────────────
-  ○ idle       pm       0q       —
-  ○ idle       impl     0q       —                              composing
-  ○ idle       qa       0q       —
-  ○ idle       lead     0q       —
+  ○ idle       pm        0q       —
+  ○ idle       impl      0q       —                             composing
+  ○ idle       qa        0q       —
+  ○ idle       lead      0q       —
 
   ── streaming: impl ──
   ● reading the queue and claiming #624

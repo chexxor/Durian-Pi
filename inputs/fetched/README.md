@@ -16,8 +16,16 @@ sentence usually is.**
 
 **The rule.** If a report cites a fetched page, the page ships here, with a manifest row. A report whose citations point at
 neither a file here nor a resolvable URL gets **returned, not folded** — a dead URL or an unopenable line range is worse than
-no citation, because it reads as evidence. This directory is **tracked** (it is not in `.gitignore`, unlike `vendor/eval/`
-and `.spike/`), so a corpus that lives only in the agent's workspace counts as lost.
+no citation, because it reads as evidence. **What is tracked here is the record, not the bytes.** `git ls-files
+inputs/fetched/` lists exactly `MANIFEST.md` and `README.md`, because `.gitignore:73-75` ignores `inputs/fetched/*.html`
+with the stated reason: "fetched vendor pages are re-fetchable evidence, too big to track (11 pages, 8.2 MB, largest
+2.6 MB); the tracked record is `inputs/fetched/MANIFEST.md` (url, date, HTTP, sha256, verified phrases)". So the durable,
+checkable unit of a citation is the **manifest row** — URL, fetch date, HTTP status, sha256, the phrases verified in our
+copy — **plus the ≤ 40-word quote**, while the page itself stays re-fetchable and ignored. Two consequences the old wording
+hid: a page sitting on disk but absent from the manifest is **lost** (`git check-ignore -v` on any page names
+`.gitignore:75`), and **a fresh worktree holds no pages at all** — in the clean worktree this paragraph was written in,
+`ls inputs/fetched/*.html` matched nothing. Never cite a page path as if a reader could open it from a checkout: cite the
+**URL**, and the manifest row that pins what the fetched copy was.
 
 **Naming.** One file per fetched page: `<host>_<path-with-underscores>.html` (or `.md`), e.g.
 `code.claude.com_docs_en_skills.html`. The report's citations point at the **URL**, not the file; the manifest maps the two.

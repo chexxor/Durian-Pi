@@ -130,3 +130,52 @@ verification depth for speed — dropping a real-model lane from the default loo
 `docs/DECISIONS.md` **D213** (the ruling and its measurements), **D212** (the extension-plane policy this pairs with),
 `docs/reviews/base-agent-product-topology-research-prompt.md` question **8** (competitor iteration architecture), and the
 numbers in the front-matter `evidence` line, all run 2026-11-05 on Linux Fedora 45 `7.2.15-300.fc45.x86_64` node v24.22.1.
+
+## Cheap instruments for "is the fleet actually working?" (added 2026-11-08, delegate N10)
+
+Two reads that answer it in under a second, neither of which needs the broker up. Both were written in gitignored
+`.spike/` and are reproduced here so they survive (pitfall: an unpromoted instrument is lost —
+`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`); `#5617` is the row that promotes the files
+themselves into `tools/`.
+
+**Completed vs failed generations per seat.** A wake count proves nothing — a seat can wake 20 times and produce no
+assistant turn (the `no_model` failure in D237 looked exactly like a healthy fleet in the broker log).
+
+```js
+// node fleet-health.mjs <sinceISO>
+import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync("./selfdev.sqlite", { readOnly: true });
+const seats = { 3: "pm", 9: "impl", 15: "qa", 21: "lead", 4924: "scribe", 4930: "devtools",
+  4936: "auditor", 55605: "security", 86607: "qa2", 107595: "architect" };
+for (const g of db.prepare("SELECT id, conversation_id, record FROM tasks WHERE kind = ? ORDER BY id DESC LIMIT 400")
+  .all('"pi.generation"')) {
+  const j = JSON.parse(g.record);
+  if ((j.startedAt ?? 0) < Date.parse(process.argv[2] ?? "2026-11-08T06:36:00Z")) continue;
+  const st = j.state?.outcome?.status; // "completed" | "failed" | undefined (in flight)
+  console.log(seats[g.conversation_id] ?? g.conversation_id, st, j.state?.outcome?.error?.message ?? "");
+}
+db.close();
+```
+
+**What a seat actually did in its turn.** If commits are absent, look at the tool calls before blaming the provider:
+`devtools` filled a worktree with a 25 MB `.scratch/all-queue.json` this morning while the fleet ran 205 generations
+with 0 commits.
+
+```js
+// node seat-turn-read.mjs <conversationId> [limit]
+import { DatabaseSync } from "node:sqlite";
+const db = new DatabaseSync("./selfdev.sqlite", { readOnly: true });
+for (const r of db.prepare("SELECT record FROM entries WHERE conversation_id = ? ORDER BY id DESC LIMIT ?")
+  .all(Number(process.argv[2]), Number(process.argv[3] ?? 12))) {
+  const j = JSON.parse(r.record);
+  const c = Array.isArray(j.content)
+    ? j.content.map(x => x.type === "tool-call" ? `TOOL ${x.name} ${JSON.stringify(x.args).slice(0, 120)}` : (x.text ?? ""))
+    : j.content;
+  console.log(j.kind, String(c).replace(/\n/g, " ").slice(0, 200));
+}
+db.close();
+```
+
+**Measure provider capacity under load, not in a quiet gap.** The same 8 requests measured 5.28 s with the fleet dead
+and **60.0 s** with six seat turns in flight (`GET /status` showed a 79,886-token prompt). A capacity number quoted
+without its load state is not a capacity number.

@@ -11,6 +11,17 @@
 // systemic". A second family is now served on the second GPU, so author seats run `local/<id>` and verifier
 // seats run `verifier/<id>`.
 //
+// THE THIRD PREFIX (#5648, 2026-11-08). A second BOX on the LAN (192.168.1.52:8080) sits idle while the first
+// box carries every seat, so throughput is gated on registration, not on hardware: `DURIG_LOCAL2_*` was
+// written into `~/.config/durig/env` and was inert, because `src/seatmodel.mjs` resolves a seat's provider
+// ONLY from a prefix that is registered here. Measured on the box itself, so the values below are not guesses:
+// `GET /v1/models` serves `qwen3.8-flash-next-q2_0` with `meta.n_ctx 131072` and
+// `architecture.input_modalities ["text"]` (text-only); `GET /props` reports `total_slots 4` and
+// `modalities.vision false`. AND A WRONG ID IS INVISIBLE AT THE WIRE: a completion asked for
+// `this-model-does-not-exist-abc123` returned 200 with `"model": "qwen3.8-flash-next-q2_0"` and
+// `finish_reason: "stop"` - llama.cpp/Strata reroutes an unknown id to whatever is loaded. So the provider
+// prefix is the ONLY place a stale model id can fail, and it fails by never resolving, not by erroring.
+//
 // WHY THIS MODULE OWNS THE ID SET. Two consumers used to compare a seat's provider to the literal string
 // "local" (`src/broker.mjs` for the D105 between-items context reset, `src/readapi.mjs` for the declared
 // context window). With a second local provider both would have silently EXCLUDED it: the verifier seat
@@ -36,12 +47,20 @@ export const VERIFIER_PROVIDER_ID = "verifier";
 /** Env/config key prefixes. The provider id is DERIVED from the prefix, so the two can never drift apart. */
 export const LOCAL_ENV_PREFIX = "DURIG_LOCAL_";
 export const VERIFIER_ENV_PREFIX = "DURIG_VERIFIER_";
+/** A third locally-served OpenAI-compatible server, on its own host (#5648). The name says BOX, not family:
+ * `local2` is whatever model that box serves, and the id is still derived from the prefix below. */
+export const LOCAL2_ENV_PREFIX = "DURIG_LOCAL2_";
 
-/** Registration order: authors first, verifiers second. */
-export const LOCAL_ENV_PREFIXES = [LOCAL_ENV_PREFIX, VERIFIER_ENV_PREFIX];
+/** Registration order: authors first, verifiers second, the spare box last. */
+export const LOCAL_ENV_PREFIXES = [LOCAL_ENV_PREFIX, VERIFIER_ENV_PREFIX, LOCAL2_ENV_PREFIX];
 
-/** The ids this module can build. See the note above on why a static set is sound. */
-export const LOCAL_PROVIDER_IDS = [LOCAL_PROVIDER_ID, VERIFIER_PROVIDER_ID];
+/** The ids this module can build - DERIVED from the prefix list, never enumerated. A hand-written id list is
+ * how a registered prefix becomes a silently EXCLUDED provider: `broker.mjs` (the D105 between-items context
+ * reset) and `readapi.mjs` (the declared window) both ask this set, so an id missing here means a genuinely
+ * local seat is treated as remote - it never resets its context and its window reads as unknown. Derivation
+ * makes that state unreachable: you cannot register a prefix without its id appearing here.
+ * See the note above on why a static set is sound. */
+export const LOCAL_PROVIDER_IDS = LOCAL_ENV_PREFIXES.map(providerIdForPrefix);
 
 /** Is this provider locally served (free context, cheap reset, no paid API)? */
 export function isLocalProviderId(id) {
