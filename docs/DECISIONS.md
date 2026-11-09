@@ -10433,3 +10433,57 @@ Three findings follow, each with the measurement attached.
 
 **Why.** Every one of these is the same milestone question — *can the rig finish the work it admits* — and each answer
 came from a number, not from a wake count.
+
+## D240 — the operator re-orders the milestone: **avoid compaction; continuation notes are the mechanism, and they live on the extension plane** (2026-11-09T03:2xZ, delegate recording; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The ruling, as given.** "The priority is to avoid context compaction. If a task cannot be completed in a single
+context window, ensure the team member is properly maintaining notes to ensure they can continue working on the task
+from a fresh context, in case the team harness forces them to work in a new context." The operator did not know where
+the notes should live or whether that should be configurable per installation, and ruled the mechanism must be **an
+extension**, "as is proper in the Pi ecosystem" (D212: a customization that cannot be an extension means the base is
+missing a seam — grow the seam, not the feature).
+
+**What the delegate adopted, and the measurement behind each choice.**
+
+1. **Source of truth is a store document**, `defineDoc({kind: "durig.notes", scope: "conversation", history: "rewindable", fork: "asOf"})` — the shape
+   ROADMAP **177** already ruled for typed state, and the shape the pi-durable `PlanDoc` example uses. *Why not a file
+   in the seat's worktree:* `.durig/` is gitignored (`.gitignore:16`), seats work in per-item worktrees (D49), and the
+   rig has a recorded incident where worktree and scratch state were swept
+   (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`). A note that dies with the worktree is not a continuity
+   mechanism, and a gate cannot read it.
+2. **A mirror file, configurable per installation:** `DURIG_NOTES_DIR/item-<id>.md`, default `<rig root>/.durig/notes/`,
+   resolved through `src/config.mjs` like every other setting and printed by `check` so the effective path is never
+   guessed. This answers the operator's "configurable per installation" question with one env var, not a new config
+   surface.
+3. **Compaction stays as a fallback, but the summariser model call is removed.** `beforeCompact`
+   (`pi-durable dist/harness/compaction.js:82-88`) lets an extension return `{summary}` and `place()` commits it at
+   `:374` — the summariser request is never constructed. That deletes the fragile part: **218** "Summarization hit
+   the token limit; the summary is incomplete" records, **209** refusals by `DURIG_SPEND_CAP_RUN_USD` before any
+   request was sent, and 1 provider 429, out of **2,333** attempts (430 failed). It does **not** `{decline: true}`:
+   ROADMAP **176** forbids a competing summariser, and the hook writing the summary *is* pi-durable's own mechanism.
+4. **The note is not put in the prompt.** ROADMAP **175** is the gate — pi-durable rebuilds the system prompt from
+   sections before every request and provider caching is prefix-exact, so a `render` that changes per request may be a
+   full-prefix cache miss every request. Static pointer section only; the mutable body arrives at boundaries: wake
+   (`src/driver.mjs:54, 242`), compaction (`beforeCompact`), and reset (`src/reset.mjs:70`, `harness.reset(handoff)`
+   at `dist/harness/harness.js:45-48`). The reset path matters because a compaction summary is *always* fenced
+   (`compaction.js:12-13, :374`), so a structured seed can only come from a reset.
+5. **The 331 nesting fix is still required** — as the fallback's plumbing, not as the milestone. `src/config.mjs:513`
+   emits `out.modelOverrides` as a sibling of `compaction`, which `dist/harness/compaction.js:196` never reads, and
+   `demo/config.test.mjs:333-341` asserts the sibling shape, so the test currently pins the bug (pitfall 161).
+
+**Why this ordering, and not "make compaction better."** Compaction cannot be the answer to task completion because
+the wall is not the window. Measured this session: the auditor's live context is **106 %** of its declared 24,576-token
+window; **9 of 12 seats** are `AT RISK` on turn shape — a strict alternating template refuses the next user turn before
+any token limit is reached; and a seat's current window carries **1–11 queue items** (impl references 108 distinct
+`item-\d+` in its last 200 entries), so the summariser is being asked to compress a hundred unrelated tasks. A perfect
+summary of a window holding a hundred tasks still does not let one task finish. The note is the unit of continuity;
+the window is just where it is carried.
+
+**Deliberately left to the operator.** Whether the verifier/auditor moves to the local family (it is the seat at the
+wall — every one of the 209 run-cap refusals belongs to conversation 4936) or whether `DURIG_VERIFIER_MAX_TOKENS` /
+verifier context is raised: capacity is a grant, not a delegate action. Whether notes are per-project or per-rig is
+already answered by D130/R1 (per project; this rig is one project today).
+
+**Recorded, not done.** No code was written by this delegate. The design is
+`docs/reviews/architecture-context-continuity-2026-11-09.md`; the intent is spooled to `pm` as
+`delegate-20261109-continuity` (broker `pid 114848`, first pass `INTENT delivered=5 dead=0 dup=0`).

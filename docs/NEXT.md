@@ -1,11 +1,12 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-08T20:1xZ (delegate session **N12** — the operator's goal this window is **"ensure task
-completion within a single context window"**. N12 measured *why* a seat's task does not finish inside its window,
-restarted the fleet, and delivered the operator's intent to `pm`. Nothing was landed by this session; the landing
-pass is now blocked by **stale bases**, not by unverified work. `main` = `origin/main` = **`d37bef35`** (measured
-`git rev-parse --short main`; the N11 pointer's `496cb462` was already superseded — `item-5736` landed as
-`4efce137`, and `d37bef35` is a docs commit on top of it).
+**Last update:** 2026-11-09T03:2xZ (delegate session **N13** — the operator narrowed the goal: **avoid compaction; a
+seat that cannot finish inside one window must be maintaining notes so it can resume from a fresh context, and the
+mechanism must be an extension**. N13 surveyed the prior art, wrote the design
+(`docs/reviews/architecture-context-continuity-2026-11-09.md`), and routed it to `pm`
+(requestId `delegate-20261109-continuity`). `main` = **`15df5d34`** (measured `git rev-parse --short main`; `item-5786`
+landed as `f5a73c61`, `item-3581` as `15df5d34`). The fleet ran, wedged twice, and was recovered twice; the broker is
+resident as `pid 114848` since 03:20:33Z.
 
 **N12 in brief** — three facts, all measured on this box, all reproducible with one command each:
 1. **ROADMAP 331 is still unfixed on `main`.** The per-model compaction override is emitted as a *sibling* of the
@@ -74,7 +75,10 @@ provider. Field names are `usd` / `prompt_tokens`, not `costUSD` (pitfall 145).
 it in one way: the mechanism is now measured end to end (config → `compactionSettings()` → harness defaults → 240
 failed summaries on the verifier seat), and the operator's intent for the fix is **spooled to `pm`**
 (requestId `delegate-20261108-context-window`), and `pm` turned it into rows #5784/#5787/#5791/#5794/#5796 within
- ten minutes. What it did NOT move: **this delegate session landed nothing** (its commits are docs-only: `2338f004`,
+ ten minutes. **N13 changed the priority order**: compaction is no longer the thing to perfect — it is the thing to
+avoid. The continuity design is in `docs/reviews/architecture-context-continuity-2026-11-09.md`; `beforeCompact`
+(`pi-durable dist/harness/compaction.js:82-88`) lets an extension supply the summary itself, which removes the
+summariser model call entirely — the source of 218 truncations and 209 run-cap refusals. What it did NOT move: **this delegate session landed nothing** (its commits are docs-only: `2338f004`,
 `47b18e74`, `a9c651b5`, `2362d20a`, `cba0ef3f`), and `grep -n "out.compaction" src/config.mjs` still shows the
 override emitted as a sibling — `:455 if (Object.keys(policy).length > 0) out.compaction = policy;` with the
 `modelOverrides` block below it — **ROADMAP 331 is not fixed**. `main` = **`cba0ef3f`** (`fb463162` landed
@@ -93,29 +97,21 @@ failing-first" (**the same subject appears twice — verify they are not duplica
 **#5794** `qa` — verify the re-cut tip and name the sha. `item-5398` and `item-5648` cannot land until their re-cuts
 exist.
 
-**Exact next command** — the broker (`pid 3521203`, started 20:56Z, `--max-duration 1800`) stopped **passing** at
-21:26:06Z while seat runs continue (generations still landing at 21:35Z on devtools/impl/qa). A `degraded` verdict from
-`broker-serve --status` is **not** proof of a stall — read the newest `pi.generation` rows first (pitfall 144), and
-never hard-stop while genlock slots are being created.
+**Exact next command** — the resident broker is `pid 114848`, started 03:20:33Z with `--max-duration 7200`; its first
+pass delivered 5 intents `dead=0 dup=0` and woke pm,qa,lead,scribe,devtools,auditor,security,architect. It has wedged
+twice this session (pids 3521203 and 23632 both exited `reason=deadline passes=-` — that signature means the process
+died with **no completed pass at all** in its life, pitfall 165). A `degraded` verdict is not proof of a stall: compare
+`heartbeatAt` (liveness) with `lastPassAt` (progress) first, and check for a live genlock lease before hard-stopping.
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
 node scripts/clockin.mjs                               # BEFORE starting a broker; it hangs while one drives
-ls -1 selfdev.sqlite.genlock*                          # EMPTY => safe to stop; non-empty => a generation is in flight
-node tools/broker-serve.mjs --stop                     # cooperative; expect "stopped": false on a lingered broker
-# still alive and genlock empty =>  kill 3316329  then  DURIG_DB=./selfdev.sqlite node cli.mjs resume
-set -a; . "$HOME/.config/durig/env"; set +a
-node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes   # a fresh broker drains the spool
-grep -c "delegate-20261108-clockin-hang" selfdev.sqlite.broker.log       # did pm receive the intent?
-git rev-parse --short main                             # expect 39081534 or newer (docs only from the delegate)
-node scripts/land.mjs item-5648 --changed-suite        # ONLY after #5787's re-cut exists
-node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # THE gate: exit 0 only when the override
-                                                     #   resolves, every window holds its policy, and no truncated/refused
-                                                     #   compactions remain. Currently exit 1 with six named reasons.
-node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs  # must print reserve=20480 once #5785 lands
-node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8  # is the read path answering at all?
-node docs/evidence/2026-11-08-context-window/milestone-check.mjs       # also prints the run-cap headroom: how many
-                                                     #   compactions the resident broker can still afford (pitfall 156)
+node docs/evidence/2026-11-08-context-window/milestone-check.mjs   # broker progress leg, spool, occupancy, shape
+node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8   # is the read path answering?
+node cli.mjs queue --json --no-body --status queued    # bounded read; the unbounded census returns 27.9 MB (88% terminal)
+git rev-parse --short main                             # expect 15df5d34 or newer
+cat docs/reviews/architecture-context-continuity-2026-11-09.md   # the contract pm must decompose
+node scripts/test.mjs --area docs                      # 6/6 expected
 ```
 
 **Read-path caveat (22:12Z).** A CLI read does not open the store while a broker is resident — `src/readclient.mjs:106-111`

@@ -3338,3 +3338,33 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `{"ok": false, "error": "read health: timed out awaiting the broker's result"}`. Any script that caps the call at
     a few seconds sees 0 bytes and exit 124 and concludes "hung". Seats do **not** pay this: their queue read is
     `tx.doc(RigQueue)` (`src/seattools.mjs:133`), not the broker read path. Only the operator's CLI does.
+165. **An EXIT line with `passes=-` means the broker was force-killed, never that it ran no passes.** The emitter is
+    `cli.mjs:2183`, the *last-resort* timer: a signal requests a stop, `DURIG_STOP_GRACE_MS` elapses without the pass
+    settling, and the timer writes the literal `EXIT pid=… reason=deadline passes=-` before `process.exit(0)`. A
+    graceful exit prints a number instead (`src/broker.mjs:2001`): this session saw `reason=max-duration passes=473`
+    (pid 3941969) versus `reason=deadline passes=-` twice (pids 3521203 at 23:30:42Z, 23632 at 03:20:22Z), both after
+    SIGTERM on a broker whose last completed pass was 30+ minutes earlier. Read it as **the pass loop was wedged**.
+166. **The queue is not readable from raw SQLite as a document.** `documents.record` for `durig.queue` is a 47-byte
+    envelope — `{"id":29,"kind":"durig.queue","scope":{"kind":"session"},"createdAt":1}` — and the items live in
+    `document_revisions.content` deltas (**14,705** revisions, newest `seq 3503853`). A probe that parses the doc
+    record prints "0 items" and reads exactly like an empty queue. Use the bounded CLI view
+    (`cli.mjs queue --json --no-body --status queued`); the unbounded census returns **27.9 MB**, 88 % of it
+    `done`/`cancelled` history (4,100 + 868 of 5,896 rows measured 01:4xZ).
+167. **A compaction summary is always fenced, so a structured seed cannot come from compaction.**
+    `pi-durable dist/harness/compaction.js:12-13` wraps whatever a `beforeCompact` hook supplies (`:374`) as
+    `"The conversation history before this point was compacted into the following summary:\n<summary>…</summary>"`.
+    `dist/harness/harness.js:45-48` (`reset(handoff)`) and tool `control: {handoff}`
+    (`dist/harness/generation.js:547-557`) are the only un-fenced injection points — the design for continuation
+    notes hangs on that distinction (`docs/reviews/architecture-context-continuity-2026-11-09.md` §4.3).
+168. **No compaction or handoff package in the pi registry can load into a seat.**
+    `src/extensions.mjs:19-21`: a pi *coding-agent* extension "cannot load here". Twenty-two packages surveyed on
+    2026-11-09 are all on that plane (`pi-blitz-handoff`, `@protokol11/pi-session-transfer`,
+    `@codeslinger001/pi-auto-handoff`, `pi-tuck`, `pi-vcc`, `pi-observational-memory`,
+    `@woksin/pi-context-budget`, `pi-compact-assistant`, `pi-voluntary-compaction`, …). Their **shapes** are prior
+    art — structured handoff as the compaction entry's summary with the cut point preserved (`pi-auto-handoff`),
+    write-the-state-to-a-file-then-compact (`pi-compact-assistant`), zero-model-call deterministic summaries plus
+    recall over the untouched transcript (`pi-tuck`, `pi-vcc`, `@pi-unipi/compactor`) — never components.
+169. **A dynamic prompt section can cost the whole cached prefix.** ROADMAP **175** is the gate: pi-durable rebuilds
+    the system prompt from sections before every request and provider caching is prefix-exact, so a `render` that
+    changes per request may be a full cache miss every request. Keep the note **out of the section** (a static
+    pointer) and deliver the mutable body at boundaries — wake, compaction, reset.
