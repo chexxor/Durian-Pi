@@ -46,6 +46,7 @@ import {
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
 import { createLocalProvider, localProviderSpecs } from "./src/providers/local.mjs";
+import { shellToolLine } from "./src/shellregistry.mjs";
 import { wrapProviderWithSpend, capsFor, ledgerPath } from "./src/providers/spend.mjs";
 import {
   Constitution,
@@ -567,7 +568,10 @@ async function buildSeatPrompt(models, seat, providerId) {
     "When asked to decompose or route a task, CREATE QUEUE ITEMS with send_work - do not merely describe them in your reply.",
   ].join("\n");
   const seatModel = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
-  let instructions = [compilePersona(seat), PROTOCOL].join("\n\n");
+  // #5739: the shell line is emitted from the registry, not hand-written in 12 persona files, so the
+  // prompt cannot claim a shell the guard would refuse. `shellToolLine()` reads the same plan
+  // (src/shellregistry.mjs) that registers the tool and that seatguard.mjs uses to refuse a call.
+  let instructions = [compilePersona(seat), shellToolLine(), PROTOCOL].join("\n\n");
   let optimizedVia = null;
   // DURIG_OPTIMIZE=on runs each seat's persona through the optimizer (one
   // model call per seat) before it becomes the system prompt. The raw spec
