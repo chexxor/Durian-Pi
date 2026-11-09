@@ -172,6 +172,11 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    `leaked-worktrees.md` (2026-10-19). Most durian-pi item worktrees are dirty with CARRY residue, so
    this is the COMMON path, not the exception. Then re-run Diagnose and step 2.
 6. `git worktree prune` to drop metadata for worktrees already removed by the sweep.
+7. **After any composed merge, gate on the FULL suite, not the derived one.** A conflict resolved by taking
+   one side can silently delete a capability `main` already shipped. On 2026-11-09 the `item-5226` composition
+   dropped `LOCAL2_ENV_PREFIX` from `LOCAL_ENV_PREFIXES` (`src/providers/local.mjs`); the 46-test changed-suite
+   passed and the 278-test suite caught it (`demo/local2-provider-prefix.test.mjs`). `node scripts/suite.mjs
+   --jobs 8` is 60 s — cheap relative to one wrong landing.
 7. Remote snapshot refs (`origin/selfdev-*`, `origin/item-148`, `origin/pi-rebase`) are the operator's:
    deleting them is a push, and the delegate holds no push grant.
 
@@ -216,7 +221,35 @@ tree clean, all 33 unlanded refs intact.
 `pm` — to open a landing pass for the `ahead>0` set (the durable fix for unlanded work). `lead` — when
 a held branch cannot be merged cleanly. The operator — to prune remote snapshot refs.
 
+## The ceiling: a merged branch is not a closed item (measured 2026-11-09)
+`cli.mjs worktree audit`'s `reapable: 0` was **correct** for three consecutive passes. The sweep contract is
+TERMINAL + UNLOCKED + CLEAN, and `src/broker.mjs:1117` classifies a tree as `live` whenever its item row is
+`queued|claimed|deferred|held`. On 2026-11-09 **49** item trees had branches that were provably ancestors of
+`main` (`git merge-base --is-ancestor` exit 0 for each) while their rows stayed non-terminal — 35 `deferred`,
+11 `held`, 3 `claimed`. Git had nothing left to do; the pin was queue state. **No git verb can close that gap**
+— the fix is a landing act that also dispositions the row, which is why this belongs to the release role
+(`pm`), not to the sweep.
+
+The consuming verb exists but is **not landable**: `item-5301` (ROADMAP 311 cut 2, tip `39f8c92c`, 1 ahead of
+`main`) carries `cmdWorktreeReap` + `reapWorktrees` + `demo/worktree-reap.test.mjs`. Two reproduced defects:
+`cli.mjs` does not parse (backticks around `reapable` inside the `usages:` template literal → `SyntaxError:
+Unexpected identifier 'reapable'`), and once the backticks are removed the demo fails at
+`demo/worktree-reap.test.mjs:114` because `reapWorktrees` returns only the array of removed item ids while the
+demo asserts `dry.candidates` / `dry.refusedSoleCarrier` / `dry.kept` / `dry.counts.reapable`. Reproduce:
+`git worktree add --detach .spike/probe item-5301 && ln -s $(pwd)/node_modules .spike/probe/node_modules && cd .spike/probe && node cli.mjs worktree reap --dry-run`.
+The ref is KEPT (`git branch -d` refuses it, correctly). It is a **re-cut job for a seat**, not a delegate merge.
+
 ## Evidence
+2026-11-09 (delegate land+reap pass, broker DOWN, operator-directed): **58 worktrees → 9**, **60 refs → 12**,
+`main` `6787bd24` → `ea12fe04`, **zero `--force`**. Six branches landed (`item-5387`, `item-5501`, `item-5829`,
+`item-5226`, `item-5221` + the composition fix `ea12fe04`); 49 trees removed, 48 refs `-d`'d, each proved an
+ancestor of `main` first; every tree's residue captured to `.spike/delegate/cleanup-20261109/quarantine/`
+(52 files, 2 non-empty diffs) before removal. Suite on `main`: **278/278** in 60 s. What remains is explained:
+**9** worktrees = `main` + `durian-dev/seatroot` + the seven live seat roots (`item-5604 auditor, 5801 devtools,
+5829 impl, 5834 qa, 5912 scribe, 5965 architect, 5976 security`), and **12** refs = those seven + `main`,
+`seatroot/linux`, `verify-5180` (ledger row: NOTHING-TO-LAND), `wip/seat-prompt-files` (SUPERSEDED-BY-EVENTS,
+author re-cut) and `item-5301` (the unlandable reap verb above).
+
 2026-10-18 (delegate, operator-directed): a full sweep pruned **51 merged refs** — 17 free `-d` plus
 **34 worktree-held refs whose ONLY content was generated scratch** (untracked `verify-*`/`.verify*`,
 `.tmp-merged.txt`/`.tmp-held.txt`, `selfdev.sqlite.broker.inbox.out/`, `suite-batch*.txt`) with every

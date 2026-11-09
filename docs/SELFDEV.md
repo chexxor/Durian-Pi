@@ -3511,3 +3511,35 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     pass: the sweep contract needs TERMINAL + UNLOCKED + CLEAN, and unlocking a tree whose item is not terminal is a queue
     act the delegate cannot take. Report the true number ("56 merged refs are pinned by non-terminal rows") rather than a
     stuck cleanup, and route it to the release role rather than to a git verb.
+
+## Operational pitfalls (delegate land+reap pass, 2026-11-09 — numbered 186-190, continuing from 185; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+186. **A composed merge can delete a capability `main` already ships, and the derived suite will not see it.**
+    Resolving a conflict by taking one side wholesale is a silent revert. Landing `item-5226` dropped
+    `LOCAL2_ENV_PREFIX` from `LOCAL_ENV_PREFIXES` in `src/providers/local.mjs`; `scripts/land.mjs
+    --changed-suite` ran **46/278** tests and passed; the **full** suite failed
+    (`demo/local2-provider-prefix.test.mjs`: "must build 3 specs once the third prefix is configured (got 2)").
+    Gate every composition with `node scripts/suite.mjs --jobs 8` (60 s on this box) before calling the landing
+    done. The cheap probe that catches it in one line:
+    `git diff 6787bd24 main -- src/providers/local.mjs | grep -c 'LOCAL2_ENV_PREFIX'`.
+187. **Backticks inside the `usages:` template literal break the whole CLI, and the failure looks like an empty
+    stdout.** `item-5301`'s new usage lines wrap `reapable` in backticks inside a backtick-delimited string. Every
+    demo then dies with `SyntaxError: Unexpected identifier 'reapable'` and the test harness reports "nonzero exit 1"
+    with no message you can act on. Cheapest check before touching a branch that edits the usage block:
+    `git show <branch>:cli.mjs | grep -n 'node cli.mjs worktree'` and look for backticks in those lines.
+188. **A demo and its implementation can disagree about the return shape, and only the demo is honest.** In
+    `item-5301`, `reapWorktrees` (`src/broker.mjs`) returns the array of removed ids, while
+    `demo/worktree-reap.test.mjs:114` asserts `dry.candidates`, `dry.refusedSoleCarrier`, `dry.kept` and
+    `dry.counts.reapable`. Fix the shape in the verb, not the assertion — the verb's whole point is to report
+    **three causes with three messages**.
+189. **The worktree count is pinned by queue state, and no git verb can unpin it.** After this pass
+    `cli.mjs worktree audit` reports **9** trees, all `seat-root`, `reapable: 0` — the correct answer. Before it,
+    49 merged trees stayed because their rows were `deferred`/`held`/`claimed` (`src/broker.mjs:1117`:
+    `liveItemIds.has(itemId) → keepReason "live"`). Do not report "cleanup stuck"; report "N merged trees pinned
+    by non-terminal rows" and route it to `pm` as a landing-act design question (see
+    `docs/runbooks/branch-cleanup.md` § "The ceiling").
+190. **`tools/channel-preflight.mjs` sets `DURIG_CONFIG` to the RIG file, so the #5071 unknown-key guard makes the
+    instrument itself fail.** Measured 2026-11-09: it throws `cli.mjs queue exit 1: unknown config-file key(s):
+    _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json`. `cli.mjs queue` run normally
+    exits 0. Until the tool is fixed, read state with `node cli.mjs status` and
+    `node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` (1.2 s, read-only, works with the broker down).
