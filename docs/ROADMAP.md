@@ -65,6 +65,10 @@ held it, and it was adapted onto current `main` as one-concern items: **#307** c
 
 ## Milestones
 
+**The ledger, the acceptance criteria and the gate command for each of these live in `docs/MILESTONES.md` (D251):
+a milestone is closed when its gate exits 0, not when a row here says it is.** A session that needs to know where a
+milestone stands runs the gate, not this section.
+
 - **M1 — Rig runs and routes. ✅ done.** Queue semantics, org edges, Router at
   harness open, seat prompts, real-model e2e (D3, D4, D5, D16).
 - **M2 — Operator can see the rig. ✅ done.** `watch`/`log` human views, live

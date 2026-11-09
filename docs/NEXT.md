@@ -31,19 +31,16 @@ down). Wall clock ~50 min, dominated by two full-suite runs (60 s each).
 
 ## What this pass actually changed (evidence, not activity)
 
-- **Landed, with `scripts/land.mjs` or a composed merge:** `item-5387` (`c8217425`, runbook fix), `item-5501`
-  (`e741f415`, two DISPOSITIONS rows), `item-5829` (`53a415c8`, the forge-before-every-read correction to
-  `docs/runbooks/broker-down-or-stalled.md`), `item-5226` (`35efd976`, `SHARED_PRICE_JSON_KEY`), `item-5221`
-  (`67567a73`, RM-306 shell withhold). Before merging, each tree's uncommitted residue was **committed on its own
-  branch** so it could not vanish with the worktree.
-- **Removed:** **49** item worktrees, **48** refs. Every removal was preceded by `git diff HEAD --binary` and a
-  move of every `??` path into `.spike/delegate/cleanup-20261109/quarantine/` (52 files, 2 non-empty diffs). No
-  `git worktree remove --force`, no `git branch -D`, no unlock of a live seat's tree.
+- **Landed:** `item-5387` (`c8217425`), `item-5501` (`e741f415`), `item-5829` (`53a415c8`), `item-5226`
+  (`35efd976`), `item-5221` (`67567a73`). Each tree's uncommitted residue was committed on its own branch first.
+- **Removed:** **49** item worktrees, **48** refs, each preceded by `git diff HEAD --binary` and a move of every
+  `??` path into `.spike/delegate/cleanup-20261109/quarantine/` (52 files, 2 non-empty diffs). No `--force`, no
+  `git branch -D`, no unlock of a live seat's tree.
 - **Proved nothing was lost:** every pruned ref was checked with `git merge-base --is-ancestor <ref> main` before
   `git branch -d`; `main` advanced only by clean fast-forwards and merges.
 - **One regression caught and fixed:** the `item-5226` composition dropped `LOCAL2_ENV_PREFIX` from
-  `LOCAL_ENV_PREFIXES`. The **46-test derived suite passed**; the **278-test full suite** failed
-  (`demo/local2-provider-prefix.test.mjs`). Fixed in `ea12fe04`; suite re-run green. Rule now in
+  `LOCAL_ENV_PREFIXES`. The 46-test derived suite passed; the **278-test full suite** failed
+  (`demo/local2-provider-prefix.test.mjs`). Fixed in `ea12fe04`, re-run green. Rule now in
   `docs/runbooks/branch-cleanup.md` Do step 7 and pitfall **186**.
 - **The ceiling, measured:** before the pass, 49 trees had branches provably **ancestors of `main`** while their
   rows read `deferred` (35), `held` (11) or `claimed` (3). `src/broker.mjs:1117` keeps any tree whose item is live,
@@ -60,6 +57,9 @@ down). Wall clock ~50 min, dominated by two full-suite runs (60 s each).
    parse and `reapWorktrees` returns a different shape than `demo/worktree-reap.test.mjs` asserts.
 4. **#5785** — the code is on `main`, the row is `deferred`, its own subject says the nesting is done. A
    zero-build close for its owner.
+5. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5 and
+   `docs/reviews/milestone-m5-solidified-2026-11-09.md` §4. Until ratified, "M5 done" is undefined (D141, D251).
+   The gate already says where the rig is: **3 PASS, 1 PARTIAL, 4 FAIL**.
 
 ## Exact next command
 
@@ -98,13 +98,11 @@ Expected from the last line (exit **0** now — the mechanism passes and the gat
 step, and arming is the operator's grant: add `"DURIG_EXTENSIONS": "extensions/continuity.mjs"` to
 `durig.config.json` with the broker stopped. Full procedure: **`docs/runbooks/continuation-notes.md`**.
 
-**Cheap state reads that work with the broker down** (this pass used these; they are the reason the pass cost
-nothing):
+**Cheap state reads that work with the broker down** (used this pass; they are why the pass cost nothing):
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (9 trees, all `seat-root`, `reapable: 0`),
-`node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` (6,021 rows in 1.2 s), and
-`git worktree list` + `git branch --format='%(refname:short)' | wc -l`. **Do not reach for
-`tools/channel-preflight.mjs`** — it currently sets `DURIG_CONFIG` to the rig file and the #5071 unknown-key guard
-makes the tool itself fail (pitfall **190**).
+`node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` (6,021 rows in 1.2 s), `git worktree list` and
+`git branch --format='%(refname:short)' | wc -l`. **Do not reach for `tools/channel-preflight.mjs`** — it sets
+`DURIG_CONFIG` to the rig file and the #5071 unknown-key guard makes the tool itself fail (pitfall **190**).
 
 **Is the team operating?** No — the fleet is stopped with the broker. Queue: 6,021 rows,
 `done 4154 / cancelled 873 / held 461 / deferred 383 / claimed 12 / queued 138`. `cli.mjs worktree audit` reports
