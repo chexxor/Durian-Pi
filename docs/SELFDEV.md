@@ -66,11 +66,19 @@ and `architect` entirely, while claiming "Ten seats" — the docs defect is reco
 ## Running it
 
 The CLI is non-interactive and emits one JSON document per command. Two things must be right: the
-**store** (`DURIAN_PI_DB`) and the **seat root** (where seats may read and write).
+**store** (`DURIG_DB`) and the **seat root** (`DURIG_SEAT_ROOT`, where seats may read and write).
+
+**The pre-rebrand `DURIAN_PI_*` spellings are inert for `cli.mjs`.** `src/config.mjs` (`CONFIG_KEYS`, lines
+112 and 132) lists only `DURIG_*` keys, and `cli.mjs:151` resolves `CFG.DURIG_DB ?? "./rig.sqlite"` — so a copied
+`DURIAN_PI_DB=...` command silently opens the default store instead of the one it names. Discriminating test,
+run in this tree: `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` (exit 1,
+`cause: no_store`), `DURIG_DB=./nope-b.sqlite node cli.mjs status` → `"db": "…/nope-b.sqlite"` (honored).
+The one entry point that still takes the old name is `scripts/clockin.mjs:245`, which tries `DURIAN_PI_DB`
+first, then `DURIG_DB`, default `./selfdev.sqlite`.
 
 ```bash
 cd durian-pi
-export DURIAN_PI_DB=./selfdev.sqlite          # the selfdev store (NOT rig.sqlite)
+export DURIG_DB=./selfdev.sqlite              # the selfdev store (NOT rig.sqlite)
 export DEEPINFRA_API_KEY=...              # real runs need it
 node cli.mjs ps                           # seats present?
 node cli.mjs status                       # attention + non-terminal work
@@ -94,15 +102,15 @@ tree. Isolate first:
 
 ```bash
 node cli.mjs worktree C:/tmp/durian-pi-dev/<item>       # a checkout; its cwd is <item>/durian-pi
-DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
-DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --watch
+DURIG_SEAT_ROOT=<that>/durian-pi DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
+DURIG_SEAT_ROOT=<that>/durian-pi DURIG_DB=./selfdev.sqlite node cli.mjs run --watch
 ```
 
 `up --refresh` re-points each seat's persisted `cwd` **only to whatever the rig file names** — measured 2026-10-28
 (Linux): with `rig.selfdev.json` still carrying `devtools.cwd = C:/Users/Alex/…/item-2801`, `up rig.selfdev.json
 --refresh --dry-run` reported `changes: {}` for all 12 seats, i.e. it re-asserted the dead Windows path. Fix the rig
-file first (ROADMAP 210). The F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
-disagrees with what a seat already has, so re-point rather than guessing.
+file first (ROADMAP 210). The F12 guard fails closed if `DURIG_SEAT_ROOT`
+(`src/seatguard.mjs:41`, `src/seatroot.mjs:6`) disagrees with what a seat already has, so re-point rather than guessing.
 
 ## Pinned-pi reproduction in worktrees
 
@@ -158,7 +166,7 @@ The `vendor/pi-main/` directory is gitignored; it is fully reproducible from the
 Priority is **not** the top of the 1300-line roadmap. It is:
 
 1. `docs/NEXT.md` — the current pointer, refreshed every session.
-2. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs queue` — the non-terminal rows
+2. `DURIG_DB=./selfdev.sqlite node cli.mjs queue` — the non-terminal rows
    (`queued`/`claimed`/`deferred`).
 3. `node cli.mjs status` → `attention` — what the substrate already flags
    (`queue-ageing`, `admitted_not_started`, `generation_stale`, `deferred_awaiting_answer`).
@@ -192,7 +200,7 @@ explicitly retired by the operator (2026-10-15). When the operator says a run is
   double-wake (D45). This is why writes go through the broker spool (`intent.mjs`) while the
   broker drives. This is a *store* rule, not a *files* rule: per-task worktrees let
   different seats edit concurrently, and `genlock` already leases N cross-process
-  generation slots (`DURIAN_PI_MAX_CONCURRENT_SEATS`). The sanctioned concurrency is **one
+  generation slots (`DURIG_MAX_CONCURRENT_SEATS`, `src/config.mjs:115`). The sanctioned concurrency is **one
   broker (`serve`) owning the store and driving up to N seats**, each in its own
   worktree; for genuinely independent drivers, use separate databases.
 - **A write-side process killed by the harness tool cap strands the seat.** Recover with
