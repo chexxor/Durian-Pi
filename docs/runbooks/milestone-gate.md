@@ -40,8 +40,11 @@ Baseline measured 2026-11-09:
 | C4 egress governed by a destination policy | FAIL | `refusalFor()` refused 0 of 3 probes |
 | C5 security position precedes code | PASS | `docs/reviews/security-seat-sandbox-position.md` |
 | C6 budgeted read path over stored history | FAIL | 0 recall tools; 209,680 entries with no read path |
-| C7 cache economics measured | FAIL | ledger records 0 cached tokens (see the trap below) |
+| C7 cache economics measured | PASS | durable entries: 73,326 usage-bearing, 9,639,752,590 `cacheRead` vs 695,331,530 fresh input (93.3% hit); the ledger records 0 because it only meters metered endpoints |
 | C8 mediator not the only defence, or the limit stated | PASS | the position doc states it explicitly |
+
+C7 turned PASS only after the measurement was written up in **`docs/reviews/cache-evidence/2026-11-09.md`** — a
+number nobody can read is not a measurement.
 
 ## The trap that makes a green gate meaningless
 
