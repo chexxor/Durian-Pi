@@ -55,6 +55,11 @@ The instrument is delegate-side (`tools/`, ROADMAP 209 asks for the productized 
 same read is the six commands above — what the instrument adds is the two facts a human forgets to ask for: **how long
 each spooled intent has been waiting**, and **whether the provider each seat names actually advertises that model**.
 - `START` with **no** `EXIT` = the broker died abnormally.
+- The preflight's `env:` line reports a credential as `set (N chars, from env)` or `unset`, **never the value**
+  (#5700 / ROADMAP 295, operator ruling: fix the print, do not rotate). Before that fix it spread every
+  `DURIG_LOCAL_*` / `DURIG_VERIFIER_*` variable verbatim into JSON — and a pasted preflight is a credential leak
+  channel. Non-credential config (`*_BASE_URL`, `*_MODEL`, `*_CONTEXT`) still prints its value, because a preflight
+  that reports nothing is not a preflight. Pinned by `demo/broker-serve-env-presence.test.mjs`.
 - A live `genlock` slot means a generation is in flight — do not kill the broker.
 - `serve.err` ending in `Session failed after a storage error` → go to `store-corruption-recovery.md`.
 - `serve.err` with **`Error: database is locked`** (SQLite busy/lock contention) is a SECOND dormant
