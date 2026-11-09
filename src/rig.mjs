@@ -1189,7 +1189,8 @@ const Router = defineExtension({
 		defineTool({
 			name: "hold_work",
 			description:
-				"Park one of your claimed items without deferring. The item stays yours but becomes unclaimable until released. Useful when a seat cannot proceed but has no specific question for another party.",
+				"Park a row without deferring: one you have claimed, or a QUEUED row addressed to you " +
+				"(no claim needed, #5724). The item becomes unclaimable and stops waking the seat until released.",
 			parameters: Type.Object({
 				itemId: Type.Number(),
 				reason: Type.Optional(Type.String({
@@ -1205,8 +1206,14 @@ const Router = defineExtension({
 					if (!item) return `unknown item #${args.itemId}`;
 					if (item.to !== me)
 						return `item #${args.itemId} is addressed to ${item.to}, not you`;
-					if (item.status !== "claimed")
-						return `item #${args.itemId} is not claimed by you (status=${item.status})`;
+					// #5724: parking does not require a claim. Before this, re-parking a live row meant
+					// claim_work then hold_work — two calls, one wasted claim, and a window in which the row
+					// sits as `claimed`. The invariant this protects is that a PARKED row is never wake-able:
+					// the driver's selector is `status === "queued"` (src/broker.mjs:127), so going straight
+					// from queued to held removes it from wake selection in one step. Deferred and terminal
+					// rows still refuse — the seam is widened only for the recipient's own queued row.
+					if (item.status !== "claimed" && item.status !== "queued")
+						return `item #${item.id} is ${item.status}; hold_work parks a row you hold (claimed) or a queued row addressed to you`;
 					item.status = "held";
 					if (args.reason) item.heldReason = args.reason;
 					item.transitions.push({
