@@ -160,7 +160,7 @@ that is M5's honest baseline, not a bug). Then
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip **`89a4b3c5`** (re-read with `git rev-parse --short main` — this
+**State:** refs **12**, worktrees **9**, `main` tip — read it with `git rev-parse --short main` (a pinned sha in this
 pointer goes stale by its own commits),
 `git status --short -- .` empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced.
 Continuity evidence: `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism,
@@ -188,7 +188,7 @@ self-imposed; nothing here has run one. Anyone scheduling ROADMAP 174 must measu
 **Traps this window** — `docs/SELFDEV.md` **191–210** (N19 adds: the spend ledger cannot see cache hits because it
 only meters metered endpoints, while the durable entries carry 9.64 billion `cacheRead` tokens; a milestone
 sentence is not a milestone; before claiming an escape exists, call the guard's own function on the command;
-`toolRemovalsFor` has no claim argument and no rule data to consult; 95 registered roadmap items have no queue
+`toolRemovalsFor` has no claim argument and no rule data to consult; 96 registered roadmap items (of 150 numbered ≥200) have no queue
 row; `check`'s `single-model-rig` passes while the verifier is unregistered — read the two spend lines above the
 verdict). Grep for the symptom; the file is ~50,000 tokens.
 
