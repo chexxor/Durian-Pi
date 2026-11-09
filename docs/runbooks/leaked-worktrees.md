@@ -3,9 +3,9 @@ runbook: leaked-worktrees
 symptom: "stray or dirty item-* worktrees; a merged item-branch that cannot be pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-21
-verified_by: delegate
-evidence: "2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced"
+last_verified: 2026-11-06
+verified_by: devtools
+evidence: "2026-11-06 (#5209, Linux node v24.22.1, main 46c28b73): the sole-copy probe section's three commands RAN — `git merge-base --is-ancestor e173f397 main` exit 1 (sole-copy proof), `test -e <common-dir>/worktrees/item-5094/locked` exit 0 (lock marker), `git worktree lock item-5094 --reason ...` exit 128 (already locked: the reason is immutable without opening the reap window), `git cherry main <branch>` all-`+` for all ten non-ancestor branches, `git for-each-ref --contains <head>` >=1 ref for all ten. Census: 30 worktrees, 14 LOCKED / 16 unlocked; item-5094 LOCKED + landing entry #5207. 2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced"
 check_rule: null
 ---
 
@@ -232,7 +232,7 @@ branch. A **locked** worktree is an intentional keep; unlock one only when its i
 content qualifies above. This is a mechanical, read-only-to-the-store git operation; the broker may keep
 driving.
 
-### Disposition audit, measured 2026-10-31T19:0xZ (D185, Linux `Alex-Desktop-Win10`) — the METHOD, not just the answers
+### Disposition audit, measured 2026-10-31T19:0xZ (D185, Linux `label-withheld-per-D205`) — the METHOD, not just the answers
 
 Every verdict below came from a command in this pass, so re-run it rather than trusting the table.
 
@@ -262,6 +262,56 @@ deleting them is irreversible. **Do not prune; do not `gc` without reading
 
 **Always finish with `git worktree prune --dry-run --verbose`** — on 2026-10-31 it printed nothing, which is how you
 prove the admin area is clean rather than assuming it.
+
+### Prune eligibility is CONTENT against `main`; reachability is a FAST PATH ONLY (#5209, rides #3337/#3165)
+
+The sweep contract (TERMINAL + UNLOCKED + CLEAN) is a **liveness** test, not a **content** test. A tree can
+satisfy all three and still be the only place a piece of work exists in a form `main` cannot reproduce, and
+the reaper is **not content-gated**. So a rotation report must **NAME THE SOLE-COPY STATE EXPLICITLY**:
+`item TERMINAL + worktree UNLOCKED + artifact NOT CONTENT-present on main`. A bare `reapable` count hides it.
+
+Three questions, in this order (the third decides whether the first two are a data-loss window or bookkeeping):
+
+```bash
+git merge-base --is-ancestor <branch> main; echo exit=$?   # (1) FAST PATH: 0 = content in ancestry, stop
+git cherry main <branch>                                   # (2) CONTENT verdict by patch-id: - applied upstream, + UNAPPLIED
+git for-each-ref --contains <head> --format='%(refname)'  # (3) is HEAD contained by ANY ref?
+```
+
+- **(1) non-zero does NOT prove absence.** A re-cut lands as a different sha with the same content (patch-id
+  section above), and once `main` moves forward `git diff --name-only main <branch>` **overstates** the gap —
+  it counts `main`'s own later edits to the same paths. It is a triage number, never the verdict.
+- **(2) `git cherry main <branch>` is the content verdict** (it compares patch-ids, so it survives re-cuts and
+  re-squash): an all-`+` output means the branch carries work upstream does not have → NOT content-present.
+- **(3) A reaped WORKTREE does not lose commits whose HEAD is contained by a ref** — the sweep removes the
+  worktree, never the branch, and `prepare_workspace` re-attaches. Every durian-pi item worktree is on its own
+  `item-<id>` branch, so the loss vector is **BRANCH removal** (`-D`, which needs a named grant) or a **ref-less
+  HEAD**, never the worktree sweep. Consequence for a sole-copy artifact under a landing entry: **the entry must
+  gate BRANCH cleanup, not the worktree sweep** (#5184), and `git worktree lock` is the belt, not the braces.
+
+**The lock reason is effectively immutable.** `git worktree lock` on an already-locked tree exits **128**
+(`fatal: '<name>' is already locked`); refreshing the wording needs unlock→lock, which opens exactly the reap
+window you are closing. So do NOT re-lock to restate a reason: put the cross-references (landing-entry id,
+disposition) on the **queue row**, and verify the lock by the admin-dir marker in the **COMMON** git dir, not
+in the worktree — `<common-dir>/worktrees/<name>/locked`, e.g. `test -e ../.git/worktrees/item-5094/locked`.
+
+Measured 2026-11-06T09:3xZ at `main` `46c28b73` (Linux, node v24.22.1, git from the shared repo's common dir):
+**30 registered worktrees = 14 LOCKED / 16 unlocked** (28 item worktrees: 14/14). #5113's "five of eight
+locked" is **stale** — re-measure, never carry it. Ten item branches are non-ancestors of `main`
+(`item-4829 4846 4943 4967 5090 5094 5147 5175 5111 5145`), and **all ten come back all-`+` on `git cherry`**
+→ content NOT present on `main`. **All ten HEADs are contained by a ref** (their own `item-<id>` branch, and
+`item-4829`/`item-5147` share one tip `a8d770f9` = 2 refs), and every one is `dirty=0`, so **no commit loss is
+possible from a worktree sweep alone**; what is at stake is the *unlanded work*, reachable only through the
+branch ref. `item-5094 @ e173f397` is LOCKED with a park marker and carries landing entry **#5207** (impl);
+`item-5147` is LOCKED and its item is live. The other eight are TERMINAL + UNLOCKED + CLEAN, i.e. reapable by
+the contract while holding work `main` cannot reproduce — that is the set a rotation pass must not treat as
+hygiene, and it is what `worktree audit`'s retirement reporting (#3165 / #5237) has to surface by name.
+
+Verify (this section must be able to fail): re-run the three commands above for any branch the report calls
+sole-copy — `merge-base` exit **non-zero**, `git cherry` containing at least one `+`, and
+`git for-each-ref --contains` printing **at least one ref**. If `cherry` is all `-`, the row is not sole-copy
+and the lock can go; if `for-each-ref` is empty, the tree IS a data-loss window and an `archived/*` ref
+(`git update-ref`) comes before any sweep.
 
 ## Verify
 `git worktree list` no longer lists the resolved worktree; `git status` is quiet for `item-*`.
@@ -454,3 +504,36 @@ three states, the re-attach recipe, and the never-amend-a-completed-branch rule)
 `docs/incidents/2026-10-19-terminal-worktree-mistaken-for-lost-work.md`. **If a seat asks "where is my
 worktree?", point it at §8a rather than re-explaining** — and check whether the item was merely
 terminal (normal) or live (a keep, never a force).
+
+## 2026-11-06: the refusal that never ends — `node_modules` symlinks and a Node API drift (311)
+
+Two facts that change which half you fix. Both measured on Linux Fedora 45, node v24.22.1, git 2.51→2.56.
+
+**The classification already exists — read it first, read-only:**
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
+# measured: total 26 = seat-root 8, reapable 14, live 2, locked 2, dirty 0
+```
+
+Fourteen were `reapable` with `dirty 0`. Nothing consumes that set: there is no reap verb and no schedule
+that runs the audit. That is the leak, not unidentifiability.
+
+**If `serve.err` shows `refusing to remove worktree …: junction/symlink detected at undefined/<name>`:**
+the `undefined/` half is a **Node API drift** — `src/worktree.mjs:1237` prints `${entry.path}/${entry.name}`,
+and on node v24 `dirent.path` is `undefined` (the property is `dirent.parentPath`). The `<name>` half tells
+you the real cause: it is a **package-manager symlink under `node_modules`**. Confirm in one line, inside the
+worktree (never a whole-filesystem search):
+
+```bash
+node -e "const fs=require('fs');const d=process.argv[1];const es=fs.readdirSync(d,{recursive:true,withFileTypes:true});
+console.log(d,'entries',es.length,'symlinks',es.filter(e=>e.isSymbolicLink()).length)" <worktree>
+# measured: item-4973 17,795 entries / 10 symlinks; item-5179 55,886 / 57
+```
+
+The guard's threat model (a seat building a junction to escape confinement, Git 2.42 deleting *through* it) is
+correct; it is being tripped by ordinary dependency installs, so the worktree is permanently unreapable. Do not
+`rm -rf` around it by hand while a broker owns the store — the fix is (i) `entry.parentPath` in the message,
+(ii) removing `node_modules` before the walk or accepting links that stay inside the worktree, (iii) a reap
+verb fed by `worktree audit`. Until then: count worktrees at clock-in and clock-out (`git worktree list | wc -l`)
+and say which way it moved.

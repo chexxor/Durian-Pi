@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-29
 verified_by: delegate
-evidence: "docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box Alex-Desktop-Win10, node v24.22.1); the failure counts are from this session's own mistakes"
+evidence: "PARTIAL re-run 2026-11-06: `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
 check_rule: "not yet — see docs/ROADMAP.md **262**: `check` reports `runbook-front-matter` as SKIPPED, and `scripts/clockin.mjs:123` skips any runbook with no front matter, so a header-less runbook is currently invisible to both"
 ---
 
@@ -97,6 +97,34 @@ Note that `"224 lines"` written next to a path citation on the same line is read
 about that file**, and `swapon`/`free`-style instruments can silently print `NaN` when you parse their header line — both
 produced findings this session. Re-run the checker after rewording.
 
+## A cited FIGURE must carry its measurement, or it must say it is unverified
+
+A path citation can be checked with `test -e`; a **number** (a port, a token count, a latency, a row count) can only be
+checked against the probe that produced it. So a figure you took from a measurement is admissible in a live doc only when
+it carries **(a) the date it was measured and (b) the command that re-derives it**. If you cannot re-run the probe, write
+the date, write `NOT re-verified`, and say what is missing — a labelled gap beats a silent number, and a bare number is
+how a stale value survives a docs refresh: the refresh carries the number forward and nobody re-measures it.
+
+Measured instance, 2026-11-06T08:0xZ (same host as `docs/NEXT.md`; no hostname per D205). A runbook and a roadmap row
+cited the app's LAN share as `127.0.0.1:47832` / `0.0.0.0:47832` with no measurement date attached where the prose was
+operational. Re-measuring: `curl -s -w 'HTTP %{http_code}\n' http://127.0.0.1:47832/v1/models` → `HTTP 000`, **exit 7**
+(ECONNREFUSED); same for `:47831`. The live listener was `0.0.0.0:8080`, and `ps -eo pid,args | grep -E
+'serve\.server|strata --serve'` showed the launch's own `--host 0.0.0.0 --port 8080` — the port is a launch argument
+(`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)`), never a constant, and two `ss` runs inside the same hour
+disagreed on the bind (`127.0.0.1:8080`, then `0.0.0.0:8080`) because the server restarted between them. The firewall
+figures in the same section could **not** be re-measured at all: every `firewall-cmd` verb returned a D-Bus `Did not
+receive a reply` error with **exit 254** — recorded as unverified, not re-asserted.
+
+Find the cites worth re-dating (read-only):
+
+```bash
+git grep -nE '(127\.0\.0\.1|0\.0\.0\.0|localhost):[0-9]{4,5}' -- docs README.md | grep -v NEXT-ARCHIVE
+```
+
+**Archives are exempt by design.** `docs/NEXT-ARCHIVE.md` keeps superseded session text **verbatim** (the pointer says so
+explicitly), so stale figures there are the historical record, not a live claim; the live surfaces are `docs/NEXT.md`,
+`docs/STATUS.md`, `docs/FEATURES.md`, `docs/runbooks/*` and the README, and those are where a figure owes its measurement.
+
 ## If it fails
 
 Nothing here writes, so there is nothing to roll back except your own edits: `git checkout -- <path>` restores a doc you
@@ -118,3 +146,7 @@ Registered as **262**. Instruments: `tools/doc-integrity-guard.mjs` (this sessio
 (over cap); `docs/ROADMAP.md` items 260/261 registered=missing while cited; `docs/runbooks/README.md` 46 index rows vs 32
 runbook files; `docs/runbooks/delegate-doc-hygiene.md` front matter **absent** — the file this runbook describes was itself
 non-conformant until fixed in the same commit that added the guard.
+
+The figure-carrying-its-measurement rule above was folded in under item **#5193** (2026-11-06) rather than registered as a
+second docs-truth row. Probes listed there were run that hour; the `firewall-cmd` leg is recorded **unverified** (exit 254).
+The live half of the change is in `docs/runbooks/local-provider-down.md`, where the port literals became probes.

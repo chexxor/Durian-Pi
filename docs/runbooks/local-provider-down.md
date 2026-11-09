@@ -3,9 +3,9 @@ runbook: local-provider-down
 symptom: "a local seat fails to run: `model_error: 401 \"Invalid API key\"`, `model_error: Connection error.`, or `No API key for provider: local`; `/v1/models` on the configured port 401s or does not list the model the seat's `local/<id>` names. NOTE the port may be OPEN and answering while the provider is unusable — see Diagnose state 3 and the 2026-11-04 state 5"
 writes: false
 precondition: "none"
-last_verified: 2026-11-04
+last_verified: 2026-11-06
 verified_by: delegate
-evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified."
+evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. 2026-11-06: state 6 (a LAN strata box passes /models and /health yet misses the preflight's 20s completion bound -> `START REFUSED`) and state 7 (per-box keys after a rotation: one 74-char `DURIG_LOCAL_API_KEY` 401s on BOTH boxes) found; ROADMAP 325/326. PARTIAL re-verification 2026-11-06T08:0xZ (host signature in docs/NEXT.md): the PORT pointers re-measured — `curl` to `127.0.0.1:47831` and `127.0.0.1:47832` both exit **7** (ECONNREFUSED, `HTTP 000`); `ps -eo pid,args` shows the live launch `-m serve.server … --host 0.0.0.0 --port 8080` and `ss -ltnp` shows **`0.0.0.0:8080`** owned by that serve.server pid; `curl http://127.0.0.1:8080/v1/models` answers `authentication_error: missing or wrong API key`. The firewall section is **NOT** re-verified: `firewall-cmd --state` returns a D-Bus `Did not receive a reply` error with exit **254**, so a delegate cannot answer those questions today. `last_verified: 2026-11-06` records the state-6/state-7 legs only — the Do/Verify legs of this runbook were NOT re-run."
 check_rule: null
 ---
 
@@ -62,6 +62,7 @@ against the `id` values returned by `/v1/models`:
 | `/v1/models` 200, configured id listed, `"status"` not `loaded` | state 4 - still loading or the load failed: poll, then read `server.err` |
 | **`BLOCK provider-DURIG_LOCAL_-unauthorized: … ANSWERED /v1/models with HTTP 401`** in `node tools/broker-serve.mjs --status` | **state 5 seen from the preflight, and since #5111 named for what it is: the server ANSWERED, so it is not down.** Read the rest of the line before acting. `/chat/completions COMPLETES … inference WORKS` means only the LISTING refused the credential (a server may protect `/models` and still serve inference) — that is a NOTE, not a block. `/chat/completions also refused (…)` means the block is evidence: supply the key (Do 0). `--no-probe` prints the verdict too and says inference is **unproven**, never a verdict it did not measure. A **404** prints `provider-DURIG_LOCAL_-models-not-found` — reachable, wrong path; only a refused connection or a timeout is still `provider-DURIG_LOCAL_-unreachable`. **If an older transcript says `provider-DURIG_LOCAL_-unreachable: … HTTP 401`, that string is the defect #5111 fixed: re-run `--status`, do not act on it.** Pinned by `demo/broker-serve-provider-auth.test.mjs` (a loopback server that REQUIRES a key: keyed → answers+completes; unkeyed → `unauthorized` naming `DURIG_LOCAL_API_KEY`, never `unreachable`; 404 → path; closed port → still `unreachable`) |
 | **`/v1/models` 401 `{"error":"Invalid API key"}`** | **state 5 - the server DEMANDS a credential and the rig sent the loopback placeholder.** `src/providers/local.mjs` sends `LOOPBACK_PLACEHOLDER_KEY` (`"no-key-required"`) whenever the endpoint is loopback and `DURIG_LOCAL_API_KEY` does not resolve, because a *keyless* llama.cpp accepts anything. A server with a key set rejects it, and the seat's run ends `model_error: 401 "Invalid API key"` with no hint about the credential. Fix: supply the key (see Do 0). Measured 2026-11-04 on Strata `:47831` |
+| "Which credential VARIABLE does this endpoint use, and is it RESOLVED — without printing a value?" | `node tools/keycheck.mjs --level=auth --family=LOCAL` (**#5277**, ROADMAP 338). Free and offline: `--level=auth` opens ZERO sockets (`Models.checkAuth` resolves auth without a request), and it prints the variable NAME as `credentialSource`. `--level=reach` adds one `GET <base>/models` (a round trip, zero completion tokens) for reachable / advertised / `latencyMs`; **only `--level=spend` sends a completion, and it refuses without `--ceiling=USD`.** It redacts credential values out of its own output and refuses (exit 2, empty stdout) rather than quote one, so unlike the preflight its output IS pasteable. Pinned by `demo/keycheck.test.mjs` |
 
 A port probe (`netstat`, `Test-NetConnection`) can only tell states 1 from 2/3/4 - it cannot tell a dead
 provider from an unrelated listener. Use it to find the PID, not to conclude.
@@ -231,18 +232,39 @@ the reverse move a two-line change later. Restarting is `local-provider-down.md`
 
 ## Reaching the same server from ANOTHER computer (measured 2026-11-04, Strata)
 
-The local model server binds **loopback only** — measured: `ss -ltnp` shows `127.0.0.1:47831` for the Strata host,
-and nothing on `0.0.0.0`. Three ways to reach it from a second machine, cheapest-correct first:
+> **Ports are DERIVED at launch, so a port in this runbook is a pointer to a probe, never a value to paste.** Every
+> `47831`/`47832` below is what the **2026-11-04** launch bound. Re-measure in one command before you cite a port,
+> build a tunnel, or open a firewall hole:
+>
+> ```bash
+> ps -eo pid,args | grep -E 'serve\.server|strata --serve' | grep -v grep   # the launch's own --host/--port
+> ss -ltnp | grep -E ':(8080|4783[0-9])'                                    # what is actually LISTENing now
+> curl -s -w 'HTTP %{http_code}\n' http://127.0.0.1:<measured-port>/v1/models; echo "exit=$?"   # exit 7 = nothing there
+> ```
+>
+> **Re-measured 2026-11-06T08:0xZ** (same host as docs/NEXT.md; no hostname per D205): the live launch is
+> `-m serve.server … --host 0.0.0.0 --port 8080`; `ss -ltnp | grep 8080` → **`0.0.0.0:8080`** (python3.12, that
+> serve.server pid); an earlier `ss -ltn` the *same hour* showed `127.0.0.1:8080`, so the bind itself moves across a
+> restart — another reason to measure rather than quote. `curl` to **47831 and 47832 both exit 7** (ECONNREFUSED,
+> `HTTP 000`). So the sentence below about **loopback only** was TRUE of the 2026-11-04 launch and is **not true of the
+> 2026-11-06 launch** (it binds `0.0.0.0`), and the port literals throughout are the old launch's numbers kept for
+> their structure, not as current values.
+
+The local model server bound **loopback only** as measured 2026-11-04 — `ss -ltnp` showed `127.0.0.1:47831` for the
+Strata host and nothing on `0.0.0.0` (see the marker above: re-measure, this changed). Three ways to reach it from a
+second machine, cheapest-correct first:
 
 1. **The app's own Share listener (recommended, built in).** Strata ships a *separate, key-protected listener for
    inference only* (`host/server/local-share.mjs`): `createLocalShare({ host = "0.0.0.0", port = PORT + 1 })`,
    serving exactly `/v1/models`, `/v1/chat/completions`, `/v1/messages`, gated on the app's API key, with CORS
-   preflight answered — it never serves the UI or the host APIs. With `PORT=47831` the URL is
-   **`http://<lan-ip>:47832/v1`** (`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)`), and it is **off until
-   enabled in the app** (measured: no listener on 47832 while the host was up on 47831). Then, from the other
+   preflight answered — it never serves the UI or the host APIs. With the 2026-11-04 `PORT=47831` the URL was
+   **`http://<lan-ip>:47832/v1`** (`sharePort = findFreePort(STRATA_SHARE_PORT ?? PORT + 1)` — i.e. **the share port is
+   the serve port + 1**: derive it from the `--port` you just measured, do not copy this one), and it is **off until
+   enabled in the app** (measured 2026-11-04: no listener on 47832 while the host was up on 47831; measured
+   2026-11-06: no listener on either). Then, from the other
    computer: `Authorization: Bearer <the same key>`.
 2. **SSH tunnel (safest; keeps the server on loopback and encrypts the bearer token).** From the second machine:
-   `ssh -L 47831:127.0.0.1:47831 <user>@<this-box>` and point the client at `http://127.0.0.1:47831/v1`. Nothing new
+   `ssh -L <measured-port>:127.0.0.1:<measured-port> <user>@<this-box>` (2026-11-04: `ssh -L 47831:127.0.0.1:47831 …`) and point the client at `http://127.0.0.1:<measured-port>/v1`. Nothing new
    listens on the LAN and the key never crosses the network in cleartext.
 3. **Rebind the host itself** (`STRATA_BIND=0.0.0.0`, read at `host/server/index.mjs` alongside `STRATA_PORT`).
    **Not recommended:** that listener also carries the UI and the host APIs, and a key that is set for inference
@@ -256,6 +278,12 @@ legitimate DECLARED price**. Two consequences: (a) a LAN URL costs a config chan
 SSH tunnel keeps the URL loopback, so it needs no price declaration at all — one more reason to prefer option 2.
 
 ### Firewall on this host (measured 2026-11-04, Fedora 44) — what actually gates a LAN client
+
+> **Not re-verified 2026-11-06 — the instrument itself is unreachable to a delegate.** Re-running the block below that
+> day gave `firewall-cmd --state` → `Error: Did not receive a reply …` with **exit 254** for every verb (including
+> `--query-port=8080/tcp`), so the allow-list facts recorded here are **2026-11-04 facts whose ports are also stale**
+> (the launch moved to `:8080`, see the marker above). Treat every port in this section as `<measured-port>`, and if
+> `firewall-cmd` errors like that, say what is missing rather than re-asserting the numbers.
 
 `firewall-cmd` is readable **without root** for queries, and that is the only trustworthy answer:
 
@@ -300,3 +328,74 @@ curl -s -H "Authorization: Bearer <the key>" http://192.168.1.101:47832/v1/model
 
 **No firewall change at all** is needed for the SSH-tunnel option above: `ssh` is already an allowed service, and the
 tunnel keeps the URL loopback (so durig also needs no price declaration).
+
+## 2026-11-06: state 6 — the port is OPEN, the model is LOADED, and the box still cannot serve a seat (325)
+
+This is the case where every "is it up?" read says yes. `/v1/models` answers in 2-3 ms and reports
+`"status": {"value": "loaded"}`, `/health` answers `{"status":"ok","loaded":true,"max_context":131072}`, and the rig's
+preflight still refuses to start:
+
+```
+NOTE   provider-local-priced-metered: local/<id> is a metered endpoint priced at $0/$0 per Mtok …
+BLOCK  provider-local-completion-failed: local: /chat/completions failed — timeout after 20s
+START REFUSED: provider-local-completion-failed
+```
+
+Read the box's own scheduler first — it is a **single slot**, and it tells you who is in it:
+
+```bash
+curl -s -H "Authorization: Bearer <key>" http://<lan-host>:8080/status
+# measured: {"busy":true,"queued":0,"phase":"answering","prompt_tokens":18978,"generated":5316,"max_tokens":16384,
+#            "thinking_budget":12288}   … and `generated` moved 5,316 -> 5,830 in 64 s  => ~8 tok/s
+```
+
+Then time a real completion **against the preflight's bound**, because that is the number the rig enforces:
+
+```bash
+node .spike/delegate-20261106/strata-endpoint-check.mjs   # prints ctx, /status, and ms-vs-20000ms PASS/FAIL
+```
+
+Measured on 2026-11-06 (Linux Fedora 45, node v24.22.1): the LAN box took **129.5 s** for a 31-token completion
+(`finish_reason: stop`) and timed out at 150 s and 45 s on other attempts; the loopback box took **1.4 s** on the same
+prompt. **Do not lower the gate by trial and error.** If a minute-scale seat turn is acceptable, raise
+`DURIG_STREAM_TIMEOUT_MS` deliberately (a capacity ruling — put the measured tok/s on the row that raises it). If it is
+not, keep the family on loopback: the flip is one `DURIG_LOCAL_BASE_URL` plus `DURIG_LOCAL_CONTEXT` (131072 on the LAN
+box, 200000 on loopback — take the number from `/health`'s `max_context`, not from memory) plus that box's key.
+
+**State 7 — after a credential rotation, which box holds which key.** One `DURIG_LOCAL_API_KEY` arms exactly one box.
+Measured: the rotated rig key (74 chars) was **401 on both boxes**, while pi's own per-provider entries
+(`~/.pi/agent/auth.json`: `strata.key`, `strata-server.key`) each answered **200** on their own box and **401** on the
+other. `cli.mjs status`, `check` and the roster stay green through all of this; the only instrument that caught it is the
+preflight completion probe. And when you diagnose it, **do not paste preflight output into a report** — the open
+**295** prints `DURIG_LOCAL_API_KEY`/`DURIG_VERIFIER_API_KEY` **values**. Since **#5277** there is a pasteable answer to
+the same question: `node tools/keycheck.mjs --family=LOCAL` prints `credentialSource` = the variable NAME and never its
+value (measured on this box 2026-11-07: `--level=auth --family=LOCAL` **0.24 s · exit 0**, and `demo/keycheck.test.mjs`
+**1.4 s · exit 0**, which plants a value in the env, has the fixture endpoint echo it back in `data[].id`, and asserts
+the value is ABSENT from the tool's whole output). **Run it on each box** — keys are per box, and the tool says so in
+its own header; a green here is a statement about this box only. It does NOT settle state 7 by itself: an endpoint can
+accept the key for `/models` and still refuse inference, which is what the paid completion probe is for
+(`--level=spend --ceiling=0.01`, ≈$0.001).
+
+**The price footgun on this path (323).** A LAN URL is not loopback, so the family becomes `metered` and needs a DECLARED
+price (`0` is legitimate). But `CONFIG_KEYS` has no `DURIG_LOCAL_PRICE_*` keys, so putting them in `durig.config.json`
+makes **every** CLI verb exit `unknown config-file key(s) …`. Declare them in the **environment** (`~/.config/durig/env`,
+loaded with `node --env-file=…`), and remember the consequence: a start **without** `--env-file` then registers no model
+row and the whole author family goes dark with `registration-refused`.
+
+**State 8 — the server was bounced and now serves a different model id (2026-11-08).** Symptoms: every seat turn dies
+in ~1 ms with `Model … is not available` / `reason: no_model`, the broker log looks normal (`woke=impl` on pass after
+pass), and no conversation gains an assistant entry. Diagnose in this order, all measured on this rig:
+1. `curl -s -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models` — read the **id** the box
+   advertises and its `meta.n_ctx`.
+2. `node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK'` — the
+   preflight prints `BLOCK provider-DURIG_LOCAL_-model-absent: … advertises [<served id>] but the config names
+   '<configured id>'`.
+3. `node -e 'const{DatabaseSync}=require("node:sqlite");const d=new DatabaseSync("./selfdev.sqlite",{readOnly:true});
+   for(const r of d.prepare("SELECT id,conversation_id,record FROM tasks WHERE kind=? ORDER BY id DESC LIMIT 5").all("\"pi.generation\"")){const j=JSON.parse(r.record);console.log(r.id,r.conversation_id,j.state?.outcome?.status,j.state?.outcome?.error?.message)}'`
+   — confirms the failure is at registration, not at the wire.
+Fix: set `DURIG_LOCAL_MODEL` (and `DURIG_LOCAL_CONTEXT` to the advertised `n_ctx`) in `durig.config.json`, re-point
+every `local/<id>` string in `rig.selfdev.json`, re-point the `DURIG_COMPACTION_MODEL_OVERRIDES` key, commit the roster
+(a dirty tracked tree makes `broker-serve --start` refuse: `START REFUSED: live-tree-dirty`), then
+`node --env-file="$HOME/.config/durig/env" cli.mjs up rig.selfdev.json --refresh` with the broker stopped.
+Do **not** rely on llama.cpp's rerouting: a request for an unadvertised id is answered by the served model, so the
+stale id looks fine at the wire while the rig refuses to register it.

@@ -1,6 +1,6 @@
 # Delegate notes — 2026-10-29 (part 3): the verifier's "endless thinking" is mostly a **host configuration fault**, ministral measured and rejected, and I OOM-killed the seats' server
 
-Host: `Alex-Desktop-Win10`, Linux (Fedora), Node v24.22.1, two GPUs (GPU0 RTX A4000 16,376 MiB, GPU1 RTX 3090 24,576 MiB),
+Host: `label-withheld-per-D205`, Linux (Fedora), Node v24.22.1, two GPUs (GPU0 RTX A4000 16,376 MiB, GPU1 RTX 3090 24,576 MiB),
 94 GiB RAM, **8 GiB zram swap**. Every number below names the model **variant** and the measured decode, per ROADMAP 255
 acceptance (5).
 

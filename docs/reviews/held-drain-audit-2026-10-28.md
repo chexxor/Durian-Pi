@@ -11,7 +11,7 @@ writing verb (`up`/`worktree`/`run`/`send`/`complete`) was run, so no worktree/b
 pre-inventory is `.spike/delegate/inventory-pre-20261028.txt` (1 worktree = `/home/chexxor/Git/Durian-Pi`, 1
 branch = `main`, `.spike` = 37 entries).
 
-**Machine (named, per D131):** native Linux, `Linux Alex-Desktop-Win10 7.2.11-200.fc44.x86_64`, git 2.56.0.
+**Machine (named, per D131):** native Linux, `Linux label-withheld-per-D205 7.2.11-200.fc44.x86_64`, git 2.56.0.
 Repo state at measurement: `main` = `0159af9`.
 
 ## 1. Baseline re-measured (so the audit sits on a known-good rig)

@@ -1,7 +1,7 @@
 # Design note 2 — the permission planes, the requirements ratchet, and where plugin trust lives
 ### ROADMAP 241, second half: the files the first note listed as unread, read at the pin
 
-**Host and clock (ROADMAP 244 discipline):** read on `Alex-Desktop-Win10` (Linux, Fedora kernel
+**Host and clock (ROADMAP 244 discipline):** read on `label-withheld-per-D205` (Linux, Fedora kernel
 `7.2.11-200.fc44.x86_64`, node v24.22.1), zone `America/Chicago` (CDT = UTC−5). The reads below ran
 **2026-10-29T02:42–03:05Z**, which on this host's own calendar is still **2026-10-28** — that is the date in
 the filename, and every timestamp in this file is **Z** unless marked host-local.

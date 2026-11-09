@@ -785,7 +785,7 @@ export async function prunePatchEquivalentBranch({ repoPath, branch, mainRef = "
 /* ================================================================ */
 /*  P2-1: worktree-per-task lifecycle (claim → lock → release → remove)  */
 /* ================================================================ */
-import { readFile, writeFile, unlink, readdir } from "node:fs/promises";
+import { readFile, writeFile, unlink, readdir, readlink } from "node:fs/promises";
 
 /**
  * Validate that a worktree's git identity is correct — it resolves to itself,
@@ -1233,8 +1233,25 @@ export async function removeClaimedWorktree({ worktree, force = false }) {
 	const entries = await readdir(worktree, { recursive: true, withFileTypes: true });
 	for (const entry of entries) {
 		if (entry.isSymbolicLink()) {
+			// #5134: the refusal was RIGHT and the message was BROKEN. `Dirent.path` no longer exists on this
+			// runtime (node v24.22.1: a recursive readdir Dirent carries only `name` and `parentPath`), so
+			// `${entry.path}/${entry.name}` printed `undefined/anthropic-ai-sdk` — a refusal the reader could not
+			// act on, which is how five leaked worktrees survived a repair pass. `parentPath` is the current name;
+			// `path` is kept as the fallback so the message stays right on an older node. The link TARGET is
+			// included because the thing a seat must decide is what the junction points AT.
+			const linkDir = entry.parentPath ?? entry.path ?? worktree;
+			const linkPath = join(linkDir, entry.name);
+			let target = null;
+			try {
+				target = await readlink(linkPath);
+			} catch {
+				target = null;
+			}
 			throw new Error(
-				`refusing to remove worktree ${worktree}: junction/symlink detected at ${entry.path}/${entry.name}`,
+				`refusing to remove worktree ${worktree}: junction/symlink detected at ${linkPath}` +
+					` -> ${target ?? "(target unreadable)"} (found under this worktree root; git on this host deletes`
+					+ ` THROUGH a junction, which would write into the tree it points at, so the tree is left in place —` +
+					+ ` the worktree ledger decides what owns it, not this guard)`,
 			);
 		}
 	}

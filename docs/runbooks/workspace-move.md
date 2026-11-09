@@ -5,7 +5,7 @@ writes: true
 precondition: "broker-stopped"
 last_verified: 2026-10-29
 verified_by: delegate
-evidence: "docs/incidents/2026-10-26-worktree-and-scratch-sweep.md; docs/DECISIONS.md D131; the Windows→Linux move of the selfdev rig; re-run 2026-10-29 by a delegate on Linux (Fedora 7.2.11-200.fc44.x86_64, node v24.22.1, box Alex-Desktop-Win10) — Steps 1/3 read-only against ./selfdev.sqlite, measured output inline below; docs/reviews/cross-os-rig-portability-2026-10-29.md; ROADMAP 210, 217, 221, 232, 263-267"
+evidence: "docs/incidents/2026-10-26-worktree-and-scratch-sweep.md; docs/DECISIONS.md D131; the Windows→Linux move of the selfdev rig; re-run 2026-10-29 by a delegate on Linux (Fedora 7.2.11-200.fc44.x86_64, node v24.22.1, box label-withheld-per-D205) — Steps 1/3 read-only against ./selfdev.sqlite, measured output inline below; docs/reviews/cross-os-rig-portability-2026-10-29.md; ROADMAP 210, 217, 221, 232, 263-267"
 check_rule: null   # proposed: ROADMAP 190 (sha-citation resolution)
 ---
 

@@ -4,7 +4,7 @@ Question put to the delegate: **choose the next major milestone.** This document
 ruling. The operator ratifies or replaces the choice; `pm` sequences and decomposes within it.
 Nothing here is asserted from memory — every number is from a command run in this session.
 
-**Machine state, named:** native Linux, `Linux Alex-Desktop-Win10 7.2.11-200.fc44.x86_64`. Nothing was
+**Machine state, named:** native Linux, `Linux label-withheld-per-D205 7.2.11-200.fc44.x86_64`. Nothing was
 restarted, reconfigured, loaded, sent, claimed or transitioned this session.
 
 ---

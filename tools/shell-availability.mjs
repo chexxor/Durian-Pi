@@ -1,7 +1,7 @@
 // tools/shell-availability.mjs — the ONE verdict for "can a seat shell START on this host", and it is
 // asked of the product's registry, never read out of vendored text (#4977).
 //
-// WHY THIS EXISTS (measured on `main` at 57fa451b, Linux box `Alex-Desktop-Win10`, node v24.22.1):
+// WHY THIS EXISTS (measured on `main` at 57fa451b, Linux box `label-withheld-per-D205`, node v24.22.1):
 // `tools/broker-serve.mjs` section 7 printed `BLOCK seat-shell-availability: the seat shell tool is
 // registered as "bash" and spawns [pwsh, powershell], NONE of which exists on linux`. That sentence
 // contradicts itself, and it has been false since ROADMAP 217 landed: the registered tool IS `bash`,

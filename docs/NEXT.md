@@ -1,116 +1,144 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-06T00:4xZ (delegate session **E** closes. The operator answered six questions and three of them
-moved state — recorded as **`docs/DECISIONS.md` D214**, registered as **`docs/ROADMAP.md` 294–298**. (1) **"Metered arm"**:
-the verifier family is restored, cross-family *and* cross-vendor, at `ef29516d`, and `single-model-rig` is gone from
-`check`. (2) **"Granted"**: the push grant was exercised — `git push origin main` → `4c585f5b..ef29516d`, and
-`git rev-list --count origin/main..main` = **0**. (3) **"Accepted"**: the wake-and-measure pass (`--yes-pm-wakes`) is
-granted and in flight. (4) **"Routed"** for the topology research, with the answer placement now defined by ROADMAP
-**298**. (5) **naming deferred until the research completes** — `durian-core` is still unratified. (6) the hostname scrub
-came back as *"please continue… provide a recommendation amongst options"*, so the options are in D214 and **nothing was
-edited**. The superseded session-D pointer moved **VERBATIM** to `docs/NEXT-ARCHIVE.md`.)
+**Last update:** 2026-11-09T06:2xZ (delegate session **N15** — the operator said "run the landing pass now". **42
+branches landed**: `main` moved `7609831c` → `429f2b5a` → `08a8453c` → **`85e1127f`** (42 `merge: land` commits; 99
+commits, 87 files, +5,114/−387 since session start). Every landing went through `scripts/land.mjs` (tree-clean gate,
+text-integrity gate, genlock slot), and the pass was proven by a full suite before and after: **262/265 before**
+(`08a8453c`) and **277/278 after** (`85e1127f`, 60.1 s, `--jobs 8`) — no landing introduced a red; the only new reds were
+two derived-manifest failures caused by a landed demo and fixed in `58dd8ad2`. Backlog after the pass: **24 refs / 35
+commits ahead of `main`** — **4** merge clean, three of them then refused by the BOM gate (pitfall 174), **20** conflict. Broker was
+wedged (`pid 114848`, heartbeat fresh, last pass 05:20:31Z = 3,162 s before the pass) — `serve --stop` refused, `kill`
+logged `EXIT pid=114848 reason=deadline passes=-`, and with it down `cli.mjs status` answers in **0.96 s** and
+`tools/queue-drain-audit.mjs` in **1.26 s**. **The fleet is stopped**; restarting it is the operator's call (see the
+Blocker row).
+
+The previous window (N14) asked whether a **release manager / ops
+seat** should own merging all completed branches, and to prioritise that over the delegate landing branches by hand.
+The delegate agrees, with one hard constraint found in the rig's own runbook: **a broker-hosted seat cannot drive a
+landing pass** (`docs/runbooks/land.md:427-431` — quiescing requires stopping the broker, which ends the seat's run;
+land.md also says `land` is the delegate's/operator's action). So the role is split: a seat owns the *continuous
+readiness inventory and the ordered landing plan*; the quiesce-then-merge pass stays outside the broker until a base
+seam exists. Intent spooled to `pm`, requestId `delegate-20261109-release-role`. Goal `mw88k2at-1ozydj` (continuity
+notes, D240) is **paused** by the operator at this point.
+N14 measured 151 item branches, 62 ahead, 83 commits unlanded, 43 clean, 19 conflict. N15 landed 42 of those 62 and
+re-measured: **24 refs ahead** (`git rev-list --count main..<ref>` > 0), **35 commits**, **4** clean against current
+`main`, **20** conflicting. `main` = **`d6118d0e`**.
 
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
-kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — the probe is `uname -s && uname -r && (. /etc/os-release &&
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
 echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a hostname** — D205, ROADMAP 281).
+
+**Cost (measured 06:2xZ, `selfdev.sqlite.spend.jsonl`):** 2,030 ledger lines, **$0.92401** cumulative, **$0.03462** on
+2026-11-09 UTC — all of it before this pass; the fleet ran until 05:20:31Z and the landing pass itself spent no model
+tokens. Field names are `usd` / `prompt_tokens`, not `costUSD` (pitfall 145), and the ledger is untracked **and not
+gitignored**, which is why `land.mjs` refuses a dirty tree (ROADMAP 310).
 
 ## NEXT SESSION
 
-**Current item: the queue is still empty, so the cut is the whole backlog — `lead` cuts `docs/ROADMAP.md` 282–298 into
-rows, cheapest-and-most-visible first.** Max queue id is still **#5156**: `lead` has now been briefed twice (`INTENT
-delivered=1` at `2026-11-05T22:52Z` and this session's `intent 27b1a681` at `2026-11-06T00:1xZ`, brief at
-`.spike/delegate-20261106/brief-lead-1.md`) and the wake-and-measure pass is running on the operator's explicit
-**"Accepted"** grant. Routing is `lead`'s; the delegate's briefed order (cheapest and most visible first) is:
-**(1)** ROADMAP **294** — the *only* red demo, and it is red **because the metered arm succeeded**:
-`demo/verifier-arm-probe.test.mjs` asserts host config state; the fix probe is already run
-(`--config=<fixture>` → `verdict:NOT-ARMABLE cause:metered-endpoint-unpriced`), so the demo must supply its own config
-fixture per arm and pin both directions; **(2)** ROADMAP **295** — the blessed first command prints credential **values**
-(`tools/broker-serve.mjs:467-471`); **(3)** ROADMAP **296** — the same preflight probes the paid endpoint with no ceiling
-and no ledger row; **(4)** ROADMAP **297** — price and measure three real verify legs on the armed arm before anyone
-touches the slot; **(5)** **282** clauses 1+3+4 (per-area loop budgets — `check` still has zero timing rules) and
-**283–289**, **291**, **293** (`tools/channel-preflight.mjs` still throws, and it is the blessed first command);
-**(6)** the deferral wave (**292**) — now measurable, because the operator granted the pass; **(7)** ROADMAP **298** as
-the research intake.
+**Milestone this window worked** — **landing the unlanded backlog** (release-role intent
+`delegate-20261109-release-role`, Part A: inventory + train), and inside it **ensuring LLM task completion (D226)**,
+first tranche **ROADMAP 331**: `item-5306` landed `fix(331,#5306): nest per-model compaction overrides inside`, so
+`src/config.mjs:520` reads `compaction.modelOverrides = layered` and `demo/config.test.mjs` is green in the 278-test
+suite. N13's priority order still stands: compaction is the thing to *avoid*, not perfect — the continuity design is
+`docs/reviews/architecture-context-continuity-2026-11-09.md`, and `beforeCompact`
+(`pi-durable dist/harness/compaction.js:82-88`) lets an extension supply the summary, removing the summariser call that
+produced 218 truncations and 209 run-cap refusals.
 
-**Blocker:** **the team has nothing to claim** — `queued 0`, max id **#5156** — and a broker pass over an empty queue
-costs wakes and proves only that the queue is empty. Below it, in order of cost to the rig: the credential-printing
-preflight (**295**), the unaccounted metered probe spend (**296**), the red-because-success demo (**294**), the
-still-crashing channel instrument (**293**), and the un-priced verifier slot (**297**). Closed this session and do not
-re-open: the verifier (**"Metered arm"**, `ef29516d`) and the push grant (**"Granted"**, exercised, 0 unpushed).
+**Current item (priority order, as the operator set it on 2026-11-09):**
+1. **The release role** — spooled to `pm` as `delegate-20261109-release-role`, still undrained. Part A is seat-ownable
+and needs no model spend: keep the landing list current (three gates: verified in queue, tip matches the list, clean
+against CURRENT main), order the train (each stacked entry names its base, `land.md:400-410`), report the 20 conflicts
+with a named owner, own worktree/branch hygiene (ROADMAP 311, 344). Part B — the quiesce-then-merge act — is **not**
+seat-ownable; it is a base-seam question (ROADMAP 131 `pause`, a broker-side quiesced boundary).
+2. **The continuity cluster** (D240 / ROADMAP 331), already decomposed by `pm`: **#5931/#5932** `impl` define the
+`durig.notes` doc; **#5933/#5934** `devtools` the `DURIG_NOTES_DIR` seam; **#5935** `impl` the mirror at
+wake/compaction/reset; **#5936/#5937** `impl` the `beforeCompact` hook; **#5939/#5940** `qa` the compacteval A/B;
+**#5941** `impl` the offline reset-mid-item acceptance demo; **#5942** `scribe` the runbook. Each subject appears twice
+— the duplicate-row defect is live; confirm before claiming.
+3. **The compaction fallback fix** #5785 — the code is on `main` now; the row is `deferred` and its own subject reads
+"nesting DONE on item-5306", so closing it is a zero-build act for its owner, not work.
 
-Run this first — all reads, no writes:
+**Unlanded backlog (measured 06:2xZ against `d6118d0e`): 24 refs / 35 commits ahead.** 20 conflict, named by file so an
+owner can be assigned: `docs/DECISIONS.md` 4846, 5208, 5211, 5275, 5740, 5824; plus `docs/NEXT.md` 5615, 5684, 5712;
+`docs/runbooks/broker-down-or-stalled.md` 4879, 5663, 5758; `docs/runbooks/session-start-cost.md` +
+`scripts/clockin.mjs` 5596; 5398 (`docs/NEXT.md`, `demo/clockin-digest.test.mjs`); `demo/local-slot-gate.test.mjs` +
+`demo/test-areas.json` 5488, 5686; `inputs/fetched/README.md` 5393; `tools/README.md` 5617; `docs/SELFDEV.md` 5702;
+`cli.mjs` + `prompts/impl.md` + `rig.selfdev.json` (`wip/seat-prompt-files`). **4 merge clean but refused by
+`scripts/land.mjs`**: `item-5094`, `item-5400`, `impl-item-5094-recut` — all carry a **UTF-8 BOM on
+`scripts/sync-pi.mjs`**, which `main` itself ships (`git show main:scripts/sync-pi.mjs | head -c 3 | xxd` → `efbbbf`);
+strip it on `main` and all three land. `verify-5180` merges clean but is a verify-tree snapshot — never merge a snapshot
+(branch-cleanup step 4). `item-5488` needs no build: `git cherry main item-5488` prints one `-`.
+**Six landed rows are still non-terminal** and their owners must close them (the delegate claims nothing): #5362,
+#5491, #5501, #5699 deferred; #5820 claimed; #5912 held. 36 of the 42 landed rows are `done`.
 
+**Exact next command** — the broker is **down** (killed 06:13:32Z after `serve --stop` refused; `cli.mjs resume`
+cancelled one stranded run, `impl` submission 418542, `run-cancelled`). Nothing drains until a broker starts, and two
+things gate that: the verifier provider registers **no model row** on this box (`"registration-refused"`,
+`"provider":"verifier"`, `"model":"openai/gpt-oss-120b"`, `"causes":["metered-endpoint-unkeyed"]` — the tool's own
+remedy: set `DURIG_VERIFIER_API_KEY`), and the spend cap refuses `google/gemini-3.1-pro` ($14 max call exposure against
+a $4 store cap).
 ```bash
-cd ~/Git/Durian-Pi
-git status --short -- . && git rev-list --count refs/remotes/origin/main..main   # 0 = pushed; ef29516d is trunk
-DURIG_DB=./selfdev.sqlite node cli.mjs status                                    # 7 s — attention + non-terminal work
-DURIG_DB=./selfdev.sqlite node cli.mjs queue 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print('max id',max(i['id'] for i in d['items']));[print(i['id'],i['status'],i.get('from'),'->',i.get('to'),str(i.get('subject'))[:90]) for i in d['items'] if i['id']>=5157]"   # >5156 = lead cut the rows; still 5156 = re-send the brief
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --status queued | python3 -c "import json,sys;print('queued rows:',len(json.load(sys.stdin)['items']))"
-node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status         # broker up/down + provider classes
-node scripts/test.mjs --list                                                     # 0.1 s — the loop map (9 areas, 258 tests)
-node scripts/test.mjs --area check                                               # 6 s — the roster gate: `single-model-rig` must stay ABSENT
-DURIG_DB=./selfdev.sqlite node tools/queue-drain-audit.mjs --config=./rig.selfdev.json --counts-only   # 1.1 s
+cd /home/chexxor/Git/Durian-Pi
+node scripts/clockin.mjs                                 # BEFORE starting a broker; it hangs while one drives
+node tools/broker-serve.mjs --status                     # state + genlock + spool depth + provider reachability
+node cli.mjs status                                      # ~1 s once the broker is healthy
+node tools/queue-drain-audit.mjs --db ./selfdev.sqlite   # 1.3 s, read-only: 6,021 rows
+node scripts/test.mjs --area docs                        # 6/6 expected
 ```
+Landing census, run **inside the loop**, not once (pitfall 173):
+`git merge-tree --write-tree main "$b" >/dev/null 2>&1 && node scripts/land.mjs "$b" --db ./selfdev.sqlite`.
 
-The intent instrument is **`intent.mjs` at the repo root** (`git ls-files`), *not* `tools/intent.mjs`: the path in the
-previous pointer and in the broker's own guidance text throws `MODULE_NOT_FOUND`. Re-send the brief with
-`node intent.mjs lead --body-file <file>` (**space** after `--body-file`).
+**Landing is the operator's/delegate's act, not a seat's.** `scripts/land.mjs` refuses on a dirty tree or an in-flight
+generation; the pass needs a quiesced window (`docs/runbooks/land.md`, `docs/runbooks/merge.md`). Before a pass,
+`git status --porcelain` must be empty **including untracked** (ROADMAP 310 — `selfdev.sqlite.spend.jsonl` is untracked
+and not ignored, and it blocked a whole train), and stray `item-*/` directories block the helper even when porcelain is
+clean (`/item-*/` is gitignored): 154 registered worktrees right now. **Branch pruning is stuck behind those worktrees:**
+after this pass 131 refs are fully merged into `main` and **all 131 are still checked out** in a registered worktree
+(`git worktree list --porcelain | grep -c '^branch refs/heads/'` = 151), so nothing is free to delete; the rig's own
+`complete_work` step refuses to remove them because of npm `.bin` symlinks (pitfall 133). A stale base is a **re-cut job
+for the author seat**, not a merge job for the delegate (`land.md` Do 0b).
 
-## State (measured 2026-11-06T00:3xZ, same host signature as above)
+**Read-path caveat.** While a broker is resident every CLI read routes through it (`src/readclient.mjs:106-111`); a
+stalled pass loop makes every read block with 0 bytes while a direct read-only sqlite query answers fine — "empty queue"
+and "cannot read the queue" print the same thing (pitfalls 152, 176). An empty `genlock` is **not** proof no generation
+is in flight (pitfall 150); compare `heartbeatAt` with `lastPassAt` before calling a stall (pitfall 165).
 
-- **Trunk:** `main` = `ef29516d`, **pushed** (`origin/main..main` = 0). Session-E commits: `ef29516d` (the roster returns
-  five verifier-capable seats — `qa`, `qa2`, `advocate`, `auditor`, `designer` — to `verifier/openai/gpt-oss-120b`).
-  Docs for this session (D214, ROADMAP 294–298, this pointer) land with it.
-- **The verifier arm (the operator's "Metered arm"):** `verifier` = `https://api.deepinfra.com/v1/openai`,
-  `openai/gpt-oss-120b`, ctx 24,576 / out 3,000 — **the slot was deliberately not moved** (ROADMAP 297). Price came from
-  the vendor catalog fetched 2026-11-06 (174 models: ctx 131,072, $0.037 in / $0.17 out per Mtok) and is recorded in the
-  **gitignored** host configs (`durig.config.json`, `../durian-dev/seatroot/durig.config.json`) with
-  `DURIG_VERIFIER_PRICE_AS_OF=2026-11-06`. Arming order is the finding: the probe first returned
-  `NOT-ARMABLE / metered-endpoint-unpriced`, and only after the dated price row returned **`ARMABLE`** with
-  `maxCallExposureUsd 0.001419` → **2,818 legs** under the `$4` store cap (`check` 284.7 % of cap, `run` 240.7 %, `call`
-  35.5 %). Capability by observation, not vendor card: `tool_choice=auto` and `=required` both returned valid
-  `tool_calls` — 3 calls, **$0.00003**, ledgers `.spike/delegate-20261106/spend-arm-*.jsonl` under
-  `DURIG_PROBE_CEILING_USD=0.15`. At `max_tokens=24` the arm returned `content:""` with `finish:length` — it spends the
-  completion budget thinking, which is why 297 measures legs rather than trusting the slot.
-- **Suite:** **257/258** — the one failure is `demo/verifier-arm-probe.test.mjs` (ROADMAP **294**, red *because* the arm
-  is legitimately priced; it inherits `durig.config.json`, which the demo cannot scrub). The two instruments
-  `docs/runbooks/verifier-independence.md` says must move together both moved: `deepinfra-catalog` exit 0
-  (`12 rig seat models resolve across providers local=7, verifier=5`) and `local-model-pointer` exit 0. **Correct the old
-  claim wherever it appears:** that demo's red cause was **the roster lift** (`real seats exercise BOTH exemptions
-  (local=12)`), not a missing `DEEPINFRA_API_KEY`.
-- **`check`:** 126 findings — `citation-unresolvable` 67, `duplicate-item` 57, `verification-without-evidence` 1,
-  `evidence-tree` 1 — and **`single-model-rig` is gone**. `check` has no timing budget (ROADMAP 282).
-- **Queue:** max id **#5156**. `done` 3816 · `cancelled` 812 · `held` 345 rows (276 > 7 d) · `deferred` 183 rows ·
-  **`queued` 0**. All 183 deferrals end `{"by":"supervisor","to":"human"}` and `human` is not a seat.
-- **Spend:** the store ledger (`selfdev.sqlite.spend.jsonl`) still does **not exist** — every call this session was
-  either on the free `local` arm or a probe ledgered in `.spike/`. The non-existence is itself evidence for ROADMAP
-  **296**: the preflight's metered probe leaves no row.
+**Suite on `main` (`d6118d0e`):** `node scripts/test.mjs --all --jobs 8` → **276/278 in 57 s** (278 tests, 9 areas).
+Reds: `demo/verifier-arm-probe.test.mjs` — "an unpriced metered endpoint must exit non-zero (the spike copy exited 0 —
+the false-green shape #5090 removed)" — and `demo/clockin-digest.test.mjs` — "digest is 20274 B, over its 20000 B
+budget". Both were red before this pass (262/265 at `08a8453c`); neither was caused by a landing.
+`demo/seat-turn-shape.test.mjs` is flaky under `--jobs 8` and passes standalone.
 
-## Traps this session found (mirrored into `docs/SELFDEV.md` §session E)
+**Is the team operating?** No — the fleet is stopped with the broker. Queue: 6,021 rows,
+`done 4154 / cancelled 873 / held 461 / deferred 383 / claimed 12 / queued 138`. Still open: the parked-wake defect
+#5740 (`WAKE_CONTENT_PARKED`, `src/driver.mjs:54`) and its worktree `item-5740`. **Capacity:**
+`DURIG_MAX_CONCURRENT_SEATS = 4` (D238), gate covers `local/*` since `4efce137`; both boxes serve
+`qwen3.8-flash-next-q2_0`, so `local2` buys throughput, not family independence. **Standing, deliberately unresolved:**
+the operator's "we can re-evaluate later whether we can afford to host a verifier model on localhost" — still no queue
+row; minting it is a seat act.
 
-1. **A red demo can mean success.** `demo/verifier-arm-probe.test.mjs` asserts a *host* config property; arming the arm
-   the operator asked for turned the suite red. Read the failure's *cause*, not its count (ROADMAP 294).
-2. **Two commands documented in the pointer do not exist as written.** `tools/intent.mjs` → the file is `intent.mjs` at
-   the repo root. Run `test -e` before citing a path (D159 addendum, D211 CORRECTION) — ROADMAP 291/298 family.
-3. **`--dry-run` is not a health check of the queue.** It reports provider classes, the spool and the wake set, and it
-   *refuses a dirty live tree* (`BLOCK live-tree-dirty` — F12/F23): commit the docs before starting a pass, or a seat
-   woken from this cwd edits this tree.
-4. **Reasoning models eat the completion budget.** `max_tokens=24` → `finish_reason:"length"`, `content:""`. A verifier
-   leg needs completion headroom, not just a context slot (ROADMAP 297).
-5. **A stale read is a trap in a compacted session.** Editing against an earlier read result failed on exact-match —
-   the live pointer is 159 lines, not the 221 an earlier read showed. Re-read the file you are about to edit.
+**Broker posture at clock-out (06:2xZ):** DOWN. pid 114848 (started 03:20:33Z, `--max-duration 7200`) logged 1,002
+passes then hit its bound: last pass 05:20:31Z, heartbeat fresh, verdict `degraded`, no genlock file; `serve --stop`
+refused, `kill` logged `2026-11-09T06:13:32.508Z EXIT pid=114848 reason=deadline passes=-`. Spool: 9 pending intents
+(incl. the release-role one) and 59 dead-letters.
 
-## Watch-list (delegate)
+**Blocker:** two, and only the operator can clear the second. (1) the release-role intent is spooled and undrained —
+`ls -1 selfdev.sqlite.broker.inbox` still shows 1 file and the last `INTENT` line in `selfdev.sqlite.broker.log` is
+03:45:30Z; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall 141). (2) **no provider will register a
+model on this box right now** — `broker-serve --status` reports four BLOCKs: `provider-DURIG_LOCAL_-unauthorized`
+(127.0.0.1:8080 answers `/v1/models` with 401 — set `DURIG_LOCAL_API_KEY`), `provider-verifier-no-key` and
+`provider-verifier-refuses-inference` (`DURIG_VERIFIER_API_KEY` unset; the store shows this shape 18,309 times, 402
+"You need positive balance to do inference"), and the spend cap refuses `google/gemini-3.1-pro` ($14 max call exposure
+against a $4 store cap). Keys and balance are grants the operator holds.
 
-- **The pass is the evidence.** If `queue --id` shows rows above **#5156**, ROADMAP **292** is measurable: publish
-  per-role **wake → claim** latency and the `tools/latency-budget.mjs` `WAIT 72.4% / WORK 13.0% / HELD 5.9%` split.
-- **#5145** is `done` and unlanded with both evidence legs (`#5155` qa, `#5156` lead) `deferred`; the lift is gone, so a
-  real cross-family verify leg on `item-5145` @ `39ee4fcc` is finally possible. No author-side leg closes it.
-- **#5151** (`deferred → human`) is now **answered** by the operator's ruling and by `ef29516d`; whether the gate the
-  earlier ruling asked for (**#5146**, also `deferred → human`) is still owed *after* the fact is `lead`'s call.
-- **Naming:** `durian-core` stays unratified by operator ruling until the research completes. Do not cut a rename row.
-- **Untracked `install.sh` in the repo root** — an unrelated installer (Strata Terminal), not the rig's. Disposition is
-  the operator's; nothing in this repo references it (`git grep` clean).
-- **Host facts, hostname-free:** Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Two GPUs
-  remain full (RTX A4000 14637/16376 MiB, RTX 3090 23098/24576 MiB), which is why the local `:1234` verifier stayed down
-  and the metered arm is the arm that runs.
+**Traps this window** — `docs/SELFDEV.md` **173–177** (this pass: re-preflight inside the loop; the text-integrity gate
+is absolute, so `main`'s own BOMs block otherwise-clean branches; a batch landing must regenerate
+`demo/test-areas.json`; a wedged broker reads exactly like an empty queue; run `git cherry` before calling a branch
+unlanded) and **130–169**. Grep for the symptom; the file is ~49,000 tokens.
+
+**Probes left for promotion** (gitignored `.spike/`, read-only, no model spend, broker-down safe):
+`.spike/delegate/queue-census-ro.mjs` (branch-vs-queue census that works with the broker down),
+`.spike/delegate/compaction-policy-probe.mjs`, `.spike/delegate/context-window-health.mjs`,
+`.spike/delegate/fleet-health.mjs`. Promotion is a row from `lead` (#5617 is the precedent id).
+
+Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).

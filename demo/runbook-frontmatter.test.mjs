@@ -22,6 +22,7 @@ import {
 	RUNBOOK_PRECONDITIONS,
 	RUNBOOK_TEMPLATE_SECTIONS,
 	auditRig,
+	formatCheck,
 	runbookFrontMatterProblems,
 } from "../src/checkup.mjs";
 
@@ -156,10 +157,24 @@ assert.equal(noBlock.exitCode, 0, "…so `check` still exits 0");
 
 const none = audit(undefined);
 const noneCheck = none.checks.find((c) => c.id === "runbook-front-matter");
-assert.equal(noneCheck.status, "skipped", "without runbook data the rule is SKIPPED, never a pass");
-assert.ok(noneCheck.why, "the skip says why");
+assert.equal(noneCheck.status, "unknown", "without runbook data the rule is UNKNOWN, never a pass and never a plain skip (#5767)");
+assert.ok(noneCheck.why, "the unknown says why");
+assert.ok(
+	none.checks.filter((c) => c.status === "unknown").length === 3,
+	"all three runbook rules report unknown together — one absent input, three judged nothing",
+);
+assert.match(
+	formatCheck(none, { color: false, seats: 1, storeReason: "absent" }),
+	/runbook-front-matter UNKNOWN:/,
+	"the human render prints UNKNOWN for the no-data case, not a silent pass",
+);
+assert.equal(
+	formatCheck(clean, { color: false, seats: 1, storeReason: "read" }).includes("runbook-front-matter UNKNOWN"),
+	false,
+	"a runbook that WAS supplied never renders UNKNOWN — the two outcomes are distinguishable",
+);
 
 console.log(
-	"RUNBOOK FRONT-MATTER TEST PASS (mandatory keys + stem mirror + value shapes + skeleton enforced; _template exempt; fix-now; skipped without data)",
+	"RUNBOOK FRONT-MATTER TEST PASS (mandatory keys + stem mirror + value shapes + skeleton enforced; _template exempt; fix-now; UNKNOWN — not skipped, not a pass — when no runbook data is supplied)",
 );
 process.exit(0);

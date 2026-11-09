@@ -91,3 +91,25 @@ Record: `docs/incidents/2026-10-19-git-sha-redacted-as-secret.md`. **SUPERSEDED 
 confirms (`git cat-file -e <hex>^{object}`) and otherwise redacts/fires as today — FAILS CLOSED. Read the
 position before treating a `high-entropy-token` finding over git output as a false positive; the check
 still fires unless the value IS a git object id.
+
+## Shipped: one git-object verdict, both surfaces (#3128)
+
+The resolution-backed exemption above is now CODE, in `src/gitobject.mjs`, and BOTH surfaces consume it:
+`secretSpans` (`src/secretredact.mjs`, the `afterTool` redactor) and `secretTokens` (`src/secretdetect.mjs`,
+the read-side detector). Neither surface declares its own predicate any more — that was the drift: on this
+tree, before the change, every commit id in every ref classified as secret-shaped in the redactor
+(`git rev-list --all` → 2516 ids, 2516 matches) while the detector's exclusion lived in one module only.
+
+What a seat sees now:
+- a 40/64-hex that `git cat-file -e <id>^{object}` CONFIRMS is left alone — `git rev-parse HEAD`, the line-1
+  output of `git merge-tree --write-tree`, and `evidence.artifact` pins all survive redaction;
+- a 40/64-hex that does NOT resolve is still redacted, and the marker now names the class
+  (`unconfirmed-object`) instead of a generic `high-entropy-token`, so the reader knows WHY the value went
+  away and can re-read it through a ref name;
+- probes are budgeted: `MAX_OBJECT_PROBES_PER_PASS = 64` distinct ids per tool result. Over the budget,
+  nothing is exempted — the token is redacted. Unverifiable means redact, never pass.
+
+**Verify (ran, exit 0):** `node demo/sha-object-verdict.test.mjs` — asserts the matrix (real ids survive,
+planted non-objects still fire, `commit <random hex>` forged context does NOT exempt) and counts the
+class on this tree: 0 of 2516 ref ids redact. `node demo/secretdetect.test.mjs` and
+`node demo/secretredact.test.mjs` also exit 0.

@@ -1,6 +1,6 @@
 # Delegate notes 2026-10-29 — the hygiene runbook lands, two instruments get promoted, and the restart gate turns out to be circular
 
-**Host for every number here:** Linux (Fedora `7.2.11-200.fc42.x86_64`), box `Alex-Desktop-Win10`, node v24.22.1,
+**Host for every number here:** Linux (Fedora `7.2.11-200.fc42.x86_64`), box `label-withheld-per-D205`, node v24.22.1,
 store `./selfdev.sqlite`, rig `rig.selfdev.json`. Session start 2026-10-29T19:1xZ (14:1x host-local CDT), and the
 previous session's clock-out was `2026-10-29T07:3xZ`, so this is the same calendar day, ~12 h later.
 

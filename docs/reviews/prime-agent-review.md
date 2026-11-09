@@ -114,3 +114,18 @@ keyed). No research-agent prompt. One **operator** question this row decides che
 `custom_prompt` (replace static prefix, tail preserved) + `append_system_prompt` pair as durian-pi's seat-prompt override
 semantics — if yes, ruling #1 (the persona surface) can combine **oh-my-pi's file format** with **prime-agent's
 override semantics** and **OpenHands' protected default profile**.
+
+## Dated delta — 2026-11-07, the credentials-and-secrets question (pin `815e64b5`, re-measured this turn)
+
+Read for the operator's pre-333 question: `crates/pa-agent/src/agent_loop/mod.rs:95-115`,
+`crates/pa-agent/src/agent_loop/response.rs:98-112`, `crates/pa-agent/src/agent.rs:558-575`. Mechanism **M12** in
+`docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md`; decision row in `docs/COMPETITORS.md`.
+
+**The cheapest true boundary in the whole sweep, and it has no service in it.** The agent-loop config carries an injected
+resolver (`mod.rs:107 pub get_api_key: Option<GetApiKeyFn>`), resolved **at request time** and per provider
+(`response.rs:104-111`, where the callback wins and the stored `api_key` is only the fallback), and the derivation path
+builds a nested agent's config with **`config.api_key = None;`** (`agent.rs:564`) while **cloning the callback in**
+(`agent.rs:571`). A derived member therefore inherits the *ability to obtain* a credential, never a materialized one.
+durian-pi already does this for the model credential (`cli.mjs:349-357` resolves broker-side), which re-prices the
+"separate secrets service" question: rows **334/335/342** should present a seat with a **name the host resolves**, and a
+process boundary is only needed for consumers that can build their own requests (a seat's shell, git, registries).
