@@ -1,12 +1,17 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T03:2xZ (delegate session **N13** — the operator narrowed the goal: **avoid compaction; a
-seat that cannot finish inside one window must be maintaining notes so it can resume from a fresh context, and the
-mechanism must be an extension**. N13 surveyed the prior art, wrote the design
-(`docs/reviews/architecture-context-continuity-2026-11-09.md`), and routed it to `pm`
-(requestId `delegate-20261109-continuity`). `main` = **`15df5d34`** (measured `git rev-parse --short main`; `item-5786`
-landed as `f5a73c61`, `item-3581` as `15df5d34`). The fleet ran, wedged twice, and was recovered twice; the broker is
-resident as `pid 114848` since 03:20:33Z.
+**Last update:** 2026-11-09T04:4xZ (delegate session **N14** — the operator asked whether a **release manager / ops
+seat** should own merging all completed branches, and to prioritise that over the delegate landing branches by hand.
+The delegate agrees, with one hard constraint found in the rig's own runbook: **a broker-hosted seat cannot drive a
+landing pass** (`docs/runbooks/land.md:427-431` — quiescing requires stopping the broker, which ends the seat's run;
+land.md also says `land` is the delegate's/operator's action). So the role is split: a seat owns the *continuous
+readiness inventory and the ordered landing plan*; the quiesce-then-merge pass stays outside the broker until a base
+seam exists. Intent spooled to `pm`, requestId `delegate-20261109-release-role`. Goal `mw88k2at-1ozydj` (continuity
+notes, D240) is **paused** by the operator at this point.
+Backlog measured at 04:4xZ: **151** item branches, **62** ahead of `main`, **83** commits unlanded, **43** merge
+cleanly into current `main` (`git merge-tree --write-tree`), **19** conflict. `main` = **`429f2b5a`** (docs + gate
+work only; nothing landed by this session). Broker resident as `pid 114848` since 03:20:33Z, **860 passes** by 04:40Z,
+spool empty, verdict HEALTHY.
 
 **N12 in brief** — three facts, all measured on this box, all reproducible with one command each:
 1. **ROADMAP 331 is still unfixed on `main`.** The per-model compaction override is emitted as a *sibling* of the
@@ -86,16 +91,22 @@ override emitted as a sibling — `:455 if (Object.keys(policy).length > 0) out.
 (fixed in `2362d20a`, the pointer must contain `node cli.mjs`), `seat-turn-shape.test.mjs` (a live-store sha pin that
 races a driving broker — pitfall 138), `verifier-arm-probe.test.mjs` (open, unexplained by this session).
 
-**Current item:** the milestone pass, **routed by `pm`** (read with `node cli.mjs queue --status queued --json
---no-body` at 21:1xZ — 56 queued, 13 claimed). The rows that matter to "task completion inside one window":
-**#5785** `pm -> impl` — "ROADMAP 331 (milestone, load-bearing): nest the compaction overrides + per-family schedule,
-gated on pi-durable's compaction"; **#5787**
-`devtools` — re-cut `item-5648` onto current main; **#5786** `devtools` — disposition: is `item-5398` superseded by
-#5737; **#5789** `devtools` — promote the two `.spike/delegate/` fleet instruments into `tools/`; **#5813 and #5814**
-`devtools` — "CLOCK-IN HANG (milestone): bound `runCli()` like `gitSafe` and report unavailable reads in the digest,
-failing-first" (**the same subject appears twice — verify they are not duplicates before either is claimed**); **#5802 / #5810** `lead` — landing entries for #5398 and item-5488;
-**#5794** `qa` — verify the re-cut tip and name the sha. `item-5398` and `item-5648` cannot land until their re-cuts
-exist.
+**Current item (priority order, as the operator set it on 2026-11-09):**
+1. **The release role** — spooled to `pm` as `delegate-20261109-release-role`. Part A is seat-ownable and needs no
+model spend: keep the landing list current (three gates: verified in queue, tip matches the list, clean against
+CURRENT main), order the train (every stacked entry names its base, `land.md:400-410`), report the 19 conflicts with a
+named owner, and own worktree/branch hygiene (ROADMAP 311 and 344). Part B — the quiesce-then-merge act — is **not**
+seat-ownable; it is a base-seam question (ROADMAP 131 pause, broker-side quiesced boundary).
+2. **The continuity cluster** (D240 / ROADMAP 331), already decomposed by `pm`: **#5931/#5932** `impl` define the
+`durig.notes` doc; **#5933/#5934** `devtools` the `DURIG_NOTES_DIR` seam; **#5935** `impl` the mirror at
+wake/compaction/reset; **#5936/#5937** `impl` the `beforeCompact` hook; **#5939/#5940** `qa` the compacteval A/B;
+**#5941** `impl` the offline reset-mid-item acceptance demo; **#5942** `scribe` the runbook. **Each subject appears
+twice** — the duplicate-row defect is live (226 live rows share a subject); confirm before claiming.
+3. **The compaction fallback fix** #5785 (nest `modelOverrides`) — still unfixed on `main`; it is the fallback the
+notes mechanism replaces, so it stays in the tranche but is no longer the priority.
+
+**Unlanded backlog the next session must handle** (measured 04:4xZ): 62 branches / 83 commits ahead of `main`; 43
+merge clean, 19 conflict. Command below reproduces the census in under a minute.
 
 **Exact next command** — the resident broker is `pid 114848`, started 03:20:33Z with `--max-duration 7200`; its first
 pass delivered 5 intents `dead=0 dup=0` and woke pm,qa,lead,scribe,devtools,auditor,security,architect. It has wedged
@@ -106,13 +117,20 @@ died with **no completed pass at all** in its life, pitfall 165). A `degraded` v
 ```bash
 cd /home/chexxor/Git/Durian-Pi
 node scripts/clockin.mjs                               # BEFORE starting a broker; it hangs while one drives
-node docs/evidence/2026-11-08-context-window/milestone-check.mjs   # broker progress leg, spool, occupancy, shape
-node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8   # is the read path answering?
-node cli.mjs queue --json --no-body --status queued    # bounded read; the unbounded census returns 27.9 MB (88% terminal)
-git rev-parse --short main                             # expect 15df5d34 or newer
-cat docs/reviews/architecture-context-continuity-2026-11-09.md   # the contract pm must decompose
+node docs/evidence/2026-11-08-context-window/milestone-check.mjs   # config, store, shape, broker leg, continuity leg
+node cli.mjs queue --json --no-body --status queued    # bounded read; the unbounded census returns ~27.9 MB
+node cli.mjs status                                    # answers in ~2 s while the broker is healthy
+# landing census (read-only, ~20 s): branches ahead of main and which merge clean
+for b in $(git branch --list | sed 's/^[* +]*//' | grep -E 'item-[0-9]+'); do a=$(git rev-list --count main.."$b" 2>/dev/null || echo 0); [ "$a" -gt 0 ] && echo "$b $a"; done
+for b in $(git branch --list | sed 's/^[* +]*//' | grep -E 'item-[0-9]+'); do git merge-tree --write-tree main "$b" >/dev/null 2>&1 && echo "CLEAN $b" || echo "CONFLICT $b"; done
 node scripts/test.mjs --area docs                      # 6/6 expected
 ```
+
+**Landing is the operator's/delegate's act, not a seat's.** `scripts/land.mjs` refuses while the tree is dirty or a
+generation is in flight; the pass needs a quiesced window (`docs/runbooks/land.md`, `docs/runbooks/merge.md`). Before
+any pass: `git status --porcelain` must be empty **including untracked** (ROADMAP 310: `selfdev.sqlite.spend.jsonl` is
+untracked, not ignored, and it blocked a whole train), and stray `item-*/` directories block the helper even though
+porcelain is empty (`/item-*/` is gitignored).
 
 **Read-path caveat (22:12Z).** A CLI read does not open the store while a broker is resident — `src/readclient.mjs:106-111`
 routes it to the broker. With the pass loop stalled (last pass 21:26:06.898Z, 11 `PASS-FAILED … database is locked

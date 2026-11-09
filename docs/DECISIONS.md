@@ -10487,3 +10487,38 @@ already answered by D130/R1 (per project; this rig is one project today).
 **Recorded, not done.** No code was written by this delegate. The design is
 `docs/reviews/architecture-context-continuity-2026-11-09.md`; the intent is spooled to `pm` as
 `delegate-20261109-continuity` (broker `pid 114848`, first pass `INTENT delivered=5 dead=0 dup=0`).
+
+## D241 — 2026-11-09T04:4xZ: landing becomes a **role**, not an errand — a release seat owns the readiness plan, the quiesce-then-merge pass stays outside the broker (operator question, delegate answer; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The decision.** The operator asked whether the team should have a release manager / ops seat responsible for
+merging all completed branches, instead of the delegate landing them by hand. The delegate agrees, and records the
+shape the role can actually take, because the rig already contains the constraint that decides it.
+
+**Why the naive version cannot work.** `docs/runbooks/land.md:427-431`, read in-tree: "**A landing pass CANNOT be
+driven by a broker-hosted seat.** Quiescing requires stopping the broker, and stopping the broker ENDS the run of any
+seat hosted by it — so such a seat cannot stop the broker and then land and report. (2026-10-17: the exclusive
+landing window closed QUIET BUT EMPTY for exactly this reason.)" The same runbook states plainly that `land` is the
+delegate's/operator's action, not the team's. So "the ops seat merges everything" is not implementable today; a seat
+that stops the broker stops itself.
+
+**What the role CAN own (measured need, 04:4xZ).** `git branch --list` → 151 item branches; **62 ahead of `main**;
+**83 commits** unlanded; `git merge-tree --write-tree main <branch>` → **43 merge clean, 19 conflict**. This recurs
+after every pass: `docs/DECISIONS.md:7404` requires re-establishing the seat-root invariant after every landing pass,
+and ROADMAP 311 records 21 worktrees the rig classified as `reapable` and nothing consumed — the delegate removed them
+by hand. ROADMAP 310 shows the land helper refuses the whole train on a dirty tree, and the dirt was the rig's own
+`selfdev.sqlite.spend.jsonl`. That is a continuous job with a name, not an occasional favour.
+
+**The split, spooled to `pm` as `delegate-20261109-release-role`:**
+- **Part A, seat-ownable, no model spend:** keep the landing list current against the three gates in
+  `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §5 (verified in queue; tip matches the landing list vs `git rev-parse`;
+  clean against the **current** `main` by `git merge-tree`); order the train and name every stacked entry's base
+  (`land.md:400-410`); report the conflict set with a named owner per conflict; own worktree/branch hygiene.
+  Acceptance: one command prints an ordered, executable plan; after a pass `git rev-list --count main..<branch>` is 0
+  for every branch in it.
+- **Part B, not seat-ownable:** the quiesce-then-merge act. If the team wants it inside the rig, it is a **base seam**
+  question (ROADMAP 131 `pause`, a broker-side quiesced boundary), not a seat question — and per D212 customization
+  belongs on the extension plane, so the missing seam must be named rather than wired around.
+
+**Deliberately left to the operator.** Creating a new seat is a capacity grant: 12 seats today, `DURIG_MAX_CONCURRENT_SEATS = 4` (D238), and 9 of 12 seats are already `AT RISK` on turn shape — adding a seat is not free. The operator decides whether the role is a new seat, a redefinition of `lead` (which already writes landing entries) or `devtools` (which owns rebase-then-land per DISPOSITIONS:200), or a delegate-run cadence with the seat only preparing the plan.
+
+**Recorded, not done.** No branch was merged by this session. `main` = `429f2b5a` (docs + gate only).
