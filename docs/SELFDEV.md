@@ -3673,3 +3673,41 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     landed. Measurement plus a document is not the same as an instrument that keeps the measurement current. Before
     ratifying any criterion, ask: if this drifted tomorrow, what would notice? If the answer is "nothing", the
     criterion is a snapshot, not a gate.
+
+## Operational pitfalls (delegate compaction-guard pass, 2026-11-09 — numbered 211-215, continuing from 210; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+211. **"Auto-compaction failed" on the delegate harness is a request-shape bug, not a big-context bug.** pi-coding-agent
+    sends the summarization request with **no explicit output cap** (`dist/core/compaction/compaction.js:495` —
+    "summaries use the model's output limit (#9512)") and treats a `stopReason: "length"` as a hard failure
+    (`:454 getSummarizationFailure`, string at `:459`; printed at `dist/core/agent-session.js:2594-2595`). On this
+    rig the local provider's reasoning phase shares the `max_tokens` budget with the answer: `max_tokens:32` returned
+    32 tokens of `reasoning_content` and the content `"GU"` with `finish_reason "length"`. The fix is a project-local
+    extension, not a pi change (D212): `.pi/extensions/compaction-guard.js` + `tools/compaction-guard-core.mjs`.
+    Verify with `node tools/compaction-guard-test.mjs` (ALL PASS, 28 checks, 0.54 s, no model) and
+    `node tools/compaction-guard-e2e.mjs` (real harness + real model: span 158,764 chars → 1,481-char summary in
+    4.45 s; with `COMPACT_GUARD_OUTPUT_TOKENS=256` the call length-stopped and was **rescued** into a 7,591-char
+    checkpoint). Runbook: `docs/runbooks/harness-compaction-guard.md`.
+212. **A one-character typo in a safety net kills the safety net, and no syntax check sees it.** The guard's
+    deterministic-fallback line read `srecord({...})` — `node --check` passes (it is a runtime reference, not a
+    syntax error) and the happy path runs fine; only the provider-error / empty-body / thrown-call branches explode,
+    with `ReferenceError` propagating out of the handler. The gate caught it because it exercises those branches.
+    Rule: for any "never fails" wrapper, the gate must drive every failure branch, and the wrapper must wrap itself
+    (the guard now has an outer try/catch returning a deterministic checkpoint, `details.reason: "guard-fault-fallback"`).
+213. **For `session_before_*` events the LAST non-null extension result wins.** `dist/core/extensions/runner.js:814-822`
+    does `result = handlerResult` for every handler that returns one, and only `cancel` short-circuits. So
+    `compaction-guard` and `npm:@woksin/pi-context-budget` (both registered on `session_before_compact`) cannot both
+    decide a compaction; registration order decides. Measured with `.spike/probe-extension-discovery.mjs`: order is
+    `.pi/extensions/compaction-guard.js` then `.pi/npm/node_modules/@woksin/pi-context-budget/src/extension.ts`, and
+    in a live two-extension compaction the result that landed was `{"guard":true,"reason":"bounded","spanChars":155353}`.
+    The guard returns `undefined` whenever the default path is already safe, which is what makes the pair compose.
+214. **`thinking_budget: 0` does not turn thinking off on this server.** Measured against 127.0.0.1:8080/v1: it is
+    ignored and the model still reasons. `chat_template_kwargs {"enable_thinking": false}` and `reasoning_effort: "none"`
+    both work (finish_reason "stop", 5 tokens). Send the template kwargs only for `api === "openai-completions"` —
+    other adapters do not merge them.
+215. **The two compaction planes are not the same code.** The guard is a pi-coding-agent extension and protects
+    delegate/interactive sessions. Seats run pi-durable, which caps its own summarization output at
+    `min(floor(0.8 * reserveTokens), model.maxTokens)` (`node_modules/@earendil-works/pi-durable/dist/harness/compaction.js`)
+    and uses a different failure string ("Summarization hit the token limit; the summary is incomplete"). Seat
+    compaction is tuned with `DURIG_COMPACTION_*` (ROADMAP 331, D250); a pi-durable `beforeCompact` extension is the
+    way to apply the same bound there, and no pi-coding-agent extension can load into the durable plane
+    (`src/extensions.mjs` header). Do not report "compaction is safe" from a harness-plane test.

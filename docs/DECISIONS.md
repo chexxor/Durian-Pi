@@ -10975,3 +10975,36 @@ delegate-proposed and awaits operator ratification (D141).
 ever prints 8 PASS while `documents` still holds no audit rows, the gate is vacuous. And the cache figure is
 refuted by a single metered call reporting `cached_tokens > 0` in the ledger; that would mean the ledger does see
 cache after all, and the durable-entry number needs reconciling against it rather than replacing it.
+
+## D252 — 2026-11-09T20:2xZ: **compaction is made fail-closed on the extension plane: bound the input, bound the output, turn thinking off for that call, and write a deterministic checkpoint when the model cannot** (delegate acting on the operator's "please ensure this doesn't happen again"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**Why this shape and not another.** Three options were on the table. (a) Patch pi's compaction — ruled out by D212:
+customization lives on the extension plane; if the base needs a change, the base is missing a seam and the seam is
+grown, not the feature. (b) Reduce the compaction thresholds (`reserveTokens`, `keepRecentTokens`) so compaction
+never fires — that does not fix the failure, it postpones it, and on the harness plane those keys are not the seat
+plane's `DURIG_COMPACTION_*` (D250). (c) A project-local extension that intercepts `session_before_compact` —
+chosen, because the hook already ships and its contract is documented in the shipped dist: `agent-session.js` honours
+`result.compaction {summary, firstKeptEntryId, tokensBefore, usage, details}`, and `runner.js:814-822` keeps the
+**last non-null** handler result for `session_before_*` events.
+
+**The decision's two halves.** (1) **Compose, do not override.** The guard returns `undefined` when the default path is
+already safe (span ≤ 60,000 chars, previous summary ≤ 6,000 chars, and the model's own output limit still fits the
+window), so `npm:@woksin/pi-context-budget` — already in `.pi/settings.json` — keeps doing its work. Verified, not
+argued: with both extensions loaded the compaction succeeded in 6.9 s and the entry carried
+`{"guard":true,"reason":"bounded","spanChars":155353}`. (2) **Make failure impossible, not unlikely.** Every branch
+that pi treats as fatal — a length stop, a provider error, an empty body, a thrown call — ends in a summary here, and
+the guard's own faults are caught and turned into a deterministic checkpoint (`details.reason: "guard-fault-fallback"`).
+Pure logic lives in `tools/compaction-guard-core.mjs` so the gate runs in 0.54 s with no model, key, network or
+broker (D213).
+
+**What this decision does NOT cover, stated plainly.** It is the pi-coding-agent (delegate/interactive) plane. Seats
+run pi-durable, whose compaction task caps output at `min(floor(0.8*reserveTokens), model.maxTokens)` and reports a
+length stop as "Summarization hit the token limit; the summary is incomplete". Applying the same bound on the seat
+plane is a pi-durable `beforeCompact` extension — the arming step is the operator's grant
+(`DURIG_EXTENSIONS`, `docs/runbooks/continuation-notes.md`). No queue row was asserted by the delegate.
+
+**Evidence.** `node tools/compaction-guard-test.mjs` → ALL PASS, 28 checks, 0.54 s.
+`node tools/compaction-guard-e2e.mjs` → ALL PASS, span 158,764 chars, `sentMaxTokens 4000`, `thinkingOff true`,
+`stopReason "stop"`, 1,481-char summary, `compact()` 4.45 s; with `COMPACT_GUARD_OUTPUT_TOKENS=256` the call
+length-stopped and was rescued into a 7,591-char checkpoint. Provider probe in the runbook table. Runbook:
+`docs/runbooks/harness-compaction-guard.md`; roadmap row 351; pitfalls 211-215.
