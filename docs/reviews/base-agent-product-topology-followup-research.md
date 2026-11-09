@@ -1,4 +1,3 @@
-```markdown
 # Round 2 — base-agent product topology: idle policy, model-pointer staleness, counterexamples, verifier economics
 
 Fetched 2026-11-06. Builds on Round 1 (`docs/reviews/base-agent-product-topology-research.md`) without restating it; section numbers prefixed "R1" refer to it. Uses the delegate's corrected identifiers (`DURIG_MAX_CONCURRENT_SEATS`, `DURIG_EXTENSIONS`, `src/queue-lifecycle.mjs`, `src/extensions.mjs`, D212, ROADMAP 18/299/300/303) and does not re-cite the three paths Round 1 got wrong.
@@ -16,7 +15,7 @@ Fetched 2026-11-06. Builds on Round 1 (`docs/reviews/base-agent-product-topology
 | Devin (Cognition, docs live) | Session **sleeps**; sleeping consumes no usage; a message wakes it | 30 min default inactivity; **5 min** for Lite and API-created sessions (not child sessions); Enterprise can set **5–120 min** | Session state persists across sleep ("wake Devin up and resume the session"); environment snapshot is per-repo and session changes do **not** write back to it | observed-in-source [^5] |
 | Claude Code `/loop` (docs rev 2026-10-22) | No queue-empty backoff at all; scheduling is per-prompt cron. Self-paced mode is the only adaptive interval | Fixed min interval **1 min**; self-paced delay **1 min–1 h**, "longer waits when nothing is pending"; recurring tasks **expire after 7 days**; max **50** tasks/session; scheduler ticks every 1 s; no catch-up for missed fires | Loop iterations are ordinary turns in the same transcript; no reset | observed-in-source [^2] |
 | Claude Code agent teams | Idle is a **modelled event**, not inferred from silence: `TeammateIdle` fires "when a teammate is about to go idle after finishing its turn" | No interval, because there is no polling | Hook can veto idle: exit 2 sends the teammate back to work with stderr as feedback; `{"continue": false}` stops it entirely | observed-in-source [^6], [^6] |
-| Goose (Block, docs live) | Subagents are "temporary instances that exist only for task execution"; nothing waits on an empty queue | Subagent **5-min timeout** default; **5** concurrent max per parent; exceeding tasks queue | Timeout yields **no output** from that subagent; parallel siblings still return | observed-in-source [^3], [^3] |
+| Goose (Block, docs live) | Subagents are "temporary instances that exist only for task execution"; nothing waits on an empty queue | Subagent **5-min timeout** default; **5** concurrent max per parent; exceeding tasks queue | Timeout yields **no output** from that subagent; parallel siblings still return | observed-at-our-pin [^P3] — every number in this row is readable in the pinned clone (`goose · 775b3958`); the **5** concurrency default is enforced in **code**, the **5-min timeout** is the vendor's own docs page at that pin |
 | Cursor Cloud Agents (docs live) | Idle is a **machine lifecycle**, not an agent loop | Idle timeout exists for self-hosted worker connections (teams set it; on expiry the machine "can reset and re-enter the pool") — **advertised-elsewhere**; API status says the machine "may be hibernated or snapshotted" | Snapshot/restore keeps the workspace; the agent loop and transcript stay in Cursor's cloud | advertised-elsewhere [^11], [^18]; VM/snapshot model observed [^1] |
 | Jules (Google, docs live) | No idle loop at all: one task = one short-lived VM, then done | — | Repo-level env snapshot reused; no session to park | observed-in-source [^9], [^9] |
 
@@ -78,7 +77,7 @@ Nothing in the sample tells an operator "your supervisor is wedged but your stor
 | **Devin** | Yes, shipping | In-product (sessions, ACU metering; no customisation layer documented for the session runtime) | **Per-session** durable state (sleep/wake resumes the session), plus a per-repo environment snapshot. "Every session starts from the same clean state. Session changes don't persist back to the snapshot." No customer-visible per-agent DB. | observed [^5]; snapshot rule advertised-elsewhere [^16] |
 | **Cursor Cloud Agents** (ex-Background Agents) | Yes, shipping | In-product; team hooks and MCP are the customisation plane | **Per-agent machine** (VM + snapshot/hibernation); transcript and loop stay in Cursor's cloud. Durable state is the machine, not a database per agent. | observed [^1]; snapshot-in-status advertised [^18] |
 | **Google Jules** | Yes, "experimental", and being wound down (changelog 2026-10-29 adds full export of sessions/memories/scheduled tasks) | In-product | **Per-task** VM, short-lived; repo-level env snapshot. Nothing per-agent survives the task except the exported activity log. | observed [^9], [^9] |
-| **Block Goose — recipes** | Yes, OSS, shipping | **Extension plane**: a recipe is a YAML/JSON bundle of instructions + `extensions:` + parameters; `summon` (delegate/load) is a platform extension that must be listed in a recipe's `extensions:` block or delegation disappears | Per-**parent-session**; subagents are temporary with a 5-min timeout and no persistence. No per-agent store. | observed [^3], [^3] |
+| **Block Goose — recipes** | Yes, OSS, shipping | **Extension plane**: a recipe is a YAML/JSON bundle of instructions + `extensions:` + parameters; `summon` (delegate/load) is a platform extension that must be listed in a recipe's `extensions:` block or delegation disappears | Per-**parent-session**; subagents are temporary with a 5-min timeout and no persistence. No per-agent store. | observed-at-our-pin [^P3] — recipe bundle shape read at the pinned docs page, `summon` read at the pinned source |
 | **Gemini CLI extensions** | Mechanism exists (prompts, MCP servers, custom commands, themes, hooks, sub-agents, skills; installed by GitHub URL or local path) — **but Gemini CLI was replaced by Antigravity CLI on 2026-06-18 for unpaid tier and Google One users** | Extension plane | Per-session; no per-agent store documented | observed [^7] |
 
 **Result of the counterexample search, stated as narrowly as the evidence allows:** still **no shipped product in this sample keeps a durable database per agent.** The nearest thing that exists is a **per-agent machine** at the hosted tier (Cursor: snapshot/hibernate/reset per agent connection; Jules: one VM per task) — state per agent, but a machine image, not a queryable store, and never per-agent-in-a-team at the interactive tier. Round 1 §2's caveat can be closed as "searched, none found in six vendors", with the Gemini CLI→Antigravity CLI retirement as a reminder that the mechanism we would copy may not outlive the vendor's own product.
@@ -124,7 +123,8 @@ Format: one-line problem — evidence class — what the rig must build — owne
 | [^5] | https://docs.devin.ai/admin/billing/usage | observed-in-source | 2026-11-06 |
 | [^1] | https://cursor.com/docs/cloud-agent | observed-in-source | 2026-11-06 |
 | [^4] | https://docs.claude.com/en/docs/about-claude/model-deprecations | observed-in-source | 2026-11-06 |
-| [^3] | https://goose-docs.ai/docs/guides/context-engineering/subagents/ | observed-in-source | 2026-11-06 |
+| [^P3] | **our pin**, not a fetched page: `vendor/eval/goose · 775b3958` (registered `docs/COMPETITORS.md:380`) — `vendor/eval/goose/documentation/docs/guides/context-engineering/subagents.mdx:265` ("temporary instances that exist only for task execution"), `:274` (Max Concurrent Subagents **5**, `GOOSE_MAX_CONCURRENT_SUBAGENTS`, "Additional tasks wait until a running subagent finishes", per parent session), `:276` (Timeout **5 minutes**), `:71` (fail/timeout ⇒ "no output from that subagent"; parallel execution returns "results only from the successful ones"); **code**, `vendor/eval/goose/crates/goose/src/agents/state_machine_builder.rs:90-94` (`.with_max_concurrency(... .unwrap_or(NonZeroUsize::new(5)))`); recipe plane, `vendor/eval/goose/documentation/docs/guides/recipes/recipe-reference.md:666,699,812` (`instructions:` + `parameters:` + `extensions:`) and `vendor/eval/goose/crates/goose/src/agents/platform_extensions/summon.rs:32` (`EXTENSION_NAME = "summon"`) | observed-at-pin (clone read locally; the concurrency default is source-grade, the 5-min timeout is the vendor's docs text at the pin — no `300 s` default was found in `vendor/eval/goose/crates/goose/src/agents/subagent_handler.rs` / `state_machine/ops_subagent.rs`, whose only timeout is a 5 s abort grace at `subagent_handler.rs:342`) | 2026-11-06 |
+| [^3] | https://goose-docs.ai/docs/guides/context-engineering/subagents/ | **superseded by [^P3] — context only** (the outside page carries the same text as the pinned repo path; the numbers above are cited to the pin, per ROADMAP 318 / #5216; the page was not re-fetched, so its liveness is not asserted) | 2026-11-06 |
 | [^7] | https://geminicli.com/docs/extensions/ | observed-in-source (rev 2026-02-17) | 2026-11-06 |
 | [^9] | https://jules.google/docs/environment/ | observed-in-source | 2026-11-06 |
 | [^8] | https://cursor.com/bugbot | observed-in-source | 2026-11-06 |
@@ -137,7 +137,6 @@ Format: one-line problem — evidence class — what the rig must build — owne
 | [^16] | https://docs.devin.ai/onboard-devin/environment | advertised-elsewhere | snippet |
 | [^17] | https://cursor.com/blog/may-2026-bugbot-changes | advertised-elsewhere | snippet |
 | [^12] | https://docs.devin.ai/release-notes/2026 | advertised-elsewhere | snippet |
-```
 
 Three limitations, stated rather than smoothed over: (1) the run stopped on the **5-iteration budget**, not on three consecutive empty attempts per question, so Q13's silence and Q10's "no backoff" are sample-scoped, not proven absences; (2) every Q11 claim about *resume-time* validation is a negative finding — no vendor documents the wake path, so the design in R2-3 is inferred from vendor retirement policy, not copied; (3) `docs/MVP.md`, `docs/COMPETITORS.md`, D212 and the Round 1 study were deliberately not read, so the delegate's diff on that side may find overlap I could not detect from here.
 
@@ -145,7 +144,7 @@ Three limitations, stated rather than smoothed over: (1) the run stopped on the 
 
 [^1]: [Cloud Agents | Cursor Docs](https://cursor.com/docs/cloud-agent) (21%)
 [^2]: [Run prompts on a schedule - Claude Code Docs](https://code.claude.com/docs/en/scheduled-tasks) (18%)
-[^3]: [Subagents | goose | Your open source AI agent](https://goose-docs.ai/docs/guides/context-engineering/subagents/) (13%)
+[^3]: [Subagents | goose | Your open source AI agent](https://goose-docs.ai/docs/guides/context-engineering/subagents/) (13%) — **superseded for these claims**: the same text is in our pinned clone at `documentation/docs/guides/context-engineering/subagents.mdx` (see [^P3] in the Source table). Kept for provenance of what the round originally read; do not re-fetch it to check a number.
 [^4]: [Model deprecations - Claude Platform Docs](https://docs.claude.com/en/docs/about-claude/model-deprecations) (11%)
 [^5]: [Usage - Devin Docs](https://docs.devin.ai/admin/billing/usage) (10%)
 [^6]: [Hooks reference - Claude Code Docs](https://code.claude.com/docs/en/hooks) (10%)
@@ -161,6 +160,7 @@ Three limitations, stated rather than smoothed over: (1) the run stopped on the 
 [^16]: [Devin environment setup](https://docs.devin.ai/onboard-devin/environment) (1%)
 [^17]: [Updates to Bugbot for Teams and Individuals - Cursor](https://cursor.com/blog/may-2026-bugbot-changes) (1%)
 [^18]: [Cloud Agents API | Cursor Docs](https://cursor.com/docs/cloud-agent/api/endpoints) (0%)
+[^P3]: **our own pin**, not a web page — clone `vendor/eval/goose` at `775b3958` (gitignored clone; pin registered at `docs/COMPETITORS.md:380`, `node tools/vendor-pins.mjs --check` → PASS, 14 clones). Paths inside that clone: `vendor/eval/goose/documentation/docs/guides/context-engineering/subagents.mdx:71,265,274,276` (subagent lifecycle, max-concurrent **5**, **5-minute** timeout, fail/timeout ⇒ no output); `vendor/eval/goose/crates/goose/src/agents/state_machine_builder.rs:90-94` (the **5** default, in code); `vendor/eval/goose/documentation/docs/guides/recipes/recipe-reference.md:666,699,812` (recipe `instructions:`/`parameters:`/`extensions:`); `vendor/eval/goose/crates/goose/src/agents/platform_extensions/summon.rs:32` (`summon`). Read locally 2026-11-06; grade: the concurrency default is source-grade, the 5-minute timeout is the vendor's own docs text at the pin.
 ## Delegate diff — what this round adds to what the repo already holds (2026-11-06, delegate)
 
 The 298 acceptance test is **propagation, not publication**, and it carries a second condition the
@@ -186,6 +186,19 @@ design precedent. That lands on **300** while our own measurement of the cost of
    we hold a pin for. The claim ("a recipe is prompt+steps, no planner loop") is probably right; the
    citation should be the pin, and the tool-surface claim Round 2 leans on is exactly the gap
    `docs/COMPETITORS.md:321` records as **unexamined here** for Cline and Goose. Registered as **318**.
+
+   **318(a) FIXED (2026-11-06, item #5216) — and the landed file is not what 318(a) describes, so read
+   this before re-opening it.** The two vendor-docs paths 318(a) names (`documentation/ai-agent/recipes.md`,
+   `docs/goose/recipes/index.md`) appear **nowhere in the landed deliverable** — `grep -n
+   "ai-agent/recipes\|goose/recipes\|goose-docs" docs/reviews/base-agent-product-topology-followup-research.md`
+   hits only this diff block (`:182`) plus the `[^3]` rows. The citation the landed Goose rows actually
+   used is `[^3]` = the vendor **subagents** page, and it carried the capacity/timeout numbers in **Q10**
+   and the recipe/per-session claim in **Q12**. Both rows now cite `[^P3]`, our pin, and `[^3]` is marked
+   context-only. The claim did **not** shrink: every number survived re-checking at `goose · 775b3958`
+   (`subagents.mdx:265,274,276,71` under `vendor/eval/goose`), and the **5**-concurrent default is additionally enforced in code at
+   `crates/goose/src/agents/state_machine_builder.rs:90-94`. What the pin does **not** buy: the **5-minute
+   timeout** stays vendor-docs text at the pin — no `300 s` subagent default was found in
+   `subagent_handler.rs`/`ops_subagent.rs` — so it must not be quoted as behaviour read from source.
 2. **R2-3's `broker-wedged` rule would re-derive a discriminator we already ship.** `docs/MVP.md:40-41`
    records that `src/attention.mjs` emits exactly two notices — `idle_with_queued_work` and
    `last_run_failed` — and that "a seat actively running or settled-and-empty stays silent". Q12's claim

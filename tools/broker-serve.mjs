@@ -29,7 +29,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig, loadShippedDefaults } from "../src/config.mjs";
+import { loadConfig, loadShippedDefaults, looksLikeSecret } from "../src/config.mjs";
 import { localProviderSpecs } from "../src/providers/local.mjs";
 import {
 	brokerHealth,
@@ -462,10 +462,36 @@ for (const f of [brokerLogPath(DB), join(REPO, ".spike", "serve.out"), join(REPO
 
 const cmd = [process.execPath, CLI, "serve"];
 if (flags.maxDurationS) cmd.push("--max-duration", String(flags.maxDurationS));
+/**
+ * PRESENCE, never the value (#5700 / ROADMAP 295, operator ruling: fix the print, do not
+ * rotate a credential). This print used to spread every `DURIG_LOCAL_*` / `DURIG_VERIFIER_*`
+ * variable straight into `JSON.stringify`, so a credential's VALUE landed in a preflight report
+ * that an operator pastes into chat, an item body, or a transcript — the same class of leak that
+ * #700 closed for config FILES (`src/config.mjs` refuses secret-shaped values there) and that
+ * `tools/verifier-arm-probe.mjs` refuses for its own output. The product already has the right
+ * shape at `src/config.mjs:558` (`DEEPINFRA_API_KEY: "set" | "unset"`); this site was the one
+ * print that did not use it.
+ *
+ * Non-credential config keeps its VALUE: a preflight that reports nothing is not a preflight. A
+ * credential reports set/unset plus length and source, which is enough for an operator to tell
+ * whether the thing is configured without owning a copy of it.
+ */
+function envPresence(key, value) {
+	if (value === undefined || value === "") return "unset";
+	if (looksLikeSecret(value) || /(API_KEY|TOKEN|SECRET|PAT|AUTH)/i.test(key)) {
+		return `set (${String(value).length} chars, from env)`;
+	}
+	return value;
+}
+
 const envNotes = {
 	DURIG_DB: CFG.DURIG_DB ?? "(default ./rig.sqlite)",
 	DURIG_SEAT_ROOT: process.env.DURIG_SEAT_ROOT ?? "(unset — correct: a global root trips the F12 guard)",
-	...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^DURIG_(LOCAL|VERIFIER)_/.test(k))),
+	...Object.fromEntries(
+		Object.entries(process.env)
+			.filter(([k]) => /^DURIG_(LOCAL|VERIFIER)_/.test(k))
+			.map(([k, v]) => [k, envPresence(k, v)]),
+		),
 };
 console.log(`\n  command: ${cmd.join(" ")}   (stdout -> .spike/serve.out, stderr -> .spike/serve.err)`);
 console.log(`  env: ${JSON.stringify(envNotes)}`);

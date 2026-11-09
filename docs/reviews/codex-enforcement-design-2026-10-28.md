@@ -173,3 +173,19 @@ definition* may be carried by a project layer (the **state** may not, per above)
    `permissions_toml.rs` was "1,457 lines" from memory; measurement at the pin says **680** (`permissions.rs` 883,
    `permission_profile_catalog.rs` 145). Treat any line count here without a measurement date as suspect — that is exactly
    what ROADMAP **244** is for.
+
+## Dated delta — 2026-11-07, the credentials-and-secrets question (pin `d373d649`, re-measured this turn)
+
+Read for the operator's pre-333 question: `codex-rs/network-proxy/src/credential_broker.rs:44-60`,
+`credential_broker/environment.rs:21-45`, `core/src/shell_snapshot.rs:21-22`, `network-proxy/README.md:293-301`.
+Mechanism **M3** in `docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md`; decision rows in
+`docs/COMPETITORS.md`. Two things durian-pi can take **without** the proxy. **(1) A named posture for finding a raw
+credential in a child environment**: `CredentialMaskingFailureMode{Warn,Deny,Error}` — *"warn and leave the raw value in
+the child environment"* / *"fail credential substitution outright"* → row **337** (we currently have no name for that
+state at all, and `refusalFor("cat /proc/$PPID/environ")` returns no refusal). **(2) An ordering rule**: host, method and
+path are authorized **before** any secret is substituted, and re-signing (SigV4) happens after that decision → row **341**
+(a policy-refused model/shape must never reach a credential lookup). What stays parked: the proxy itself — it is the only
+family that also covers git/registry credentials, and it is a MITM-CA and listener posture change on a single-host rig
+(rows **337**/**342** carry the cheap half). Redaction hygiene we do not have: `environment.rs:21-45` prints
+`CredentialBrokerContext(<redacted>)` from `Debug`, and `shell_snapshot.rs:21-22` scrubs the persisted shell snapshot —
+both are "the secret must not ride along in incidental text", the same class as our `src/secretredact.mjs`.
