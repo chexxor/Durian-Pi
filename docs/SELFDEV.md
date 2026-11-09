@@ -2788,13 +2788,25 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the channel: all **6 dead letters** in `selfdev.sqlite.broker.inbox.error` are `op:"read"` payloads with reason
     `apply failed: SqliteStorage is closed` — so a dead letter is **not** evidence that an operator intent was refused.
     Read the payload's `op` before opening a delivery-failure row.
-87. **`tools/broker-serve.mjs --status` without `--env-file="$HOME/.config/durig/env"` reports 4 blocking provider
-    findings that are false about this rig.** Un-keyed shell: `BLOCK provider-local-refuses-inference … HTTP 401: missing
-    or wrong API key`, `BLOCK provider-DURIG_LOCAL_-unauthorized`, `BLOCK provider-verifier-no-key`, `BLOCK
-    provider-verifier-refuses-inference` — and the same command with the env file: **`findings (0 blocking, 3 noted)`**,
-    verifier answers, both providers take inference. The keys live in the out-of-tree env file, not in the shell; a
-    "provider is down" verdict from the un-keyed posture is an artifact. Run **both** postures and report the pair, and
-    redact before filing anything: pitfall 79's cleartext `env:` line is still unfixed (#5334/#5365/#5366).
+87. **A provider "is down" verdict can be an un-keyed shell, not a dead provider — and the fix is shell sourcing,
+    not a flag.** `tools/broker-serve.mjs --status` run in a shell that has not loaded
+    `$HOME/.config/durig/env` reported **4 blocking provider findings** that were false about this rig
+    (`BLOCK provider-local-refuses-inference … HTTP 401: missing or wrong API key`,
+    `BLOCK provider-DURIG_LOCAL_-unauthorized`, `BLOCK provider-verifier-no-key`,
+    `BLOCK provider-verifier-refuses-inference`); with the env sourced the same command reported
+    **`findings (0 blocking, 3 noted)`**. Those counts are **that box on that day**, not a law: re-measured
+    2026-11-08 in the `item-5788` worktree against the live store, BOTH postures returned
+    `findings (1 blocking, 3 noted)` (the one block being `broker-up`), exit 0 — the keys were already in the
+    environment, so the pair collapsed. Always report the pair you measured, never one posture.
+    **`--env-file` is NOT a flag this tool has**: `node tools/broker-serve.mjs --status --env-file="$HOME/.config/durig/env"`
+    prints `broker-serve: unknown argument --env-file=…` and the usage block, **exit 2** (re-run 2026-11-08;
+    `grep -rn "env-file|envFile" tools/*.mjs cli.mjs src/*.mjs` → **0 hits**, exit 1). The working posture is the
+    shell: `set -a; . "$HOME/.config/durig/env"; set +a; node tools/broker-serve.mjs --status` (Node's own
+    `node --env-file=…` is a different thing — it is the runtime's flag, not this tool's). And note the
+    direction the check itself names: **the CLI reads `DURIG_*`, not `DURIAN_*`** (`src/config.mjs:538`
+    resolves the store from `DURIG_DB`). Redact before filing anything: pitfall 79's cleartext `env:` line is
+    still unfixed (#5334/#5365/#5366), and `--status` can print credential VALUES (pitfall 120). Cross-ref
+    pitfall 131, which records the same mechanism correction.
 88. **A pass over un-sendable seats still spends the metered family, and `--max-duration` still bounds nothing.** Started
     `--max-duration 240` at 06:44:11Z; the last `PASS` printed at 06:47:58Z (32 passes) and the process was still alive at
     **28 min 07 s** when stopped by hand after `ls -1 selfdev.sqlite.genlock*` came back empty — it then printed
@@ -2861,7 +2873,8 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
    (`tools/channel-preflight.mjs:38-40,55-59`), and `cli.mjs queue` then refuses:
    `unknown config-file key(s): _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json — no code
    reads these`. A pre-flight that exits non-zero gets skipped, which is how the runbook's own channel check stops being
-   run; `tools/broker-serve.mjs --status --env-file=…` answered the same questions in the meantime. Register the fix
+   run; `tools/broker-serve.mjs --status` with the env sourced in the shell (`set -a; . "$HOME/.config/durig/env";
+   set +a`) answered the same questions in the meantime — there is no `--env-file` flag on that tool (pitfall 131). Register the fix
    against the channel rows (`#5236` family) rather than trusting the pre-flight's absence.
 
 ## Operational pitfalls (2026-11-07T18:2xZ, delegate session N6 — the operator's five answers, a 54-minute windowed pass measured end to end, and the one row that gates ROADMAP 331; rows #5447/#5448/#5453/#5488/#5491, D231; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
@@ -2916,8 +2929,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     seconds** (`21:02:41Z`–`21:02:44Z`: impl 5, pm 5, devtools 5, qa 5, lead 4, scribe 5, architect 4, security 1),
     each with `deferredTo:"human"` and the question "…has failed 3 runs in a row and still holds #<id>…". Store-wide
     **206 rows are `deferredTo:"human"`**. So the cost of forgetting `--env-file` is not a failed pass, it is 34 rows of
-    human-attention debt. `tools/broker-serve.mjs --start --env-file`-style starts (or `--env-file` on the CLI) are the
-    only safe form; `broker-serve --status` without the env file ALSO reports the provider BLOCKs falsely (pitfall 87).
+    human-attention debt. The safe form is **sourcing the env in the shell before the start**
+    (`set -a; . "$HOME/.config/durig/env"; set +a`), not a `--env-file` flag — that flag does not exist on
+    `tools/broker-serve.mjs` (pitfall 131); `broker-serve --status` without the env sourced ALSO reports the
+    provider BLOCKs falsely (pitfall 87).
 103. **`--max-duration` does not bound a window's wall clock when generations are in flight.** Started `21:05:17Z`
     with `--max-duration 2100` (35 min); deadline ≈`21:40:21Z`; last real pass `PASS 1482` at `21:37:53Z`; still alive
     at `22:19Z` with 2 `pi.generation` tasks `running`, and it exited only at `22:21:52Z` after the delegate SIGTERMed
