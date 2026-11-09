@@ -2,8 +2,9 @@
 
 **Last update:** 2026-11-09T20:5xZ (delegate session **N21** — the harness compaction guard is built, gated,
 end-to-end verified and documented; this window **re-ran the whole verification chain from a cold resume and it is
-still green** — install `UP TO DATE`, gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto e2e 6/6 in 85.5 s;
-nothing was claimed in the queue).
+still green** — install `UP TO DATE`, gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto e2e 6/6 in 85.5 s.
+This window also **registered ROADMAP 352** (nothing at session start guarantees the guard is installed). Nothing
+was claimed in the queue.
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240, first tranche ROADMAP 331)**.
 This pass closed the **harness-plane** half of it: auto-compaction in the interactive/delegate session can no
@@ -105,15 +106,19 @@ The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktre
 
 ## Current item (priority order)
 
-1. **Arm the continuity extension** (operator grant) — procedure in `docs/runbooks/continuation-notes.md`. The
+1. **Close the install gap** (registered as **ROADMAP 352**, unclaimed): nothing at session start runs
+   `tools/compaction-guard-install.mjs`, so a fresh clone, a new worktree or another machine starts **unguarded with
+   no signal** (`.pi/` is gitignored by design, `.gitignore:15`). Fix shape: `scripts/clockin.mjs` prints a `guard:`
+   line from `install --check` (<100 ms, no model/key/network). A seat job, not a delegate job.
+2. **Arm the continuity extension** (operator grant) — procedure in `docs/runbooks/continuation-notes.md`. The
    seat plane is *not* protected by this guard: pi-durable caps its own summarization output at
    `min(floor(0.8*reserveTokens), model.maxTokens)` and has its own failure string. A pi-durable `beforeCompact`
    extension is the way to apply the same bound to seats — that is the same arming step.
-2. **Decide how a landing closes its row** (D249) — spooled as `delegate-20261109-auto-clean`, undrained while the
+3. **Decide how a landing closes its row** (D249) — spooled as `delegate-20261109-auto-clean`, undrained while the
    broker is down.
-3. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2) — a seat job.
-4. **#5785** — code on `main`, row `deferred`; a zero-build close for its owner.
-5. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5,
+4. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2) — a seat job.
+5. **#5785** — code on `main`, row `deferred`; a zero-build close for its owner.
+6. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5,
    `docs/reviews/milestone-m5-solidified-2026-11-09.md` §4; gate baseline **3 PASS, 1 PARTIAL, 4 FAIL**.
 
 **Promotion candidates** (gitignored `.spike/`, broker-down safe, no spend beyond the local model):

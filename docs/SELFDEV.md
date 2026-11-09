@@ -3674,7 +3674,7 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     ratifying any criterion, ask: if this drifted tomorrow, what would notice? If the answer is "nothing", the
     criterion is a snapshot, not a gate.
 
-## Operational pitfalls (delegate compaction-guard pass, 2026-11-09 — numbered 211-215, continuing from 210; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate compaction-guard pass, 2026-11-09 — numbered 211-218, continuing from 210; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 211. **"Auto-compaction failed" on the delegate harness is a request-shape bug, not a big-context bug.** pi-coding-agent
     sends the summarization request with **no explicit output cap** (`dist/core/compaction/compaction.js:495` —

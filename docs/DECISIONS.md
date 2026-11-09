@@ -11007,4 +11007,12 @@ plane is a pi-durable `beforeCompact` extension — the arming step is the opera
 `node tools/compaction-guard-e2e.mjs` → ALL PASS, span 158,764 chars, `sentMaxTokens 4000`, `thinkingOff true`,
 `stopReason "stop"`, 1,481-char summary, `compact()` 4.45 s; with `COMPACT_GUARD_OUTPUT_TOKENS=256` the call
 length-stopped and was rescued into a 7,591-char checkpoint. Provider probe in the runbook table. Runbook:
-`docs/runbooks/harness-compaction-guard.md`; roadmap row 351; pitfalls 211-215.
+`docs/runbooks/harness-compaction-guard.md`; roadmap row 351; pitfalls 211-218.
+
+**Addendum, same day (the remaining hole).** Re-running the chain from a cold resume gave the same verdict
+(gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto/threshold e2e 6/6 in 85.5 s on a 408,516-char span, zero
+failure events) — but it also exposed that the guard's protection is **host-local and hand-installed**: `.pi/` is
+gitignored by design (`.gitignore:15`), so a fresh clone or another machine starts unguarded and nothing says so.
+That gap is registered as **ROADMAP 352** (session-start check in `scripts/clockin.mjs`); the delegate registered it
+and asserted no row. The decision is still "the extension plane, never the base" (D212) — the missing piece is a
+*seam for presence*, not a change to pi.
