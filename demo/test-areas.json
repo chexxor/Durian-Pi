@@ -267,6 +267,7 @@
       "demo/clockin-digest.test.mjs",
       "demo/format.test.mjs",
       "demo/gate-clean-scorer.test.mjs",
+      "demo/land-scratch-deps.test.mjs",
       "demo/genlock-hardening.test.mjs",
       "demo/genlock-monotonic.test.mjs",
       "demo/genlock-priority.test.mjs",
