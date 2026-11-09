@@ -1238,7 +1238,7 @@ export async function drivePass(
   harness,
   probeStorage,
   { context, seatFilter, readBusySeats, onError, onWoke, onSuppressed, currentSeat: initialSeat,
-    dbPath, onDiagnostic, waitForWakes = true, readStorage, shouldStop } = {},
+    dbPath, onDiagnostic, waitForWakes = true, readStorage, shouldStop, parkedChanged = null, onParked = () => {} } = {},
 ) {
   // Deliver any spooled operator intent FIRST, so the submission it creates is visible
   // to this pass's `inspect` and the seat is not also submitted a fixed wake.
@@ -1346,6 +1346,17 @@ export async function drivePass(
       const age = typeof skip.ageMs === "number" ? ` age=${Math.round(skip.ageMs / 1000)}s` : "";
       const conv = skip.conversationId !== undefined ? ` conv=${skip.conversationId}` : "";
       logBrokerLine(dbPath, `SKIP ${skip.seat} reason=${skip.reason}${conv}${age}`);
+    },
+    // #5740 option A: the scheduler owns the parked-set state; drivePass only forwards it. Without this
+    // line the predicate silently defaults to null and the dedup does nothing - which is exactly the
+    // kind of wiring a doc-only change would miss, so it is asserted by the serve probe below.
+    parkedChanged,
+    // #5740: parked-wake dedup is LEGIBLE. Before this, a parked seat either got a wake or got nothing,
+    // and the log could not distinguish "suppressed because nothing changed" from "not considered".
+    onParked: (event) => {
+      if (!dbPath) return;
+      logBrokerLine(dbPath, `PARKED-WAKE seat=${event.seat} reason=${event.reason}`);
+      onParked?.(event);
     },
     // #2420: an in-pass stop predicate. Checked before each wake so a pass stops
     // submitting NEW work the moment a stop is requested, not only at the loop boundary.
@@ -1798,6 +1809,8 @@ export async function runWakeLoop({
           logBrokerLine(dbPath, `WAKE ${name}`);
         },
         onSuppressed: (name) => suppressedThisPass.add(name),
+        // #5740 option A: the scheduler owns the parked-set signatures; the driver only asks.
+        parkedChanged: (seat, signature) => scheduler.parkedChanged(seat, signature),
       });
       passes++;
       // A pass that COMPLETED clears the reopen budget: recovery succeeded, so a LATER failure
