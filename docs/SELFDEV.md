@@ -3599,3 +3599,23 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     on the FIELD (`rows.every(r => r.id > TERMINAL_ROWS)`), not on a printable fragment, and when an assertion's
     arithmetic is a formula (`droppedTerminal + droppedCapped === total - shown`), write the formula, not one side
     of it: the first version of that assertion was self-consistent only by accident.
+
+199. **Reading a durable document creates it.** `tx.doc(ContinuityNotes, conversationId)` returns the initial
+    value and materialises the document if it never existed, so "a `durig.notes` document exists for this seat"
+    is not "the seat wrote a note". The gate first read document existence and called an empty note a mechanism
+    failure; it now reads the rendered body and files an empty one as an operational blocker. Existence is never
+    the assertion; content is.
+200. **`beforeRequest` is request-only.** `dist/harness/generation.js:118-123` lets a hook replace the messages
+    list for one provider call and writes nothing to `entries`. Anything a gate or a later seat must be able to
+    read has to be a store document or an entry; searching the transcript for injected text always returns
+    nothing, and "the note is not in the transcript" is therefore evidence of nothing.
+201. **A gate that reports one flat FAIL list cannot tell "unfinished" from "not running".** The continuity gate
+    printed 9 failures on the live rig when 8 of them were grants (no broker, no key, extension unlisted) and
+    one was a fixture artifact. It now separates **FAIL (mechanism)** — exit 1 — from **operational blockers**
+    and **advisory**, each with the action that closes it. A gate whose red wall cannot be triaged is a gate
+    people stop running.
+202. **A demo that keeps its store must wipe it once, at start.** `DURIG_CONTINUITY_KEEP_DIR` makes the demo
+    stores inspectable by a gate; re-running it against the same directory failed with `seat already registered:
+    control` because every scenario opened the same store. Idempotence belongs to the store, not to each
+    `openRig` call — and a scenario that wipes on open silently discards the earlier scenarios' evidence, which
+    is exactly what the gate then cannot see.

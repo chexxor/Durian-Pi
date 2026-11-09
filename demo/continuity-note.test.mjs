@@ -6,7 +6,10 @@
 //   2. `write_note` puts the note in the durable store (source of truth, D130/R2) AND mirrors it to DURIG_NOTES_DIR;
 //   3. a compaction whose summary is the note makes ZERO model calls — the summariser request is never built,
 //      so the 218 "Summarization hit the token limit" records and the 209 run-cap refusals cannot recur;
-//   4. `continue_from_note` draws a fresh context whose only carried state is the note.
+//   4. `continue_from_note` draws a fresh context whose only carried state is the note;
+//   5. a reset the seat did NOT choose (no handoff - `cli.mjs reset`, `up --refresh`, the degeneration guard)
+//      still puts the note in front of the seat's next request, without writing a transcript entry, and stops
+//      injecting once the seat has its own context back.
 //
 // No real model, no network, no broker. fauxProvider answers every request, and the compaction proof is that
 // faux's call counter does not move across a compaction that placed a summary.
@@ -42,6 +45,7 @@ process.env.DURIG_NOTES_DIR = NOTES_DIR;
 const SETTINGS = { compaction: { enabled: true, reserveTokens: 4096, keepRecentTokens: 6000, backgroundTokens: 9000 } };
 
 let failures = 0;
+const openedStores = new Set();
 function check(label, condition, detail = "") {
 	if (!condition) failures++;
 	console.log(`  ${condition ? "OK" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
@@ -49,7 +53,14 @@ function check(label, condition, detail = "") {
 
 /** Open a rig on its own store; `withContinuity` is the only difference between the two runs. */
 async function openRig({ withContinuity, seatName }) {
-	const storage = await openNodeSqliteStorage(join(dir, `${withContinuity ? "with" : "without"}.sqlite`));	const faux = fauxProvider({ models: [{ id: "faux-seat", contextWindow: 128000 }] });
+	const storePath = join(dir, `${withContinuity ? "with" : "without"}.sqlite`);
+	// One store per demo run, reused by every scenario, so a gate can inspect a single store that holds all
+	// of the proofs. Re-running the demo starts clean rather than failing on a seat the last run registered.
+	if (!openedStores.has(storePath)) {
+		if (existsSync(storePath)) rmSync(storePath);
+		openedStores.add(storePath);
+	}
+	const storage = await openNodeSqliteStorage(storePath);	const faux = fauxProvider({ models: [{ id: "faux-seat", contextWindow: 128000 }] });
 	const models = createModels();
 	models.setProvider(faux.provider);
 	const registry = createRegistry();
@@ -274,6 +285,81 @@ try {
 		check("the note survived the boundary", renderNote(note).includes("Verify the handoff seeds a fresh context"));
 	} finally {
 		await handoffRig.harness.close(ctx);
+	}
+
+	/* ---------------- 5. the boundary the seat did not choose ---------------- */
+	console.log("\n=== 5. a plain reset (no handoff) still puts the note in front of the seat ===");
+	const wokenRig = await openRig({ withContinuity: true, seatName: "woken" });
+	try {
+		const conv = await wokenRig.harness.conversation(wokenRig.conversationId, ctx);
+		wokenRig.faux.setResponses([
+			fauxAssistantMessage([fauxToolCall("write_note", {
+				itemId: 42,
+				goal: "Wake in a fresh context and still know the item.",
+				verified: [{ claim: "the note doc is conversation-scoped", evidence: "extensions/continuity.mjs" }],
+				next: "act on the goal without re-reading the transcript",
+			})], { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxText("noted")),
+		]);
+		await (await conv.submit({ type: "input", content: "note the item first" }, ctx)).wait(ctx);
+
+		// `cli.mjs reset <seat>`, `up --refresh` and the degeneration guard all call reset with NO handoff, so
+		// the fresh context would otherwise start from nothing - the symptom D240 exists to close.
+		await conv.reset(undefined, ctx);
+
+		let requestText = "";
+		wokenRig.faux.setResponses([
+			(fauxContext) => {
+				requestText = JSON.stringify(fauxContext.messages);
+				return fauxAssistantMessage(fauxText("I know the goal without being told it again"));
+			},
+			fauxAssistantMessage(fauxText("done")),
+		]);
+		const woken = await (await conv.submit({ type: "input", content: "wake" }, ctx)).wait(ctx);
+		check("the woken run settled", woken.status === "done", String(woken.status));
+		check("the note reached the provider request", requestText.includes("CONTINUITY NOTE") && requestText.includes("Wake in a fresh context"), requestText.slice(0, 160));
+		check("the note reached it in the system message, not as an extra turn",
+			JSON.parse(requestText)[0].role === "system" && JSON.parse(requestText).filter((m) => m.role !== "system").length === 1,
+			JSON.parse(requestText).map((m) => m.role).join(","));
+
+		const transcript = JSON.stringify((await conv.entries({}, 500, undefined, ctx)).items);
+		check("injection is request-only: no entry was written for the injected note",
+			!transcript.includes("read from your own durable record"),
+			`transcript entries: ${(await conv.entries({}, 500, undefined, ctx)).items.length}`);
+
+		// Once the seat has its own context back, the note is not re-injected: the mechanism is a boundary
+		// mechanism, not a per-request tax (ROADMAP 175 cache economics).
+		let laterRequestText = "";
+		wokenRig.faux.setResponses([
+			(fauxContext) => {
+				laterRequestText = JSON.stringify(fauxContext.messages);
+				return fauxAssistantMessage(fauxText("still working"));
+			},
+			fauxAssistantMessage(fauxText("done")),
+		]);
+		await (await conv.submit({ type: "input", content: "a second turn, so the context is no longer fresh" }, ctx)).wait(ctx);
+		check("the note is not injected once the seat has its own context back", !laterRequestText.includes("CONTINUITY NOTE"),
+			`visible roles: ${JSON.parse(laterRequestText).map((m) => m.role).join(",")}`);
+
+		// A seat with no note gets nothing injected - the guard cannot invent a goal.
+		const bareRig = await openRig({ withContinuity: true, seatName: "bare" });
+		try {
+			const bareConv = await bareRig.harness.conversation(bareRig.conversationId, ctx);
+			let bareRequest = "";
+			bareRig.faux.setResponses([
+				(fauxContext) => {
+					bareRequest = JSON.stringify(fauxContext.messages);
+					return fauxAssistantMessage(fauxText("no note, no injection"));
+				},
+				fauxAssistantMessage(fauxText("done")),
+			]);
+			await (await bareConv.submit({ type: "input", content: "start" }, ctx)).wait(ctx);
+			check("no note means no injection", !bareRequest.includes("CONTINUITY NOTE"), bareRequest.slice(0, 120));
+		} finally {
+			await bareRig.harness.close(ctx);
+		}
+	} finally {
+		await wokenRig.harness.close(ctx);
 	}
 
 	console.log(`\nCONTINUITY ${failures === 0 ? "PASS" : `FAIL (${failures} check(s) failed)`}`);

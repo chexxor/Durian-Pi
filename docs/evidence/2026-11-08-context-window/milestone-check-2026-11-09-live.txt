@@ -1,0 +1,85 @@
+== ROADMAP 331: does the configured override reach the harness? ==
+  store under inspection: ./selfdev.sqlite
+  config source: durig.config.json
+  compactionSettings() -> {"compaction":{"modelOverrides":{"local/qwen3.8-flash-next-q2_0":{"reserveTokens":20480},"verifier/openai/gpt-oss-120b":{"reserveTokens":4096,"keepRecentTokens":8192,"backgroundTokens":8192}}}}
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  verifier/openai/gpt-oss-120b: reserve=4096 keepRecent=8192 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+== per-window feasibility ==
+  local/qwen3.8-flash-next-q2_0: window=204800 headroom=184320 keepRecent=20000 = 11% of headroom
+    post-compaction floor: 20000 kept + 16384 summary cap = 36384 tokens vs a 204800 window (18% of the window)
+  verifier/openai/gpt-oss-120b: window=24576 headroom=20480 keepRecent=8192 = 40% of headroom
+    post-compaction floor: 8192 kept + 3276 summary cap = 11468 tokens vs a 24576 window (47% of the window)
+== observed failures in the store ==
+  pi.compaction rows: 2354; failed 432; truncated summaries 219; refused by the run cap 209
+  last 60 min: 0 compactions, 0 truncated
+  by conversation (cap refusals | truncations):
+    conv 4936: 209 | 6
+    conv 4930: 0 | 134
+    conv 9: 0 | 47
+    conv 21: 0 | 16
+    conv 3: 0 | 10
+    conv 15: 0 | 5
+  truncations: 219 lifetime, first 2026-10-18T20:55:08.971Z, last 2026-11-09T01:50:36.506Z; 5 in the last 24 h
+  cap refusals: 209 lifetime, first 2026-11-07T08:50:25.182Z, last 2026-11-07T10:34:40.102Z; 0 in the last 24 h
+== run-cap headroom for the summariser (the budget that starves compaction) ==
+  broker process since 2026-11-09T03:20:33.167Z START pid=114848: spent $0.028063 of the $0.1 run cap; mean verifier call $0.000360
+  summariser calls this process can still afford before EVERY compaction is refused: ~199 (optimistic, at mean call cost)
+  conservative: refusals projected summariser calls at $0.001368–$0.001384; at $0.001384 this process has ~51 compactions left before every one is refused
+== turn shape (tools/seat-turn-shape.mjs, read-only) ==
+  9 of 12 seats cannot be spoken to right now: seat impl, seat qa, seat lead, seat advocate, seat auditor, seat designer, seat security, seat qa2, seat architect
+== broker progress leg: alive vs healthy (src/broker.mjs:1628-1631, BROKER_HEARTBEAT_MS 20000) ==
+  no broker state file — no resident broker
+== continuity mechanism: can EVERY seat resume from a note, and did compaction stop costing a model call? ==
+  DURIG_EXTENSIONS: (unset) - no extension is loaded, so the mechanism cannot exist yet
+  to arm it (an operator grant - this changes the code that runs in every seat):
+    1. stop the broker:  node tools/broker-serve.mjs --stop   (docs/runbooks/continuation-notes.md, Preconditions)
+    2. add to durig.config.json:  "DURIG_EXTENSIONS": "extensions/continuity.mjs"
+    3. set DURIG_NOTES_DIR if the default (<rig root>/.durig/notes, gitignored) is not what you want
+    4. re-run this gate: expect every seat to print goal=yes next=yes with a non-zero resume body
+  note documents in the store: none - durig.notes is not defined
+  transcript evidence of a note write: 1 entr(ies) mentioning write_note
+  pi.system entries carrying the durig-continuity section: 0
+  DURIG_NOTES_DIR: (unset) - default below
+  mirror files at /home/chexxor/Git/Durian-Pi/.durig/notes: 0
+  compaction attempts in the last 24 h: 35 (each still costs a summariser call until the hook supplies the note)
+  seats in the roster: 12
+  no write_note call in the transcript yet: the before/after comparison has no anchor - the mechanism has never run on this store.
+== live window occupancy (entries after each seat's head marker) ==
+  pm        conv 3 head pi.reset@414617: 323 msgs, ~144978 tokens = 71% of its 204800-token window | items completed in this window: 21 (claimed 22, deferred 2), bash 0
+  impl      conv 9 head pi.reset@417742: 249 msgs, ~130178 tokens = 64% of its 204800-token window | items completed in this window: 1 (claimed 3, deferred 0), bash 67
+  qa        conv 15 head pi.reset@413440: 232 msgs, ~87220 tokens = 43% of its 204800-token window | items completed in this window: 1 (claimed 2, deferred 0), bash 75
+  lead      conv 21 head pi.compaction@419220: 133 msgs, ~12005 tokens = 6% of its 204800-token window | items completed in this window: 0 (claimed 2, deferred 0), bash 0
+  advocate  conv 4918 head pi.reset@400364: 1 msgs, ~100 tokens = 0% of its 204800-token window | items completed in this window: 0 (claimed 0, deferred 0), bash 0
+  scribe    conv 4924 head pi.reset@416865: 123 msgs, ~50501 tokens = 25% of its 204800-token window | items completed in this window: 0 (claimed 2, deferred 0), bash 17
+  devtools  conv 4930 head pi.compaction@419958: 65 msgs, ~10506 tokens = 5% of its 204800-token window | items completed in this window: 0 (claimed 0, deferred 0), bash 0
+  auditor   conv 4936 head pi.compaction@419157: 260 msgs, ~6576 tokens = 27% of its 24576-token window | items completed in this window: 0 (claimed 0, deferred 0), bash 0
+  designer  conv 4942 head pi.reset@400370: 1 msgs, ~100 tokens = 0% of its 204800-token window | items completed in this window: 0 (claimed 0, deferred 0), bash 0
+  security  conv 55605 head pi.reset@403961: 319 msgs, ~121673 tokens = 59% of its 204800-token window | items completed in this window: 1 (claimed 1, deferred 0), bash 40
+  qa2       conv 86607 head pi.reset@400360: 154 msgs, ~86766 tokens = 42% of its 204800-token window | items completed in this window: 3 (claimed 3, deferred 0), bash 30
+  architect conv 107595 head pi.reset@414472: 241 msgs, ~107046 tokens = 52% of its 204800-token window | items completed in this window: 2 (claimed 1, deferred 0), bash 41
+  note: token count is chars/4 over durable entries; the provider's own tokenizer is the ground truth.
+
+PASS (mechanism) — the override reaches the harness, every declared window holds its policy, and the note path is the one compaction takes when a note exists.
+
+Operational blockers (8) — none of these is a defect in the mechanism; each needs a grant, a broker, or a provider:
+  · 219 compaction attempts produced an incomplete summary — the window is too small for the policy.
+  · 209 compaction attempts were refused by DURIG_SPEND_CAP_RUN_USD before any request was sent — the summariser is starved by the rig's own budget.
+  · 212 truncations on seats with no cap refusals — their summary ceiling (0.8 x reserveTokens) is the binding constraint, not the budget.
+  · 5 truncated summaries in the last 24 h — the window/policy mismatch is still live, not historical.
+  · extensions/continuity.mjs exists but is not in DURIG_EXTENSIONS - by design it is never auto-discovered, so an unlisted extension is an absent one.
+  · no continuation-note document exists in the store, so a seat forced into a fresh context has nothing to resume from - the mechanism is rows #5931-#5940.
+  · 12 of 12 seats have no continuity note (pm (conv 3), impl (conv 9), qa (conv 15), lead (conv 21), advocate (conv 4918), scribe (conv 4924), devtools (conv 4930), auditor (conv 4936), designer (conv 4942), security (conv 55605), qa2 (conv 86607), architect (conv 107595)) - a forced fresh context for those seats starts empty.
+  · lead claimed 2 item(s) in its current window and completed none; scribe claimed 2 item(s) in its current window and completed none — the window is spent on tool traffic that never lands an item.
+
+Advisory (1) — risk signals this instrument cannot prove without a real provider:
+  · 9 seats are AT RISK on turn shape — a strict alternating template refuses a user turn before any window limit, so no window sizing can make them complete work.

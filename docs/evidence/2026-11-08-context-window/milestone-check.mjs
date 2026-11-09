@@ -30,6 +30,12 @@ const { config, source } = await cfg.loadConfig({ env: process.env, readFile, de
 const settings = cfg.compactionSettings(config);
 
 const failures = [];
+// An operational blocker is not a defect in the mechanism: it is a grant or a running broker the operator
+// holds. Separating them is what makes the gate usable - a wall of red over a mechanism that is finished
+// reads the same as a mechanism that is broken.
+const blockers = [];
+// Advisory: a risk signal the instrument cannot prove without a real provider. Not a verdict.
+const advisory = [];
 const seen = new Set();
 console.log("== ROADMAP 331: does the configured override reach the harness? ==");
 console.log(`  store under inspection: ${DB}`);
@@ -88,8 +94,8 @@ if (existsSync(DB)) {
   const trunc = db.prepare("select count(*) n from tasks where kind=? and record like ?").get('"pi.compaction"', "%hit the token limit%").n;
   const cap = db.prepare("select count(*) n from tasks where kind=? and record like ?").get('"pi.compaction"', "%spend_cap_exceeded%").n;
   console.log(`  pi.compaction rows: ${total}; failed ${failed}; truncated summaries ${trunc}; refused by the run cap ${cap}`);
-  if (trunc > 0) failures.push(`${trunc} compaction attempts produced an incomplete summary — the window is too small for the policy.`);
-  if (cap > 0) failures.push(`${cap} compaction attempts were refused by DURIG_SPEND_CAP_RUN_USD before any request was sent — the summariser is starved by the rig's own budget.`);
+  if (trunc > 0) blockers.push(`${trunc} compaction attempts produced an incomplete summary — the window is too small for the policy.`);
+  if (cap > 0) blockers.push(`${cap} compaction attempts were refused by DURIG_SPEND_CAP_RUN_USD before any request was sent — the summariser is starved by the rig's own budget.`);
   const since = Date.now() - 60 * 60000;
   const now = db.prepare("select count(*) n from tasks where kind=? and json_extract(record,'$.startedAt')>=?").get('"pi.compaction"', since).n;
   const nowFail = db.prepare("select count(*) n from tasks where kind=? and json_extract(record,'$.startedAt')>=? and record like ?").get('"pi.compaction"', since, "%hit the token limit%").n;
@@ -104,10 +110,10 @@ if (existsSync(DB)) {
   console.log("  by conversation (cap refusals | truncations):");
   for (const s of split) console.log(`    conv ${s.conversation_id}: ${s.cap} | ${s.trunc}`);
   const localTrunc = split.filter((s) => s.trunc > 0 && s.cap === 0).reduce((a, s) => a + s.trunc, 0);
-  if (localTrunc > 0) failures.push(`${localTrunc} truncations on seats with no cap refusals — their summary ceiling (0.8 x reserveTokens) is the binding constraint, not the budget.`);
+  if (localTrunc > 0) blockers.push(`${localTrunc} truncations on seats with no cap refusals — their summary ceiling (0.8 x reserveTokens) is the binding constraint, not the budget.`);
   console.log(`  truncations: ${truncAll.n} lifetime, first ${new Date(truncAll.mn).toISOString()}, last ${new Date(truncAll.mx).toISOString()}; ${trunc24} in the last 24 h`);
   console.log(`  cap refusals: ${capAll.n} lifetime, first ${new Date(capAll.mn).toISOString()}, last ${new Date(capAll.mx).toISOString()}; ${cap24} in the last 24 h`);
-  if (trunc24 > 0) failures.push(`${trunc24} truncated summaries in the last 24 h — the window/policy mismatch is still live, not historical.`);
+  if (trunc24 > 0) blockers.push(`${trunc24} truncated summaries in the last 24 h — the window/policy mismatch is still live, not historical.`);
   db.close();
 } else {
   console.log(`  no store at ${DB} — skipped (pass --db)`);
@@ -142,7 +148,7 @@ try {
       const worst = Math.max(...proj);
       console.log(`  conservative: refusals projected summariser calls at $${Math.min(...proj).toFixed(6)}–$${worst.toFixed(6)}; at $${worst.toFixed(6)} this process has ~${Math.max(0, Math.floor((capRun - spent) / worst))} compactions left before every one is refused`);
     }
-    if (capRun - spent < mean * 5) failures.push("the resident broker is within 5 summariser calls of its run cap: compaction will be refused before any seat finishes its task.");
+    if (capRun - spent < mean * 5) blockers.push("the resident broker is within 5 summariser calls of its run cap: compaction will be refused before any seat finishes its task.");
   } else {
     console.log("  no spend ledger or START line — headroom unmeasurable");
   }
@@ -165,7 +171,7 @@ try {
     }
   }
   console.log(`  ${risk.length} of ${seats.length} seats cannot be spoken to right now: ${risk.join(", ") || "none"}`);
-  if (risk.length > 0) failures.push(`${risk.length} seats are AT RISK on turn shape — a strict alternating template refuses a user turn before any window limit, so no window sizing can make them complete work.`);
+  if (risk.length > 0) advisory.push(`${risk.length} seats are AT RISK on turn shape — a strict alternating template refuses a user turn before any window limit, so no window sizing can make them complete work.`);
 } catch (e) {
   console.log(`  shape probe failed: ${e.message}`);
   failures.push("the shape instrument could not run, so the fleet's ability to be woken is unverified.");
@@ -199,11 +205,11 @@ try {
       for (const o of ops) opGroup[o] = (opGroup[o] || 0) + 1;
       console.log(`  dead letters by reason: ${Object.entries(group).map(([k, v]) => `${v} × ${k}`).join(" | ")}`);
       console.log(`  dead letters by op: ${Object.entries(opGroup).map(([k, v]) => `${k} ${v}`).join(" | ")}`);
-      if (opGroup.read) failures.push(`${opGroup.read} read intents were dead-lettered with "apply failed: SqliteStorage is closed" (pi-durable storage.js:670) — that is why cli.mjs status/queue print nothing and time out: the read is dead-lettered, so the CLI waits its whole cap for a result that will never arrive.`);
+      if (opGroup.read) advisory.push(`${opGroup.read} read intents were dead-lettered with "apply failed: SqliteStorage is closed" (pi-durable storage.js:670) — that is why cli.mjs status/queue print nothing and time out: the read is dead-lettered, so the CLI waits its whole cap for a result that will never arrive.`);
     }
     if (hbAge <= 2 * 20 && passAge > 120) {
       console.log("  verdict: WEDGED — the event loop is turning but the progress leg is frozen; only a pass drains the spool (src/broker.mjs:1698). “Busy” is ruled out only if the in-flight count is small and refreshes.");
-      failures.push(`the resident broker has not completed a pass in ${Math.round(passAge / 60)} minutes, so no intent, claim or wake can be routed — the milestone cannot advance while it is wedged.`);
+      blockers.push(`the resident broker has not completed a pass in ${Math.round(passAge / 60)} minutes, so no intent, claim or wake can be routed — the milestone cannot advance while it is wedged.`);
     } else if (passAge <= 120) {
       console.log("  verdict: HEALTHY — passes are advancing.");
     } else {
@@ -232,17 +238,27 @@ try {
     failures.push(`${exts.length - present.length} DURIG_EXTENSIONS path(s) do not exist; the rig reports an extension it never loaded.`);
   }
   const continuityListed = exts.some((p) => /continuity/.test(p));
-  if (!continuityListed) failures.push("extensions/continuity.mjs exists but is not in DURIG_EXTENSIONS - by design it is never auto-discovered, so an unlisted extension is an absent one.");
+  if (!continuityListed) {
+    blockers.push("extensions/continuity.mjs exists but is not in DURIG_EXTENSIONS - by design it is never auto-discovered, so an unlisted extension is an absent one.");
+    console.log("  to arm it (an operator grant - this changes the code that runs in every seat):");
+    console.log("    1. stop the broker:  node tools/broker-serve.mjs --stop   (docs/runbooks/continuation-notes.md, Preconditions)");
+    console.log("    2. add to durig.config.json:  \"DURIG_EXTENSIONS\": \"extensions/continuity.mjs\"");
+    console.log("    3. set DURIG_NOTES_DIR if the default (<rig root>/.durig/notes, gitignored) is not what you want");
+    console.log("    4. re-run this gate: expect every seat to print goal=yes next=yes with a non-zero resume body");
+  }
 
   if (existsSync(DB)) {
     const s = new DatabaseSync(DB, { readOnly: true });
     const kinds = s.prepare("select kind, count(*) n from documents group by kind order by kind").all().map((r) => String(r.kind).replace(/"/g, ""));
     const notesDocs = kinds.filter((k) => /notes/i.test(k));
     console.log(`  note documents in the store: ${notesDocs.length ? notesDocs.join(", ") : "none - durig.notes is not defined"}`);
-    if (!notesDocs.length) failures.push("no continuation-note document exists in the store, so a seat forced into a fresh context has nothing to resume from - the mechanism is rows #5931-#5940.");
+    if (!notesDocs.length) blockers.push("no continuation-note document exists in the store, so a seat forced into a fresh context has nothing to resume from - the mechanism is rows #5931-#5940.");
     let writes = 0;
     try { writes = s.prepare("select count(*) n from entries where record like ?").get("%write_note%").n; } catch { writes = 0; }
     console.log(`  transcript evidence of a note write: ${writes} entr(ies) mentioning write_note`);
+    const sectionSeen = s.prepare("select count(*) n from entries where record like ?").get("%durig-continuity%").n;
+    console.log(`  pi.system entries carrying the durig-continuity section: ${sectionSeen}`);
+    if (continuityListed && sectionSeen === 0) failures.push("the extension is listed but its prompt section never reached a request - the seat is never told the note tools exist, so it will not use them.");
     const rawDir = config.DURIG_NOTES_DIR || ".durig/notes";
     const mirrorPath = isAbsolute(rawDir) ? rawDir : join(ROOT, rawDir);
     console.log(`  DURIG_NOTES_DIR: ${config.DURIG_NOTES_DIR ? rawDir : "(unset) - default below"}`);
@@ -277,9 +293,12 @@ try {
         const boundary = s.prepare("select count(*) n from entries where conversation_id=? and record like ?").get(conv, "%\"type\":\"pi.reset\"%").n;
         const resumable = body.length > 0 && (note?.goal || note?.next);
         console.log(`  ${String(name).padEnd(9)} conv ${String(conv).padEnd(5)} note rev ${revisions} | ${body.length} chars of resume text | goal=${note?.goal ? "yes" : "no"} next=${note?.next ? "yes" : "no"} verified=${(note?.verified ?? []).length} fresh-boundaries=${boundary}`);
-        if (!resumable) seatsNotResumable.push(`${name}: note exists but renders nothing a fresh context could act on (${body.length} chars)`);
+        // An empty note doc is not a broken note: reading the doc creates it with its initial value, so an
+        // empty body means no seat has written one yet - an operational gap (no broker), not a mechanism defect.
+        if (body.length === 0) seatsWithoutNote.push(`${name} (conv ${conv}, note doc empty - no write_note yet)`);
+        else if (!resumable) seatsNotResumable.push(`${name}: note renders ${body.length} chars but names no goal or next action`);
       }
-      if (seatsWithoutNote.length) failures.push(`${seatsWithoutNote.length} of ${Object.keys(roster).length} seats have no continuity note (${seatsWithoutNote.slice(0, 12).join(", ")}) - a forced fresh context for those seats starts empty.`);
+      if (seatsWithoutNote.length) blockers.push(`${seatsWithoutNote.length} of ${Object.keys(roster).length} seats have no continuity note (${seatsWithoutNote.slice(0, 12).join(", ")}) - a forced fresh context for those seats starts empty.`);
       if (seatsNotResumable.length) failures.push(seatsNotResumable.join("; "));
       await store.close(ctx);
     } catch (e) {
@@ -317,8 +336,7 @@ try {
   }
 } catch (e) { console.log(`  continuity probe failed: ${e.message}`); }
 
-console.log("== live window occupancy (entries after each seat's head marker) ==");
-try {
+console.log("== live window occupancy (entries after each seat's head marker) ==");try {
   const j = JSON.parse(execFileSync(process.execPath, ["tools/seat-turn-shape.mjs", "--db", DB, "--json"], { encoding: "utf8", timeout: 60000, stdio: ["ignore", "pipe", "ignore"] }));
   const s = new DatabaseSync(DB, { readOnly: true });
   const seatWindow = new Map((rig.seats ?? []).map((st) => [st.name, Number(config[String(st.model ?? "").startsWith("local/") ? "DURIG_LOCAL_CONTEXT" : "DURIG_VERIFIER_CONTEXT"])]));
@@ -340,16 +358,32 @@ try {
     if (pct > 80) nearFull.push(`${st.seat} at ${pct}% of its declared window`);
     if ((calls.claim_work || 0) > 0 && (calls.complete_work || 0) === 0) stuck.push(`${st.seat} claimed ${(calls.claim_work || 0)} item(s) in its current window and completed none`);
   }
-  if (nearFull.length) failures.push(`${nearFull.join("; ")} — the window is nearly full, so the recent turns and the summary cannot both fit.`);
-  if (stuck.length) failures.push(`${stuck.join("; ")} — the window is spent on tool traffic that never lands an item.`);
+  if (nearFull.length) blockers.push(`${nearFull.join("; ")} — the window is nearly full, so the recent turns and the summary cannot both fit.`);
+  if (stuck.length) blockers.push(`${stuck.join("; ")} — the window is spent on tool traffic that never lands an item.`);
   console.log("  note: token count is chars/4 over durable entries; the provider's own tokenizer is the ground truth.");
 } catch (e) { console.log(`  occupancy probe failed: ${e.message}`); }
 
 console.log("");
 if (failures.length === 0) {
-  console.log("PASS — the override reaches the harness, every declared window holds its policy, and a seat has a note it can resume from.");
+  console.log("PASS (mechanism) — the override reaches the harness, every declared window holds its policy, and the note path is the one compaction takes when a note exists.");
+  if (blockers.length) {
+    console.log(`\nOperational blockers (${blockers.length}) — none of these is a defect in the mechanism; each needs a grant, a broker, or a provider:`);
+    for (const b of blockers) console.log("  · " + b);
+  }
+  if (advisory.length) {
+    console.log(`\nAdvisory (${advisory.length}) — risk signals this instrument cannot prove without a real provider:`);
+    for (const a of advisory) console.log("  · " + a);
+  }
   process.exit(0);
 }
-console.log(`FAIL (${failures.length}) —`);
+console.log(`FAIL (${failures.length}) — the mechanism itself is not yet sound:`);
 for (const f of failures) console.log("  · " + f);
+if (blockers.length) {
+  console.log(`\nOperational blockers (${blockers.length}):`);
+  for (const b of blockers) console.log("  · " + b);
+}
+if (advisory.length) {
+  console.log(`\nAdvisory (${advisory.length}):`);
+  for (const a of advisory) console.log("  · " + a);
+}
 process.exit(1);

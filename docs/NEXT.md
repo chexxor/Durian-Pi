@@ -48,29 +48,15 @@ model call was made; the fleet was down). Wall clock of the pass: ~50 minutes, d
 
 ## Current item (priority order)
 
-1. **Decide how a landing closes its row** — spooled to `pm` as **`delegate-20261109-auto-clean`** (in
-   `selfdev.sqlite.broker.inbox`, undrained: the broker is down). Three options with their costs, all recorded in
-   D249 and in `docs/runbooks/branch-cleanup.md` § "The ceiling": (a) `land.mjs` dispositions the row — cheapest,
-   but puts a store write in the delegate's hands; (b) the author seat closes its own row after `land` records the
-   sha — keeps ownership clean, needs the fleet running; (c) the sweep treats "branch ⊂ main AND gates terminal"
-   as its own keep-decision — no status write, but the row then lies about the tree. **Recommendation: (b)**,
-   because it preserves the rule that a delegate never asserts acceptance.
-2. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2, tip `39f8c92c`). Two reproduced defects,
-   both in the branch, not in `main`: backticks inside the `usages:` template literal make `cli.mjs`
-   unparseable, and `reapWorktrees` returns only the removed ids while
-   `demo/worktree-reap.test.mjs:114` asserts `candidates` / `refusedSoleCarrier` / `kept` / `counts.reapable`.
-   This is a seat's re-cut job (the author's branch is stale relative to `main`), not a delegate merge.
-3. **The continuity cluster** (D240 / ROADMAP 331) — the mechanism now **exists and is verified offline**:
-   `extensions/continuity.mjs` (the `durig.notes` doc, `read_note`/`write_note`/`continue_from_note`, the static
-   `durig-continuity` prompt section, and a `beforeCompact` hook that supplies the summary so the summariser call
-   never happens), proved by `demo/continuity-note.test.mjs` (0.40 s, exit 0) and `demo/offline.mjs` (0.29 s, pm →
-   worker → done with one mid-item `pi.reset`). **It is not yet armed on the live rig**: `DURIG_EXTENSIONS` is
-   unset, so `cli.mjs config` reports no extension and `selfdev.sqlite` has no `durig.notes` documents. Arming it
-   is an operator grant. Rows **#5931/#5932** (impl), **#5933/#5934** (devtools), **#5935** (impl),
-   **#5936/#5937** (impl), **#5939/#5940** (qa), **#5941** (impl), **#5942** (scribe) remain the team's to claim —
-   the duplicate-row defect is live, confirm before claiming.
-4. **#5785** the compaction fallback — code is on `main`, the row is `deferred`, its own subject says "nesting
-   DONE on item-5306". Closing it is a zero-build act for its owner.
+1. **Arm the continuity extension** (operator grant) — procedure in `docs/runbooks/continuation-notes.md`.
+   Rows **#5931–#5942** remain the team's to claim; the delegate asserted nothing.
+2. **Decide how a landing closes its row** (D249) — spooled to `pm` as `delegate-20261109-auto-clean`, undrained
+   while the broker is down. Options, costs and the recommendation are in `docs/DECISIONS.md` (D249) and
+   `docs/runbooks/branch-cleanup.md` § "The ceiling".
+3. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2) — a seat job: its `cli.mjs` does not
+   parse and `reapWorktrees` returns a different shape than `demo/worktree-reap.test.mjs` asserts.
+4. **#5785** — the code is on `main`, the row is `deferred`, its own subject says the nesting is done. A
+   zero-build close for its owner.
 
 ## Exact next command
 
@@ -99,9 +85,9 @@ node scripts/test.mjs --area rig          # 8/8;  node scripts/test.mjs --area r
 node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite
 ```
 
-Expected from the last line (exit 1, and that is the truth of the live store right now): `DURIG_EXTENSIONS:
-(unset) - no extension is loaded, so the mechanism cannot exist yet` and `note documents in the store: none`. The
-same gate run against the demo store —
+Expected from the last line (exit **0** now — the mechanism passes and the gate lists what is operational):
+`DURIG_EXTENSIONS: (unset) - no extension is loaded, so the mechanism cannot exist yet` under
+**Operational blockers (8)**. The same gate run against the demo store —
 `… milestone-check.mjs --db .spike/delegate/continuity-store/with.sqlite` — prints every seat resumable and
 `since: 1 compactions, 0 truncated summaries, 1 note-backed`. The gap between those two runs **is** the arming
 step, and arming is the operator's grant: add `"DURIG_EXTENSIONS": "extensions/continuity.mjs"` to
@@ -149,44 +135,51 @@ symptom; the file is ~50,000 tokens.
 ## NEXT SESSION
 
 **Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**: a seat can carry a durable
-continuation note through a reset/compaction boundary with **zero summariser model calls**, and the read surfaces
-that would re-introduce the blowup are bounded. The auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**,
-intents `delegate-20261109-release-role` and `delegate-20261109-auto-clean`) is the *other* open thread and is still
-spooled, not delivered.
+continuation note through a reset/compaction boundary with **zero summariser model calls**, the read surfaces that
+would re-introduce the blowup are bounded, and the mechanism now also covers the boundary the seat does *not*
+choose. The auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**, intents `delegate-20261109-release-role` and
+`delegate-20261109-auto-clean`) is the *other* open thread and is still spooled, not delivered.
 
-**Current item:** arm the continuity extension on the live rig. `extensions/continuity.mjs` exists, loads only via
-`DURIG_EXTENSIONS`, and is proved offline — but `cli.mjs config` reports `DURIG_EXTENSIONS: null` and
-`selfdev.sqlite` holds no `durig.notes` document, so the mechanism is not yet running in any seat. Arming it is an
-operator grant (it changes what code runs in every seat). Procedure and the exact edit:
-**`docs/runbooks/continuation-notes.md`**. The team's rows **#5931–#5942** remain unclaimed; the delegate asserted
-nothing.
+**Current item:** the mechanism is finished; **arming it on the live rig is the only thing left**, and it is an
+operator grant. `extensions/continuity.mjs` loads only via `DURIG_EXTENSIONS` (`src/extensions.mjs` has no
+auto-discovery on purpose — "which code runs in here" is an explicit operator list), and `cli.mjs config` still
+reports `DURIG_EXTENSIONS: null`. Procedure, exact edit and verification: **`docs/runbooks/continuation-notes.md`**.
+The team's rows **#5931–#5942** remain unclaimed; the delegate asserted nothing.
 
 **First thing to run:**
 `node demo/continuity-note.test.mjs && node demo/offline.mjs && node demo/status-view-bound.test.mjs` (expect
-`CONTINUITY PASS`, the offline delegation loop, `STATUS VIEW BOUND OK`; 0.40 s / 0.29 s / 1.8 s, no broker, no key,
-no model). Then `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
+`CONTINUITY PASS`, the offline delegation loop, `STATUS VIEW BOUND OK`; 0.63 s / 0.29 s / 1.8 s, no broker, no key,
+no model). Then the gate — `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite`
+— which now exits **0** and prints *PASS (mechanism)* with the operational blockers listed separately. Then
+`node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`). If the
-operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the two
+operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip from `git rev-parse --short main` (code landed at `ea12fe04`;
-this session's work is committed as **`26d52d43`** — `git status --short -- .` is empty), suite **280/280**
-(`node scripts/suite.mjs --jobs 8`, 56 s), nothing forced. What `26d52d43` contains: `extensions/continuity.mjs`,
-`demo/continuity-note.test.mjs`, `demo/status-view-bound.test.mjs`, `docs/runbooks/continuation-notes.md`, plus
-edits to `cli.mjs`, `src/readapi.mjs`, `src/config.mjs`, `src/providers/local.mjs`, `scripts/clockin.mjs`,
-`durig.config.default.json`, `demo/config.test.mjs`, `demo/offline.mjs`, `demo/test-areas.json`,
-`docs/SELFDEV.md`, `docs/DECISIONS.md`, `docs/runbooks/README.md` and this file. The remaining 12 refs: 7 seat-root branches, `main`,
-`seatroot/linux`, `verify-5180` (ledger: NOTHING-TO-LAND), `wip/seat-prompt-files` (SUPERSEDED-BY-EVENTS, author
-re-cut), `item-5301` (the unlandable reap verb).
+**State:** refs **12**, worktrees **9**, `main` tip from `git rev-parse --short main`, `git status --short -- .`
+empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced. Continuity evidence:
+`docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism, 8 operational
+blockers, 1 advisory) and `...-demo-store.txt` (PASS mechanism, 1 blocker) — both exit 0. The 12 refs: 7 seat-root
+branches, `main`, `seatroot/linux`, `verify-5180` (ledger: NOTHING-TO-LAND), `wip/seat-prompt-files`
+(SUPERSEDED-BY-EVENTS, author re-cut), `item-5301` (the unlandable reap verb).
 
 **Blocker:** the broker is down and no provider registers a model on this box (`DURIG_LOCAL_API_KEY` unset → 401
 on 127.0.0.1:8080; `DURIG_VERIFIER_API_KEY` unset → 402 balance), and the spend cap refuses `google/gemini-3.1-pro`
-($14 exposure against a $4 store cap). Only the operator holds those grants; 10 intents are spooled and 59 sit as
-dead-letters in `selfdev.sqlite.broker.inbox.error` (118 measured 2026-11-09).
+($14 exposure against a $4 store cap). Only the operator holds those grants; 10 intents are spooled and **118** sit
+as dead-letters in `selfdev.sqlite.broker.inbox.error` (measured 2026-11-09).
 
-**Unverified:** (1) whether the extension armed on the **live** rig produces a note for every seat in one broker
-pass — the offline proof is `demo/continuity-note.test.mjs`; the live proof needs a broker, which needs the two
-provider grants. Cheapest probe with the broker down: `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite`, which currently says the mechanism "cannot exist yet". (2) Whether `pm` will accept the D249 framing — the intent is spooled, not delivered; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall 141). Probe: `ls -1 selfdev.sqlite.broker.inbox.out/` after the broker's first pass.
+**Unverified:** (1) whether an armed live rig produces a note for every seat in one broker pass — the offline
+proof is `demo/continuity-note.test.mjs` (5 scenarios) and `demo/offline.mjs`; the live proof needs a broker, which
+needs the two provider grants. (2) Whether the note-injection cost is acceptable on a real provider: the faux
+provider estimates tokens as chars/4 and never shows a real tokenizer's cache behaviour. Cheapest probe once a key
+exists: `node tools/model-probes/…` / the compacteval A/B rows #5939–#5940. (3) Whether `pm` will accept the D249
+framing — the intent is spooled, not delivered; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall
+141). Probe: `ls -1 selfdev.sqlite.broker.inbox.out/` after the broker's first pass.
+
+**Traps this window** — `docs/SELFDEV.md` **191–202** (this pass adds: reading a durable document *creates* it, so
+an empty note is not a broken note; `beforeRequest` is request-only and never writes to `entries`; a gate that
+reports one flat FAIL list cannot distinguish "unfinished" from "not running"; a demo that keeps its store must
+wipe it once at start). Grep for the symptom; the file is ~50,000 tokens.
 
 **Cheap probe that proves the git pass is closed:** `git worktree list | wc -l` → **9**, `git branch --format='%(refname:short)' | wc -l` → **12**, `git status --short -- .` → empty, `node scripts/suite.mjs --jobs 8` → **278/278**.
 

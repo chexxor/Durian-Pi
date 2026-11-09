@@ -70,6 +70,28 @@ A seat is **resumable** when its `durig.notes` document renders a body with a go
 prints, per seat: note revision, resume-text length, whether goal/next/verified are present, and how many
 `pi.reset` boundaries that conversation has already drawn.
 
+**Read the verdict in two parts.** Since 2026-11-09 the gate separates three things it used to blend into one
+red wall:
+
+- **FAIL (mechanism)** — the code is not sound: the override does not reach the harness, a declared window
+  cannot hold its policy, an extension is listed but never loaded, a note is in the store but not mirrored, or
+  a compaction since the first note still went to the summariser. This is what exit 1 means.
+- **Operational blockers** — the mechanism is fine and the rig is not running it: no `DURIG_EXTENSIONS`, no
+  broker, no provider key, a window nearly full. Exit 0, listed separately, each with the grant or action that
+  closes it.
+- **Advisory** — a risk signal the instrument cannot prove without a real provider. `tools/seat-turn-shape.mjs`
+  flags a *shape* a strict alternating chat template would refuse; this rig's seat model was measured accepting
+  two consecutive user turns (`docs/runbooks/verifier-serving-headroom.md`, 2026-11-05), so AT RISK is a
+  hypothesis, not a refusal.
+
+Measured 2026-11-09 on `./selfdev.sqlite`: **PASS (mechanism)**, 8 operational blockers, 1 advisory —
+`docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt`. Against the demo store with the
+extension armed: **PASS (mechanism)**, 1 blocker, 1 advisory.
+
+**An empty `durig.notes` document is not a broken note.** Reading a document creates it at its initial value,
+so a 0-char body means no seat has written one yet — the gate counts that as a blocker, not a mechanism defect
+(pitfall 199).
+
 **Bounding the payload must not bound the derivation.** `queueItems` is a *view* (200 rows), but the payload also
 carries `queueCensus` (133 B: rows, per-state counts, terminal/active) and `queueDeferred` (51 KB: every deferred
 row's id, seat, status and a 55-char subject). Those exist because bounding status once silently broke clock-in:
@@ -77,6 +99,22 @@ row's id, seat, status and a 55-char subject). Those exist because bounding stat
 store printed "200 rows" and a **zero** deferred backlog for a store holding 383 rows awaiting the operator. A
 script that must join a branch to its row's state passes `--with-terminal-index` — the ids+statuses of the rows the
 view dropped, bodies never.
+
+## What the extension does at a boundary (armed, 2026-11-09)
+
+| The seat's situation | What happens | Proof |
+|---|---|---|
+| Chosen handoff — `continue_from_note` | the note becomes the reset boundary's first user message, un-fenced | `demo/continuity-note.test.mjs` §4, `demo/offline.mjs` |
+| Compaction | `beforeCompact` supplies the note as the summary body; the summariser request is never built | §3: `callCount` unchanged across a compaction (22 → 22) |
+| **Unchosen** reset — degeneration guard, `cli.mjs reset <seat>`, `up --refresh` (no handoff) | `beforeRequest` puts the note in the **system message** of the next request | §5: the provider request contains `CONTINUITY NOTE` with roles `system,user` and no transcript entry was written |
+| Full context, nothing cut | nothing is injected — the note is a boundary mechanism, not a per-request tax | §5: visible roles `system,user,assistant,user`, no note |
+| No note written | nothing is injected; the guard cannot invent a goal | §5 (`bare` seat) |
+
+Why the system message and not a new turn: an added `user` turn is precisely the shape a strict alternating
+chat template refuses, and `tools/seat-turn-shape.mjs` measured **9 of 12** live seats already carrying
+consecutive user turns. The injected text is stable while the note is unchanged, so the cached prefix is not
+churned every request (ROADMAP 175). Injection is request-only: `dist/harness/generation.js:118-123` replaces
+the messages list and the durable transcript never sees it, so the note is not double-recorded (D133).
 
 ## Do
 
@@ -149,6 +187,8 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
 | `--full-queue` exits 1 | that is the guard working: an unbounded read is refused with its row count and size | ask for a slice (`--status claimed --to <seat>`, `--queue-limit N`) |
 | clock-in prints `## QUEUE 200 rows` for a 6,021-row store, or a deferred backlog of 0 | the digest read the *view* instead of the census | it now reads `queueCensus`/`queueDeferred`; if those fields are missing the status call predates them — check `git log --oneline -- src/readapi.mjs | head` |
 | the note is in the store but no file appears | the mirror write failed (permissions, a path outside the cwd) — the note is still authoritative | the tool result names the mirror failure; the store doc is the truth |
+| a seat woken by `reset` knows nothing | the extension is not armed — an unlisted extension is an absent one (§Do 2), and a plain reset carries no handoff | arm it; `beforeRequest` then supplies the note in the system message |
+| the gate prints `FAIL (mechanism)` while seats have notes | a compaction since the first note still used the summariser, or a listed extension path does not exist | re-run the gate and read which bucket the line is in; the mechanism lines are the ones that mean code |
 
 ## Escalate to
 
@@ -179,3 +219,8 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
   `queueItems` 389,829 B, `peerGraph` 49,315 B, `queueDeferred` 51,353 B, `queueCensus` 133 B.
 - `node docs/evidence/2026-11-08-context-window/milestone-check.mjs` → exit 1 with the per-seat list; output
   captured at `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt`.
+- Same gate after the mechanism was finished, 2026-11-09: **PASS (mechanism)** on both `./selfdev.sqlite`
+  (`milestone-check-2026-11-09-live.txt`, 8 operational blockers, 1 advisory) and the armed demo store
+  (`milestone-check-2026-11-09-demo-store.txt`, 1 blocker, 1 advisory).
+- `node demo/continuity-note.test.mjs` → `CONTINUITY PASS`, exit 0, 0.630 s, five scenarios including the
+  unchosen-reset injection case.

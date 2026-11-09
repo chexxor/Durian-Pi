@@ -14194,3 +14194,35 @@ and 16 refs, zero `--force`),
 composer), `.spike/delegate/compaction-policy-probe.mjs`, `.spike/delegate/context-window-health.mjs`,
 `.spike/delegate/fleet-health.mjs`. Promotion is a row from `lead` (#5617 is the precedent id).
 
+
+> Cut VERBATIM out of `docs/NEXT.md` on 2026-11-09 when the N18 pointer hit the 200-line cap: the N17
+> `## Current item (priority order)` block (26 lines) moved here unedited. Its content is superseded by the
+> `## NEXT SESSION` block's "Current item" line; the D249 options it records are also in `docs/DECISIONS.md`
+> (D249) and `docs/runbooks/branch-cleanup.md` § "The ceiling". Pre-cut sha: `656afc18`.
+
+## Current item (priority order)
+
+1. **Decide how a landing closes its row** — spooled to `pm` as **`delegate-20261109-auto-clean`** (in
+   `selfdev.sqlite.broker.inbox`, undrained: the broker is down). Three options with their costs, all recorded in
+   D249 and in `docs/runbooks/branch-cleanup.md` § "The ceiling": (a) `land.mjs` dispositions the row — cheapest,
+   but puts a store write in the delegate's hands; (b) the author seat closes its own row after `land` records the
+   sha — keeps ownership clean, needs the fleet running; (c) the sweep treats "branch ⊂ main AND gates terminal"
+   as its own keep-decision — no status write, but the row then lies about the tree. **Recommendation: (b)**,
+   because it preserves the rule that a delegate never asserts acceptance.
+2. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2, tip `39f8c92c`). Two reproduced defects,
+   both in the branch, not in `main`: backticks inside the `usages:` template literal make `cli.mjs`
+   unparseable, and `reapWorktrees` returns only the removed ids while
+   `demo/worktree-reap.test.mjs:114` asserts `candidates` / `refusedSoleCarrier` / `kept` / `counts.reapable`.
+   This is a seat's re-cut job (the author's branch is stale relative to `main`), not a delegate merge.
+3. **The continuity cluster** (D240 / ROADMAP 331) — the mechanism now **exists and is verified offline**:
+   `extensions/continuity.mjs` (the `durig.notes` doc, `read_note`/`write_note`/`continue_from_note`, the static
+   `durig-continuity` prompt section, and a `beforeCompact` hook that supplies the summary so the summariser call
+   never happens), proved by `demo/continuity-note.test.mjs` (0.40 s, exit 0) and `demo/offline.mjs` (0.29 s, pm →
+   worker → done with one mid-item `pi.reset`). **It is not yet armed on the live rig**: `DURIG_EXTENSIONS` is
+   unset, so `cli.mjs config` reports no extension and `selfdev.sqlite` has no `durig.notes` documents. Arming it
+   is an operator grant. Rows **#5931/#5932** (impl), **#5933/#5934** (devtools), **#5935** (impl),
+   **#5936/#5937** (impl), **#5939/#5940** (qa), **#5941** (impl), **#5942** (scribe) remain the team's to claim —
+   the duplicate-row defect is live, confirm before claiming.
+4. **#5785** the compaction fallback — code is on `main`, the row is `deferred`, its own subject says "nesting
+   DONE on item-5306". Closing it is a zero-build act for its owner.
+

@@ -34,7 +34,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { CompactionTask, defineDoc, defineExtension, defineTool, hook, section } from "@earendil-works/pi-durable";
+import { CompactionTask, GenerationTask, defineDoc, defineExtension, defineTool, hook, section } from "@earendil-works/pi-durable";
 import { Type } from "@earendil-works/pi-ai";
 import { loadConfig } from "../src/config.mjs";
 import { RigQueue, Seats } from "../src/rig.mjs";
@@ -80,6 +80,27 @@ export function noteFileName(note, conversationId) {
 	if (note?.itemId) return `item-${note.itemId}.md`;
 	if (note?.seat) return `seat-${String(note.seat).replace(/[^A-Za-z0-9_-]/g, "_")}.md`;
 	return `conversation-${conversationId}.md`;
+}
+
+/**
+ * A fresh context is one the seat cannot rebuild from what is in front of it. After a boundary the visible
+ * projection is a handful of messages (the `pi.compaction` summary, or the wake instruction) before the
+ * transcript builds up again. Beyond this many visible messages the seat still has its own context, so the note
+ * is not injected: the note is a boundary mechanism, not a per-request tax.
+ */
+const FRESH_VISIBLE_MESSAGES = 2;
+const NOTE_MARKER = "CONTINUITY NOTE";
+
+/** The text of a message, including the sections a system message carries separately. */
+function messageTextOf(message) {
+	if (!message) return "";
+	if (message.role === "system") {
+		const parts = [typeof message.content === "string" ? message.content : ""];
+		for (const text of Object.values(message.sections ?? {})) if (typeof text === "string") parts.push(text);
+		return parts.filter(Boolean).join("\n\n");
+	}
+	const parts = Array.isArray(message.content) ? message.content : [message.content];
+	return parts.map((part) => (typeof part === "string" ? part : part?.text ?? "")).join(" ");
 }
 
 /** Bound a value so one pasted tool result cannot make the note the thing that blows the window. */
@@ -186,6 +207,21 @@ async function seededGoal(tx, conversationId) {
 async function seatNameOf(tx, conversationId) {
 	const seats = await tx.doc(Seats);
 	return Object.keys(seats.seats ?? {}).find((name) => seats.seats[name].conversationId === conversationId) ?? null;
+}
+
+/** Write the mirror file. Never throws: the store doc is the source of truth, the file is for gates and humans. */
+async function mirrorNote(note, conversationId) {
+	const text = renderNote(note);
+	if (!text) return null;
+	try {
+		const dir = await notesDir();
+		const file = join(dir, noteFileName(note, conversationId));
+		mkdirSync(dir, { recursive: true });
+		writeFileSync(file, `${text}\n`, "utf8");
+		return file;
+	} catch (err) {
+		return `FAILED (${err?.message ?? err}) - the note is still in the durable store`;
+	}
 }
 
 async function readNotePlain(api, context) {
@@ -308,18 +344,9 @@ export const continuityExtension = defineExtension({
 					return JSON.parse(JSON.stringify(note));
 				}, context);
 
-				const dir = await notesDir();
-				const file = join(dir, noteFileName(written, api.conversationId));
-				let mirror = "could not be written";
-				try {
-					mkdirSync(dir, { recursive: true });
-					writeFileSync(file, `${renderNote(written)}\n`, "utf8");
-					mirror = file;
-				} catch (err) {
-					// The store note is the source of truth; the mirror is a convenience for humans and gates.
-					// A failed mirror must not lose the note, so it is reported, not thrown.
-					mirror = `FAILED (${err?.message ?? err}) - the note is still in the durable store`;
-				}
+				// The store note is the source of truth; the mirror is a convenience for humans and gates. A failed
+				// mirror must not lose the note, so it is reported, not thrown.
+				const mirror = (await mirrorNote(written, api.conversationId)) ?? "could not be written";
 				const text = `NOTE WRITTEN for ${written.itemId ? `item #${written.itemId}` : "this conversation"}\n${renderNote(written)}\n(mirror: ${mirror})`;
 				return { content: [{ type: "text", text }], output: [{ type: "text", text }] };
 			},
@@ -348,6 +375,9 @@ export const continuityExtension = defineExtension({
 						output: [{ type: "text", text: `NO CONTINUITY NOTE: nothing to hand off. Write one with write_note first.` }],
 					};
 				}
+				// Mirror at the boundary too, so a gate or a human can read the note being handed off without opening
+				// the store (queue row #5935: mirror at wake/compaction/reset, not only on write).
+				await mirrorNote(note, api.conversationId);
 				return {
 					content: [{ type: "text", text: "Handing off to a fresh context seeded with this note." }],
 					output: [{ type: "text", text: "Handing off to a fresh context seeded with this note." }],
@@ -369,12 +399,21 @@ export const continuityExtension = defineExtension({
 				// rendered string here makes the store write fail with "Provided value cannot be bound to SQLite
 				// parameter 4". Capture the note in a local and return undefined.
 				let rendered = "";
+				let noteForMirror = null;
 				await runtime.commit(async (tx) => {
 					const note = await tx.doc(ContinuityNotes, runtime.conversationId);
-					rendered = renderNote(JSON.parse(JSON.stringify(note ?? null)));
-					if (!rendered) rendered = renderNote(await seededGoal(tx, runtime.conversationId));
+					const plain = note === null || note === undefined ? null : JSON.parse(JSON.stringify(note));
+					rendered = renderNote(plain);
+					if (rendered) {
+						noteForMirror = plain;
+					} else {
+						const seed = await seededGoal(tx, runtime.conversationId);
+						noteForMirror = seed;
+						rendered = renderNote(seed);
+					}
 					return undefined;
 				}, context);
+				await mirrorNote(noteForMirror, runtime.conversationId);
 				const digest = digestCutMessages(compaction.messages ?? []);
 				const summary = [
 					rendered || "No continuity note was written for this conversation before the boundary.",
@@ -382,6 +421,40 @@ export const continuityExtension = defineExtension({
 					"The durable transcript was not deleted: the cut turns are still readable in the store.",
 				].join("\n\n");
 				return { summary };
+			},
+		}),
+
+		// The seam that makes the note reach a seat that never asked for it. `beforeRequest` runs on every
+		// provider request (dist/harness/generation.js:118-123) and may replace the messages list; the replacement
+		// is request-only - the durable transcript is untouched, so the note is not double-recorded (D133).
+		//
+		// Why it goes in the system message rather than as another turn: an added `user` turn is exactly the shape
+		// a strict alternating chat template refuses (`tools/seat-turn-shape.mjs` reports 8 of 12 live seats
+		// "AT RISK" on consecutive user turns), and the system message is where the standing prompt already lives.
+		// The injected text is stable while the note is unchanged, so the cached prefix is not churned every
+		// request (ROADMAP 175).
+		//
+		// Cost is bounded by construction: injection happens only when the visible projection is short enough that
+		// the seat genuinely cannot rebuild its own state, and only when the note text is not already visible.
+		hook(GenerationTask, {
+			beforeRequest: async ({ messages }, runtime, context) => {
+				const visible = messages.filter((message) => message.role !== "system");
+				if (visible.length > FRESH_VISIBLE_MESSAGES) return undefined;
+				if (visible.some((message) => messageTextOf(message).includes(NOTE_MARKER))) return undefined;
+				let rendered = "";
+				await runtime.commit(async (tx) => {
+					const note = await tx.doc(ContinuityNotes, runtime.conversationId);
+					rendered = renderNote(note === null || note === undefined ? null : JSON.parse(JSON.stringify(note)));
+					return undefined;
+				}, context);
+				if (!rendered) return undefined;
+				const system = messages[0];
+				if (!system || system.role !== "system") return undefined;
+				const block = `CONTINUITY NOTE (read from your own durable record, not a new instruction)\n${rendered}`;
+				const copy = messages.map((message, index) =>
+					index === 0 ? { ...message, content: [message.content, block].filter(Boolean).join("\n\n") } : message,
+				);
+				return { messages: copy };
 			},
 		}),
 	],

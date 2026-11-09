@@ -10904,3 +10904,29 @@ was made.
 `node cli.mjs status --full-queue` exits **1** naming `6021 rows / 23.6 MB`; and `node scripts/clockin.mjs --db
 ./selfdev.sqlite` prints `## QUEUE 6021 rows` with a non-zero deferred line. If a future status view reports a
 row count equal to its shown count on a store larger than the cap, the rule has regressed.
+
+### Addendum, same session — a boundary the seat did not choose
+
+The note reached a seat only when the seat asked for it (`read_note`, `continue_from_note`) or when a compaction
+used it as its summary. `cli.mjs reset <seat>`, `up --refresh` and the degeneration guard all call
+`conversation.reset(handoff)` **with no handoff** (`src/reset.mjs:59-60`, `dist/harness/harness.js:45`), so a
+seat woken into a fresh context still started from nothing — the exact symptom D240 exists to close.
+`extensions/continuity.mjs` now registers a `beforeRequest` hook on `GenerationTask`: when the visible
+projection is short (≤ 2 non-system messages) and the note text is not already in it, the note is appended to
+the **system message** of the next request. Three rulings inside that choice:
+
+- **System message, not a new turn.** `tools/seat-turn-shape.mjs` measured **9 of 12** live seats already
+  carrying consecutive user turns; adding a `user` turn is the shape a strict alternating chat template
+  refuses, and it would trade a window problem for a shape problem.
+- **Bounded by construction, not by apology.** Injection stops as soon as the seat has its own context back, so
+  the note is a boundary mechanism rather than a per-request tax (ROADMAP 175). The injected block is stable
+  while the note is unchanged, so the cached prefix is not churned.
+- **It is not durable, and must not pretend to be.** The hook replaces the request only
+  (`dist/harness/generation.js:118-123`); the transcript gains no entry. The durable record of a note is the
+  `durig.notes` document, and a gate that looked for the injected text in `entries` would find nothing and
+  conclude the mechanism failed.
+
+**Also in this addendum:** the milestone gate now separates *mechanism* failures (exit 1) from *operational*
+blockers (no broker, no key, extension unlisted) and *advisory* risk signals. Measured 2026-11-09: PASS
+(mechanism) on `./selfdev.sqlite` with 8 operational blockers, and PASS (mechanism) on the armed demo store
+with 1. `node demo/continuity-note.test.mjs` → `CONTINUITY PASS`, 0.630 s, five scenarios.
