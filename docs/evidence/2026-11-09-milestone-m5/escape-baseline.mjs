@@ -14,8 +14,14 @@
 import { refusalFor } from "../../../src/confine.mjs";
 import { shellWriteRefusal, withheldShellRefusal } from "../../../src/seatguard.mjs";
 import { toolRemovalsFor } from "../../../src/seattools.mjs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = "/home/chexxor/Git/Durian-Pi/item-5801"; // a real seat root shape; no write happens here
+// Derived, not hard-coded: the project must not depend on this machine's paths (D205).
+// Nothing here is written to; the root is only a *shape* the guard reasons about.
+const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..", ".."); // repo root
+const SEAT = join(REPO, "item-5801");   // a real seat-root shape
+const SIBLING = join(REPO, "item-5604");
 const SEED = process.argv[2] || "2026-11-09";
 
 const escapes = [
@@ -24,7 +30,7 @@ const escapes = [
 	{ name: "(c) TCP to a LAN / TEST-NET address", cmd: "curl -s http://192.168.1.1/", layer: "egress" },
 	{ name: "(c2) the link-local metadata endpoint", cmd: "wget http://169.254.169.254/metadata", layer: "egress" },
 	{ name: "(d) git config --global core.hooksPath <outside>", cmd: "git config --global core.hooksPath /tmp/evil", layer: "git persistence" },
-	{ name: "(e) rm -rf a sibling worktree", cmd: "rm -rf /home/chexxor/Git/Durian-Pi/item-5604", layer: "destructive write" },
+	{ name: "(e) rm -rf a sibling worktree", cmd: `rm -rf ${SIBLING}`, layer: "destructive write" },
 	{ name: "(f) an npm lifecycle script writing outside", cmd: "npm install lodash", layer: "egress + write" },
 	{ name: "(g) a redirect writing outside the root", cmd: "echo pwned > /etc/passwd", layer: "shell write" },
 	{ name: "(h) push to a remote", cmd: "git push origin main", layer: "egress / grant" },
@@ -34,8 +40,8 @@ console.log(`ESCAPE BASELINE ${SEED} — guard as it stands. "ALLOWED" means no 
 console.log("".padEnd(96, "-"));
 let allowed = 0;
 for (const e of escapes) {
-	const confine = refusalFor(e.cmd, { root: ROOT, cwd: ROOT });
-	const shell = shellWriteRefusal({ command: e.cmd, root: ROOT, cwd: ROOT });
+	const confine = refusalFor(e.cmd, { root: SEAT, cwd: SEAT });
+	const shell = shellWriteRefusal({ command: e.cmd, root: SEAT, cwd: SEAT });
 	const withheld = withheldShellRefusal("bash");
 	const verdict = confine !== null || shell.block !== null ? "BLOCKED" : "ALLOWED";
 	if (verdict === "ALLOWED") allowed++;
