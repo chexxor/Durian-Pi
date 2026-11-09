@@ -3,9 +3,9 @@ runbook: docs-encoding-mojibake
 symptom: "an em dash, section sign, ellipsis or arrow in a doc, a rig spec or a seat instruction reads as garbage; or a file shows a change you did not make"
 writes: true
 precondition: "read-only"
-last_verified: 2026-10-21
-verified_by: impl
-evidence: "#3241 — node demo/seat-instruction-encoding.test.mjs (exit 0); node scripts/fix-mojibake.mjs --write; corrected diagnosis per lead ruling #3316"
+last_verified: 2026-11-08
+verified_by: verifier
+evidence: "#3241 — node demo/seat-instruction-encoding.test.mjs (exit 0); node scripts/fix-mojibake.mjs --write; corrected diagnosis per lead ruling #3316. #3581 (2026-11-08, item-3581 worktree): `grep -o \"â€\" docs/reviews/docs-gap-audit-2026-10-17.md` = 1 match while `node scripts/fix-mojibake.mjs` on that same file = clean, exit 0; demo exit 0 over 75 seat-facing files; bite-proof `DURIG_ENCODING_EXTRA=<planted damaged file> node demo/seat-instruction-encoding.test.mjs` = exit 1"
 check_rule: null
 ---
 
@@ -40,6 +40,45 @@ node scripts/fix-mojibake.mjs <file...>   # exit 0 + "clean" = mode (1); exit 1 
 If it reports `clean`, **the display is lying and the fix is to read as UTF-8 — do not
 repair the file.** Repairing a healthy file is how a five-minute diagnosis becomes a
 rewrite of text that was never broken.
+
+## What the guard actually covers — and the file that will always grep wrong
+
+The demo guard does not scan the repo. It scans an explicit **seat-facing** set (the header of
+`demo/seat-instruction-encoding.test.mjs` names it): `rig.json`, `rig.v2.json`, `rig.starter.json`,
+`rig.selfdev.json`, `constitution.txt`, `AGENTS.md`, and the directories `.agents/`, `skills/`,
+`docs/runbooks/`, `prompts/`. `docs/reviews/` is **outside that set on purpose**: the list is
+explicit rather than "every `.md` in the repo" precisely so a doc that QUOTES the garbage on
+purpose does not need an allow-list. Widening the set is a decision to make deliberately — record
+it here before doing it.
+
+The exclusion prevents a permanent false positive, and the false positive has a second half that
+the exclusion does NOT protect against. `docs/reviews/docs-gap-audit-2026-10-17.md` line 28 puts
+the literal two-character pair a naive scan greps for (`grep -oP '\x{00E2}\x{20AC}'`) in a table cell, as
+documentation. Measured on this tree: that grep returns **1 match**, while
+`node scripts/fix-mojibake.mjs docs/reviews/docs-gap-audit-2026-10-17.md` reports **clean, exit 0**.
+The file is RIGHT, and it will keep returning a grep hit forever. Anyone who widens a repo-wide
+scan, or who trusts a grep count, is handed a hit on correct text — and the tempted remedy
+("fix it") rewrites prose that was never broken: the exact failure this runbook warns about,
+performed with the tool the runbook recommends.
+
+Why the detector is not fooled, and why no allow-list is needed: a hit is defined as a
+**reversible** run — a character whose code-page byte is a UTF-8 lead (0xC2..0xF4) followed by
+continuation bytes (0x80..0xBF) that together form a valid UTF-8 sequence. U+00E2 U+20AC alone is bytes E2 80 — an incomplete sequence that decodes to nothing, so the
+detector's question ("would re-decoding this text change it?") answers no; U+00E2 U+20AC U+201D is
+bytes E2 80 9D and decodes to U+2014 — that is a hit.
+The guard's semantics, not a special case, keeps the quoted-pattern file green.
+
+**Rule:** a grep hit is a SIGNAL; the verdict is the detector's exit code. Before touching a file
+a scan flagged, run `node scripts/fix-mojibake.mjs <file>` and read the exit status. `clean` means
+the file is correct — do not "repair" it.
+
+One more consequence of the same semantics, measured here (#3581): you **cannot** quote the full
+three-character run inside a guarded file — not even to explain it. Writing the damaged run
+literally in this runbook made `node demo/seat-instruction-encoding.test.mjs` exit 1 with
+`docs/runbooks/docs-encoding-mojibake.md: no mojibake -- 1 hit(s): U+00E2 U+20AC U+201D -> U+2014`.
+The guard cannot tell a quotation from damage; a reversible run is a reversible run wherever it
+sits. Spell the pattern as code points (U+00E2 U+20AC U+201D) or as a hex escape inside a code
+fence, never as the characters themselves.
 
 **Prevention:** never round-trip text through the PowerShell 5.1 defaults. Read and write
 with explicit UTF-8 (`Get-Content -Encoding UTF8` / `Set-Content -Encoding UTF8`, or

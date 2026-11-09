@@ -18,6 +18,7 @@ import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-wor
 
 import { Router, Seats, enqueueItem, registerSeat } from "../src/rig.mjs";
 import { fillRoster } from "../src/seattools.mjs";
+import { UNCONFIRMED_OBJECT_FAMILY } from "../src/gitobject.mjs";
 import { readRigHealth } from "../src/readapi.mjs";
 import {
 	entryTextSegments,
@@ -200,7 +201,11 @@ check("pin <real git object> does NOT fire", secretTokens(`pin ${REAL_OBJECT}`).
 check("commit <real git object> does NOT fire", secretTokens(`commit ${REAL_OBJECT}`).length === 0);
 // THE BINDING GUARD: a pure-hex40 that is NOT a git object STILL FIRES — even inside a git
 // context. A blanket "pure-hex40" exclusion (or a context match alone) would lose this.
-check("bare non-object 40-hex still fires", secretTokens(NOT_AN_OBJECT).some((t) => t.family === "high-entropy-token"));
+check("bare non-object 40-hex still fires", secretTokens(NOT_AN_OBJECT).length > 0);
+// #3128 P-5: the family is now the CLASS, not a generic "high-entropy-token", so a reader can tell
+// WHY the value vanished and re-read it through a ref name. The canary itself is unchanged: an
+// unresolvable hex STILL fires.
+check("an unresolvable hex names its class", secretTokens(NOT_AN_OBJECT).some((t) => t.family === UNCONFIRMED_OBJECT_FAMILY), JSON.stringify(secretTokens(NOT_AN_OBJECT)));
 check("HEAD=<non-object 40-hex> STILL FIRES", secretTokens(`HEAD=${NOT_AN_OBJECT}`).length === 1, JSON.stringify(secretTokens(`HEAD=${NOT_AN_OBJECT}`)));
 check("commit <non-object 40-hex> STILL FIRES", secretTokens(`commit ${NOT_AN_OBJECT}`).length === 1);
 // The checker is what decides: a stub proves both directions without touching the repo.
