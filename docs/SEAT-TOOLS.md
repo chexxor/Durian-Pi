@@ -167,6 +167,27 @@ WSL/Docker are host NOs, and native-Windows `bash` means an undeclared Git Bash 
 `createPowerShellTool()` tries `pwsh` then `powershell`. F4's warning applies: a PowerShell
 allowlist is **not disqualifying** *only because* the boundary is the execution environment.
 
+**Superseded on non-Windows hosts, and the lever is the TOOL SURFACE (RM-306 / #5221).** The sentence
+above is a rule FOR WINDOWS, and treating it as a constant for every host is what made every seat shell
+call a `spawn … ENOENT` after the rig moved to Linux (ROADMAP 217). `src/shellregistry.mjs` now answers
+three separate questions per shell candidate — `startOn` (can it launch here), `preferredOn` (which does
+this host want), and `offeredOn` (may this host be given the tool at all) — and the operator's ruling put
+`powershell` in the third: **it is offered only on a Windows host**. Keeping offerability separate from
+startability is the point: `pwsh` CAN be installed on Linux, and a registry that conflates the two hands a
+Linux seat a PowerShell tool. `demo/seattools.test.mjs` fails if `powershell` is offered on a non-Windows
+host (it goes red on an injected `linux` host that has `pwsh` on PATH), and the same rule feeds the
+interactive client's coding toolset (`src/tui/durable/adapter.mjs`), so the two surfaces cannot drift.
+
+**The absence is reported, never silent.** `shellPlan().tried` carries a `WITHHELD on <platform>` row with
+the reason, `offeredShellNames`/`withheldShellNames` state the sets, and `src/seatguard.mjs` refuses a call
+that reaches a withheld name with `cause: shell_withheld` plus the host reason and the shell to use instead
+— not pi's generic `"Tool powershell is not available"`, which names neither (the cause-class rule in
+`docs/reviews/architecture-capacity-rulings-2026-11-03.md` §6). No prompt or rig-file text names a shell
+tool, and `demo/instruction-files.test.mjs` keeps it that way: the operator's evidence was that
+`powershell` appeared in NO instruction, and an absent instruction is filled in by the model — so only the
+absence of the tool is a fix. The guard still INSPECTS both shell names (`SHELL_TOOLS` from
+`shellToolNames()`): the withhold removes a tool from a surface, not a name from the guard.
+
 ### The worktree — what it is now for
 
 It remains the per-item workspace and the review/merge boundary (`git diff` per item, seats never

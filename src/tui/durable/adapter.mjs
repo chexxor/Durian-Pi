@@ -599,9 +599,17 @@ export async function createDurableTuiRuntime(options) {
 	return { runtime, harness, conversation, hostSession, session, services };
 }
 
-/** Pi's coding toolset (read/write/edit/bash, plus powershell on Windows) and code mode. */
+/** Pi's coding toolset (read/write/edit, plus the shell or shells THIS HOST IS OFFERED) and code mode.
+ *
+ * #5221 (RM-306): the shell half is the registry's, not a literal list. This used to install
+ * `createBashTool()` AND `createPowerShellTool()` unconditionally, which put a PowerShell tool in front of
+ * a Linux client — the same install-time context bloat and the same guaranteed spawn error ROADMAP 217
+ * measured for seats, on the second surface that composes tools. `offeredShellCandidates()` is the one
+ * rule: a Windows host still gets both (PowerShell first, bash as the fall-through), a non-Windows host
+ * gets its own shell only, and no host can be handed a shell its class is withheld from. */
 async function installDefaultTools(durable, registry) {
 	const tools = await import("@earendil-works/pi-durable/tools");
+	const { offeredShellCandidates } = await import("../../shellregistry.mjs");
 	registry.install(
 		durable.defineExtension({
 			name: "coding-tools",
@@ -609,8 +617,7 @@ async function installDefaultTools(durable, registry) {
 				tools.createReadTool(),
 				tools.createWriteTool(),
 				tools.createEditTool(),
-				tools.createBashTool(),
-				tools.createPowerShellTool(),
+				...offeredShellCandidates().map((candidate) => candidate.create()),
 			],
 		}),
 	);

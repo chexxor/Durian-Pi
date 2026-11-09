@@ -9,7 +9,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { COORDINATOR_REMOVALS, VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv, seatShell, toolRemovalsFor } from "../src/seattools.mjs";
-import { seatShellSelection, shellPlan, shellToolNames } from "../src/shellregistry.mjs";
+import { seatShellSelection, selectSeatShell, shellPlan, shellToolNames, offeredShellNames, withheldShellNames, shellWithheldReason } from "../src/shellregistry.mjs";
 import { SHELL_TOOLS } from "../src/seatguard.mjs";
 
 let failures = 0;
@@ -86,6 +86,76 @@ try {
 		"the selection this process registered agrees with the plan for this host",
 		seatShell.name === seatShellSelection.name && seatShellSelection.tool.name === seatShell.name,
 		`registered=${seatShell.name} selection=${seatShellSelection.name}/${seatShellSelection.tool.name}`,
+	);
+
+	// RM-306 (#5221), ruled by the operator: `powershell` is WITHHELD from the seat tool surface on
+	// NON-WINDOWS hosts. It is a SURFACE rule, not prose — the operator's evidence was that `powershell`
+	// appears in no rig file and in no prompt, and an absent instruction is filled in by the model. So the
+	// assertions below are about what is OFFERED, and they fail on the tree where offerability was the same
+	// question as startability (`pwsh` installed on Linux used to make PowerShell the SELECTED seat shell).
+	console.log("\nRM-306: `powershell` is withheld from the surface on non-Windows hosts, and reported as withheld (#5221)");
+	check(
+		"linux is OFFERED only bash; powershell is on the withheld list, named rather than silently absent",
+		JSON.stringify(offeredShellNames({ platform: "linux" })) === JSON.stringify(["bash"]) &&
+			JSON.stringify(withheldShellNames({ platform: "linux" })) === JSON.stringify(["powershell"]),
+		`offered=${JSON.stringify(offeredShellNames({ platform: "linux" }))} withheld=${JSON.stringify(withheldShellNames({ platform: "linux" }))}`,
+	);
+	check(
+		"a Windows host is still OFFERED powershell (the withhold is host-conditional, not a deletion)",
+		withheldShellNames({ platform: "win32" }).length === 0 && offeredShellNames({ platform: "win32" }).includes("powershell"),
+		`offered=${JSON.stringify(offeredShellNames({ platform: "win32" }))} withheld=${JSON.stringify(withheldShellNames({ platform: "win32" }))}`,
+	);
+	// THE RED CHECK the item asks for: on a non-Windows host that HAS `pwsh` installed, the seat must not be
+	// handed powershell. Availability and offerability are different questions, and this is the row that
+	// keeps them apart.
+	check(
+		"a Linux host WITH pwsh installed and no bash still gets no powershell tool (the hole: availability used to decide the surface)",
+		(() => {
+			const pwshOnly = shellPlan({ platform: "linux", exists: () => false, lookup: (p) => (p === "pwsh" ? "/usr/bin/pwsh" : null) });
+			const selected = selectSeatShell({ platform: "linux", exists: () => false, lookup: (p) => (p === "pwsh" ? "/usr/bin/pwsh" : null) });
+			return pwshOnly.name !== "powershell" && pwshOnly.degraded === true && selected.tool.name !== "powershell";
+		})(),
+		JSON.stringify(shellPlan({ platform: "linux", exists: () => false, lookup: (p) => (p === "pwsh" ? "/usr/bin/pwsh" : null) })),
+	);
+	check(
+		`the INSTALLED seat surface on this host contains NO withheld shell name (${process.platform})`,
+		SeatTools.tools.map((t) => t.name).every((n) => !withheldShellNames().includes(n)),
+		`surface=${JSON.stringify(SeatTools.tools.map((t) => t.name))} withheld=${JSON.stringify(withheldShellNames())}`,
+	);
+	check(
+		"the absence is LEGIBLE in the plan: powershell is a WITHHELD row with a reason, not a missing row",
+		(() => {
+			const row = shellPlan({ platform: "linux", exists: () => false, lookup: () => null }).tried.find((t) => t.name === "powershell");
+			return row?.offered === false && typeof row.withheldReason === "string" && row.withheldReason.length > 0 && row.canStart === false;
+		})(),
+		JSON.stringify(shellPlan({ platform: "linux", exists: () => false, lookup: () => null }).tried),
+	);
+	check(
+		"the withheld reason is answerable per name+host, and is null for a shell that IS offered",
+		shellWithheldReason("powershell", { platform: "linux" })?.includes("Windows") === true &&
+			shellWithheldReason("powershell", { platform: "win32" }) === null &&
+			shellWithheldReason("bash", { platform: "linux" }) === null,
+		`linux=${shellWithheldReason("powershell", { platform: "linux" })} win32=${shellWithheldReason("powershell", { platform: "win32" })}`,
+	);
+	// The SECOND surface that composes tools — the interactive client's coding toolset — used to install
+	// `createBashTool()` AND `createPowerShellTool()` unconditionally. Pin it to the same registry so the
+	// two surfaces cannot drift back apart (the guard-set drift lesson of #4849).
+	const adapterSource = await readFile(new URL("../src/tui/durable/adapter.mjs", import.meta.url), "utf8");
+	// Comments may NAME the old call to explain what changed; only CODE may not install it. Strip comments
+	// so the pin is about the tool set, not about the prose around it.
+	const adapterCode = adapterSource
+		.split("\n")
+		.filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+		.join("\n");
+	check(
+		"the client's coding toolset takes its shells from the registry, and does not install createPowerShellTool itself",
+		adapterCode.includes("offeredShellCandidates(") && !adapterCode.includes("createPowerShellTool("),
+		adapterCode.split("\n").filter((l) => /ShellTool|offeredShellCandidates/.test(l)).join(" | ").slice(0, 240),
+	);
+	check(
+		"the guard STILL inspects both shell names — the withhold removes a tool from a surface, not a name from the guard (#4849's pin survives)",
+		JSON.stringify([...SHELL_TOOLS].sort()) === JSON.stringify(["bash", "powershell"]),
+		JSON.stringify([...SHELL_TOOLS].sort()),
 	);
 
 	console.log("\nThe guard's shell set IS the registry — two lists drift, and the drift is a hole");

@@ -81,7 +81,10 @@ check(
 check(
 	"the linux verdict prints the registry's OWN program lists per candidate, never a fallback list",
 	linuxVerdict.detail.includes("bash [spawns bash]: CAN start (/usr/bin/bash)") &&
-		linuxVerdict.detail.includes("powershell [spawns pwsh, powershell]: cannot start") &&
+		// #5221 (RM-306): powershell is a WITHHELD row on linux, not a "cannot start" row. The distinction is
+		// the point — "cannot start" reads as a host gap the operator should fill, "withheld" is a rig rule
+		// that no install should undo. The program list is still printed, so the registry stays the source.
+		linuxVerdict.detail.includes("powershell [spawns pwsh, powershell]: WITHHELD on linux") &&
 		!linuxVerdict.detail.includes("spawns [pwsh, powershell]"),
 	linuxVerdict.detail,
 );
