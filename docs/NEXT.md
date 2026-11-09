@@ -13,58 +13,6 @@ cleanly into current `main` (`git merge-tree --write-tree`), **19** conflict. `m
 work only; nothing landed by this session). Broker resident as `pid 114848` since 03:20:33Z, **860 passes** by 04:40Z,
 spool empty, verdict HEALTHY.
 
-**N12 in brief** — three facts, all measured on this box, all reproducible with one command each:
-1. **ROADMAP 331 is still unfixed on `main`.** The per-model compaction override is emitted as a *sibling* of the
-   key the harness reads, so it is dropped. Probe: `node .spike/delegate/compaction-policy-probe.mjs` (calls
-   pi-durable's own `compactionPolicy`, never re-derives it) →
-   `DURIG_COMPACTION_MODEL_OVERRIDES = {"local/qwen3.8-flash-next-q2_0":{"reserveTokens":20480}}`,
-   `compactionSettings()` returns `{"modelOverrides":{...}}` with **no `compaction` key**, so `agent.js:47`
-   stores pi-durable's defaults and every seat resolves **reserve 16384 / keepRecent 20000 / background 32768**.
-2. **The cost is already in the store.** `node .spike/delegate/context-window-health.mjs` → 2,323
-   `pi.compaction` records: **1,897 completed, 426 failed, 240 of them the exact string "Summarization hit the
-   token limit; the summary is incomplete"**, clustered on conversation **4936** (`auditor`,
-   `verifier/openai/gpt-oss-120b`, `DURIG_VERIFIER_CONTEXT = 24576`): with the defaults that survive,
-   compact-above = 24,576 − 16,384 = **8,192 tokens** while `keepRecentTokens = 20,000` — the keep budget is
-   244 % of the headroom. That is the mechanism behind the seat-level "Compaction failed" notices.
-3. **The fleet is running.** Broker started 19:43Z (refused once on `wake-not-acknowledged` because a *read* intent
-   was spooled — pitfall 130), restarted 20:05Z: `INTENT delivered=8 dead=0 dup=0`, spool empty. In the 30 min
-   window: **145 generations completed, 0 failed** (per-seat in 15 min: devtools 46, impl 30, qa 16, scribe 6; only
-   **1** wake said "nothing claimable for you" — pitfall 136). All-time generation outcomes (store, one query):
-   54,353 completed / 16,589 failed / 333 aborted.
-5. **Clock-in now hangs while the fleet runs.** `timeout 60 node scripts/clockin.mjs` → exit 124, 0 bytes; `cli.mjs
-   status` and `cli.mjs queue --json --no-body` also time out; `cli.mjs config` answers in under a second. Cause
-   measured in the tool: `scripts/clockin.mjs:399 runCli()` has **no `timeout`** while `gitSafe` at `:413` bounds
-   every git call. Routed to `pm` (requestId `delegate-20261108-clockin-hang`). Until it is fixed, **clock in before
-   starting the broker** — pitfall 135.
-6. **`item-5737` landed mid-session** (`fb463162`) and the digest cap is now **run-verified, not just read**: with the
-   broker stopped, `node scripts/clockin.mjs` printed **15,552 B and exited 0** (earlier the same day it printed
-   41,439 B and exited 0 — the budget is 20,000 B). Check whether that makes `item-5398` a duplicate before landing
-   it (pitfall 137).
-7. **The verifier's window cannot hold the default policy — pure arithmetic.** `DURIG_VERIFIER_CONTEXT = 24576`,
-   pi-durable defaults reserve 16,384 / keepRecent 20,000: headroom 8,192, keep budget **244 %** of it. That is why
-   the store holds 240 records of "Summarization hit the token limit; the summary is incomplete". The local family is
-   fine: `curl -H "Authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models` reports
-   `qwen3.8-flash-next-q2_0`, `n_ctx: 204800`, matching `DURIG_LOCAL_CONTEXT`. Intent routed to `pm`
-   (requestId `delegate-20261108-verifier-window`, log `INTENT delivered=1` at 21:12:11Z) — pitfall 142.
-8. **Two seats fail for two different reasons.** Splitting the 426 failed `pi.compaction` records by conversation: all
-   **209** `spend_cap_exceeded` refusals are the **auditor** (conversation 4936 — 216 of its 542 compaction attempts
-   fail, 40 %), while the **214** truncations sit on the local-family seats (devtools 134, impl 42, lead 16, pm 10,
-   auditor 6). Mechanism, from `pi-durable/dist/harness/compaction.js:95`: the summariser's output ceiling is
-   `min(floor(0.8 * reserveTokens), model.maxTokens)` — 13,107 local, **6,000 verifier** because
-   `DURIG_VERIFIER_MAX_TOKENS = 6000` clamps it. Nesting the override raises local to 16,384 and cannot move the
-   verifier. Intent sent: `delegate-20261108-compaction-run-cap` — pitfalls 146, 148, 149.
-9. **Two blockers that precede window size.** (a) Shape: `node tools/seat-turn-shape.mjs --db <copy>` — **impl, devtools,
-   security, designer, advocate, qa2** are `AT RISK — a strict alternating template refuses another user turn before
-   any window is reached`; pm, qa, lead, scribe, auditor `ADMISSIBLE` (intent `delegate-20261108-shape-before-size`).
-   (b) Load: distinct `item-\d+` refs in each seat's last 200 entries — impl 108, qa 114, scribe 107, lead 89, auditor
-   81, devtools 13, pm 12; impl's recent turns hop `item-3128` → `item-5675` → `item-5713`, one run four worktrees.
-   The summariser is being asked to compress ~100 unrelated tasks, which is why it hits 13,107 tokens. 331's
-   acceptance must include "one item's context per wake" — pitfalls 155, 157. Occupancy and load: auditor 23,091/24,576 (94 %), claimed 2 items and completed 0; local seats 28–61 % of 204,800; impl compacted at 23:08Z and sits at 8 %. A window carries 1–11 tasks (pm 11, qa 5), not one. And the store is held by one process: `ls -l /proc/<broker pid>/fd | grep -c selfdev.sqlite` = **5** handles (two sqlite connections), no other process — so `PASS-FAILED … database is locked` is self-contention, and `--max-duration 1800` did not stop pid 3521203 after **02:05:25** because duration, like `.stop`, is honoured only at a pass boundary (`src/broker.mjs:1651`). Intent `delegate-20261108-store-lock`. Dead letters: all 56 are `op: read`, reason `apply failed: SqliteStorage is closed` (`pi-durable dist/storage/sqlite/storage.js:670`) — why cli reads timed out (120 s, pitfall 164). Pitfalls 162-163. **Recovered 23:30Z**: SIGTERM the wedged pid, then `broker-serve --start --max-duration 1800 --yes-pm-wakes` -> `INTENT delivered=37 dead=0 dup=0`, PASS 1..6 advancing, spool 0, `cli.mjs status` 2.0 s. Broker HEALTHY; #5785 claimable. **#5785 is three edits, not one**: `src/config.mjs:488` must emit `out.compaction.modelOverrides`, `:430` the docstring, `demo/config.test.mjs:333,339` asserts the wrong shape, so a config-only fix turns it red (pitfall 161).
-4. **#5398 is LANDED** (this pass, after #5488): the clock-in digest's deferred list is **aggregated** instead of one
-   inline row per item — **40,161 B → 15,013 B** measured on a snapshot of the live store (5,636 queue rows, 365
-   deferred, 9 seats), ~11 s to re-run, **over budget is exit 1**, and the 365 ids are greppable at
-   `.durig/clockin-deferred.txt` (`demo/clockin-digest.test.mjs` §8, `docs/runbooks/session-start-cost.md` §26–§28).
-
 Host for everything below, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
 echo "$PRETTY_NAME") && node -v && git --version` (**never sign work with a hostname** — D205, ROADMAP 281).
@@ -184,17 +132,17 @@ not family independence. `8` concurrent remains the operator's call.
 verifier model on localhost again. Don't let us forget that we want to do that."* Still **no queue row** for it;
 minting it is a seat act. Bounding number: RTX 3090 22,387/24,576 MiB (91 %) with eleven generations in flight.
 
-**Broker posture at clock-out (measured 20:2xZ):** resident pid **3316329**, started 20:04:41Z with
-`--max-duration 600`. Its last logged `PASS` is 20:11:27Z yet generations are still being created (newest
-`pi.generation` id 406503 at 20:28:40Z, 3 slots held) — the ROADMAP 303 linger is *not* idle here, so
-**do not kill it**; `serve --stop` correctly refused ("did not exit within the stop grace") while generations
-were in flight. Before any landing, run `node tools/broker-serve.mjs --status` and prove the genlock is empty
-of live generations — `scripts/land.mjs` refuses on a held slot (pitfall 134).
+**Broker posture at clock-out (measured 05:2xZ):** resident pid **114848**, started 03:20:33Z with
+`--max-duration 7200`, **1,002 passes** logged, verdict HEALTHY. Before any landing, run
+`node tools/broker-serve.mjs --status` and prove no generation is in flight — `scripts/land.mjs` refuses on a held
+slot, and an empty `ls -1 selfdev.sqlite.genlock*` is **not** proof of that (pitfall 150). A `degraded` verdict is
+not a stall: compare `heartbeatAt` (liveness) with `lastPassAt` (progress) first (pitfall 165).
 
-**Blocker:** #5651 (`pm`, held) is gated on #5488 and **#5605, which is `cancelled`** — a cancelled row cannot gate
-anything (pitfall 128), so the gate must be re-pointed to **#5736** before the roster act can run.
+**Blocker:** the release-role intent (`delegate-20261109-release-role`) is spooled and **not yet drained** —
+`ls -1 selfdev.sqlite.broker.inbox` still shows 1 file and the last `INTENT` line in `selfdev.sqlite.broker.log` is
+03:45:30Z. Delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall 141).
 
-**New traps this window** — `docs/SELFDEV.md` **130–160**: a spooled *read* intent makes `broker-serve --start`
+**Traps this window** — `docs/SELFDEV.md` **130–169** (165-169 are the continuity/queue-shape ones): a spooled *read* intent makes `broker-serve --start`
 refuse with `wake-not-acknowledged`; `--env-file` is not a flag that exists (pitfall 87's mechanism is gone, its
 substance stands); compaction failures are a record kind and the kind column is JSON-quoted; a broker past
 `--max-duration` keeps its heartbeat and stops passing while holding genlock slots; **the clock-in digest hangs

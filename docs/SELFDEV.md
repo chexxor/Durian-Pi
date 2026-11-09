@@ -3368,3 +3368,27 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the system prompt from sections before every request and provider caching is prefix-exact, so a `render` that
     changes per request may be a full cache miss every request. Keep the note **out of the section** (a static
     pointer) and deliver the mutable body at boundaries — wake, compaction, reset.
+170. **A landing pass cannot be routed to a seat.** `docs/runbooks/land.md:427-431` is explicit: quiescing requires
+    stopping the broker, and stopping the broker ends the run of any seat it hosts — so a seat can never stop the
+    broker, land, and report. (2026-10-17: the exclusive landing window closed QUIET BUT EMPTY for exactly this
+    reason.) Routing "merge all completed branches" to a seat produces a row nobody can execute. What a seat CAN
+    do is the read-only readiness work: the three gates from `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §5, the train
+    order with each stacked entry's base named, and the conflict list with owners. If the team wants the merge act
+    inside the rig, that is a base seam (ROADMAP 131 `pause`, a broker-side quiesced boundary), not a seat.
+171. **`git branch --list` is not a clean list.** Each line carries a worktree marker: `*` current, `+` checked out
+    in a linked worktree, and the leading whitespace. `sed 's/^[* ]*//'` leaves the `+` on 60+ branches, and every
+    downstream `git rev-list --count main..<name>` then fails with "unknown revision" — measured: 89 spurious
+    `[: : integer expected` errors before the census was fixed. Use
+    `git branch --list | sed 's/^[* +]*//' | grep -E 'item-[0-9]+'`, and count with
+    `a=$(git rev-list --count main.."$b" 2>/dev/null || echo 0); [ "$a" -gt 0 ] && echo "$b $a"`.
+    A branch is landed when that count is 0; `git merge-tree --write-tree main <branch>` exit 0 means it merges
+    clean into the CURRENT main, not the main it was cut from.
+172. **A compaction has a floor it can never get below, and it is computable before any seat runs.** From the pinned
+    pi-durable: `generation.js:238-243` triggers compaction above `contextWindow - reserveTokens`, the cut keeps
+    `keepRecentTokens` of recent turns, and `compaction.js:95` caps the summary at
+    `min(floor(0.8 * reserveTokens), model.maxTokens)`. So the post-compaction context is at least
+    `keepRecentTokens + that cap`. For the verifier family on this rig: 20,000 kept + 6,000 cap = **26,000 tokens
+    against a declared 24,576 window** — compaction can never fit that seat, which is why the store holds 218
+    "Summarization hit the token limit" records. `docs/evidence/2026-11-08-context-window/milestone-check.mjs` prints
+    this floor per family in its `== per-window feasibility ==` block; read the floor line, not just the headroom
+    line.
