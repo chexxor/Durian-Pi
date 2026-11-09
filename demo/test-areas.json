@@ -190,6 +190,7 @@
       "demo/tui-input-overlay.test.mjs",
       "demo/tui-input.test.mjs",
       "demo/tui-landing-fill.test.mjs",
+      "demo/tui-landing-name-gap.test.mjs",
       "demo/tui-landing.test.mjs",
       "demo/tui-launch-return.test.mjs",
       "demo/tui-multipane.test.mjs",
