@@ -102,6 +102,24 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   **Separate clause — the suppression-semantics fix:** a suppression-semantics fix is on a branch with
   its own landing entry and is not on main yet. When it lands it changes how a suppression is READ, not
   the recovery path — `resume` remains the remedy for a never-started submission.
+- **A seat reading its own queue mid-turn (the in-turn read deadlock, #5640 / #5699 interim discipline).**
+  A read spooled by a verb while THAT seat's turn is in flight cannot be answered: the broker answers read
+  intents inside a pass, and `drainIntentInbox` begins with `harness.documentState(...)` — the same session
+  the seat's turn is holding. The read waits on the work it is part of. Measured cost: **155.3 min of broker
+  time against a 75 min per-turn bound (2.07x)** (#5640), and the clock-in digest's own `cli.mjs status` read
+  **timed out twice at the 120 s bound** with `read health: timed out awaiting the broker's result` (#5644),
+  which is why the digest's acceptance command is unrunnable while the fleet is busy.
+  **What a seat does instead, TODAY (this is the discipline, not a workaround to be skipped):**
+  1. do NOT run `cli.mjs queue` / `cli.mjs status` / `scripts/clockin.mjs --db` inside your own turn when a
+     broker is resident; the numbers are handed to you in the item body, or
+  2. use ONE multi-id read (`node cli.mjs queue --id <a> --id <b> --json --no-body`) at a clock-in boundary,
+     when the broker is between passes, or
+  3. read a **snapshot copy** of the store (`cp selfdev.sqlite .snapshot/selfdev.sqlite`) for anything that
+     needs volume, and say which tree/copy the number came from.
+  **Verify (ran on 2026-11-08, read-only, no model spend):** `node demo/broker-read.test.mjs` and
+  `node demo/broker-read-nopass.test.mjs` both exit 0 — they are the demos that pin what a spooled read does
+  when no pass runs. The BUILD half of #5699 (a seam that resolves the read in-turn) is NOT shipped: the
+  bound and the semantics need a ruling, see below.
 - **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
   (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry

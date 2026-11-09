@@ -168,7 +168,7 @@ Read-only, via the broker-served `queue` read and an offline dump — no second 
 | #3663 | impl | #3660 done | release — landing list |
 | #3726 | scribe | #3724 done | **hold** — also in section C |
 | #4339 | impl | #4293 done | release — watchdog + durable-down marker (ROADMAP 61/62) |
-| #4661 | qa | #4656 done | release, then re-measure the landing gate per the incident doc |
+| #4661 | qa | #4656 done | **CLOSED — LANDED, do not re-cut.** The artifact is on `main` as merge `4d6beb0b` ("merge: land qa-item-4535 onto main", 2026-10-21): `git merge-base --is-ancestor 4d6beb0b main` exits 0 and `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` on `main` carries BOTH sections — §6.4 "The environmental bucket is audited BY NAME … (#4535)" at line 186 and §6.3 "Tree-dependent reds are deterministic …" at line 212, adjacent and unmerged (pure insert, 1 file, +26/-0). The gate #4656 is `done` but binds nothing now. The branch ref is GONE (`git branch --list 'qa-item-45*'` -> 0 lines; `git for-each-ref | grep -ci 4535` -> 0), so a landing attempt against it fails as a MISSING-REF error, not a conflict — do not re-create it. Verified 2026-11-08 in the `item-5699` worktree, parent `42eaea0`. |
 
 Spooled to `pm` as operator-authorized intent `audit-15-orphans-and-5-parked` (file
 `selfdev.sqlite.broker.inbox/0001793077486541-253486-tcdytl.json`). **Spooled is not delivered**: the broker is
