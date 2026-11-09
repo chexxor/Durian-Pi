@@ -14,8 +14,11 @@
 // it prints counts, ids and one-line reasons — NEVER queue row bodies, because bodies are the
 // entire reason those verbs are tens of megabytes.
 //
-// IT IS A READ. It opens no write verb, mutates no store, and writes nothing outside its own
-// process. If it disagrees with the store, the store is right and this file is wrong.
+// IT IS A READ. It opens no store write verb, mutates no store, and mutates no git state. It DOES
+// write exactly one artifact: a greppable snapshot of the deferred-row ids (DEFERRED_LIST_FILE,
+// gitignored) - the bytes that used to sit inline and grew without bound move to a file a session
+// greps instead of reading whole. Nothing else is written. If it disagrees with the store, the store
+// is right and this file is wrong.
 //
 // usage:
 //   node scripts/clockin.mjs                 # digest of DURIG_PI_DB / DURIG_DB (default ./selfdev.sqlite)
@@ -24,10 +27,16 @@
 //   node scripts/clockin.mjs --no-git        # skip the branch/worktree debt walk
 //   node scripts/clockin.mjs --base <ref>    # what to measure landing debt AGAINST (default: main)
 //   node scripts/clockin.mjs --no-runbooks   # skip the runbook staleness probe
+//   node scripts/clockin.mjs --budget <B>    # lower the byte budget (diagnostic/test: makes the cap bite
+//                                            # on demand instead of only when the store has grown)
+//   node scripts/clockin.mjs --deferred-file <path>  # where the deferred-id snapshot goes
+//
+// exit codes: 0 = digest printed and inside its byte budget; 1 = printed but OVER budget (the cap is
+// a gate, not a comment - ROADMAP 213); 2 = bad usage.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // The live file is read WHOLE by every session that follows it, so its length is a cost every later
@@ -35,6 +44,23 @@ import { fileURLToPath } from "node:url";
 export const POINTER_CAP_LINES = 200;
 // The digest's own budget. Above this it has started reproducing the dumps it exists to avoid.
 export const DIGEST_BUDGET_BYTES = 20000;
+
+// The deferred backlog is the term that was unbounded: measured at 7a1b80e2, ONE inline list of every
+// deferred row was 15,244 B of a 29,046 B digest (52%), and the row count went 174 -> 207 -> 376 inside
+// two windows because supervisor escalations defer rows. So the inline half is bounded by SEATS, a
+// design constant, never by rows: DEFERRED_INLINE_HEAD ids per seat, and at most DEFERRED_INLINE_MAX
+// entries printed no matter how many seats exist. Two per seat because a seat works its own backlog
+// oldest-first (the same order the broker claims in), so the oldest two are the rows it can act on; the
+// rest stay addressable by id in the snapshot file. Below DEFERRED_INLINE_MAX total rows the list is
+// still printed whole - indirection costs more than it saves on a small backlog.
+export const DEFERRED_INLINE_HEAD = 2;
+export const DEFERRED_INLINE_MAX = 24;
+// The full id list goes HERE: gitignored, grepped, never read whole by a session. Moving those bytes
+// into a doc (NEXT.md, SELFDEV.md) would re-create the cost this file exists to remove.
+export const DEFERRED_LIST_FILE = resolve(".durig", "clockin-deferred.txt");
+// Distinct seats printed in the per-seat count line before the remainder is aggregated (seats are a
+// small fixed set; the cap is paranoia, and paranoia is what keeps a bounded thing bounded).
+export const DEFERRED_SEAT_MAX = 20;
 
 /** The first `## NEXT SESSION` section of a NEXT.md-style file, verbatim. Nothing else. */
 export function pointerSection(text) {
@@ -182,6 +208,101 @@ export function suiteMarker(jsonText, currentMain = null) {
 	return `last suite: ${result} at ${at} (main ${main}${same ? "" : ` — STALE: main is now ${currentMain}`}) — ${note}`;
 }
 
+/**
+ * The QUEUE section's deferred backlog, AGGREGATED rather than shortened (#5398).
+ * Row count + per-seat counts + the ids a session can act on (lowest ids per seat), and a pointer to
+ * the snapshot file holding every id. Pure: `listFile` is passed in, nothing is written here.
+ * Body-free like the rest of the digest - subjects are sliced, `body` never appears.
+ */
+export function deferredTerm(items, listFile = null) {
+	const rows = (items || []).filter((i) => i.status === "deferred");
+	if (!rows.length) return "";
+	const bySeat = new Map();
+	for (const r of rows) {
+		const seat = String(r.to ?? "?");
+		if (!bySeat.has(seat)) bySeat.set(seat, []);
+		bySeat.get(seat).push(r);
+	}
+	for (const list of bySeat.values()) list.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+	const seats = [...bySeat.entries()].sort(
+		(a, b) => b[1].length - a[1].length || String(a[0]).localeCompare(String(b[0])),
+	);
+	const shown = seats.slice(0, DEFERRED_SEAT_MAX);
+	const line = (i) => `#${i.id} (${i.to}) ${String(i.subject || "").slice(0, 55)}`;
+	const out = [
+		`deferred (awaiting the operator): ${rows.length} rows across ${seats.length} seat(s): ` +
+			shown.map(([seat, list]) => `${seat}=${list.length}`).join(" ") +
+			(seats.length > shown.length ? ` +${seats.length - shown.length} more seat(s)` : ""),
+	];
+	if (rows.length <= DEFERRED_INLINE_MAX) {
+		const all = [...rows].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+		out.push(`  rows: ${all.map(line).join(" · ")}`);
+		return out.join("\n");
+	}
+	const head = [];
+	for (const [, list] of seats) {
+		for (const r of list.slice(0, DEFERRED_INLINE_HEAD)) {
+			if (head.length >= DEFERRED_INLINE_MAX) break;
+			head.push(line(r));
+		}
+	}
+	out.push(`  act next (lowest ${DEFERRED_INLINE_HEAD} id(s) per seat): ${head.join(" · ")}`);
+	out.push(
+		listFile
+			? `  all ${rows.length} ids: ${listFile} — grep it by seat or id; do NOT read it whole (it is a snapshot of this clock-in)`
+			: `  all ${rows.length} ids NOT written to a file this run — the per-seat counts above are the inline view`,
+	);
+	return out.join("\n");
+}
+
+/**
+ * The snapshot the digest points at: one line per deferred row, `#id<TAB>seat<TAB>deferredTo<TAB>
+ * subject`, sorted by id. A snapshot, so the header says when it was taken; subjects are truncated
+ * because this file is for GREPPING ids, not for reading bodies.
+ */
+export function writeDeferredList(rows, file = DEFERRED_LIST_FILE, db = "") {
+	const sorted = [...rows].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+	const text =
+		[
+			`# deferred rows (awaiting the operator) — ${sorted.length} rows, written by scripts/clockin.mjs at ${new Date().toISOString()}`,
+			`# store: ${db || "unknown"}. THIS IS A SNAPSHOT: it goes stale as soon as the store moves.`,
+			// The pattern is printed with LITERAL backslashes, not with real tabs: a header line containing a
+			// real tab matches the very grep it documents, so `grep -c -P "\t<seat>\t"` over-counted by one
+			// (measured on the live store: 365 deferred rows, devtools counted 89 in the digest, 90 by grep).
+			`# columns: #id <TAB> seat <TAB> deferredTo <TAB> subject(truncated)`,
+			`# grep it by seat: grep -c -P "\\tdevtools\\t" ${file}  (header lines carry no real tab, so the count is exact)`,
+			...sorted.map(
+				(r) =>
+					`#${r.id}\t${r.to ?? "?"}\t${r.deferredTo ?? "?"}\t${String(r.subject ?? "").replace(/[\t\r\n]+/g, " ").slice(0, 120)}`,
+			),
+		].join("\n") + "\n";
+	try {
+		mkdirSync(dirname(file), { recursive: true });
+		writeFileSync(file, text);
+		return file;
+	} catch (err) {
+		console.error(
+			`clockin: could not write the deferred id list to ${file}: ${err?.message ?? err} — the digest still prints, with counts only`,
+		);
+		return null;
+	}
+}
+
+/**
+ * Does the cap bite? Over budget is a FAILURE, not a comment (ROADMAP 213: "a surface that only warns
+ * degrades silently, and the next session pays the token bill"). Kept separate from main() so the
+ * verdict is assertable without a 376-row store.
+ */
+export function budgetVerdict(text, budget = DIGEST_BUDGET_BYTES) {
+	const bytes = Buffer.byteLength(text, "utf8");
+	return {
+		bytes,
+		budget,
+		ok: bytes <= budget,
+		message: `clockin: digest is ${bytes} B, over its ${budget} B budget — a digest that grows into the dumps it exists to avoid has failed at its job`,
+	};
+}
+
 export function renderDigest(s) {
 	const out = [];
 	const say = (...a) => out.push(a.join(" "));
@@ -201,10 +322,8 @@ export function renderDigest(s) {
 	if (Object.keys(parked).length) say(`deferred_awaiting_answer: ${JSON.stringify(parked)}`);
 	say(`broker: ${s.broker.detail}`);
 	say(`\n## QUEUE  ${(s.items || []).length} rows ${JSON.stringify(s.counts)}`);
-	const human = (s.items || [])
-		.filter((i) => i.status === "deferred")
-		.map((i) => `#${i.id} (${i.to}) ${String(i.subject || "").slice(0, 55)}`);
-	if (human.length) say(`deferred (awaiting the operator): ${human.join(" · ")}`);
+	const deferred = deferredTerm(s.items, s.deferredFile || null);
+	if (deferred) say(deferred);
 	if (s.git) {
 		const head = s.git.head ? `${s.git.head.state}${s.git.head.at ? `@${s.git.head.at}` : ""}` : "?";
 		const baseTag = s.git.baseSha
@@ -247,6 +366,8 @@ function parseArgs(argv) {
 		git: true,
 		runbooks: true,
 		base: "main",
+		budget: DIGEST_BUDGET_BYTES,
+		deferredFile: DEFERRED_LIST_FILE,
 	};
 	for (let i = 0; i < argv.length; i++) {
 		const a = argv[i];
@@ -255,12 +376,16 @@ function parseArgs(argv) {
 		else if (a === "--json") opts.json = true;
 		else if (a === "--no-git") opts.git = false;
 		else if (a === "--no-runbooks") opts.runbooks = false;
+		else if (a === "--budget") opts.budget = Number(argv[++i]);
+		else if (a === "--deferred-file") opts.deferredFile = resolve(String(argv[++i] || ""));
 		else if (a === "--help" || a === "-h") {
 			console.log(
-				"usage: node scripts/clockin.mjs [--db <path>] [--base <ref>] [--json] [--no-git] [--no-runbooks]\n" +
+				"usage: node scripts/clockin.mjs [--db <path>] [--base <ref>] [--json] [--no-git] [--no-runbooks] [--budget <B>] [--deferred-file <path>]\n" +
 					"Read-only cold-start digest: pointer, rig verdict, queue counts, broker liveness,\n" +
 					"unmerged-branch debt (against --base, default main; skipped with a reason if it cannot\n" +
-					"resolve), runbook staleness, provider config, read map. Never row bodies.",
+					"resolve), runbook staleness, provider config, read map. Never row bodies. The deferred\n" +
+					"backlog is printed as counts + the oldest ids per seat, with every id in a grep-able\n" +
+					"snapshot file whose path the digest names. exit 0 = inside budget, 1 = over budget, 2 = bad usage.",
 			);
 			process.exit(0);
 		} else {
@@ -451,6 +576,18 @@ export async function main(argv = process.argv.slice(2)) {
 			maxSeats: config.DURIG_MAX_CONCURRENT_SEATS,
 		},
 		localEndpoint: await probeLocal(),
+		// The deferred backlog moves its ids OUT of the digest and INTO a grep-able snapshot when the
+		// backlog is big enough that inlining costs more than the indirection. Decided here, in the half
+		// that touches the disk; `deferredTerm` stays pure.
+		deferredFile:
+			opts.deferredFile &&
+			(status.queueItems || []).filter((i) => i.status === "deferred").length > DEFERRED_INLINE_MAX
+				? writeDeferredList(
+						(status.queueItems || []).filter((i) => i.status === "deferred"),
+						opts.deferredFile,
+						db,
+					)
+				: null,
 		selfdevLines: selfdevLines.length,
 		selfdevHeadings: selfdevLines
 			.map((l, i) => [i + 1, l])
@@ -460,17 +597,17 @@ export async function main(argv = process.argv.slice(2)) {
 		ms: Date.now() - t0,
 	};
 	const text = renderDigest(state);
-	if (Buffer.byteLength(text, "utf8") > DIGEST_BUDGET_BYTES) {
-		console.error(
-			`clockin: digest is ${Buffer.byteLength(text, "utf8")} B, over its ${DIGEST_BUDGET_BYTES} B budget — a digest that grows into the dumps it exists to avoid has failed at its job`,
-		);
-	}
 	if (opts.json) {
 		console.log(JSON.stringify({ ...state, text }, null, 1));
 	} else {
 		console.log(text);
 	}
-	return 0;
+	// The cap is a GATE (ROADMAP 213). The digest still prints — a session that ran clock-in must see
+	// why it failed — but the exit code says the tool stopped doing its job, so the landing gate and a
+	// human running `clockin.mjs | wc -c` both hear about it.
+	const verdict = budgetVerdict(text, opts.budget);
+	if (!verdict.ok) console.error(verdict.message);
+	return verdict.ok ? 0 : 1;
 }
 
 // The CLI half runs only when this file is the entry point, so demo/clockin-digest.test.mjs can

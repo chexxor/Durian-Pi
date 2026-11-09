@@ -1,4 +1,4 @@
-﻿// verify-1940-inflight-compact.mjs (#1940 check 3) - stage an IN-FLIGHT generation on the TARGET
+// verify-1940-inflight-compact.mjs (#1940 check 3) - stage an IN-FLIGHT generation on the TARGET
 // seat, then spool op:compact and apply it via the broker drain; PROVE: (a) whether the op applies
 // mid-flight or is refused (CAPTURE THE REASON EXACTLY), (b) the staged run settles (done vs
 // aborted), (c) the full turn is committed, (d) the compaction entry behavior.

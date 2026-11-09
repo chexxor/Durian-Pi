@@ -1,4 +1,4 @@
-﻿import { refusalFor } from './src/confine.mjs';
+import { refusalFor } from './src/confine.mjs';
 const B = 'git branch ';
 const D = String.fromCharCode(45, 68);
 const d = '-d';

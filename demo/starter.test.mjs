@@ -115,8 +115,8 @@ try {
 		// The runbook rules need runbook data the CLI does not supply yet (item 86 wires the caller to
 		// read docs/runbooks/*), so they are legitimately SKIPPED here - and must say why.
 		if (c.id.startsWith("runbook-")) {
-			assert.equal(c.status, "skipped", `rule ${c.id} is "${c.status}", not "skipped": the CLI passes no runbook data yet`);
-			assert.ok(c.why, `rule ${c.id} skips without a reason`);
+			assert.equal(c.status, "unknown", `rule ${c.id} is "${c.status}", not "unknown": the CLI passes no runbook data yet, so it cannot judge (#5767)`);
+			assert.ok(c.why, `rule ${c.id} reports unknown without a reason`);
 			continue;
 		}
 		// The FEATURES-row rule (ROADMAP 46 / D62) needs git-history data the CLI does
