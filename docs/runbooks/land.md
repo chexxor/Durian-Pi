@@ -269,10 +269,15 @@ ask "stop or not?" or "why did --suite fail?".
    ( cd .gate-deps && node scripts/test.mjs --all --jobs 6 )   # 263/263, exit 0
    git worktree remove --force "$PWD/.gate-deps"; git worktree prune
    ```
-   Without the symlink the same scratch reds on the dependency-importing demos. The fix (link the deps into
-   the scratch, or refuse `--suite` and say why when they are absent) is registered as #5832; until it lands,
-   a `--suite` refusal on a demo that imports `@earendil-works/*` must be re-measured with deps present before
-   the branch is blamed.
+   Without the symlink the same scratch reds on the dependency-importing demos. **FIXED (#5793):** the helper
+   now symlinks the checkout's `node_modules` into its scratch before running the suite, and when the checkout
+   HAS NO `node_modules` it REFUSES with an environment reason rather than running a suite whose red belongs
+   to the instrument. The report carries `scratchDeps: {linked, source, target, reason}`, so a result states the
+   environment it was measured in — a suite number without that field is not a measurement of the tree.
+   Verify: `node demo/land-scratch-deps.test.mjs` → 9 checks, exit 0: a fixture repo lands green WITH the link
+   (main gains the merge commit, the fixture demo resolves the import) and is refused WITHOUT it (exit nonzero,
+   the error names `node_modules`, not a demo, and main does not advance), while a bare worktree of the same
+   fixture really cannot resolve the import — so the gate's red was the environment, not the branch.
 
    **Second instance of the same tree-shape class (#4985, fixed at `c4db1fd9`).** A landing stopped the same
    way — `STOPPED: demo/clockin-digest.test.mjs failed` — and the item-4966 landing entry recorded
