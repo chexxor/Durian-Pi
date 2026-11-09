@@ -274,6 +274,7 @@
     ],
     "toolchain": [
       "demo/clockin-digest.test.mjs",
+      "demo/fleet-health-counts.test.mjs",
       "demo/format.test.mjs",
       "demo/gate-clean-scorer.test.mjs",
       "demo/genlock-hardening.test.mjs",

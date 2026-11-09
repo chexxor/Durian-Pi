@@ -191,6 +191,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [per-row-marker.md](per-row-marker.md) | you must decide whether a held landing row's work actually landed on main, and choose a marker to probe for it — bare identifiers give false positives, whole added lines give false negatives | no |
 | [spend-cap-tripped.md](spend-cap-tripped.md) | an item parks with reason `spend_cap_exceeded`; a seat or a probe refuses **before** sending with a cap, spent and projected number; you want to know where the store's money went and what is still unconfirmed | no |
 | [verifier-independence.md](verifier-independence.md) | a verifier wants to edit the artefact it is verifying, or is about to report an `artifact`/SHA it did not run — a verifier's only write is a report; **or** a verify leg must state which kind of independence it has when author and verifier run the SAME model, and what a `local/` verifier re-point would break | no |
+| [fleet-health-census.md](fleet-health-census.md) | you need a NUMBER for fleet failures and a TREND: "did compaction stop failing?", "which seat is producing them?" — counts that work while the broker is wedged | no |
 
 ## Index (mechanism)
 
@@ -202,6 +203,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Seats | seat-reset, compact-a-seat |
 | A turn moved more tokens than the seat's window (`context_over_window`, `check` rule `context-over-window`), and whether that fraction is current at all | context-over-window, compact-a-seat, seat-reset, compaction-eval |
 | Long-context eval | compaction-eval |
+| Fleet outcome counts and failure families (generations, compaction), counted from the store without the broker | fleet-health-census |
 | A verifier turn truncated at `length`, or refused in ~30 ms with zero tokens; KV cost and which GPU a model slot really owns | verifier-serving-headroom, compact-a-seat, hygiene-and-dead-model-pointers |
 | A seat settles `unanswered` with `reason: model_error` and the attention notice names **no cause**; the submission's `detail` reads `Compaction failed: Summarization hit the token limit; the summary is incomplete` | verifier-serving-headroom (Step 0 + 0b: read the cause, then the headroom arithmetic), compact-a-seat, context-over-window, local-provider-down |
 | Write guard / source files | write-corruption-recovery |
