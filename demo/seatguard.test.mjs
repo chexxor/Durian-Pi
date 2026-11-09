@@ -13,6 +13,7 @@ import { NodeExecutionEnv } from "@earendil-works/pi-durable/env/node";
 import { SeatGuard, beforeTool } from "../src/seatguard.mjs";
 import { afterTool } from "../src/secretredact.mjs";
 import { authorEnv } from "../src/confine.mjs";
+import { offeredShellNames, seatShellSelection } from "../src/shellregistry.mjs";
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -55,9 +56,15 @@ try {
 	}
 
 	console.log("\nOrdinary work is not blocked — a guard that blocks everything is an outage");
+	// #5221 (RM-306) moved the shell NAME to be host-conditional, so these policy checks run through a
+	// shell this host is actually OFFERED. They are not a powershell test — the whole point of #4849 is
+	// that which shell the host registers is a registry fact — and a withheld name now answers with the
+	// withhold refusal (asserted in its own section below), so driving them with a withheld name here
+	// would test the withhold, not the command policy.
+	const hostShell = offeredShellNames()[0];
 	for (const command of ["node demo/cli.test.mjs", "git status", "git diff HEAD", "npm test", "rg wanted src"]) {
-		const verdict = await beforeTool({ type: "toolCall", id: "2", name: "powershell", arguments: { command } });
-		check(`allowed: ${command}`, verdict === undefined, JSON.stringify(verdict));
+		const verdict = await beforeTool({ type: "toolCall", id: "2", name: hostShell, arguments: { command } });
+		check(`allowed: ${command} as a \`${hostShell}\` call`, verdict === undefined, JSON.stringify(verdict));
 	}
 
 	console.log("\nOnly shell tools are inspected, and nested calls are covered too");
@@ -66,13 +73,43 @@ try {
 	const nested = await beforeTool({
 		type: "toolCall",
 		id: "4",
-		name: "powershell",
+		name: hostShell,
 		arguments: { command: "wsl ls" },
 		parent: { taskId: "tool:1", callId: "c1" },
 	});
 	check("a nested call — how a codemode script reaches a tool — is blocked too", nested?.block?.includes("refused by durig"));
 	const missing = await beforeTool({ type: "toolCall", id: "5", name: "bash", arguments: {} });
 	check("a shell call with no command string is left alone rather than guessed at", missing === undefined);
+
+	// #5221 (RM-306): a shell tool this host is WITHHELD must be refused with the HOST reason, not as a
+	// generic not-found. pi settles an unresolvable name as `tool_unavailable: "Tool powershell is not
+	// available"`, which names neither the host nor the shell to use instead — the cause-class rule
+	// (architecture-capacity-rulings-2026-11-03.md §6) forbids that shape, so durig's own `block` channel
+	// answers it. The name still reaches this hook on the paths that bypass the offered surface: a nested
+	// codemode call (`agent.callable`), or an extension that installs a shell of its own.
+	console.log("\nA shell tool WITHHELD on this host is refused with the host reason (#5221 / RM-306)");
+	const withheldName = ["powershell", "bash"].find((n) => !offeredShellNames().includes(n));
+	if (withheldName === undefined) {
+		console.log(`  SKIP every shell name is offered on ${process.platform}, so there is no withheld name to drive here`);
+	} else {
+		const withheld = await beforeTool({ type: "toolCall", id: "w1", name: withheldName, arguments: { command: "git status" } });
+		check(
+			`the \`${withheldName}\` call is refused, naming the host, the cause class, and the shell to use instead`,
+			withheld?.block?.includes("shell_withheld") &&
+				withheld.block.includes("WITHHELD") &&
+				withheld.block.includes(process.platform) &&
+				withheld.block.includes(seatShellSelection.name),
+			JSON.stringify(withheld),
+		);
+		check(
+			"the refusal is NOT a generic tool-not-found (pi's `is not available` must not be the seat-facing signal)",
+			!withheld?.block?.includes("is not available") && !withheld?.block?.includes("tool_unavailable"),
+			JSON.stringify(withheld),
+		);
+		// The withheld name is refused BEFORE any command classification, so an innocuous command does not
+		// make it look allowed: the name is the problem, not the argument.
+		check("a withheld-name call is refused whatever its command string", withheld !== undefined);
+	}
 
 	console.log("\nOne policy serves both layers (two lists would drift, and the drift would be a hole)");
 	const envRefusal = await authorEnv(new NodeExecutionEnv({ cwd: root }), root).exec("wsl ls", {}, context);
@@ -85,7 +122,7 @@ try {
 	);
 
 	console.log("\nPublishing is refused unless the OPERATOR granted it, which a seat cannot forge");
-	const pushCall = (command, id) => ({ type: "toolCall", id, name: "powershell", arguments: { command } });
+	const pushCall = (command, id) => ({ type: "toolCall", id, name: hostShell, arguments: { command } });
 	const push = await beforeTool(pushCall("git push origin main", "7"));
 	check("git push is refused by default", push?.block?.includes("operator's authorization"), JSON.stringify(push));
 

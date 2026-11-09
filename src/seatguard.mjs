@@ -19,7 +19,7 @@ import { isInside, refusalFor } from "./confine.mjs";
 import { writeTargets } from "./writetargets.mjs";
 import { resolveSeatRoot, sameRoot } from "./seatroot.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
-import { seatShellSelection, shellToolNames } from "./shellregistry.mjs";
+import { seatShellSelection, shellToolNames, shellWithheldReason } from "./shellregistry.mjs";
 import { afterTool as redactToolResult } from "./secretredact.mjs";
 
 /** pi-durable's own write-path normalization (tools/path-utils.js): unicode
@@ -409,6 +409,30 @@ export function refusalForSpoolPath(target) {
 }
 
 /**
+ * #5221 (RM-306): refuse a call to a shell tool this host is WITHHELD, and say why.
+ *
+ * The withhold lives in the SURFACE (`src/shellregistry.mjs` `offeredOn`), so on a normal seat the name is
+ * never offered and there is nothing to refuse. This is the legibility half of the ruling: a name that
+ * DOES reach a call — a nested codemode call (`agent.callable`, which is not filtered by what the model
+ * was offered), an extension that installs a shell of its own, a future seat on another host — must not be
+ * answered by pi's generic `"Tool powershell is not available"`. `harness/tool.js` settles `tool_unavailable`
+ * for any name it cannot resolve, and that sentence names neither the host nor the shell to use instead,
+ * which is the cause-class rule's forbidden shape (architecture-capacity-rulings-2026-11-03.md §6: a named
+ * cause, never a generic one). The refusal is durig's existing `block` channel, so the caller sees a durig
+ * refusal with a recovery, not a missing tool.
+ */
+export function withheldShellRefusal(name, host = {}) {
+	const reason = shellWithheldReason(name, host);
+	if (reason === null) return null;
+	return (
+		`refused by durig (cause: shell_withheld): the \`${name}\` shell tool is WITHHELD on this host ` +
+		`(${host.platform ?? process.platform}) — ${reason}. The seat shell registered here is ` +
+		"`" + seatShellSelection.name + "`; re-issue the command through that tool. " +
+		"Do not retry the withheld name — it is absent by policy, not by accident."
+	);
+}
+
+/**
  * Refuse a call, or let it through.
  *
  * `ToolHookCall.parent` is set for a nested call - one a running tool made through
@@ -416,6 +440,11 @@ export function refusalForSpoolPath(target) {
  * which a coding-agent `tool_call` event could not.
  */
 export async function beforeTool(call, api, context) {
+	// RM-306 (#5221): a withheld shell name is refused with the host reason before anything else runs.
+	if (SHELL_TOOLS.has(call?.name)) {
+		const withheld = withheldShellRefusal(call.name);
+		if (withheld !== null) return { block: withheld };
+	}
 	const command = SHELL_TOOLS.has(call?.name) ? call.arguments?.command : undefined;
 	if (typeof command !== "string") {
 		// #1966 layer (ii): a write/edit into the broker spool is refused before it lands.

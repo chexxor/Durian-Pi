@@ -31,10 +31,20 @@
 
 import { shellPlan } from "../src/shellregistry.mjs";
 
-/** One line: what the registry reported for every candidate, so the verdict shows its work. */
+/** One line: what the registry reported for every candidate, so the verdict shows its work.
+ *
+ * #5221 (RM-306): a WITHHELD candidate prints as withheld, with its reason — never as "cannot start".
+ * The two states read alike in the old line and mean opposite things: "cannot start" is a host fact the
+ * operator can fix by installing a program, "withheld" is a rig rule no installation should undo. An
+ * operator told to "make one of the programs above resolvable" for a withheld tool is being pushed toward
+ * re-opening the hole this row closes. */
 export function describeRegistry(plan) {
 	return plan.tried
-		.map((t) => `${t.name} [spawns ${t.programs.join(", ")}]: ${t.canStart ? `CAN start${t.startedBy ? ` (${t.startedBy})` : ""}` : "cannot start"}${t.preferred ? " [preferred on this host]" : ""}`)
+		.map((t) =>
+			t.offered === false
+				? `${t.name} [spawns ${t.programs.join(", ")}]: WITHHELD on ${plan.platform}${t.withheldReason ? ` — ${t.withheldReason}` : ""}`
+				: `${t.name} [spawns ${t.programs.join(", ")}]: ${t.canStart ? `CAN start${t.startedBy ? ` (${t.startedBy})` : ""}` : "cannot start"}${t.preferred ? " [preferred on this host]" : ""}`,
+		)
 		.join(" | ");
 }
 
@@ -79,6 +89,6 @@ export function seatShellVerdict({ plan = shellPlan(), rigPath = "the rig file",
 		id: "seat-shell-availability",
 		severity: "block",
 		detail: `NO shell can start on ${plan.platform}: the registered seat shell tool is "${plan.name}" and it spawns [${programs}], none of which resolves here (registry: ${registry}) — every seat shell call is a guaranteed spawn error, so a woken seat can edit but cannot run the demo suite (the constitution's oracle) or run git, and its completions are self-declared${wakeSet.length && !needsShell.length ? ` | a coordinator-scoped exception IS measurable for this wake set: ${wakeSet.map((w) => w.name).join(", ")}` : ""}${needsShell.length ? ` | NOT admissible: these wake-set seats keep the shell tool: ${needsShell.join(", ")}` : ""}`,
-		fix: `src/shellregistry.mjs already registers the host-preferred shell, so this is a HOST fact, not a registration bug: make one of the programs above resolvable on this box (or run the broker where one is), then re-run --status. Still owed by 217: the operator-owned instruction text in ${rigPath}. For one bounded coordinator-scoped wake the operator may ack it: --ack-coordinator-wake with --max-duration <s>.`,
+		fix: `src/shellregistry.mjs already registers the host-preferred shell, so this is a HOST fact, not a registration bug: make one of the programs above resolvable on this box (or run the broker where one is), then re-run --status.${plan.tried.some((t) => t.offered === false) ? ` Candidates marked WITHHELD above are not offered on ${plan.platform} by policy (RM-306) and are NOT a fix — do not install them to satisfy this check.` : ""} Still owed by 217: the operator-owned instruction text in ${rigPath}. For one bounded coordinator-scoped wake the operator may ack it: --ack-coordinator-wake with --max-duration <s>.`,
 	};
 }
