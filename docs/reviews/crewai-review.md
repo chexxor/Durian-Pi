@@ -140,3 +140,15 @@ they cited. The mechanism is real; the citation is not at this pin. Fixed here r
 **Follow-up (Do 9):** `docs/reviews/crewai-followup-research-prompt.md` is not written — the open questions
 (how their JSONC crew schema validates unknown keys; whether `llm_overlay` is user-visible config) are answerable by
 opening two more files in this clone, so they belong to the next session's walk, not to the research agent.
+
+## Dated delta — 2026-11-07, the credentials-and-secrets question (pin `f3d0099d`, re-measured this turn)
+
+**Null result worth recording.** Asked how crewai scopes a credential **between members** of a crew, the answer is: it
+does not. `lib/crewai/src/crewai/crew.py:353` declares a separate `planning_llm` (fed to the planning agent at `:1470
+planning_agent_llm=self.planning_llm`) — a per-**role model**, not a per-role **credential** — and `api_key` appears only
+as a pass-through kwarg inside the provider-client parameter lists (`lib/crewai/src/crewai/llm.py:2711, 2774`). The
+platform-auth surface (`lib/cli/src/crewai_cli/authentication/*`) is for their hosted platform's own token, not for
+member scoping; per-tool credential modules (`…/tools/**/credentials.py`) were enumerated by name only, not read.
+Consequence for durian-pi: per-member credential scoping (**306**, and the grant surface in **342**) is an addition we
+would be making, not a port — no team framework read in `docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md`
+has it. Host for this reading: Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.

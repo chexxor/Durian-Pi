@@ -46,6 +46,7 @@ import {
   fallbackModels,
 } from "./src/providers/deepinfra-models.ts";
 import { createLocalProvider, localProviderSpecs } from "./src/providers/local.mjs";
+import { shellToolLine } from "./src/shellregistry.mjs";
 import { wrapProviderWithSpend, capsFor, ledgerPath } from "./src/providers/spend.mjs";
 import {
   Constitution,
@@ -85,6 +86,7 @@ import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES } from "./src/readapi.mjs";
+import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -430,10 +432,39 @@ function buildModels(live = null) {
   // verifier server while every other seat keeps the default provider. TWO servers is the point, not an
   // accident: an author and its verifier cannot share a blind spot only if they are different families
   // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
+  // #5488 — THE GENERATION-SLOT GATE APPLIES HERE TOO, and this block is the whole fix.
+  // `DURIG_MAX_CONCURRENT_SEATS` is documented (src/config.mjs; docs/SELFDEV.md's review recipe) as the key that
+  // makes "seats queue in durig rather than inside the model". It did not: the faux branch and the metered
+  // default above both wrap in `wrapProviderWithSlots`, this loop did not, so on a rig whose seats are ALL
+  // `local/*` the cap was inert — measured with the config reading `1`: 9-10 `pi.generation` tasks `running` at
+  // once and ZERO `<db>.genlock.<i>` files across 40 samples (docs/DECISIONS.md, the #5488 finding; reproduced
+  // in docs/NEXT.md as "`running` reached 10 while DURIG_MAX_CONCURRENT_SEATS=1"). D-5015.1's claim that EVERY
+  // provider is wrapped was false here; #5491 corrected the wording, this closes the behaviour.
+  //
+  // WHY HERE AND NOT IN src/providers/local.mjs: locality decides cost and credentials, but capacity is a
+  // property of the HOST process, and the lease needs `DB_PATH` plus the resolved cap — both already owned here.
+  // In `local.mjs` it would fork the cap (a second reader of the same key) and gate the provider even where the
+  // rig says "no limit". NO NEW KEY is minted: the gate is armed by the same `maxSeats()` the other two branches
+  // read, and `durig.config.default.json` stays at `1` — nothing is widened by default. Wrapper order matches the
+  // metered branch: spend OUTSIDE (a money refusal must never take a generation slot), the slot gate INSIDE the
+  // trace, so a queued generation is still visible while it waits.
+  //
+  // FEASIBILITY (acceptance 5): gating IS feasible on this plane — the lease wraps the provider CALL, so it is
+  // held for the whole response whether the local engine queues internally or not. The cost is MEASURED in
+  // demo/local-slot-gate.test.mjs (ungated vs gated wall-clock, in seconds), not asserted as free.
+  const localSlots = maxSeats();
   for (const spec of localProviderSpecs(CFG)) {
+    const built = createLocalProvider(spec, { createProvider, api: ocApi });
+    const gatedLocal = Number.isFinite(localSlots)
+      ? wrapProviderWithSlots(built, {
+          dbPath: DB_PATH,
+          slots: localSlots,
+          getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
+        })
+      : built;
     models.setProvider(
       withSpend(
-        wrapProviderWithTrace(createLocalProvider(spec, { createProvider, api: ocApi }), {
+        wrapProviderWithTrace(gatedLocal, {
           getSeat: () => process.env.DURIG_ACTIVE_SEAT ?? null,
         }),
       ),
@@ -567,7 +598,10 @@ async function buildSeatPrompt(models, seat, providerId) {
     "When asked to decompose or route a task, CREATE QUEUE ITEMS with send_work - do not merely describe them in your reply.",
   ].join("\n");
   const seatModel = resolveSeatModel(models, seat.model, providerId, MODEL_ID);
-  let instructions = [compilePersona(seat), PROTOCOL].join("\n\n");
+  // #5739: the shell line is emitted from the registry, not hand-written in 12 persona files, so the
+  // prompt cannot claim a shell the guard would refuse. `shellToolLine()` reads the same plan
+  // (src/shellregistry.mjs) that registers the tool and that seatguard.mjs uses to refuse a call.
+  let instructions = [compilePersona(seat), shellToolLine(), PROTOCOL].join("\n\n");
   let optimizedVia = null;
   // DURIG_OPTIMIZE=on runs each seat's persona through the optimizer (one
   // model call per seat) before it becomes the system prompt. The raw spec
@@ -1131,6 +1165,14 @@ const QUEUE_FLAGS = {
   // record a later reader trusts, and acting on a subject without its body is a failure this rig has registered
   // repeatedly. The attention/count derivation still runs over the FULL rows: projection is after derivation.
   "--no-body": { kind: "flag", usage: "[--no-body]" },
+  // #5770 — the BOUNDED park view. `--held` is shorthand for `--status held`; `--with-gates` projects each row
+  // to ONLY the fields that answer "who parked it, on what, when do we look again" (no body, no subject); `--limit`
+  // caps how many rows are emitted. Bounded by construction: bodies are dropped, the count is capped, and an
+  // unbounded request (`--limit 0`, or above the cap) is REFUSED rather than silently dumping the store — the
+  // unbounded version of this read reached 25 MB in a devtools scratch export.
+  "--held": { kind: "flag", usage: "[--held]" },
+  "--with-gates": { kind: "flag", usage: "[--with-gates]" },
+  "--limit": { kind: "value", usage: "[--limit <n>]", valueName: "n" },
 };
 const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
 
@@ -1149,6 +1191,8 @@ async function cmdQueue(args = []) {
   const statuses = [];
   const to = [];
   let noBody = false;
+  let gates = false;
+  let limit = GATE_VIEW_CAP;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     const spec = QUEUE_FLAGS[a];
@@ -1156,7 +1200,10 @@ async function cmdQueue(args = []) {
     // silently accept, and `main` accepting one was part of the fail-open.
     if (!spec) refuseQueueArgument(`unknown argument ${a}`);
     if (spec.kind === "flag") {
-      noBody = true;
+      // #5770: `--held` is a status filter (not a separate vocabulary), so it composes with `--to`/`--id`.
+      if (a === "--held") statuses.push("held");
+      else if (a === "--with-gates") gates = true;
+      else noBody = true;
       continue;
     }
     if (spec.kind === "value") {
@@ -1168,7 +1215,16 @@ async function cmdQueue(args = []) {
         refuseQueueArgument(`${a} takes a queue state, not "${v}" (states: ${spec.values.join(", ")})`);
       if (a === "--id") ids.push(v);
       else if (a === "--status") statuses.push(v);
-      else to.push(v);
+      else if (a === "--limit") {
+        // Bounded by construction: `--limit 0` is not a limit, and a limit above the cap is the unbounded dump
+        // this instrument exists to avoid. Refuse and name the cap instead of quietly printing the store.
+        const n = Number(v);
+        if (!Number.isInteger(n) || n <= 0)
+          refuseQueueArgument(`--limit must be a positive integer (1..${GATE_VIEW_CAP}); "all" is not a limit`);
+        if (n > GATE_VIEW_CAP)
+          refuseQueueArgument(`--limit ${n} exceeds the bounded park view's cap of ${GATE_VIEW_CAP}`);
+        limit = n;
+      } else to.push(v);
       i += 1;
       continue;
     }
@@ -1192,7 +1248,7 @@ async function cmdQueue(args = []) {
   // THE DEFAULT IS TODAY'S BYTES (#5016): no flags, or only the `--json` no-op, and the answer is the whole
   // document — `{ok, command, items}`, unchanged — so anything that parses `queue` today keeps parsing it. Every
   // extra key below appears ONLY once a caller asked for a narrower view.
-  if (ids.length === 0 && !filtered && !noBody) {
+  if (ids.length === 0 && !filtered && !noBody && !gates) {
     const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
     out({ ok: true, command: "queue", items });
     return;
@@ -1257,6 +1313,32 @@ async function cmdQueue(args = []) {
   // printed. `rows`/`counts`/`attention` above are still the whole store's.
   const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
   const items = filterQueueItems(all, { statuses, to });
+  if (gates) {
+    // THE BOUNDED CENSUS (#5770). Bodies are gone before projection, so this view cannot become the 25 MB
+    // dump; the count is capped and the cap is REPORTED, so a caller who sees 200 rows knows 438 matched.
+    const view = items.map(gateView);
+    const gateless = view.filter((v) => v.gate === "none");
+    out({
+      ok: true,
+      command: "queue",
+      view: "gates",
+      bounded: { limit, cap: GATE_VIEW_CAP, matched: items.length, shown: Math.min(items.length, limit), truncated: items.length > limit },
+      filter: { statuses, ...(to.length ? { to } : {}) },
+      rows: census.rows,
+      counts: census.counts,
+      // The number the census was asked for: held rows with NOTHING recorded about why they are parked.
+      gatelessHeld: view.filter((v) => v.status === "held" && v.gate === "none").length,
+      items: view.slice(0, limit),
+      ...(gateless.length ? { gatelessIds: gateless.map((v) => v.id) } : {}),
+      narrowed: "payload",
+    });
+    if (items.length > limit) {
+      process.stderr.write(
+        `queue: --with-gates is capped at ${GATE_VIEW_CAP} rows; ${items.length} matched, ${limit} shown. Raise it with --limit <= ${GATE_VIEW_CAP} or filter with --to <seat>.\n`,
+      );
+    }
+    return;
+  }
   out({ ...doc, items: noBody ? items.map(stripBody) : items });
 }
 
@@ -3261,6 +3343,7 @@ usages:
   node cli.mjs queue --id <id> [--id <id>…]   ONE (or a few) queue rows, body included, nothing else printed
   node cli.mjs queue --status <state> [--to <seat>…]  filter the printed rows; the counts/attention stay the whole store's (#5016)
   node cli.mjs queue --no-body               VIEWER form: bodies omitted, loudly headed, notices still derived over full rows (#5016)
+  node cli.mjs queue --held --with-gates     bounded park census (#5770): per row id/from/to/status/stage/blockedBy/reason/resolver/reviewBy, NO bodies, capped at 200 rows, and it reports how many held rows have no recorded gate
   node cli.mjs show <id>       the same row-scoped read, as a verb
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing

@@ -1,4 +1,4 @@
-﻿// verify-1924-audit-edge.mjs (v2) - auditor probes for impl-item-1881 @e836366 (#1924).
+// verify-1924-audit-edge.mjs (v2) - auditor probes for impl-item-1881 @e836366 (#1924).
 // Pins the artifact via ./verify-e836366. Documents boundaries; not the artifact rs own suite.
 // Run: node verify-1924-audit-edge.mjs (exit 0 = every probe behaved as documented)
 import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
