@@ -133,7 +133,7 @@ closure) — the delegate claims nothing.
 has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the two
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` **`ea12fe04`**, suite **278/278**, tree clean, nothing forced.
+**State:** refs **12**, worktrees **9**, `main` **`58ff9746`**, suite **278/278**, tree clean, nothing forced.
 Nothing on the git side is pending. The remaining 12 refs: 7 seat-root branches, `main`, `seatroot/linux`,
 `verify-5180` (ledger: NOTHING-TO-LAND), `wip/seat-prompt-files` (SUPERSEDED-BY-EVENTS, author re-cut),
 `item-5301` (the unlandable reap verb).
