@@ -31,11 +31,13 @@ const block = /const PROTOCOL = \[([\s\S]*?)\]\.join\(/.exec(source);
 assert.ok(block, "buildSeatPrompt must still define a PROTOCOL primer");
 const primer = block[1];
 
-// It must actually reach the prompt, or documenting tools changes nothing.
+// It must actually reach the prompt, or documenting tools changes nothing. #5739 added the generated
+// shell line to the join, so the pin now covers the whole composition, not just the primer: the seat's
+// instructions are persona + the host's registered shell line + the protocol primer.
 assert.match(
 	source,
-	/\[compilePersona\(seat\), PROTOCOL\]/,
-	"the primer must be joined into the seat's instructions",
+	/\[compilePersona\(seat\), shellToolLine\(\), PROTOCOL\]/,
+	"the primer (and the generated shell line, #5739) must be joined into the seat's instructions",
 );
 
 const registered = (Router.tools ?? []).map((tool) => tool.name);

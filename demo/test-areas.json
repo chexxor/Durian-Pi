@@ -222,6 +222,7 @@
       "demo/sanitize-terminal-control.test.mjs",
       "demo/seat-git-env.test.mjs",
       "demo/seat-instruction-encoding.test.mjs",
+      "demo/seat-shell-wording.test.mjs",
       "demo/seatguard.test.mjs",
       "demo/seatroot-name.test.mjs",
       "demo/seattools.test.mjs",
