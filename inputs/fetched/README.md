@@ -27,8 +27,13 @@ hid: a page sitting on disk but absent from the manifest is **lost** (`git check
 `ls inputs/fetched/*.html` matched nothing. Never cite a page path as if a reader could open it from a checkout: cite the
 **URL**, and the manifest row that pins what the fetched copy was.
 
+
 **Naming.** One file per fetched page: `<host>_<path-with-underscores>.html` (or `.md`), e.g.
 `code.claude.com_docs_en_skills.html`. The report's citations point at the **URL**, not the file; the manifest maps the two.
+**Save the copy as `.html`**: the ignore rule above covers `*.html` only, so a page saved as `.md` is neither ignored nor
+tracked and `scripts/land.mjs` counts an untracked path as a **dirty tree** and refuses to land (measured: `git
+check-ignore -v inputs/fetched/probe-page.html` exits 0, `…probe-page.md` exits 1 — if that happens, see
+`docs/runbooks/land.md`).
 
 **Manifest: `inputs/fetched/MANIFEST.md`** — one row per page, produced by the fetch, never hand-typed:
 

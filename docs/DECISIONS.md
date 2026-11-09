@@ -10616,6 +10616,158 @@ it asserts the classifier's current behaviour, so it certifies the hole; it must
 red until 263/266 land.
 
 
+## D243 — a roadmap row is bounded by its acceptance check, not by its design note (2026-11-06; architect acting, on lead's ruling in queue #5208)
+
+**Status.** Accepted and in force for every new row and every proposed fold. Docs-only; no code touched.
+
+**Context.** I deferred #5048 to settle whether a design intent is one roadmap row or two. The question recurs every session and each recurrence costs a lead round-trip; meanwhile the answer that is *not* taken is cheap and destructive — rows get merged because the roadmap reads shorter. Detail and worked examples: `docs/reviews/architecture-row-shape-fold-rule-2026-11-06.md`.
+
+**Decision.** The unit of a roadmap row is **one independently-red acceptance check**, not one design note and not one concern-as-prose.
+- FOLD only when all three hold: one acceptance command goes red for either half; they cannot land independently (same branch, same commit); split, one half would be true but unactionable.
+- STAND BESIDE when any one holds: each half has its own command that can go red independently; different seats or different times can claim them; one half is naming/observability and the other is behavior.
+- Folding to shorten `docs/ROADMAP.md` is refused.
+- Falsifiable probe (measured, exit 0, main @ `46c28b73`): count each row's own `*Acceptance:*` clause — `awk '/^[0-9]+\. /{if(n!="")printf "row %s own-Acceptance=%d\n", n, c; n=$1; c=0} /\*Acceptance:\*/{c++} END{if(n!="")printf "row %s own-Acceptance=%d\n", n, c}' docs/ROADMAP.md` — ROADMAP 92/93/94/95 each carry exactly 1, naming four different assertions, so none may be folded into another. A row with 0 is a fold candidate or an untestable row; either way it is the row to fix.
+- Applied: #2402 folds into **92** (`docs/ROADMAP.md:1806-1821`) and #2403 into **94** (`docs/ROADMAP.md:1833-1840`), because both halves already live on the durable surface — D107 at `docs/DECISIONS.md:2880`, its cap-at-2-then-re-anchor parameter with the 94 pointer at `docs/DECISIONS.md:2934`, the ordering at `docs/DECISIONS.md:2936`. #2619 stands beside, and the capacity fold is not a candidate for it: its citation of a cancelled item is provenance, not a gate (`docs/reviews/architecture-queue-lifecycle-redesign-review.md:395-397`). #94 stands beside the send-time bounding work, and the vocabulary row #5206 stands beside its carrier #4973.
+
+**Options considered.** (a) *Group rows by concern* — fewer rows, one design note per theme; rejected because a green run then cannot say which half regressed, and the half that regressed is exactly the one that was merged in. (b) *One row per sentence* — maximum signal; rejected because it splits a single acceptance check across rows that must land in the same commit, so a seat can close one half and call the pair done. (c) *Keep asking lead per case* — rejected as the status quo ante: it spends a ruling per session and remembers nothing. (d) *Chosen*: the acceptance check bounds the row; the design note may span many rows and cross-links them instead of merging them.
+
+**Consequences.** Every row must keep its own `*Acceptance:*` and `*Owner:*` line, or the probe flags it; cross-references ("vocabulary row names its carrier row") become the way pairs are shown, so the roadmap grows in cross-links rather than in merged rows — accepted, since length is not the property being protected. The one part the probe cannot decide, two clauses naming the same assertion in different words, stays a human call and is the only case that still escalates to lead. Failure modes with recovery paths are tabled in the review: silent half-regression (unfold on the count-0 row), cascade (the uncovered half is visible at claim time via its `*Acceptance:*`), loop (this entry is the standing rule), scope drift (folding-for-length refused, count is the tell).
+
+## D244 — a seat's attention state is a named, owned state; idle (S2/S5/S6) may never reach the reset actuator, and a `pi.reset` record must carry its cause (2026-11-06; architect acting, queue #5211 / ROADMAP 313)
+
+**Status.** Design accepted and in force as the contract for ROADMAP 314/316/317. Docs-only: **this entry changes no number and no knob** — it does not raise `DURIG_MAX_CONCURRENT_SEATS`, touch the verifier slot, or set a backoff value, per the operator's ordering ruling (D at `docs/DECISIONS.md:9489`: **backoff before capacity**, because every capacity knob multiplies the measured reset storm). Full table and failure modes: `docs/reviews/architecture-idle-attention-2026-11-06.md`.
+
+**Context.** One bounded pass (`docs/ROADMAP.md:6006-6031`, `docs/SELFDEV.md:2234-2241`) recorded **`pi.reset 1,406`** against `pi.assistant 331` — the rig reset seats ~4x more often than it let them speak — with `escalated=1394`, `scribe:degeneration 592 / devtools 481 / pm 458`, ~**$0.17/h** of idle spend, and **31 resets to `lead`**, which erased an operator ruling from the only seat able to act on it. The cause is architectural, not a bad threshold: the rig has sensors for many conditions and **exactly two actuators** (reset, defer-to-human), and `planResets` (`src/supervisor.mjs:153-168`) fires purely on `assessment.degenerate`, so it cannot distinguish a quiet seat from a wedged one. `src/broker.mjs:1824-1836` then clears the seat's cooldown and marks the scheduler dirty, which is correct recovery for a wedged turn and an **accelerant** for idleness.
+
+**Decision.** Eleven named states (S1 working … S11 paused), each with the `path:line` that owns its entry transition, what the rig does, who is woken, what is counted, and its wall-clock and counted-context cost — the table is in the review note and is the deliverable ROADMAP 313 asked for. One invariant, stated with an owner and a probe:
+> **INV-1.** A `pi.reset` entry may exist only when a named per-run cause from S8 (wedged) or S9 (degenerate) is attached to it. An idle seat (S2 nothing-claimable, S5 parked, S6 gated) produces **zero** reset records.
+Three defects block INV-1 today, each with an exact fix: **(1)** all 1,406 reset records carry **blank** text (`docs/SELFDEV.md:2241`) while the code does build a cause-named handoff (`src/supervisor.mjs:181-224`, written via `conv.reset(resetHandoff, …)` at `src/reset.mjs:70`) — so **stamp the cause on the reset record, not only in handoff prose**; **(2)** `assessRun` computes `justReset` (`src/degeneration.mjs:131-135`, returned `:231`) and **nothing consumes it** (probe: `grep -rn justReset src/ tools/ --include=*.mjs | grep -v '^src/degeneration.mjs'` → **0 lines**, measured), so the #1704 fix exists as a comment and a field but not as an act — make it load-bearing or delete it; **(3)** the live-generation-lease refusal is **conditional on a finite cap** (`src/reset.mjs:27-30`, consulted at `:54-55`; `maxSeatsFromEnv` → `Infinity` when `DURIG_MAX_CONCURRENT_SEATS` is unset, `:20-25`, measured `undefined`) so with the cap unset a reset can be drawn **under a running seat**, the one case its own header (`src/reset.mjs:11-13`) forbids — make the lease guard unconditional, since the cap sizes the pool and must not size the safety check.
+Chosen shape: **wake-on-delta, not wake-on-pass** (option A), because the discriminator already exists (`SKIP reason=no-work`, `src/driver.mjs:111`) and the scheduler already has cooldowns and `markDirty` — it is a policy change, not a new sensor.
+
+**Options considered.** **A. idle as a first-class scheduler state, wake on queue change** — chosen; reversible, single seam, makes 314/316/317 each "act on state X". **B. backoff timer only** — cheapest and reversible, but still pays a full prompt per wake, still leaves the reset path reachable from idleness, and re-tunes itself whenever capacity changes, which is the coupling the operator's ordering exists to break; acceptable only as an interim, and never with the guard able to fire on an empty queue. **C. raise the turn bound / relax the guard** — rejected: treats a symptom of the wrong edge, weakens the real S8/S9 protection, and cannot fix a blank reason record.
+
+**Consequences.** (a) Idleness gets a cost line, not an actuator: S2/S5/S6 currently bill identically (one wake + one full prompt each), and 396 durable records in one 30-min pass carry the driver's no-work text (`docs/ROADMAP.md:6010`) — the rig paid ~400 times to be told there was nothing to do. (b) Every reset becomes attributable, so a pass report must print `resets=` beside `escalated=`; a blank reset record is by definition an attention bug, not capacity. (c) The recovery verbs split by state: reset for S8/S9 only, defer-to-human for S10, nothing at all for S2/S5/S6, restart-the-harness for S4. (d) A missed delta-wake is a new failure mode with a named backstop — the `admitted_not_started` notice (`src/attention.mjs:15-18`, `STRANDED_ADMITTED_MS = 30_000` at `:38`) is what makes S4 visible if the wake does not arrive. (e) A ruling must never live only in a seat's context: rulings ride as queue rows, because a legitimate S8 reset discards context and D-entries and rows survive. (f) The probes are **specified, not run**: no demo suite ran in this worktree (`vendor/pi-main` is unbuilt there, so a suite verdict would not be comparable with the seat root's). Acceptance stays ROADMAP 313's measured one — re-run the bounded pass on `queued 0`, require `escalations ≤ seat count` (not 1,394) and **zero `pi.reset` records**.
+
+## D245 — the store close is the LAST act of the broker, not an independent one (INV-CLOSE); a closed store is a liveness failure, not a data-plane count (2026-11-06; architect, queue #5231 + addendum #5260; ROADMAP 303, sibling 327/329)
+
+**Status.** Design accepted; **docs-only** — no code changed, and the four implementation seams are routed to `impl` via `pm`, not taken here. ADR number is **provisional**: re-mint at land time in issue order (the mint-at-land rule), never hardcode it in a branch. Full failure enumeration and probes: `docs/reviews/architecture-broker-linger-lifecycle-ordering-2026-11-06.md`.
+
+**Context.** ROADMAP 303 is **5/5 reproduced** and the trigger is not the deadline and not the provider: pid 765129 took `STOP-REQUESTED source=file` → `EXIT pid=765129 reason=stop passes=15` at 09:35 and was still resident 13 minutes later (`docs/ROADMAP.md:6078`, `:6102`). The cost side is what raises severity: `selfdev.sqlite.broker.inbox.error/` holds **4 destroyed CLI reads** (`read health`, `read queue`), each `.reason` = `apply failed: SqliteStorage is closed` — a lingering broker holding a **closed** store does not merely delay the operator's reads, it deletes them. Reading the exit path named the fault: the broker enforces "never close the harness over a live run" (`src/broker.mjs:1978-1996`, F11) and has **no inverse guarantee** — store-close and loop-stop are two unlinked acts, so both orders are reachable and each degrades a different surface. Three ordered defects sit under it: **F1** `reopen()` closes both handles before it can guarantee a re-open (`cli.mjs:2055-2071`), so a failed open leaves the loop dereferencing a closed store; **F2** that failure is **invisible to every terminal counter** — `reopenCap` and `wakeRetryBudget` are entered only by a *thrown pass* (`src/broker.mjs:1871-1878`, `:1934`), while `drainIntentInbox` turns each apply failure into a dead-letter (`:782`) and the idle read drain turns it into a diagnostic and `continue`s (`:1713-1719`); **F3** the `.stop` **file** arms no force timer (`forceTimer` exists only inside `onSignal`, `cli.mjs:2094-2117`, reached from SIGINT/SIGTERM) and its drain is unbounded unless `stoppedBy === "deadline" || graceExpired()` (`src/broker.mjs:1992-1996`), while `serve --stop` explicitly refuses to escalate (`cli.mjs:1975-1988`) — so the operator's own verb cannot stop it, which is exactly the measured `serve --stop` → `kill` sequence. Adjacent drift: `cli.mjs:1948-1949` promises a 60 s wait; the code waits `resolveStopGraceMs() + 5_000` ≈ **10 s** (`:1956`, `STOP_GRACE_DEFAULT_MS = 5_000` at `:2006`).
+
+**Decision.** **1. INV-CLOSE (the pairing that was missing).** *The store close is the last act of the process: after (i) the loop has stopped, (ii) every spooled intent is applied, dead-lettered with a reason, or re-queued, and (iii) no dereferenceable handle points at a closed store. Nothing that can execute an intent runs after close; if the close itself hangs, the process still exits within the force bound.* **2. On the #5260 ruling question — keep the store open and refuse to linger; do NOT fail closed on reads.** At the deadline the broker stops *accepting* intents with a named refusal (`broker-stopping` + pid + remaining grace), **fails-or-requeues** the pending inbox (this is ROADMAP 329's "an op enqueued during shutdown is stranded forever, silently" — same fault from the queue side, so it is folded into this row, not a new one), and keeps answering reads until the instant of close. **The control/write surface degrades on purpose; the read surface never does**, because 303's own measured lesson is that the store is the truth and the broker is a router that can go dark while alive (direct read-only open: **111 ms**; every broker-routed read: 120 s timeout). **3. A store-state failure is a LIVENESS failure.** A dead-letter whose reason is a store-state class (`closed`, `SessionFailed`) counts in `unactionedFailure` and can end the run terminally (`stoppedBy="store-unrecoverable"`) — never again an unbounded streak of error files with a fresh heartbeat. **4. Every stop path gets a force bound**, the `.stop` file included, and a forced exit reports the real completed-pass count and stop source (row 328's `passes=-` is the same defect seen in the record). **5. Liveness must be pid-attributed.** `heartbeatAt` may **accept** "some broker is alive" and may never **DECIDE** "this pid is working" (#3575 applied to this instrument): `brokerHealth`'s liveness leg (`src/broker.mjs:2131-2141`) reports the pid it read, and the 303/314 verdict requires a pid match — in the 09:35–09:48 window a second broker had already started, so the "fresh heartbeat" attributed to pid 765129 is ambiguous evidence. **6. 303 and 327 stay separate rows with separate conditions**: 303 is **refusal-to-exit**, 327 is **marker survival**. Clearing the stop file on exit does nothing for a broker that never reaches its exit path; bounding the drain does nothing for a request written into a run that has not started. Anyone tempted to fix both with one condition re-breaks the other.
+
+**Options considered.** **A. Pair close with exit + bound every stop path + terminal counters** — chosen: reversible, three small seams, keeps the read surface honest; cost is a longer, explicitly-reported shutdown. **B. Fail closed on reads past the deadline** — rejected as primary: it converts a diagnosable dark-read window into an intentional one, indistinguishable from a broken store, and destroys facts rather than delaying them; admissible only as an add-on after A. **C. An outside watchdog kills the wedged pid** — cheapest, but the wrong owner: it forces the `passes=-` record, is the path that leaves a stop request behind for the next run (327), and destroys the in-flight evidence; accepted only as the last layer with a bounded grace.
+
+**Consequences.** (a) "Linger" splits into two states that must not be merged: **L-A** resting on closed handles (destroys intents — the 4 dead-letters prove the loop was running) and **L-B** resident after `EXIT` with the store already closed (dark reads only; a ref'd keepalive at `src/scheduler.mjs:198-207` is unclosed, and `src/` holds only two `unref()` sites, `broker.mjs:1647`, `genlock.mjs:225`); they are told apart by `heartbeatAt` freshness **plus a pid match**. (b) A stopping broker becomes *legibly* unavailable — a named refusal instead of a timeout — so `status`/`health`/`queue` stay readable during shutdown and the wrong remedy (a write against a healthy store) stops being tempting. (c) Escalation becomes safe to add: with INV-CLOSE honoured, a forced exit no longer strands in-flight intents, which is what makes 329's fail-or-requeue the precondition for 303's bound rather than an unrelated row. (d) Every probe in the review is **RED-first** and two are already pinned by a green baseline: `node demo/broker-cooperative-stop.test.mjs` → **exit 0** in this worktree, which proves the gap is not stop *semantics* but the missing force bound — the fix must extend that file, not add a new one. (e) No new roadmap row is opened by this review; the four seams (F1 reopen atomicity, F2 counters, F3 force bound + `passes=` reporting, 329 requeue) and the pid-attribution leg are routed to `impl`/314 via `pm`.
+
+---
+
+## D246 — a spooled request has a LIFECYCLE: exit must fail-over the inbox residue, and a read is routed on PROGRESS, not liveness (#5275 / ROADMAP 329)
+
+**Status:** Accepted (design). Build not yet landed — implementation routed to `impl` via `pm`; the `check`-rule half
+goes to `devtools`. D-number minted at land time in issue order (lead #3075/#3186), never hardcoded here.
+
+**Context.** The intent spool (`<db>.broker.inbox`) has no lifecycle: `drainIntentInbox` runs only at the start of a
+pass (`src/broker.mjs:1243-1249`) or in the idle read-only branch (`1712-1727`), and `runWakeLoop`'s exit path
+(`1984-2000`) never visits the inbox. Three shapes were observed: (a) a drain running against a closed
+`SqliteStorage` → dead-letter `apply failed: SqliteStorage is closed`; (b) a drain not running → the read hangs with
+no named cause (`watch --once --human`, 0 bytes on both streams, 90+ s); (c) an op enqueued during shutdown →
+**stranded forever, silently** — no answer, no `.error.json`, and the next run's answer is written to a result slot
+the caller already deleted (`src/readclient.mjs:49`). Measured at clock-in
+(`node tools/stranded-inbox.mjs <repo>/selfdev.sqlite`, 2026-11-07T03:52Z): `inbox=7 shutdownStranded=0
+drainStranded=7 hbAgeS=6 progressAgeS=2223 runSinceExit=yes` — five `read` and **two `message`** intents pending
+against a broker whose heartbeat was 6 s old and whose last completed pass was 37 min old. So the limbo state is
+reachable **without any shutdown**, and the routing boolean that sends a read there is `readData` →
+`brokerAliveFor` → `brokerAlive` (`src/readclient.mjs:109-110`, `src/broker.mjs:2097-2106`), which is pid + heartbeat
+only — the liveness-vs-progress conflation #5231/#5260 document, while `brokerHealth` (`src/broker.mjs:2138-2160`)
+already computes the progress leg.
+
+**Decision.**
+1. **Exit is a transaction over the spool.** Before `clearBrokerState` and before the harness closes: one final
+   `drainIntentInbox` bounded by the remaining grace (the #2420 `settleWithin` shape), then `deadLetterIntent`
+   (`src/broker.mjs:239-259`) every still-pending entry with `broker exited (reason=<stoppedBy>) before this intent
+   was drained`. That rides the channel `readIntentError`/`awaitIntentResult` already poll
+   (`286-328`); no new channel.
+2. **FAIL-with-named-cause is the default; requeue is the exception.** A replayed `read` answers about a session that
+   no longer exists and lands in a slot its caller deleted; the duplicate-delivery family (#3087, #3877,
+   impl-item-3192 / entry #3460) is the cost of re-enqueueing anything the caller may have retried. Requeue is
+   reserved for ops carrying an epoch tag the next run can dedupe.
+3. **One epoch primitive: `runToken`.** `writeBrokerState` already mints it per broker run
+   (`src/broker.mjs:2217-2218`). 329(c) (entry survival) and 327 (#5258, marker survival) share it; do not introduce
+   two ad-hoc "is this from the old run" conditions.
+4. **Reads are routed on `brokerHealth(state).state`, not `brokerAlive`.** Three-way table: `up` → spool;
+   `degraded` (pid alive, heartbeat fresh, no pass within the progress bound) → **refuse with
+   `broker-degraded-no-progress`**, neither spool nor open the store; `down` (state gone, or
+   `brokerProcessAlive` says the pid is gone, `2194-2204`) → `readLocal`, the caller is the sole owner. A client-side
+   fallback to a direct store open while a writer lives stays **prohibited** (`src/readclient.mjs:3-11, 61-72`).
+5. **The read's bound must be below the caller's patience**, derived from the progress bound rather than the
+   hand-picked 120 s (`src/readclient.mjs:34`); a cause that arrives after the caller left is functionally silence.
+6. **The population becomes a measure.** `tools/stranded-inbox.mjs` exits non-zero iff entries outlived the run that
+   received them; a stale `broker.json` naming a dead pid becomes a check finding
+   `broker-state-pid-not-running` (`status`/`check`), because that stale state is itself a *cause* of shape (b).
+
+**Options considered.** (A) above — chosen: small, reversible, uses only existing channels, and makes the residue
+countable. (B) *requeue everything for the next epoch* — cheapest at exit, rejected: it manufactures the stale-read and
+duplicate-delivery classes it is meant to avoid, and makes the next broker's first pass semantically load-bearing on
+work it was never asked to do. (C) *move the spool lifecycle into the store* (per-entry status/claim/lease, `dark`
+in-database) — the right destination if (c) recurs after (A), rejected now: it needs the store open at the moment the
+store is closing, and it widens the single-writer boundary far beyond the defect.
+
+**Consequences.** Operator reads become **unavailable-and-loud** during a wedge instead of slow-and-silent; that is
+the accepted price, since a refused read has a recovery path and a never-answering read does not. `brokerAlive` stays
+legitimate for *identity* and for pid-death questions — but any consumer asking "can this broker answer me?" must call
+`brokerHealth`, so call-sites that today use `brokerAlive` as a routing gate are on notice. `degraded` is now a state
+with teeth, so a rig that shows it must be acted on (restart or repair), and the progress bound
+(`DEFAULT_PASS_TIMEOUT_MS = 300_000` + margin, `src/broker.mjs:2126-2155`) becomes a user-visible promise about read
+latency. Acceptance is by probe, not by ordering argument: a demo that enqueues **mid-shutdown**, the mid-pass
+closed-storage specimen, the `watch --once` non-zero-with-cause assertion, and
+`tools/stranded-inbox.mjs` reporting zero shutdown-stranded entries on a live rig after a restart.
+
+## D234 — the operator answers all four open decisions of the record cut: the push grant is **granted again and consumed again**, the maintenance-window deferral batch is **one class of residue settled by one ruling** (not 365 human answers), the seat cap becomes **3 measured slots — but only after #5488 lands**, and **#5398's acceptance is BOTH bars** (2026-11-08T00:3xZ, delegate recording; host signature measured in the item worktree with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0`, exit 0 — identical to the signature D233 recorded, so runs from both cuts are attributable to the same machine without ever naming it (D205, ROADMAP 281))
+
+**Source for all five points: the operator's rulings of `2026-11-08T00:3xZ`, relayed as the body of pm's item #5615** (point 2 is the ask lead registered as **#5595**). They are recorded, not pasted: the deferred surface is **365 rows** and the digest that has to fit the operator's screen is **nine**, so `docs/NEXT.md` carries pointer lines only (`scripts/clockin.mjs:203-207`, D233).
+
+**(1) PUSH GRANT — answered, and consumed.** `git push origin main` carried **`7a1b80e2..c047b767`**; the ref range is what makes a grant auditable after the fact. Re-checked in this worktree, all exit 0 unless noted: `git rev-parse --short origin/main` and `git rev-parse --short main` → both **`c047b767`**; `git diff --name-only 7a1b80e2..c047b767` → **exactly 5 paths, all docs** — `docs/DECISIONS.md`, `docs/NEXT.md`, `docs/NEXT-ARCHIVE.md`, `docs/SELFDEV.md`, `docs/runbooks/session-start-cost.md`; `git diff --shortstat 7a1b80e2..c047b767` → **412 insertions, 89 deletions** — so the grant moved documentation only, no source file crossed it; the credential screen `git diff 7a1b80e2..c047b767 | grep -cE "sk-[A-Za-z0-9]{20}|DURIG_[A-Z_]*API_KEY[\"= :]+[A-Za-z0-9]{8}"` → **0** (grep exits 1 when it matches nothing — here that is the pass condition, not a failure). The grant is **spent**: this D234 commit is unpushed and needs a fresh one, and D233 (4) still stands — `origin` receives `main` only, durability comes from landing.
+
+**(2) STANDING RULING on the parked rows — options (ii) + (iii) approved, stated ONCE as a class rule so no future window re-litigates 365 rows.**
+
+- **(ii) the sweep residue is answered by the ruling itself.** Every deferral written `by: "supervisor"` inside the sweeps (transition stamps **`2026-11-07T23:17:40.785Z–23:18:05.788Z`**, plus the second window) whose cause is `last_run_failed: stranded: Connection error.` + `repeated_failure: 5 consecutive failed runs; the supervisor escalates it to the human` was caused by **planned model-server maintenance**, not by an ambiguous ask. Those rows therefore need **no human answer**: each **owning seat** clears its own with `resume_work(<id>)` (pitfall 106 — the delegate still resumes nothing; `resume`/`defer`/`cancel` stay seat acts). The rule is about a **cause class**, so the next outage does not re-open a 365-row question.
+- **(iii) the operator digest carries ONLY the genuine operator questions — one line each, NO answers
+  proposed. INTAKE list at the 00:3xZ cut — the nine:** **#4976** `pm`, **#4354** `impl`, **#3350** `qa`,
+  **#4881** `lead`, **#4835** `scribe`, **#4817** `devtools`, **#4954** `auditor`, **#4827** `security`,
+  **#4814** `qa2`. **STANDING surface as of the SAME DAY's later notice (2026-11-08T03:3xZ): FOUR** —
+  **#4976** `pm`, **#4881** `lead`, **#4817** `devtools`, **#4827** `security`. The other five are not
+  open asks, each closed by the notice with its reason: **#4814** `done`; **#4954** `cancelled`; and
+  **#4354 / #4835 / #3350** are **no longer operator questions at all** — they became ordinary seat work
+  because their gates measured gone (**#4352** `done`, **#4849** `done`, **#3349** `cancelled`), and the
+  carrier rows that EXECUTE that reclassification are **#5687** (`impl`, incl. #4354), **#5689** (`qa`,
+  incl. #3350), **#5691** (`scribe`, for #4835). **#4817's operator half is a measured no-op**: 81 root
+  `item-*` directories, 81 registered worktrees, **0 strays** — measured in that 03:3xZ notice, not
+  re-measured by this recording. And explicitly: **nothing in this ruling answers the four** — all four
+  remain open, and D234 must not be read as clearing them. **Why the enumeration is not housekeeping:**
+  publishing nine when four are open re-asks the operator about three closed or reclassified items — the
+  same double-ask recorded for the cap row in **#5622** ("publishing it as pending asks the same human the
+  same question twice"). The carrier for publishing them is **#5598** (`scribe`, gated on **#5594**), and
+  its body must be re-pointed at the FOUR before anything is printed.
+- **Not re-checkable in this session, and labelled as such:** the ids above — the nine intake ids, the
+  four standing ones, and every closure named in (iii) — and the sweep stamps live in the store, and this
+  session had **no broker** (`pgrep -af broker-serve` → no process; `DURIG_DB=./selfdev.sqlite node cli.mjs status` → **exit 124**, killed at a 90 s timeout) and **no `sqlite3` CLI** (`which sqlite3` → not found). The store-side figures are therefore recorded as **measured by pm/N8 in their own session**, not re-verified here. The gap itself is worth a row: the store is **560,422,912 B** and the only reader, `cli.mjs`, asks a broker that may not be up. The 03:3xZ re-count in (iii) is sourced to that operator notice, not to
+  a store read from this recording session; the carrier rows #5687/#5689/#5691 are reported by pm and were
+  likewise not observed from this session's queue.
+
+**(3) CONCURRENCY — the D233 gate holds; both halves approved.**
+
+- **(i) approved: land #5488 FIRST, then raise the cap to the 3 measured slots.** `GET /props` re-measured at `00:26Z` on the seat box: **`total_slots: 3`**, **`n_ctx 204800`**, model **`qwen3.8-flash-next-iq3_s`**. The cap value **must NOT be reopened before #5488 lands** — D233's gate sentence, now ratified by the operator; until `DURIG_MAX_CONCURRENT_SEATS` reaches `local/*`, any cap change is inert (`running` reached 10 and 9 with the cap at 1).
+- **(ii) approved as a row: mint the third registered local prefix** (`DURIG_LOCAL2_*` → `local2/…_xxxs`). Still un-minted at cut, and the code says so: `grep -rn "DURIG_LOCAL2" --include=*.mjs .` over the repo hits **nothing**, and `src/providers/local.mjs:41-44` still exports exactly two prefixes and two ids (`local`, `verifier`). Three envelopes were spooled at `00:5xZ` and deliver on the next `--start` (the D216 route: registration, not a directive).
+
+**(4) #5398 ACCEPTANCE = BOTH bars, stated on the row — neither bar alone closes it.**
+
+- **(a)** `node scripts/clockin.mjs | wc -c` **≤ 20,000 B on the LIVE store** (`DIGEST_BUDGET_BYTES`, `scripts/clockin.mjs:37`). Measured **44,102 B at 00:26Z**, grown from the **40,404 B** D233 and `docs/NEXT.md` recorded — the size tracks the deferral backlog, which is the failure mode (a digest whose length is a function of the backlog it exists to summarise has no ceiling).
+- **(b)** a demo that goes **RED** on a fixture holding **≥ 150 `deferredTo:"human"` rows**, because `demo/clockin-digest.test.mjs` prints `PASS` on a **7-row fixture** while the live digest is 44 KB — the vacuous-fixture rule (pitfall 88) applied to this gate.
+- **Bar (a) was NOT re-measured by the delegate and is BLOCKED, not unmet:** `node scripts/clockin.mjs` fails without a broker (`Error: Command failed: … cli.mjs status`, inner payload `"error": "read health: timed out awaiting the broker's result"`, exit 1). Re-run the one command once the broker is back; whoever closes #5398 owes that number, and its completion must carry it as `evidence` with `artifact` naming the tree (`LANDED at <sha>`, never bare `done` — D233 (4)).
+
+**(5) HOST SIGNATURE for the window, so runs are attributable.** `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**; **Fedora Linux 45 (Forty Five)**; kernel **`7.2.15-300.fc45.x86_64`**; **node v24.22.1**; **git 2.56.0**. Re-run in this worktree at record time, **exit 0**, byte-identical to D233's — the machine-scoped half of "which run was this".
+
 ## D247 — 2026-11-08T08:2xZ: a parked-only seat is woken once per change of its parked set, not once per cooldown
 
 **Decision (proposed, #5740; number minted at land time per #3075).** The wake contract for a seat whose only
