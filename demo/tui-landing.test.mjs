@@ -142,13 +142,16 @@ try {
 	// Row 1's brief grows (the flexible cell takes the spare columns) and row 3's em-dash row is
 	// padded to 80. Nothing else about the rows changed - same glyphs, same state words, same
 	// queue counts, same #id.
+	// #4354 GOLDEN UPDATE (intended, named): the name rung went 9 -> 10, so every row now carries one
+	// cell between the seat name and the queue column, and row 1's brief loses exactly one character
+	// to that cell (`…stack ont…` -> `…stack on…`). The fixed prefix is 34, not 33.
 	check(
 		"80x24 golden row 1",
-		golden80[0] === "▸ ● working    impl     2q       #74 merge the carry stack ont… tool complete_w…",
+		golden80[0] === "▸ ● working    impl      2q       #74 merge the carry stack on… tool complete_w…",
 		JSON.stringify(golden80[0]),
 	);
-	check("80x24 golden row 2 (parked: the QUESTION brief)", golden80[1] === "  ◌ parked     qa       0q · 1p  #92 supervisor escalation: wh…                 ", JSON.stringify(golden80[1]));
-	check("80x24 golden row 3 (idle, no item)", golden80[2] === "  ○ idle       advocate 0q       —                                              ", JSON.stringify(golden80[2]));
+	check("80x24 golden row 2 (parked: the QUESTION brief)", golden80[1] === "  ◌ parked     qa        0q · 1p  #92 supervisor escalation: w…                 ", JSON.stringify(golden80[1]));
+	check("80x24 golden row 3 (idle, no item)", golden80[2] === "  ○ idle       advocate  0q       —                                             ", JSON.stringify(golden80[2]));
 	const golden44 = seatRows({ width: 44, selectedSeat: "impl" });
 	check("44x24 golden renders three rows at the floor", golden44.length === 3, JSON.stringify(golden44));
 	// #3941: the rows now fill the declared 44 columns instead of stopping 4 cells short, so the

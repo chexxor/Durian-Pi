@@ -1,4 +1,3 @@
-```markdown
 # Round 2 — base-agent product topology: idle policy, model-pointer staleness, counterexamples, verifier economics
 
 Fetched 2026-11-06. Builds on Round 1 (`docs/reviews/base-agent-product-topology-research.md`) without restating it; section numbers prefixed "R1" refer to it. Uses the delegate's corrected identifiers (`DURIG_MAX_CONCURRENT_SEATS`, `DURIG_EXTENSIONS`, `src/queue-lifecycle.mjs`, `src/extensions.mjs`, D212, ROADMAP 18/299/300/303) and does not re-cite the three paths Round 1 got wrong.
@@ -138,7 +137,6 @@ Format: one-line problem — evidence class — what the rig must build — owne
 | [^16] | https://docs.devin.ai/onboard-devin/environment | advertised-elsewhere | snippet |
 | [^17] | https://cursor.com/blog/may-2026-bugbot-changes | advertised-elsewhere | snippet |
 | [^12] | https://docs.devin.ai/release-notes/2026 | advertised-elsewhere | snippet |
-```
 
 Three limitations, stated rather than smoothed over: (1) the run stopped on the **5-iteration budget**, not on three consecutive empty attempts per question, so Q13's silence and Q10's "no backoff" are sample-scoped, not proven absences; (2) every Q11 claim about *resume-time* validation is a negative finding — no vendor documents the wake path, so the design in R2-3 is inferred from vendor retirement policy, not copied; (3) `docs/MVP.md`, `docs/COMPETITORS.md`, D212 and the Round 1 study were deliberately not read, so the delegate's diff on that side may find overlap I could not detect from here.
 
