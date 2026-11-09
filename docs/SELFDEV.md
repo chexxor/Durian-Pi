@@ -66,11 +66,19 @@ and `architect` entirely, while claiming "Ten seats" — the docs defect is reco
 ## Running it
 
 The CLI is non-interactive and emits one JSON document per command. Two things must be right: the
-**store** (`DURIAN_PI_DB`) and the **seat root** (where seats may read and write).
+**store** (`DURIG_DB`) and the **seat root** (`DURIG_SEAT_ROOT`, where seats may read and write).
+
+**The pre-rebrand `DURIAN_PI_*` spellings are inert for `cli.mjs`.** `src/config.mjs` (`CONFIG_KEYS`, lines
+112 and 132) lists only `DURIG_*` keys, and `cli.mjs:151` resolves `CFG.DURIG_DB ?? "./rig.sqlite"` — so a copied
+`DURIAN_PI_DB=...` command silently opens the default store instead of the one it names. Discriminating test,
+run in this tree: `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` (exit 1,
+`cause: no_store`), `DURIG_DB=./nope-b.sqlite node cli.mjs status` → `"db": "…/nope-b.sqlite"` (honored).
+The one entry point that still takes the old name is `scripts/clockin.mjs:245`, which tries `DURIAN_PI_DB`
+first, then `DURIG_DB`, default `./selfdev.sqlite`.
 
 ```bash
 cd durian-pi
-export DURIAN_PI_DB=./selfdev.sqlite          # the selfdev store (NOT rig.sqlite)
+export DURIG_DB=./selfdev.sqlite              # the selfdev store (NOT rig.sqlite)
 export DEEPINFRA_API_KEY=...              # real runs need it
 node cli.mjs ps                           # seats present?
 node cli.mjs status                       # attention + non-terminal work
@@ -94,15 +102,15 @@ tree. Isolate first:
 
 ```bash
 node cli.mjs worktree C:/tmp/durian-pi-dev/<item>       # a checkout; its cwd is <item>/durian-pi
-DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
-DURIAN_PI_SEAT_ROOT=<that>/durian-pi DURIAN_PI_DB=./selfdev.sqlite node cli.mjs run --watch
+DURIG_SEAT_ROOT=<that>/durian-pi DURIG_DB=./selfdev.sqlite node cli.mjs up rig.selfdev.json --refresh
+DURIG_SEAT_ROOT=<that>/durian-pi DURIG_DB=./selfdev.sqlite node cli.mjs run --watch
 ```
 
 `up --refresh` re-points each seat's persisted `cwd` **only to whatever the rig file names** — measured 2026-10-28
 (Linux): with `rig.selfdev.json` still carrying `devtools.cwd = C:/Users/Alex/…/item-2801`, `up rig.selfdev.json
 --refresh --dry-run` reported `changes: {}` for all 12 seats, i.e. it re-asserted the dead Windows path. Fix the rig
-file first (ROADMAP 210). The F12 guard fails closed if `DURIAN_PI_SEAT_ROOT`
-disagrees with what a seat already has, so re-point rather than guessing.
+file first (ROADMAP 210). The F12 guard fails closed if `DURIG_SEAT_ROOT`
+(`src/seatguard.mjs:41`, `src/seatroot.mjs:6`) disagrees with what a seat already has, so re-point rather than guessing.
 
 ## Pinned-pi reproduction in worktrees
 
@@ -158,7 +166,7 @@ The `vendor/pi-main/` directory is gitignored; it is fully reproducible from the
 Priority is **not** the top of the 1300-line roadmap. It is:
 
 1. `docs/NEXT.md` — the current pointer, refreshed every session.
-2. `DURIAN_PI_DB=./selfdev.sqlite node cli.mjs queue` — the non-terminal rows
+2. `DURIG_DB=./selfdev.sqlite node cli.mjs queue` — the non-terminal rows
    (`queued`/`claimed`/`deferred`).
 3. `node cli.mjs status` → `attention` — what the substrate already flags
    (`queue-ageing`, `admitted_not_started`, `generation_stale`, `deferred_awaiting_answer`).
@@ -192,7 +200,7 @@ explicitly retired by the operator (2026-10-15). When the operator says a run is
   double-wake (D45). This is why writes go through the broker spool (`intent.mjs`) while the
   broker drives. This is a *store* rule, not a *files* rule: per-task worktrees let
   different seats edit concurrently, and `genlock` already leases N cross-process
-  generation slots (`DURIAN_PI_MAX_CONCURRENT_SEATS`). The sanctioned concurrency is **one
+  generation slots (`DURIG_MAX_CONCURRENT_SEATS`, `src/config.mjs:115`). The sanctioned concurrency is **one
   broker (`serve`) owning the store and driving up to N seats**, each in its own
   worktree; for genuinely independent drivers, use separate databases.
 - **A write-side process killed by the harness tool cap strands the seat.** Recover with
@@ -2780,13 +2788,25 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the channel: all **6 dead letters** in `selfdev.sqlite.broker.inbox.error` are `op:"read"` payloads with reason
     `apply failed: SqliteStorage is closed` — so a dead letter is **not** evidence that an operator intent was refused.
     Read the payload's `op` before opening a delivery-failure row.
-87. **`tools/broker-serve.mjs --status` without `--env-file="$HOME/.config/durig/env"` reports 4 blocking provider
-    findings that are false about this rig.** Un-keyed shell: `BLOCK provider-local-refuses-inference … HTTP 401: missing
-    or wrong API key`, `BLOCK provider-DURIG_LOCAL_-unauthorized`, `BLOCK provider-verifier-no-key`, `BLOCK
-    provider-verifier-refuses-inference` — and the same command with the env file: **`findings (0 blocking, 3 noted)`**,
-    verifier answers, both providers take inference. The keys live in the out-of-tree env file, not in the shell; a
-    "provider is down" verdict from the un-keyed posture is an artifact. Run **both** postures and report the pair, and
-    redact before filing anything: pitfall 79's cleartext `env:` line is still unfixed (#5334/#5365/#5366).
+87. **A provider "is down" verdict can be an un-keyed shell, not a dead provider — and the fix is shell sourcing,
+    not a flag.** `tools/broker-serve.mjs --status` run in a shell that has not loaded
+    `$HOME/.config/durig/env` reported **4 blocking provider findings** that were false about this rig
+    (`BLOCK provider-local-refuses-inference … HTTP 401: missing or wrong API key`,
+    `BLOCK provider-DURIG_LOCAL_-unauthorized`, `BLOCK provider-verifier-no-key`,
+    `BLOCK provider-verifier-refuses-inference`); with the env sourced the same command reported
+    **`findings (0 blocking, 3 noted)`**. Those counts are **that box on that day**, not a law: re-measured
+    2026-11-08 in the `item-5788` worktree against the live store, BOTH postures returned
+    `findings (1 blocking, 3 noted)` (the one block being `broker-up`), exit 0 — the keys were already in the
+    environment, so the pair collapsed. Always report the pair you measured, never one posture.
+    **`--env-file` is NOT a flag this tool has**: `node tools/broker-serve.mjs --status --env-file="$HOME/.config/durig/env"`
+    prints `broker-serve: unknown argument --env-file=…` and the usage block, **exit 2** (re-run 2026-11-08;
+    `grep -rn "env-file|envFile" tools/*.mjs cli.mjs src/*.mjs` → **0 hits**, exit 1). The working posture is the
+    shell: `set -a; . "$HOME/.config/durig/env"; set +a; node tools/broker-serve.mjs --status` (Node's own
+    `node --env-file=…` is a different thing — it is the runtime's flag, not this tool's). And note the
+    direction the check itself names: **the CLI reads `DURIG_*`, not `DURIAN_*`** (`src/config.mjs:538`
+    resolves the store from `DURIG_DB`). Redact before filing anything: pitfall 79's cleartext `env:` line is
+    still unfixed (#5334/#5365/#5366), and `--status` can print credential VALUES (pitfall 120). Cross-ref
+    pitfall 131, which records the same mechanism correction.
 88. **A pass over un-sendable seats still spends the metered family, and `--max-duration` still bounds nothing.** Started
     `--max-duration 240` at 06:44:11Z; the last `PASS` printed at 06:47:58Z (32 passes) and the process was still alive at
     **28 min 07 s** when stopped by hand after `ls -1 selfdev.sqlite.genlock*` came back empty — it then printed
@@ -2853,7 +2873,8 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
    (`tools/channel-preflight.mjs:38-40,55-59`), and `cli.mjs queue` then refuses:
    `unknown config-file key(s): _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json — no code
    reads these`. A pre-flight that exits non-zero gets skipped, which is how the runbook's own channel check stops being
-   run; `tools/broker-serve.mjs --status --env-file=…` answered the same questions in the meantime. Register the fix
+   run; `tools/broker-serve.mjs --status` with the env sourced in the shell (`set -a; . "$HOME/.config/durig/env";
+   set +a`) answered the same questions in the meantime — there is no `--env-file` flag on that tool (pitfall 131). Register the fix
    against the channel rows (`#5236` family) rather than trusting the pre-flight's absence.
 
 ## Operational pitfalls (2026-11-07T18:2xZ, delegate session N6 — the operator's five answers, a 54-minute windowed pass measured end to end, and the one row that gates ROADMAP 331; rows #5447/#5448/#5453/#5488/#5491, D231; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
@@ -2908,8 +2929,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     seconds** (`21:02:41Z`–`21:02:44Z`: impl 5, pm 5, devtools 5, qa 5, lead 4, scribe 5, architect 4, security 1),
     each with `deferredTo:"human"` and the question "…has failed 3 runs in a row and still holds #<id>…". Store-wide
     **206 rows are `deferredTo:"human"`**. So the cost of forgetting `--env-file` is not a failed pass, it is 34 rows of
-    human-attention debt. `tools/broker-serve.mjs --start --env-file`-style starts (or `--env-file` on the CLI) are the
-    only safe form; `broker-serve --status` without the env file ALSO reports the provider BLOCKs falsely (pitfall 87).
+    human-attention debt. The safe form is **sourcing the env in the shell before the start**
+    (`set -a; . "$HOME/.config/durig/env"; set +a`), not a `--env-file` flag — that flag does not exist on
+    `tools/broker-serve.mjs` (pitfall 131); `broker-serve --status` without the env sourced ALSO reports the
+    provider BLOCKs falsely (pitfall 87).
 103. **`--max-duration` does not bound a window's wall clock when generations are in flight.** Started `21:05:17Z`
     with `--max-duration 2100` (35 min); deadline ≈`21:40:21Z`; last real pass `PASS 1482` at `21:37:53Z`; still alive
     at `22:19Z` with 2 `pi.generation` tasks `running`, and it exited only at `22:21:52Z` after the delegate SIGTERMed
@@ -3000,3 +3023,417 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
    prescription: if the only non-doc entry is the ledger, the honest gate is the area plus the doc guards
    (`scripts/test.mjs --area docs`, `demo/next-pointer.test.mjs`, `demo/clockin-digest.test.mjs`,
    `tools/doc-integrity-guard.mjs`) — and say in the report that you ran them, because the tool did not tell you to.
+
+## Operational pitfalls (2026-11-08T02:5xZ, delegate session N9 — the operator's four approvals executed, the two-seats-on-strata-server directive, and the read deadlock that ate three windows; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+114. **`cli.mjs send` is deprecated AND refuses on this rig — `intent.mjs` is the route, and the refusal is about
+    money, not about the seat.** Measured 00:3xZ: four `send <seat> --body-file …` calls printed
+    `send is DEPRECATED (opens a full writing harness = a second owner)` then
+    `{"spend":"catalog-refused","model":"google/gemini-3.1-pro","cause":"over-exposed","capUsd":4,
+    "maxCallExposureUsd":14,…}` and **changed nothing in the store** (queue counts identical afterwards). Correct
+    route, and it spools safely while the broker is down:
+    `DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --body-file <path> --request-id <fresh-uuid>` →
+    `{"ok":true,"op":"message","spooled":"selfdev.sqlite.broker.inbox/…"}`, delivered on the next `--start`
+    (`tools/broker-serve.mjs --status` prints the spool with age, and `--status` also lists dead-letters).
+
+115. **Correction to D234 (4): the clock-in digest does NOT need a broker, and its bar (a) is measurable at rest.**
+    With the broker stopped and `broker.json` gone: `node scripts/clockin.mjs | wc -c` → **43,967 B, exit 0** (stderr
+    carries the over-budget warning); `DURIG_DB=./selfdev.sqlite node cli.mjs status` → **exit 0**. The D234 sentence
+    that `status` exits 124 at 90 s and that the digest "fails without a broker" was measured **under load**, not
+    structurally: the same commands DO fail with `read health: timed out awaiting the broker's result` while the
+    broker is inside a long pass. Rule: measure at-rest numbers with the broker **stopped**, and say which state you
+    measured in.
+
+116. **A broker-routed read issued from inside a seat's own turn cannot be answered — the broker is inside the pass
+    waiting for that turn.** Three windows, three overruns: last passes `00:59:45`, `02:03:17`, `02:41:55`, each
+    followed by a `EXIT pid=… reason=deadline` only after the delegate killed the pid (`01:41:57` = **42 min past an
+    1800 s bound**; `02:25:12` = 22 min past 1200 s; `02:53:06`). The proof is not in the log (the log just stops
+    mid-pass) — it is two reads run in the same breath: the nonterminal `tasks` rows
+    (`SELECT id,conversation_id,kind,status FROM tasks WHERE status <> 'terminal'`, here `pi.tool` `running`) and
+    `ps --ppid <broker pid> -o pid,args`, whose children were
+    `node cli.mjs queue --id N` (90 s timeout) and `node scripts/clockin.mjs --db …`. From outside the same shape
+    answers `{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}`. Corollaries: seats
+    asking "what is in the queue?" burn a whole turn to a timeout; `scripts/clockin.mjs` fails mid-window for the same
+    reason (its `health` read); and there is no store-side escape, because the newest `durig.queue` revision is
+    **5,819 B** against **5,661** rows in the store (pitfall 105 holds — one multi-id `show` is the only read).
+    The fourth window (03:00:18Z, bound 600 s) overran by less — **15.0 min** — with its passes still flowing
+    (`ms` 87–163), which is the discriminator: a **frozen `lastPassAt`** is this defect, a **moving `lastPassAt` with
+    `woke=-` on every line** is pitfall 121.
+    Recovery when you must end such a window: `kill <pid from broker.json>` (never `pkill -f`, pitfall 49) →
+    `cli.mjs resume` (settles `placed`/`queued` submissions) → confirm `broker.json` is gone.
+
+117. **A tiny-token probe on a llama.cpp box can return `content: null` and read as a dead provider.** Measured on
+    the LAN box: `max_tokens: 8` → `finish_reason=length`, `completion_tokens: 8`, `message.content = null`;
+    `max_tokens: 64` → `finish=stop`, `content: "OK"`, 26 completion tokens. So the preflight's 1-token probe class
+    (held row **#549**, pitfall 108) will BLOCK a broker start against a healthy second server. When you register a
+    new local provider, probe at a budget that can produce content, and put that in the row's own acceptance.
+
+118. **A probe copied into a linked worktree can measure the tree you think it did not — prove it with a
+    differential, not by reading the import path.** A `.spike` probe importing `../../scripts/clockin.mjs` printed
+    **identical bytes (41,489 B)** when run from the main tree and from `item-5398`, which would have "disproved" the
+    fix. The differential settled it in one command: render the SAME synthetic 365-deferred-row fixture through both
+    trees' `renderDigest()` → **24,107 B (main) vs 856 B (item-5398)**, and `deferredTerm(items)` → **1,125–1,548 B**
+    for 365 rows. Rule: when a probe's job is to compare two trees, run the fixture through both in the same call and
+    print both numbers; a single number from a copied file is not evidence about a tree.
+
+119. **Read the spend ledger's field names before reporting money — summing the wrong key prints a confident $0.00000.**
+    `<db>.spend.jsonl` rows are
+    `{at,model,host,authKeyEnv,prompt_tokens,completion_tokens,reasoning_tokens,cached_tokens,priceSource,priceAsOf,usd,totalBefore,totalAfter,status}`.
+    Summing `cost_usd_usd`/`costUsd` (plausible names) returned `0.00000` for 91 calls; the real field is **`usd`**:
+    this session = **91 calls, $0.05703**, store cumulative **$0.762695** over 1,640 rows. Cross-check the total
+    against a prior recorded figure (D233 recorded $0.705665) so a zero can't pass as a cheap session.
+
+120. **`tools/broker-serve.mjs --status` prints live credential VALUES, and it is the first command every recovery
+    runbook names — redact before you paste.** Reproduced again at 03:1xZ: the report ends with
+    `env: {"DURIG_DB":…,"DURIG_LOCAL_API_KEY":"sk-…","DURIG_VERIFIER_API_KEY":"…"}`. This is already registered as
+    **docs/ROADMAP.md 295** (cause pinned at `tools/broker-serve.mjs:467-471`, where `envNotes` filters
+    `/^DURIG_(LOCAL|VERIFIER)_/` and that family now includes `*_API_KEY`, `src/providers/local.mjs:88`) — so do not
+    re-derive it, and do not paste the output into a doc, a report, or a row. If you must capture it, filter it in the
+    same command: `… --status | sed -E 's/"(DURIG_[A-Z0-9_]*KEY)":"[^"]*"/\1:"«redacted»"/g'`. Scope re-checked after
+    this occurrence: `grep -rInE "<the two key values>" --include='*.md' --include='*.mjs' --include='*.json' .` → the
+    only hits are ROADMAP 295's own **elided** example, in the live tree and in item worktrees; nothing else carries a
+    value. Rotation is the operator's call, not a cleanup (ROADMAP 295, D231 declined rotation once).
+
+121. **A `claimed` row does not wake a seat: after a kill+`resume`, the fleet idles with `woke=-` on every pass.**
+    Observed in the 03:00:18Z window (bound 600 s): **351 passes, every one `PASS N ms=… woke=-`**, zero generations,
+    while 10 rows sat `claimed` and 35 `queued`. Nothing is broken — the broker wakes a seat when a **submission or an
+    intent** lands for it, and killing a window mid-turn consumes the intents that were driving those rows. So an
+    idle-fleet window is not a stall to debug, it is a delivery problem, and the fix is a 3-line intent, spooled while
+    the broker is **down** and applied on the next `--start`:
+    `DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --body-file <path> --request-id <fresh-uuid>` → the file sits in
+    `<db>.broker.inbox/` and `--status` prints it with its age (`node intent.mjs --help` lists the ops: message, stop,
+    reset, compact, pause, unpause, read, configure — **there is no `wake` op**, and `cli.mjs` has no `wake` verb
+    either: `grep -oE '"(wake|nudge|ping)"' cli.mjs` → no hit). Leaving a spooled intent in the inbox across a session
+    boundary is safe and is the cheapest way to hand the next session a moving fleet — but say so in `docs/NEXT.md`, or
+    the next session reads an unexplained inbox file as a fault.
+
+## Operational pitfalls (2026-11-08T06:4xZ, delegate session N10 — the bounce that killed every seat turn, and the cap that was never set; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+122. **Bouncing a provider server changes the model *id*, and that kills every seat turn at registration, not at the
+    wire.** Measured: `GET /v1/models` returned `qwen3.8-flash-next-q2_0` on both boxes while `rig.selfdev.json` and
+    `durig.config.json` named `qwen3.8-flash-next-iq3_s`; every generation failed with
+    `Model local/qwen3.8-flash-next-iq3_s is not available` / `reason: no_model`. Fix both halves in one pass — the
+    declared id (`DURIG_LOCAL_MODEL`) **and** the seat strings in `rig.selfdev.json` — then `up --refresh` with the
+    broker stopped. **Re-point `DURIG_COMPACTION_MODEL_OVERRIDES` too**: its key is the model string, and leaving the
+    old key silently drops the 20,480-token reserve. Commit the roster before starting a window: `up` and
+    `broker-serve --start` both refuse a dirty tracked tree (`START REFUSED: live-tree-dirty`).
+123. **`no_model` failures are invisible in the broker log.** The wake lines run and `woke=impl` appears 20 times, but
+    the conversation gains only the wake user entry — no assistant turn. The instrument is the store:
+    `SELECT id,conversation_id,record FROM tasks WHERE kind='"pi.generation"' ORDER BY id DESC` and read
+    `state.outcome.status` / `state.outcome.error.message`. A `terminal` row is **not** a success.
+124. **`/props total_slots` is not the concurrency the box actually serves.** Declared `total_slots: 4`, yet **8**
+    concurrent seat-sized requests (2,460 prompt tok, 512 out) finished in **5.28 s** wall vs **5.41 s** for 4. Measure
+    throughput with real prompt sizes before setting `DURIG_MAX_CONCURRENT_SEATS`; a 64-token probe sizes the box badly.
+125. **llama.cpp reroutes an id it does not serve.** Requested `qwen3.8-flash-next-iq3_s` → served `q2_0`, `finish=stop`.
+    So a stale declared id never shows up as an HTTP error; the only signal is the preflight
+    `BLOCK provider-DURIG_LOCAL_-model-absent`. Run `tools/broker-serve.mjs --status` **after any server change**, and
+    redact in the same command (pitfall 120).
+
+## Operational pitfalls (2026-11-08T08:4xZ, delegate session N11 — the fleet is awake but 96 % of the queue is parked, and the wake body lies about capability; host: Linux, Fedora Linux 45, 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0)
+
+126. **"Check `status`" is not an instruction a seat can follow.** `WAKE_CONTENT_PARKED` (`src/driver.mjs:55`) tells a
+    parked seat to check `status`; the seat registry has ten tools and no `status` (`src/rig.mjs:632–1327`:
+    `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `hold_work`, `release_work`,
+    `revise_work`, `cancel_work`, `peek_queue`). `lead` notices it in its own reasoning ("It's the fifth repetition… I
+    don't have a `status` tool").
+    Count the waste, don't guess it: `SELECT count(*) FROM entries WHERE record LIKE '%there is nothing claimable for
+    you%'` — **174 parked wakes vs 72 claimable wakes** in one afternoon. #4607 fixed the wake that lied about *work*;
+    this one lies about *capability*.
+127. **A fleet can be fully awake and still do nothing.** Counts from the queue doc: `held 438, deferred 384` against
+    `queued 34, claimed 16`. Wakes are not throughput; claimable rows are. The instrument is one line:
+    `cli.mjs queue --json --no-body` → per-seat `queued/claimed/held/deferred`, then compare with the wake reasons in
+    `selfdev.sqlite.broker.log`.
+128. **Concurrency oversubscription is visible in the store, not in `/props`.** `GET /status` reports `queued: 0`
+    while **11 `pi.generation` rows are `running`** against a box declaring `total_slots: 4`, with seat turns aged
+    100–290 s. `queued: 0` means llama.cpp is accepting them, not that it is serving them in parallel. The admission
+    gate is `DURIG_MAX_CONCURRENT_SEATS` and it is inert for `local/*` until **#5488** lands (pitfall 122's sibling).
+129. **Engine exit -11 shows up as a seat-level `last_run_failed`, not a broker error.** `cli.mjs status` attention
+    list carried `qa2` and `architect`: `model_error: the engine stopped unexpectedly (exit code -11); the next request
+    restarts it`. Read it under load: 3090 at 22,387/24,576 MiB with eleven concurrent generations.
+
+## Operational pitfalls (2026-11-08T20:1xZ, delegate session N12 — the compaction override that never reaches the harness, and three instrument traps found while measuring it; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+130. **A spooled *read* intent makes the next `broker-serve --start` refuse.** Measured 19:4xZ: `--start` printed
+    `BLOCK wake-not-acknowledged: a start delivers 1 intent(s) to ?` and exited `START REFUSED`. The single spool
+    file was `{"op":"read","view":"queue-census","from":"cli"}` — a viewer's health request, not work (pitfall 86
+    already says a dead letter is not a refused operator intent; the same reading applies to the pending set).
+    So **every `cli.mjs status`/`queue` call taken while the broker is down guarantees a refusal on the next start.**
+    Remedy, measured: pass `--yes-pm-wakes`; the broker then started and logged `INTENT delivered=8 dead=0 dup=0`.
+    Do not "clean" the spool by hand.
+131. **`--env-file` is not a flag that exists.** `grep -rn "env-file|envFile" tools/*.mjs cli.mjs src/*.mjs` →
+    **0 hits**; `node tools/broker-serve.mjs --status --env-file="$HOME/.config/durig/env"` prints the usage block
+    and reports nothing. Pitfall 87's *substance* is right and its *mechanism* is dead: the working posture is shell
+    sourcing — `set -a; . "$HOME/.config/durig/env"; set +a; node tools/broker-serve.mjs --status` →
+    **findings (0 blocking, 3 noted)**; un-sourced → 4 blocking provider findings that are artifacts of an un-keyed
+    shell. Report the pair, never one.
+132. **Compaction failure is a record kind, not a log line, and the kind column is JSON-quoted.** `select kind,
+    count(*) from tasks group by kind` → `"pi.generation"` 71,277 · `"pi.tool"` 53,301 · `"pi.compaction"` 2,323.
+    `where kind='durig.queue'` matches **nothing** because the column stores `"durig.queue"` with the quotes. Per
+    outcome: 1,897 completed, **426 failed**, of which **240** carry the exact text "Summarization hit the token
+    limit; the summary is incomplete", clustered on conversation 4936 (`auditor`, verifier family,
+    `DURIG_VERIFIER_CONTEXT = 24576`). The mechanism, measured with pi-durable's own resolver
+    (`node_modules/@earendil-works/pi-durable/dist/harness/compaction.js:195 compactionPolicy`, fed the object
+    `cli.mjs:516` hands `Harness.open`): `src/config.mjs:488` returns `{modelOverrides}` with **no `compaction`
+    key**, `agent.js:47` merges only `settings?.compaction`, so `DURIG_COMPACTION_MODEL_OVERRIDES` is dropped and
+    every seat resolves reserve 16384 / keepRecent 20000 — a 24,576-token window with 8,192 tokens of headroom and a
+    20,000-token keep budget. Probe: `.spike/delegate/compaction-policy-probe.mjs` (promote it with the fix).
+133. **`done` rows pile up worktrees because npm's `.bin` symlinks trip the cleanup guard.** `broker-serve --status`
+    printed, verbatim: `complete_work: workspace cleanup for #5740 failed: refusing to remove worktree
+    /home/chexxor/Git/Durian-Pi/item-5740: junction/symlink detected at .../item-5740/node_modules/.bin/anthropic-ai-sdk
+    -> ../@anthropic-ai/sdk/bin/cli`. Consequence measured after one day of normal operation: **102 `item-*/`
+    directories at the repo root, 113 registered worktrees**. The lander's stray test is registration-based, not
+    name-based, so this is NOT a landing block (`stray_count = 0` here) — but it is a growing disk and inventory
+    cost nobody sees in `status`, and `git status` never mentions any of it because `/item-*/` is gitignored.
+134. **A broker past `--max-duration` keeps the heartbeat, stops passing, and still holds genlock slots.** Started
+    19:43:27Z with `--max-duration 240`; at 19:59Z `broker.json` had a fresh `heartbeatAt` and a `lastPassAt` frozen
+    at 19:47:22, three `selfdev.sqlite.genlock.*` files naming pid 3279083, and `select ... where
+    json_extract(record,'$.state.status')='running'` returning **0 rows** — no generation was in flight. `serve
+    --stop` returned `"stopped": false … no forced kill`. The runbook's remedy (ROADMAP 303) applies only after
+    you have *proven* the genlock is empty of live generations: check the store, then `kill <pid>`. Reading the
+    genlock files alone says "a generation is in flight" and would make a delegate wait for work that does not
+    exist — and `scripts/land.mjs` refuses on exactly that signal, so this signature silently blocks landings.
+135. **The clock-in digest hangs while the fleet is running, and it hangs on an unbounded call.** Measured 20:2x–20:3xZ with broker pid 3316329 resident: `timeout 60 node scripts/clockin.mjs` -> **exit 124, 0 bytes**; `timeout 25 node cli.mjs status --json` and `... queue --json --no-body` -> exit 124; `timeout 40 node cli.mjs config` -> exit 0. The cause is in the tool, not the rig: `scripts/clockin.mjs:399 runCli()` runs `execFileSync(process.execPath, ["cli.mjs", ...])` **with no `timeout`**, while every git call in the same file is bounded (`:413 gitSafe`, `timeout: 15000`, its own comment: "a hung git call would turn a 6 s clock-in into a stall"). Read verbs block on a driving broker (pitfall 86) even when `ls selfdev.sqlite.genlock*` is empty and generations are being created. Until it is fixed, **clock in before starting the broker**, or read the queue with a direct read-only store open.
+136. **Wakes are not the current ceiling — the seats are moving.** In the 15 min after the broker came up: generations per conversation `devtools 46, impl 30, qa 16, scribe 6`, **145 completed / 0 failed** generations in 30 min, and only **1** wake whose text said "nothing claimable for you". Pitfall 126's 174 parked wakes were a snapshot of a *stopped* fleet; do not read the parked-wake count as today's throughput. The 435 `held` / 384 `deferred` rows are the real backlog.
+137. **A landing can make an open row redundant.** `item-5737` landed (`fb463162`) and put the digest cap gate on main — `scripts/clockin.mjs:292-302 budgetVerdict`, `:608/:616` exit 1 when over budget. Before landing `item-5398` (the same concern, older base, currently conflicting with main), check whether it is already satisfied: `node scripts/clockin.mjs --budget 20000` with the broker stopped should exit 1 on a 41 KB digest. A duplicate landing is worse than a stale branch.
+138. **`demo/seat-turn-shape.test.mjs` cannot pass while a broker is resident, and the failure reads as a mutation bug
+    when it is a race.** Its live-store leg does `const liveBefore = sha256(liveDb)` then `assert.equal(sha256(liveDb),
+    liveBefore, "the read must not modify <db>")` (`demo/seat-turn-shape.test.mjs:292`). Measured 20:4xZ with broker pid
+    3316329 driving: the assertion fails with two different shas. The reader is NOT at fault — proven by taking the
+    same read against a copy: `cp selfdev.sqlite /tmp/store-copy.sqlite; sha256sum` before and after
+    `node tools/seat-turn-shape.mjs --db /tmp/store-copy.sqlite` → **identical** `b3e204740d2eb746`, exit 0. So the
+    store moved because the fleet was committing during the demo. A test that pins the bytes of a live store must
+    snapshot first or re-read the baseline after opening; otherwise "REAL STORE bytes changed" is a false red that
+    every delegate will re-investigate.
+139. **A broker past its `--max-duration` deadline keeps seats generating while its pass loop is frozen, and that makes
+    the queue unreadable.** Measured 20:5xZ, Linux Fedora 45, node v24.22.1, pid 3316329: `heartbeatAt` 20:53:53Z
+    (fresh), `lastPassAt` frozen at **20:11:27Z** (passAge 2,421 s, the preflight says `degraded`), genlock slots
+    appearing and clearing as generations run, **320 generations completed / 0 failed in 60 min**. Every read that
+    routes through the broker is dark: `node cli.mjs status` and `node cli.mjs queue --json --no-body` exit 124 with
+    0 bytes, and `node tools/queue-drain-audit.mjs` printed only its header ("one broker-served read") and returned
+    nothing. Eight intents sat undrained in the spool, including `delegate-20261108-clockin-hang` (14 min waiting) —
+    so an intent you spooled is **not** delivered just because the fleet is busy. `node tools/broker-serve.mjs --stop`
+    returns `"stopped": false … did not exit within the stop grace; no forced kill`. The runbook's remedy
+    (`docs/runbooks/broker-down-or-stalled.md`, third signature) is a hard stop **only when `ls selfdev.sqlite.genlock*`
+    is empty**, then `cli.mjs resume`, then a restart with a longer `--max-duration`. Never infer "the queue is empty"
+    from an unreadable read.
+140. **The deadline-linger clears by itself, and the clock-in digest budget is now real.** The resident broker exited
+    on its own at 20:54:22Z — `EXIT pid=3316329 reason=max-duration passes=31` — no kill needed, no stranded run.
+    A fresh broker drained the whole spool: `INTENT delivered=10 dead=0 dup=0`. And with the broker stopped,
+    `node scripts/clockin.mjs` printed **15,552 B and exited 0** — inside the 20,000 B budget it used to blow
+    (41,439 B earlier the same day). That is `item-5737`'s cap gate verified by running it, not just reading the code.
+141. **`SqliteStorage is closed` is the dead-letter reason, and it is intermittent.** `node cli.mjs queue --json`
+    returned `{"ok":false,"error":"read queue: apply failed: SqliteStorage is closed"}` twice around the restart, then
+    **10 consecutive reads succeeded**. Every one of the 55 files in `selfdev.sqlite.broker.inbox.error` carries the
+    same reason line (`cat` a `.error.json.reason`). So: an intent you spooled while the pass loop is frozen may be
+    applied after the harness's storage handle closes and be lost. After a restart, **confirm delivery from the log**
+    (`grep INTENT selfdev.sqlite.broker.log`), never from the fact that `intent.mjs` returned `ok:true`.
+142. **The default compaction policy does not fit the verifier's window — the arithmetic, not the model.**
+    `DURIG_VERIFIER_CONTEXT = 24576` with pi-durable's defaults (reserve 16,384, keepRecent 20,000): headroom is
+    24,576 − 16,384 = **8,192**, and `keepRecentTokens = 20,000` is **244 %** of it. Any compaction attempt on that
+    seat is guaranteed to emit the store's most common failure string, "Summarization hit the token limit; the
+    summary is incomplete" (240 records, conversation 4936 = `auditor`). Nesting the override is necessary but not
+    sufficient; a per-window feasibility check (`reserveTokens + keepRecentTokens <= declaredWindow`, fail loudly at
+    config load) is the half that actually stops the failures. The local family is fine: the server reports
+    `n_ctx: 204800` for `qwen3.8-flash-next-q2_0` and `DURIG_LOCAL_CONTEXT = 204800` matches it.
+143. **Read the queue before you name a row, and check for twins before one is claimed.** At 21:1xZ
+    `node cli.mjs queue --status queued --json --no-body` returned **56 queued / 13 claimed** rows, and two of them —
+    **#5813** and **#5814** — carry the *same* subject ("CLOCK-IN HANG (milestone): bound runCli() like gitSafe and report
+    unavailable reads in the digest, failing-first", both `queued` by pm, #5813 at 21:00:40Z). Two rows for one defect is a landing hazard, not a doubled effort. Ids also drift: the
+    pointer said **#5784** was the ROADMAP 331 fix; the row that actually carries it is **#5785** (`pm -> impl`, queued):
+    "ROADMAP 331 (milestone, load-bearing): nest the compaction overrides + per-family schedule, gated on pi-durable's
+    compaction". Re-read the queue instead of trusting a remembered id.
+144. **"Degraded broker" is a false positive while a seat run is mid-flight.** Measured 21:3xZ, Linux Fedora 45, node
+    v24.22.1: `node tools/broker-serve.mjs --status` says `broker: degraded pid=3521203 heartbeat 18s ago last pass 418s
+    ago (no pass within the progress timeout)`, yet the store shows generations at 21:35:01, :07, :14, :23, :33, :37,
+    :39, :50 on conversations 4930 (devtools), 9 (impl) and 15 (qa). A **pass wakes a seat; the seat then runs many
+    turns inside that run**, so `lastPassAt` can be frozen for ten minutes while the fleet is plainly working. Read the
+    newest `pi.generation` rows before concluding anything is stalled: `select id,conversation_id,json_extract(record,'$.startedAt') from tasks where kind="pi.generation" order by id desc limit 8`.
+    Do **not** hard-stop a broker in that state — you abort live seat runs, and `resume` only withdraws stranded
+    submissions.
+145. **The spend ledger is `selfdev.sqlite.spend.jsonl`, and its fields are `usd`, `prompt_tokens`,
+    `completion_tokens`, `totalBefore`/`totalAfter` — not `costUSD`.** Grepping for `costUSD` finds nothing and reads as
+    "no spend data exists". Today's real numbers, one command: `node -e 'const l=require("fs").readFileSync("selfdev.sqlite.spend.jsonl","utf8").split("\n")…'` →
+    **374 calls, $0.18432, 3,661,636 prompt tokens, 287,337 completion tokens**; median prompt 9,787, max 22,963;
+    **67 calls** carried a prompt larger than the default `reserveTokens = 16,384`, and **0** exceeded the verifier's
+    24,576-token window — which is exactly why the failure mode is "summarization hit the token limit" rather than a
+    provider 400.
+146. **Most compaction failures are not the window — they are the rig's own run cap.** Grouping the 426 failed
+    `pi.compaction` records by error message splits them cleanly (measured 21:4xZ, `./selfdev.sqlite`): **214**
+    `Summarization hit the token limit; the summary is incomplete` and **209**
+    `Summarization failed: spend_cap_exceeded (durig's own cap, out of budget under it - NOT the provider's):
+    verifier/openai/gpt-oss-120b projects $0.001384 and would cross DURIG_SPEND_CAP_RUN_USD $0.1000 (this process,
+    spent $0.098924). No request was sent and no ledger row was written.` The caps are **defaults, not operator
+    settings**: `durig.config.default.json` carries `DURIG_SPEND_CAP_CALL_USD = 0.05`, `DURIG_SPEND_CAP_RUN_USD = 0.10`,
+    `DURIG_SPEND_CAP_STORE_USD = 4.00`, and `durig.config.json` sets none of them. The lifetime ledger is $0.885818 —
+    nowhere near the $4 pool. So a long-lived broker process walks up to its $0.10 run cap, and from that point **every
+    compaction on every seat in that process is refused**: the window keeps growing and the seat can never settle. If
+    a seat's task does not finish, check the cap before blaming the model.
+147. **There is now one command that answers "is the milestone met?"**
+    `node docs/evidence/2026-11-08-context-window/milestone-check.mjs` — read-only, no model spend, broker-down safe.
+    It prints what the harness resolves per family, the headroom of each declared window, and the store's failure
+    census, then exits **0** only when the override reaches `settings.compaction`, every declared window can hold its
+    policy, and no truncated/refused compactions remain. As of this session it exits 1 with five named reasons. Do not
+    report "331 fixed" without running it.
+148. **The harness already implements per-model layering; only the placement is wrong.**
+    `node_modules/@earendil-works/pi-durable/dist/harness/compaction.js:195-202` reads
+    `const { modelOverrides, ...policy } = settings.compaction;` and matches the key
+    `` `${model.provider}/${model.modelId}` ``. So a compaction override emitted as a *sibling* of `compaction` is
+    invisible, and a key spelled differently from the resolved `provider/modelId` silently does nothing. Proven in one
+    command (see `docs/evidence/2026-11-08-context-window/README.md` §5): nested -> `reserveTokens: 20480`, sibling ->
+    `reserveTokens: 16384`. Before writing any "compaction is broken" claim, run that two-line comparison; it settles
+    the question without touching a seat or spending a token.
+150. **`genlock` being empty is not proof that no generation is in flight.** Measured 22:06:57Z: `ls -1 selfdev.sqlite.genlock*` returned
+    **zero** files while the store showed `pi.generation` records created at 22:06:48.655Z (impl, conv 9) and
+    22:05:21.612Z (devtools, conv 4930). A seat's run can be live with no genlock slot held, so the runbook's "prove
+    genlock is empty before stopping" check is necessary but not sufficient. Before a hard stop, also require that no
+    `pi.generation` record has been created in the last ~2 minutes:
+    `node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 3").all())'`
+151. **The pass loop can stop while seats keep working.** `grep -c PASS-FAILED selfdev.sqlite.broker.log` = **23** in the
+    cumulative log, **11** of them on 2026-11-08 (20:05:11Z–21:26:01Z), each
+    `SessionFailed: Session failed after a storage error; close and reopen it cause=Error: database is locked errcode=5`.
+    The last successful pass was 21:26:06Z; after that the broker kept waking nothing while devtools and impl kept
+    generating for another 40 minutes. Consequences: no new queue rows get claimed, and spooled intents pile up (24 in the inbox at 22:17Z)
+    (`ls selfdev.sqlite.broker.inbox | wc -l`). This is the same lock that surfaces as `read queue: apply failed:
+    SqliteStorage is closed` on the read side (row #5807). It is a pass-loop failure, not a seat failure. Correlation observed, cause NOT proven: every PASS-FAILED fell in a 5-minute bucket that also contained 13-66 generations. The log is cumulative, so time-box the count (pitfall 153).
+152. **A CLI read does not read the store while a broker is resident — it asks the broker.** `src/readclient.mjs:106-111`
+    routes `readData` to `readViaBroker` when `brokerAliveFor(dbPath)`. If the pass loop has stalled, the read verb
+    **blocks** rather than erroring: measured 22:12Z, two reads at an 8 s cap each returned 0 bytes and `HUNG`, eight
+    concurrent reads at 25 s all returned exit 124 with 0 bytes, while a direct read-only sqlite query in the same
+    minute answered (128,248 tasks). "Empty queue" and "cannot read the queue" are the same output. Probe:
+    `node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8`.
+153. **`selfdev.sqlite.broker.log` is cumulative, not daily.** `grep -c PASS-FAILED` counts every pass failure since the
+    store was created (measured 2026-11-08: 23 total, **11** dated 2026-11-08, the earliest 2026-11-06T03:49:53Z). Any
+    "today" number from it must be time-boxed: `grep "PASS-FAILED" selfdev.sqlite.broker.log | grep -c "^2026-11-08"`.
+    The same trap applies to compaction failure counts in the store: a lifetime count and a rolling-24 h count tell
+    different stories (pitfall 146), which is why `milestone-check.mjs` prints both.
+154. **`serve --stop` cannot work when the pass loop is dead.** It writes a stop *file*, and `src/broker.mjs:1651` says a
+    file stop is honoured at a pass boundary while only SIGINT/SIGTERM "stops at once". With no pass since 21:26:06Z,
+    two `serve --stop` attempts both reported `pid 3521203 STILL ALIVE`. The working ladder is: check the newest
+    `pi.generation` timestamp (empty `genlock` is not enough, pitfall 150) -> `serve --stop` (expect refusal) ->
+    `kill -TERM <pid>` -> prove the pid is gone -> `--resume` -> start. `[judgement]` SIGTERM aborts live seat runs,
+    so it is a decision, not a reflex.
+155. **Turn shape can block a seat before its window ever matters.** `node tools/seat-turn-shape.mjs --db <copy>`
+    (read-only; copy the store first and diff the SHA — pitfall 143) prints, per seat, the replay window the next
+    provider call is built from and a verdict. Measured 2026-11-08T22:26Z: **impl, devtools, security, designer,
+    advocate** are `AT RISK — a strict alternating template refuses another user turn here, before any window is
+    reached`; pm, qa, lead, scribe, auditor are `ADMISSIBLE`. It also says plainly: "a head marker HIDES these from
+    the window, it does not remove them" — the auditor's transcript behind its `pi.compaction@404797` marker still
+    shows >= 2,621 user turns and >= 1,600 errored assistant turns. Before diagnosing "the seat is idle", check the
+    shape; a seat in this state cannot be spoken to, so no window sizing will make it complete work.
+156. **Compaction has a per-process budget that can be measured before it fails.** Every one of the 209 refusals
+    carries the same number: the process had spent **$0.098924** of `DURIG_SPEND_CAP_RUN_USD = $0.10`, with the
+    summariser call projected at **$0.001368–$0.001384**. Once a broker process gets within one summariser call of
+    the cap, **every** compaction in that process is refused until it restarts. `milestone-check.mjs` now prints the
+    live headroom (broker pid 3521203, started 20:56:53Z: spent $0.005797, ~68 compactions left at $0.001384 each).
+    When compaction stops working, read that line before blaming the model or the window.
+157. **A seat's window holds ~100 queue items, so compaction is asked to summarise a hundred unrelated tasks.** Count
+    distinct `item-\d+` in the seat's last 200 entries: impl 108, qa 114, scribe 107, lead 89, auditor 81, devtools 13,
+    pm 12. In impl's last few turns: `resume_work {3128}`, bash in `item-5675`, `defer_work {5713}`, bash in
+    `item-5713` — one run, four worktrees, one window. The auditor also shows **12** `[error] refused by durig: path …`
+    refusals in the same slice. Window sizing cannot fix load that is a routing decision.
+158. **A hung `cli.mjs status` is about the read path, not the data.** `src/readclient.mjs:106-111` routes a read
+    through the broker whenever one is resident; if the pass loop is stalled the read never returns (measured: 8 s cap,
+    0 bytes, exit 124) while a direct read-only SQLite query on the same store answers in milliseconds. Before
+    debugging the store, run `docs/evidence/2026-11-08-context-window/read-path-probe.mjs` — it compares both in one
+    command.
+159. **The broker locks against itself.** `ls -l /proc/<pid>/fd | grep selfdev.sqlite` shows the broker holding **5**
+    handles (two sqlite connections plus `-wal`/`-shm`) and *no other process* holding the store. That is the shape of
+    the `PASS-FAILED … database is locked errcode=5` lines: it is not a competing reader, and killing your own CLI
+    invocations cannot help.
+160. **`--max-duration` is not a kill switch.** A broker started with `--max-duration 1800` was still running
+    (`ps -o etime` → `02:05:25`) because duration, like the `.stop` file, is honoured only at a pass boundary
+    (`src/broker.mjs:1651`). With a dead pass loop only SIGTERM/SIGINT stops it, and that aborts live seat runs.
+161. **A test can pin a bug.** `demo/config.test.mjs:333-341` asserts `compactionSettings()` returns
+    `{ modelOverrides: … }` as a **sibling** of `compaction`, while pi-durable reads it only from
+    `settings.compaction.modelOverrides` (`compaction.js:196-197`; `agent.js` mentions it nowhere). Fixing
+    `src/config.mjs:488` alone makes that test red. When a setting "silently does nothing", read the test that
+    asserts its shape before blaming the consumer.
+162. **A hung CLI read is a dead-lettered read, not a slow query.** `selfdev.sqlite.broker.inbox.error/*.reason` said
+    `apply failed: SqliteStorage is closed` for all 56 dead letters, every one `op: "read"`
+    (`pi-durable dist/storage/sqlite/storage.js:670`). `src/readclient.mjs:106-111` still waits for a broker result
+    after the intent was rejected. Read the `.reason` files first — they name the failure class in one line.
+163. **Alive ≠ healthy.** `<db>.broker.json` carries two legs: `heartbeatAt` (LIVENESS, rewritten every 20 s by
+    `BROKER_HEARTBEAT_MS`) and `lastPassAt` (PROGRESS, the last COMPLETED pass). A broker wedged in a stuck await
+    keeps a fresh heartbeat with a frozen pass — `src/broker.mjs:1628-1631`. Compare the two ages before deciding
+    whether to restart.
+164. **Broker-served CLI reads are bounded at 120 s, not hung.** `src/readclient.mjs:35` defaults to
+    `timeoutMs = 120_000`; measured `cli.mjs status` took **2 m 0.569 s** and returned
+    `{"ok": false, "error": "read health: timed out awaiting the broker's result"}`. Any script that caps the call at
+    a few seconds sees 0 bytes and exit 124 and concludes "hung". Seats do **not** pay this: their queue read is
+    `tx.doc(RigQueue)` (`src/seattools.mjs:133`), not the broker read path. Only the operator's CLI does.
+165. **An EXIT line with `passes=-` means the broker was force-killed, never that it ran no passes.** The emitter is
+    `cli.mjs:2183`, the *last-resort* timer: a signal requests a stop, `DURIG_STOP_GRACE_MS` elapses without the pass
+    settling, and the timer writes the literal `EXIT pid=… reason=deadline passes=-` before `process.exit(0)`. A
+    graceful exit prints a number instead (`src/broker.mjs:2001`): this session saw `reason=max-duration passes=473`
+    (pid 3941969) versus `reason=deadline passes=-` twice (pids 3521203 at 23:30:42Z, 23632 at 03:20:22Z), both after
+    SIGTERM on a broker whose last completed pass was 30+ minutes earlier. Read it as **the pass loop was wedged**.
+166. **The queue is not readable from raw SQLite as a document.** `documents.record` for `durig.queue` is a 47-byte
+    envelope — `{"id":29,"kind":"durig.queue","scope":{"kind":"session"},"createdAt":1}` — and the items live in
+    `document_revisions.content` deltas (**14,705** revisions, newest `seq 3503853`). A probe that parses the doc
+    record prints "0 items" and reads exactly like an empty queue. Use the bounded CLI view
+    (`cli.mjs queue --json --no-body --status queued`); the unbounded census returns **27.9 MB**, 88 % of it
+    `done`/`cancelled` history (4,100 + 868 of 5,896 rows measured 01:4xZ).
+167. **A compaction summary is always fenced, so a structured seed cannot come from compaction.**
+    `pi-durable dist/harness/compaction.js:12-13` wraps whatever a `beforeCompact` hook supplies (`:374`) as
+    `"The conversation history before this point was compacted into the following summary:\n<summary>…</summary>"`.
+    `dist/harness/harness.js:45-48` (`reset(handoff)`) and tool `control: {handoff}`
+    (`dist/harness/generation.js:547-557`) are the only un-fenced injection points — the design for continuation
+    notes hangs on that distinction (`docs/reviews/architecture-context-continuity-2026-11-09.md` §4.3).
+168. **No compaction or handoff package in the pi registry can load into a seat.**
+    `src/extensions.mjs:19-21`: a pi *coding-agent* extension "cannot load here". Twenty-two packages surveyed on
+    2026-11-09 are all on that plane (`pi-blitz-handoff`, `@protokol11/pi-session-transfer`,
+    `@codeslinger001/pi-auto-handoff`, `pi-tuck`, `pi-vcc`, `pi-observational-memory`,
+    `@woksin/pi-context-budget`, `pi-compact-assistant`, `pi-voluntary-compaction`, …). Their **shapes** are prior
+    art — structured handoff as the compaction entry's summary with the cut point preserved (`pi-auto-handoff`),
+    write-the-state-to-a-file-then-compact (`pi-compact-assistant`), zero-model-call deterministic summaries plus
+    recall over the untouched transcript (`pi-tuck`, `pi-vcc`, `@pi-unipi/compactor`) — never components.
+169. **A dynamic prompt section can cost the whole cached prefix.** ROADMAP **175** is the gate: pi-durable rebuilds
+    the system prompt from sections before every request and provider caching is prefix-exact, so a `render` that
+    changes per request may be a full cache miss every request. Keep the note **out of the section** (a static
+    pointer) and deliver the mutable body at boundaries — wake, compaction, reset.
+170. **A landing pass cannot be routed to a seat.** `docs/runbooks/land.md:427-431` is explicit: quiescing requires
+    stopping the broker, and stopping the broker ends the run of any seat it hosts — so a seat can never stop the
+    broker, land, and report. (2026-10-17: the exclusive landing window closed QUIET BUT EMPTY for exactly this
+    reason.) Routing "merge all completed branches" to a seat produces a row nobody can execute. What a seat CAN
+    do is the read-only readiness work: the three gates from `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §5, the train
+    order with each stacked entry's base named, and the conflict list with owners. If the team wants the merge act
+    inside the rig, that is a base seam (ROADMAP 131 `pause`, a broker-side quiesced boundary), not a seat.
+171. **`git branch --list` is not a clean list.** Each line carries a worktree marker: `*` current, `+` checked out
+    in a linked worktree, and the leading whitespace. `sed 's/^[* ]*//'` leaves the `+` on 60+ branches, and every
+    downstream `git rev-list --count main..<name>` then fails with "unknown revision" — measured: 89 spurious
+    `[: : integer expected` errors before the census was fixed. Use
+    `git branch --list | sed 's/^[* +]*//' | grep -E 'item-[0-9]+'`, and count with
+    `a=$(git rev-list --count main.."$b" 2>/dev/null || echo 0); [ "$a" -gt 0 ] && echo "$b $a"`.
+    A branch is landed when that count is 0; `git merge-tree --write-tree main <branch>` exit 0 means it merges
+    clean into the CURRENT main, not the main it was cut from.
+172. **A compaction has a floor it can never get below, and it is computable before any seat runs.** From the pinned
+    pi-durable: `generation.js:238-243` triggers compaction above `contextWindow - reserveTokens`, the cut keeps
+    `keepRecentTokens` of recent turns, and `compaction.js:95` caps the summary at
+    `min(floor(0.8 * reserveTokens), model.maxTokens)`. So the post-compaction context is at least
+    `keepRecentTokens + that cap`. For the verifier family on this rig: 20,000 kept + 6,000 cap = **26,000 tokens
+    against a declared 24,576 window** — compaction can never fit that seat, which is why the store holds 218
+    "Summarization hit the token limit" records. `docs/evidence/2026-11-08-context-window/milestone-check.mjs` prints
+    this floor per family in its `== per-window feasibility ==` block; read the floor line, not just the headroom
+    line.
+
+## Operational pitfalls (2026-11-09T06:2xZ, delegate session N15 — the pass that put 42 branches on `main`, and the four places a landing pass goes silently wrong; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+173. **A merge preflight is true only for the `main` it was run against.** At 04:4xZ the backlog measured 43 clean / 19
+    conflicting. Landing changes `main`, so a branch clean at T0 is not clean at T1: after 42 landings the surviving
+    backlog measured **4 clean / 20 conflicting** (`git merge-tree --write-tree main <branch>` exit code). Run the
+    preflight **inside the loop, immediately before each `land`**, not once at the start of the pass:
+    `git merge-base --is-ancestor "$b" main && continue; git merge-tree --write-tree main "$b" >/dev/null 2>&1 || { echo "SKIP $b"; continue; }; node scripts/land.mjs "$b" --db ./selfdev.sqlite`.
+    Stacked branches are handled by the same loop: land the base first and the child re-preflights against a `main`
+    that already contains it (`item-5306` → `item-5834` share a tip; the second reported `ALREADY-LANDED`).
+174. **`scripts/land.mjs`'s text-integrity gate is absolute, not relative to the base, so `main`'s own faults block
+    other branches.** Three branches (`item-5094`, `item-5400`, `impl-item-5094-recut`) were refused with `1 file(s)
+    fail TEXT INTEGRITY — scripts/sync-pi.mjs ... bom: UTF-8 BOM present`, yet `git show main:scripts/sync-pi.mjs |
+    head -c 3 | xxd` → `00000000: efbb bf` — `main` carries the same BOM. A branch that touches a file `main` already
+    ships broken cannot land until the fault is stripped **on `main`**. `node tools/text-integrity-scan.mjs` on HEAD:
+    **842 tracked files read, 46 with faults — 35 no-trailing-newline, 11 BOM**. Strip the 11 BOMs first and three
+    otherwise-clean branches become landable in one pass.
+175. **A batch landing must regenerate the derived manifests, or the suite goes red on files the pass never touched.**
+    After the batch, `node scripts/test.mjs --all --jobs 8` reported **2 reds that did not exist at the baseline**:
+    `demo/test-areas.test.mjs` and `demo/land-changed-suite.test.mjs`, both asserting the same thing — `"demo/keycheck.test.mjs" is on disk but not mapped to any area (add it to demo/test-areas.json)`. The demo came in with `item-5277` (`tools: promote the credential-surface keycheck out of .spike/`) and the manifest is hand-maintained, so the branch could not have updated it. Fix: `git diff --name-only <base> main -- demo | grep 'test.mjs$'` after a batch, then map every new file. The rule that catches it is `demo/test-areas.test.mjs` — run the **full** suite on `main` after a batch; per-area runs cannot see a manifest gap.
+176. **A wedged broker is indistinguishable from an empty queue, and one `kill` restores the read path in under a second.** pid 114848 (started 03:20:33Z, `--max-duration 7200`) logged 1,002 passes, then passed nothing for **3,162 s** while its heartbeat stayed fresh. Every CLI read hung: `cli.mjs queue --status queued` hit a 60 s cap with **0 bytes** and rc 124, while `node -e 'new DatabaseSync("./selfdev.sqlite",{readOnly:true})'` answered in milliseconds. `node tools/broker-serve.mjs --stop` refused; with no `selfdev.sqlite.genlock*` file present, `kill 114848` logged `2026-11-09T06:13:32.508Z EXIT pid=114848 reason=deadline passes=-`. Afterwards: `cli.mjs status` **0.96 s**, `cli.mjs resume` 0.45 s (one stranded run cancelled, `impl` submission 418542), `tools/queue-drain-audit.mjs --db ./selfdev.sqlite` **1.26 s / 6,021 rows**. **A landing pass cannot be gated on queue state until the broker read path is working** — check `heartbeatAt` vs `lastPassAt` before the first `cli.mjs` call, not after.
+177. **Before a pass, run the two guards that cost under a second, and read `git cherry` before calling a branch unlanded.** `node tools/doc-integrity-guard.mjs` exits **1** today: `docs/runbooks/session-start-cost.md cites **365** but docs/ROADMAP.md registers no item 365`. And `item-5488` looked like a conflict branch (`ahead=1`), but `git cherry main item-5488` prints a single `-` — its only patch is already on `main`, so it is a zero-build close, not a landing. `tools/queue-drain-audit.mjs` reports the same shape for the queue: `146 non-terminal LANDING rows — 98 already fully on main (21% of the 277 held = zero-build closable)`.

@@ -8339,7 +8339,9 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
 - **D-5015.1 — Status: DECIDED. The cap is enforced at the PROVIDER SEAM, not at the queue-admission seam.**
   `cli.mjs:344-391` is the only place every run path (send, resume, doctor, subagent) plus **pi-durable's own
   compaction summarization** reaches a model, and it already wraps every provider (`wrapProviderWithSlots`,
-  `wrapProviderWithTrace`). Admission-only enforcement is REFUTED by measurement: the failure D196 measured fires
+  `wrapProviderWithTrace`). *[the "every provider" clause is FALSE — see the 2026-11-07 amendment directly below;
+  the DECIDED placement stands, the observed coverage did not]* Admission-only enforcement is REFUTED by
+  measurement: the failure D196 measured fires
   **inside** the turn, and D196(2) counts **one `pi.user` entry per compaction attempt left in the author's
   session** — an admission gate would not have stopped either, and each attempt costs tokens and dirties the head.
   The provider seam cannot stop *queue* spend (100 dead-on-arrival wakes), so a **projection at admission** is added
@@ -8347,6 +8349,45 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   not money). Options considered: (a) admission-only — cheap, cannot see compaction/turn spend, rejected;
   (b) provider seam + admission projection — chosen; (c) post-hoc stop-the-rig on the ledger — rejected, it is a
   meter, not a guard, and the operator has 12 seats of live work to lose.
+  - **Amended 2026-11-07 (#5491, `scribe`): the placement DECIDED above is UNCHANGED; the claim that the seam was
+    already complete was FALSE, at `c43ec1fa` and still at the tree this amendment lands against (`a314ddd3`).**
+    Amended in place rather than minted as a rival entry (numbering/landing discipline #3075 / #3186 / #3271).
+    Re-checked by `scribe` in this worktree, so the next session does not re-derive it:
+    `grep -n "wrapProviderWithSlots" cli.mjs` → **2 call sites only**, `:327` (the `faux` plane) and `:401` (the
+    default/metered provider); the `local/*` registration loop at **`cli.mjs:433-441`** registers
+    `withSpend(wrapProviderWithTrace(createLocalProvider(…)))` with **no slot wrapper**, and
+    `grep -cE "genlock|Slot" src/providers/local.mjs` → **0**. Consequence, stated plainly: on a `local/*` rig
+    `DURIG_MAX_CONCURRENT_SEATS` **gates nothing**, and the rig reads as capped anyway —
+    `durig.config.default.json:3` ships `"DURIG_MAX_CONCURRENT_SEATS": "1"` and the operator's
+    `durig.config.json` does not set the key (untracked, so absent from this worktree).
+    A second name drift sits on the same knob, recorded here once so nobody re-derives it: the docs call the key
+    **`DURIAN_PI_MAX_CONCURRENT_SEATS`** on **27 lines across 14 doc files** — including `docs/ROADMAP.md:2773`, the
+    **153** row that proposes to redesign the lock this knob drives — while that spelling has **0** matches under
+    `src/` + `cli.mjs`. The key the code reads is `DURIG_MAX_CONCURRENT_SEATS` (`src/config.mjs:115`, the comment at
+    `src/config.mjs:304`, `src/config.mjs:541`). Renaming anything is #5488's call, not this entry's; the drift is
+    recorded because a reader who greps the ROADMAP name finds no code and concludes the cap does not exist at all.
+    - **Store/log numbers, MEASURED-BY-REPORT — the auditor measured these against a live broker at `c43ec1fa`; the
+      `scribe` landing this entry rode did NOT re-run them and cannot (the broker and its store are not this tree):**
+      with the config reading `"1"`, `select count(*) from tasks where status='running'` → **9–10** concurrent
+      `pi.generation` rows, newest entries interleaved across ≥9 conversations; `ls -1 selfdev.sqlite.genlock*`
+      sampled **40× over ~16 s** → **0** on every sample; `grep -cE "genlock|slot" selfdev.sqlite.broker.log` →
+      **0** across the whole pass. The pass window 07:33:22Z→08:40Z: **0 commits landed**, worktrees **41→52**,
+      branches **43→53**, 164 metered calls / **$0.09438** (store cumulative $0.567999), 133 wakes, queue
+      done +10 / claimed +16, worktree audit `{seat-root 9, live 24, reapable 13, locked 1, non-item 4, dirty 1}`.
+      The check that settles the claim at the code level is **not** these numbers: it is **#5488**'s failing-first
+      demo test, which had **not landed** at the time of this amendment (`git log --all --grep 5488` → no build
+      commit), and what gating `local/*` costs in wall-clock seconds is #5488's to produce, not this entry's.
+    - **Lead ruling recorded (so the next question does not need a ruling): ONE seam.** The cap gates all providers
+      at the single provider-registration site; slot logic does **not** move into `src/providers/local.mjs`; **no new
+      and no renamed config key**; the "document local-engine `--parallel` ownership instead" shape is **REJECTED**
+      as the primary fix — it widens surface and leaves the knob a lie. The fix is **BACKOFF-side**, so it is not
+      subject to the capacity-adding gate **#5194/#5268** (backoff before capacity: the cap must be *made true*
+      before anything raises it), and it does **not** preempt the operator's milestone rows **#5306/#5309/#5310/#5395**.
+    - **Cited, not duplicated:** **#5488** (`lead`→`impl`, the build row that makes the claim true), **ROADMAP 153**
+      (the capacity axis, still gate-held), **#5194/#5268** (the backoff-before-capacity gate), **#2585**, **#5408**
+      (ids carried from the lead's row — `scribe` did not verify their content, so nothing is asserted about them
+      here). The narrative of the pass that measured this is **D230** and its `docs/SELFDEV.md` pitfalls; the key's
+      own comment at `src/config.mjs:304` and the `docs/SELFDEV.md` recipe are corrected by **#5488**, not here.
 - **D-5015.2 — Status: DECIDED (values proposed, pool is the operator's). Three caps, three axes.**
   `DURIG_SPEND_CAP_CALL_USD` = **0.05 USD projected per call**; `DURIG_SPEND_CAP_RUN_USD` = **0.10 USD per run**
   (the existing probe ceiling, `DURIG_PROBE_CEILING_USD`, renamed, and a **different axis** — a run total is not a
@@ -10150,3 +10191,375 @@ the repo.
 change beyond the config the operator ordered, credential rotation (declined, D231), deleting the store backups that
 carry credential values (**30** `.bak.*` sidecars in `~/.durig-backup/`, largest 20,536,188 B, mode `0600`), and the
 **365** rows parked on a human — whose digest rows are **#5409/#5410** (`pm`, claimed).
+
+## D235 — the operator converts the standing capacity option into an instruction: *"add two seats that we sometimes rely on to use the strata-server provider"*; the delegate executes the machine half, the team owes the code half; and both of the session's verified fixes are recorded as **verified-but-unlanded** (2026-11-08T02:5xZ, delegate recording; host signature measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0` — the same signature as D233/D234, so runs are attributable to this machine without naming it)
+
+**Source:** the operator, `2026-11-08T00:4xZ`, verbatim: *"If you haven't yet, please add two seats that we sometimes
+rely on to use the strata-server provider."* That sentence follows the four approvals of the D234 cut
+(*"1. approved. 2. Approved. 3. Approved. 4. Approved. Please continue making good progress on the milestone."*) and
+**ratifies D233's option (ii)** — the third registered local prefix — as a directive rather than an option. Capacity
+and roster remain operator-granted; the grant was given here, so the delegate executes the roster act and does not
+re-ask it.
+
+**What was executed (machine config, no repo file touched).** `~/.config/durig/env` (mode `0600`, backup of the prior
+file kept in gitignored `.spike/delegate-20261108h/durig-env.preceding`) now carries a complete third-provider block,
+every value measured on the box rather than copied from a config that disagrees with it:
+
+| key | value | how it was established |
+|---|---|---|
+| `DURIG_LOCAL2_BASE_URL` | `http://192.168.1.52:8080/v1` | the LAN box the operator calls `strata-server` |
+| `DURIG_LOCAL2_MODEL` | `qwen3.8-flash-next-iq3_xxs` | `GET /v1/models` answers **exactly** `["qwen3.8-flash-next-iq3_xxs"]` and `/props model_alias` agrees — **pi's `~/.pi/agent/models.json` declares `…_s` for this host and is false** |
+| `DURIG_LOCAL2_CONTEXT` | `131072` | `= /props default_generation_settings.n_ctx` |
+| `DURIG_LOCAL2_MAX_TOKENS` | `16384` | matches the seat plane's existing posture |
+| `DURIG_LOCAL2_PRICE_USD_IN/OUT` | `0` / `0`, `_AS_OF=2026-11-08` | **required, not optional**: a LAN host is `metered` by endpoint (`src/providers/local.mjs:60-77`), so an unpriced spec is a refusal; `0` is a legitimate *declared* price for operator-owned hardware (`local.mjs:83-95`) |
+| `DURIG_LOCAL2_API_KEY` | the box's own key | taken from the operator's `~/.pi/agent/auth.json` entry for `strata-server`; the **local** key is rejected there — `GET /props` with it returns `authentication_error: missing or wrong API key` |
+
+Endpoint facts measured with that key, in the same command as the write: `total_slots: 4`, `n_ctx 131072`,
+text-only; a 57-token prompt completes with real content (`finish=stop`, 26 completion tokens vs 27 on the seat box
+for the same prompt).
+
+**What is still owed, and by whom.** A seat's provider comes **only** from the leading segment of its `model` string
+(`src/seatmodel.mjs:13-22`), and `LOCAL_ENV_PREFIXES` / `LOCAL_PROVIDER_IDS` (`src/providers/local.mjs:41,44`) still
+name exactly two locally-served providers, so `local2/…` cannot resolve and **no seat can move until the code lands**
+— confirmed by `grep -rn "DURIG_LOCAL2" --include=*.mjs` over the repo → **0 hits**. The team minted both halves
+within one pass of the brief: **#5605** (`devtools`, `queued`) registers the prefix (the two constants plus
+`CONFIG_KEYS`, `src/config.mjs:118-128`; the id `local2` is DERIVED from the prefix, `local.mjs:131-133`, so id and
+key cannot drift), and **#5608** (`pm`, `held`) is the roster act — set `"model":
+"local2/qwen3.8-flash-next-iq3_xxs"` on two seats in `rig.selfdev.json` and `up --refresh` **with the broker stopped**
+(`--refresh` re-points EVERY seat). Recommended pair, with the reason on the row so `lead` can overrule it on
+knowledge the delegate does not have: **`qa2` + `security`** (text-only work; `auditor` stays on the metered
+cross-family verifier so D-5015 independence survives; the no-code "repoint `DURIG_VERIFIER_*`" route stays
+rejected). Excluded on purpose: `designer` and `advocate` — the box is **text-only** and those seats review UI/CLI
+surfaces where an image can be in the turn; and `impl`/`architect`/`pm`/`lead`/`qa`/`scribe`, which need the
+204,800-token window and the faster quant. The capability cut is stated, not hidden: `_xxxs` quant,
+**131,072** context, text-only, 2 concurrent calls measured at **5,271 ms** on that box; what is bought is **4 slots
+on a different machine**, which also stops the seat fleet and the delegate's own pi session contending for the same
+3 loopback slots (pitfall 112).
+
+**TRAP recorded so #5605 does not rediscover it.** A tiny-token probe against that box returns
+`finish_reason=length` with `message.content = null`: at an 8-token budget it produced 8 completion tokens and **no
+content**; at 64 it returned `OK`. A 1-token preflight probe (pitfall 108, held row **#549** — single-sample probes)
+will therefore read a healthy server as "answers but refuses inference" and **BLOCK** the broker start.
+
+**VERIFIED, NOT LANDED — the durability rule (D232 (4)) applied to this session's two fixes.** `main` =
+`origin/main` = **`c047b767`** at cut; both fixes sit on item refs, each green under a runner that is not its author's
+loop: **#5488** (`item-5488` = `ade0691a`, row `done`) — `demo/local-slot-gate.test.mjs` exit 0 with 11 assertions
+(lease held naming seat+pid, released at end, second `local/*` generation QUEUES and never reaches the wire, acquire
+overhead **0.070 s**), `node scripts/test.mjs --all --jobs 6` → **262/262 in 81.5 s**, `durig.config.default.json`
+untouched (default cap still 1); non-vacuity observed on `main`, where with the cap at 1 the delegate sampled
+**6 `running` `pi.generation` rows with 0 `genlock` lease files** and 12 TCP connections to a 3-slot box.
+**#5398** (`item-5398` = `9ae25f09` + docs `6d5c126d`) — both operator-approved bars met on the live store with the
+broker stopped: `node scripts/clockin.mjs | wc -c` → **15,117 B** in the item tree against **43,967 B** in the `main`
+tree at the same minute on the same store (budget 20,000 B; over-budget is now **exit 1**), and
+`demo/clockin-digest.test.mjs` exit 0 with a **160-row `deferredTo:"human"`** fixture asserting the old
+one-line-per-row shape is **over** budget while the aggregate shape stays bounded from 160 to 4,000 rows.
+
+**A STRUCTURAL HAZARD found by watching windows, not logs.** **A broker-routed read issued from inside a seat's own
+turn cannot be answered**, because the broker is inside the very pass waiting for that turn to settle. Three windows,
+three overruns (last passes `00:59:45`, `02:03:17`, `02:41:55`; killed with `EXIT … reason=deadline` at `01:41:57` =
+**42 min past a 1800 s bound**, `02:25:12` = 22 min past 1200 s, `02:53:06`). The proof is the child cmdlines
+(`ps --ppid <broker pid>`): seats sat in `node cli.mjs queue --id N` (90 s timeout) and
+`node scripts/clockin.mjs --db …` while `tasks` showed their `pi.tool` rows `running`; from outside the same read
+answers `{"ok":false,"error":"read queue-census: timed out awaiting the broker's result"}`, which is also why
+`scripts/clockin.mjs` fails mid-window (its `health` read times out). And there is no way around it through the store:
+the newest `durig.queue` revision holds **5,819 B** while the store has **5,661** rows, so pitfall 105's "no SQL
+shortcut for item state" is a property, not a missing tool. Scribe filed the gap as **#5640**. This is the mechanism
+behind "the windows are being spent, not the work": **111 metered calls, $0.06364** across four windows (00:29:45Z,
+01:43:18Z, 02:26:55Z, 03:00:18Z) whose **broker wall clock was 155.3 min against 75 min of nominal `--max-duration`
+bound — a 2.07× overrun** (per window 72.2/30, 41.9/20, 26.2/15, 15.0/10 min) — and they produced 4 commits
+(D234, #5488, #5398 ×2, this record). The last window is its own evidence: **351 passes, `woke=-` on every one**,
+zero generations, with 10 rows `claimed` and 35 `queued` — a `claimed` row does not wake a seat, so an idle fleet after
+a kill+`resume` is a delivery problem, and the cheap fix is an intent spooled while the broker is **down** and applied
+on the next `--start` (pitfall 121).
+
+## D236 — the operator **accepts all seventeen recommendations** of the N9 question set and orders them executed; the delegate executes the machine plane, records the rulings, and routes the rest (2026-11-08T03:3xZ, delegate recording; host measured in the same command as the edits: `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0`)
+
+**Source:** the operator, `2026-11-08T03:2xZ`, verbatim: *"I accept your recommendations. Please act on them."* That
+adopts the N9 recommendation list (Q1–Q17) as rulings. Recorded here so a later session cites a decision, not a chat.
+
+**Rulings now in force** (one line each, with the row or file that carries it):
+
+1. **Push is granted for the record batch** (`origin/main..main`). Consumed this session — see §Execution.
+   `#5580`'s "11 unpushed commits" is **stale**: measured `git log --oneline origin/main..main` → **2** docs commits.
+2. **Landing first, always**: land **#5488** (rebase onto current `main` first — the branch predates `c047b767`) and
+   **#5398**; only then the approved **cap → 3**, which is a `durig.config.json` act by a seat, never by the delegate.
+3. **Two seats move to `local2`, pair = `qa2` + `security`,** and the capability cut is **accepted explicitly**:
+   `_xxxs` quant, **131,072** context, **text-only**, 4 slots on a second box. `designer`/`advocate` remain excluded
+   (text-only work), `impl`/`architect`/`pm`/`lead`/`qa`/`scribe` remain excluded (204,800 window, faster quant).
+   Row **#5608** stays parked until the code half lands; the duplicate code rows **#5605** (`devtools`, queued) and
+   **#5655** (`impl`, claimed) are one unit and their resolution is `lead`'s, not the delegate's.
+4. **Independence is by risk class, not by default**: a non-author independent leg is required for **behaviour
+   changes**, optional for docs/verify rows; where it is required and the verifier cannot carry it, it runs **on the
+   local model** (seat-level independence), and `status.context` is **not** trusted as health — `auditor` declares
+   24,576 while the verifier slot is 8192×4 and real auditor turns run p50 16,518 / max 23,419 (`#4957`, done). No new
+   GPU capacity, no bigger slot (standing since `#4954`), so option (a) is off the table unless the operator changes it.
+5. **Memory write gate — two boundaries ruled by the operator** (by adoption of the recommendation, phrased as the
+   delegate's text, restatable): **quarantine content is NEVER rendered in a prompt section**, and **no memory record
+   may ever satisfy a permission check — memory informs reasoning only.** `security` writes the ROADMAP 167/179
+   position against these two sentences; nothing in **165/166/167** is buildable until that position lands.
+6. **The read-deadlock is a real defect and gets a row** (`#5640` is the gap): a broker-routed read issued inside a
+   seat's own turn cannot be answered. Interim discipline: seats stop issuing `cli.mjs queue` / `clockin.mjs --db …`
+   from inside a turn; use one multi-id `show` (pitfall 105) or the recorded numbers.
+7. **Docs-only rows release now, not later**: **#4354** (its gate **#4352** is `done`), **#4835** (its stated blocker
+   **#4849** is `done`), **#3350** (its gate **#3349** is **`cancelled`** — the gate names a dead row and must be
+   re-pointed). The `$?`-clobber prover pitfall (**#4976**) gets its own small docs row off the live tree.
+8. **Landing gate: re-measure then land one at a time.** The operator's side of **#4817** — reclaiming stray plain
+   `item-*` directories — is a **no-op**: measured 03:2xZ, **81** root `item-*` directories, **81** registered
+   worktrees, **0** strays (probe in the next paragraph). Batch landing stays forbidden.
+9. **`--status` prints credential values: fix the print, do NOT rotate** on the strength of this recurrence (terminal
+   output only; re-scope grep found only ROADMAP **295**'s own elided example). Redaction rule stands (pitfall 120).
+10. **ROADMAP 217's remaining half is shipped as operator-owned text**: the seat prompts must name the shell tool
+    (`bash` on Linux hosts). Measured before the act: `grep -rIo "bash" prompts/ | wc -l` → **0**.
+11. **Both probes get promoted to `tools/`** — widen **#5617** to cover the digest-scale probe too; an unpromoted
+    probe in gitignored `.spike/` is lost next session.
+12. **Windows are short and supervised**: one 900 s landing-first window, judging it by `woke=` and a moving
+    `lastPassAt` (pitfalls 116/121), because tonight cost **155.3 min of broker time against 75 min of bound (2.07×)**.
+
+**EXECUTED BY THE DELEGATE (machine plane, no repo file).** Correction to pi's model registry, the act of Q15. Before:
+`~/.pi/agent/models.json` declared `qwen3.8-flash-next-iq3_s` for the provider `strata-server`
+(`http://192.168.1.52:8080/v1`) while `GET /v1/models` answers exactly `["qwen3.8-flash-next-iq3_xxs"]`;
+`settings.json` repeated the same id in `defaultModel` (its `defaultProvider` is `strata-server`) and in the model
+settings key. **Severity, measured — this is a false claim, not a broken call:** a completion requested with the WRONG
+id is served by the box with the RIGHT one —
+`{"model":"qwen3.8-flash-next-iq3_s", …}` → `"model": "qwen3.8-flash-next-iq3_xxs"`, `content: "OK"`, so llama.cpp
+re-routes the id and pi's own session was never failing on it. After the edit both files agree with the box:
+`strata` = `qwen3.8-flash-next-iq3_s` ctx **204,800** (unchanged), `strata-server` = `qwen3.8-flash-next-iq3_xxs`
+ctx **131,072** max **24,576**, settings default `strata-server/qwen3.8-flash-next-iq3_xxs`. Both files were copied
+first to gitignored `.spike/delegate-20261108h/pi-{models.json,settings.json,models-store.json}.preceding` (mode
+`0600` source, backups in the same tree); JSON re-parsed after each write. **Note for the operator:** pi's declared
+`maxTokens 24576` for that box still exceeds this rig's `DURIG_LOCAL2_MAX_TOKENS=16384`, and pi's default provider is
+the **LAN box, not the local box** — that was true before this edit and is not changed by it.
+
+**What the delegate did NOT do.** No queue act (no claim/complete/defer/route), no seat's work, no code change:
+Q13's print fix, Q6's re-measure, Q2/Q5's releases, Q4's closure authority, Q12's BUILD row and Q11's roster act are
+delivered as intents to `lead`/`pm`/the owning seats with the rulings above quoted in them, and one bounded supervised
+window is run to let the team act (Q17).
+
+## D237 — 2026-11-08T06:3xZ: after a provider bounce the fleet is dead until BOTH the declared id and the roster strings name what the box serves; the delegate executed that on the machine plane and set the seat cap to 4
+
+Host, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+
+**The operator's instruction (06:1xZ):** "I bounced the LLM server, and raised the concurrency to 8. You'll probably
+need to poke the agents in the team to get them working again. And you'll probably need to raise the concurrency count
+for the team."
+
+**What was actually broken, measured before touching anything.** Every seat generation failed in **1 ms**
+(`startedAt 1794119569512`, `endedAt 1794119569513`) with
+`{"status":"failed","error":{"message":"Model local/qwen3.8-flash-next-iq3_s is not available","detail":{"reason":"no_model"}}}`
+— 20 wakes on `impl`, 21 on `pm`, 19 on `devtools`, and **no assistant entry at all** in any conversation. The box's
+own listing: `GET http://127.0.0.1:8080/v1/models` → `[{"id":"qwen3.8-flash-next-q2_0","status":{"value":"loaded"},
+"meta":{"n_ctx":204800},"architecture":{"input_modalities":["text","image"]}}]`, and the LAN box the same id with
+`n_ctx 131072` and `input_modalities: ["text"]` only.
+
+**Why, from the source, not from guesswork.** `createLocalProvider` (`src/providers/local.mjs:241-280`) registers
+exactly **one** model row, `spec.modelId`, which comes from `<PREFIX>MODEL`. `resolveSeatModel`
+(`src/seatmodel.mjs:13-22`) takes the model id straight from the seat string. So a seat naming an id the provider does
+not register dies as `no_model` *before any request* (`src/providers/local.mjs:233,269`). llama.cpp **reroutes an
+unknown id** — measured: request `qwen3.8-flash-next-iq3_s` → response `"model":"qwen3.8-flash-next-q2_0"`,
+`finish_reason":"stop"`, content `"OK"` — so a stale id is invisible on the wire and only shows up at registration.
+The instrument that names it is the preflight:
+`BLOCK provider-DURIG_LOCAL_-model-absent: http://127.0.0.1:8080/v1 advertises [qwen3.8-flash-next-q2_0] but the
+config names 'qwen3.8-flash-next-iq3_s'`.
+
+**Executed (machine plane and the rig's own roster; no queue act, no seat's work):**
+- `durig.config.json`: `DURIG_LOCAL_MODEL=qwen3.8-flash-next-q2_0`, `DURIG_LOCAL_CONTEXT=204800` (the box's `n_ctx`),
+  and the `DURIG_COMPACTION_MODEL_OVERRIDES` key re-pointed from `local/qwen3.8-flash-next-iq3_s` to
+  `local/qwen3.8-flash-next-q2_0` — leaving the old key would silently lose the 20,480-token compaction reserve.
+  Backup: `.spike/delegate-20261108h/durig.config.preceding.json`.
+- `rig.selfdev.json`: all 11 local seats re-pointed to `local/qwen3.8-flash-next-q2_0` (`auditor` stays
+  `verifier/openai/gpt-oss-120b` as the gate canary). Backup:
+  `.spike/delegate-20261108h/rig.selfdev.preceding.json`. Applied with `cli.mjs up rig.selfdev.json --refresh`
+  (broker stopped — `--refresh` re-points every seat) → `refreshed: pm, impl, qa, qa2, lead, advocate, scribe,
+  devtools, auditor, designer, security, architect`.
+- `.pi/settings.json` (this directory): delegate session default → `strata-server/qwen3.8-flash-next-q2_0`, freeing a
+  localhost slot. Backup: `.spike/delegate-20261108h/durian-pi-dot-pi-settings.preceding`.
+
+**The concurrency number, and why 4 rather than 8.** The operator raised provider-side concurrency; the rig's own
+admission cap was **unset**, i.e. `durig.config.default.json:3` `DURIG_MAX_CONCURRENT_SEATS: "1"`. Measured on the
+local box in one command: **4** concurrent seat-sized turns (2,460 prompt tokens, 512 max out) = **5.41 s** wall;
+**8** concurrent = **5.28 s** wall; `/props` declares `total_slots: 4`. So **4 is the number the box declares and the
+number the measurement supports without queueing**; 8 is demonstrated headroom, and per D233/D236 the cap is a dated
+operator ruling, so `4` is set as a reversible machine-plane default (one key in `durig.config.json`) with the 8
+measurement recorded for the operator to raise it to.
+
+**Boundary stated so the record is not over-read:** a `START REFUSED: live-tree-dirty` from `broker-serve.mjs` is not
+noise — a seat woken from a dirty main tree edits that tree (F12/F23). The roster edit therefore had to be committed
+before the window could start. And the LAN box is **text-only**, so any seat whose surfaces carry images cannot move
+to it (D236 (3)).
+
+**What the delegate did NOT do:** no claim/complete/defer/route, no code change. `#5655`/`#5605` (register
+`DURIG_LOCAL2_`) are still the team's, unstarted as of 06:3xZ (measured: no worktree contains `DURIG_LOCAL2`), and the
+two-seat move to the LAN box still waits on that registration.
+
+## D238 — 2026-11-08T07:0xZ: the operator's three answers to N10 — cap 4 accepted, push granted and consumed, throughput now with the localhost-verifier question parked, not closed
+
+Host, measured in the same command as the measurements: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+
+**The answers, verbatim:** "1. accepted. 2. approved. 3. I want throughput now. We can re-evaluate later, whether we
+can afford to host a verifier model on localhost again. Don't let us forget that we want to do that."
+
+**Rulings recorded.**
+1. **`DURIG_MAX_CONCURRENT_SEATS = 4` stands** (D237), accepted with the evidence that 4 is the declared slot count
+   and the 3090 sits at 22,637/24,576 MiB (92 %) with six seat generations running. The raise to 8 stays an operator
+   ruling, gated on **#5488** landing — until then the cap is inert for `local/*` and the number is a label.
+2. **Push granted and consumed:** `git push origin main` → `7ccb2163..dc4491bf`, exit 0, `origin/main` = `dc4491bf`,
+   `git rev-list --count origin/main..main` = **0**. The grant is spent; the next push needs a new grant.
+3. **Throughput is the priority, and its bottleneck is named with numbers.** Measured 06:4xZ: local box
+   `total_slots 4`, 18 TCP connections, `/status` `{"busy":true,"queued":0}`; LAN box `total_slots 4`, **2 connections,
+   idle**. 205 seat generations completed in 25 min, 0 failures. The idle box cannot be used until `DURIG_LOCAL2_` is
+   registered (**#5648**, `devtools`, claimed — its failing-first demo was run against the unfixed tree and is red,
+   exit 1: "must build 3 specs … (got 2)"). **The verifier-on-localhost question stays open on purpose**: it is a
+   capacity ruling about hosting a second model family on the loopback box, and the measurement that bounds it is the
+   92 % GPU memory. It is deliberately *not* resolved here; it goes in the parked-question digest (§D of NEXT.md) and
+   a row pm is asked to mint.
+
+**A defect worth naming, from the same read:** lead cancelled **#5605 / #5655 / #5705** and re-cut the identical change
+into **#5648** (claimed), **#5714** and **#5721** (both queued to `impl`) — one change, four live rows. That is a
+routing-deduplication gap, and it is why the queue reads that seats run inside their turns cost 25 MB and minutes.
+
+**Also fixed in this window (machine hygiene):** `.gitignore` now carries `*.spend.jsonl`. `selfdev.sqlite.spend.jsonl`
+(649,410 B, 1,796 rows) was untracked **and not ignored** — the exact shape that lost the ledger once before
+(`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`). Note the interaction: `broker-serve --start`
+refuses a dirty tracked tree (`START REFUSED: live-tree-dirty`), so an uncommitted hygiene edit is not neutral — it
+stops the fleet.
+
+**What the delegate did NOT do:** no claim/complete/defer/route. The `local2` code half, the landing of #5488/#5398,
+the dedup of #5714/#5721 and the minting of the verifier-family row are delivered as intents to `lead`, `devtools` and
+`pm` and executed by those seats in a bounded supervised window.
+
+**D238 addendum (07:3xZ) — the concurrency number must be measured under load, and under load it collapses.** The
+"8 concurrent seat-sized turns in 5.28 s" figure in D237 was taken in the quiet gap while the fleet was dead. Re-measured
+with the fleet running: **8 concurrent requests = 60,013 ms wall**, and **one** 128-token request = **12,563 ms**, while
+`GET /status` shows a seat turn with **79,886 prompt tokens** in flight (`{"busy":true,"queued":0}`). So the local box
+is **prompt-processing bound, not slot bound**: the binding constraint is the size of each seat's prompt, not the
+number of slots. Consequence for the throughput ask: raising `DURIG_MAX_CONCURRENT_SEATS` to 8 would queue, not
+speed; the two levers that actually move throughput are (a) landing **#5648** so the idle LAN box (4 slots, 2
+connections) can carry seats, and (b) making each seat turn cheaper — which is the compaction/context work the team
+owns. Record both numbers with the load state, or the 5.28 s figure will be quoted as capacity it is not.
+
+## D239 — 2026-11-08T18:5xZ: the fleet runs, the queue is parked, and a wake body that names a tool no seat has is a throughput defect
+
+**Decision.** "Ensure the team is operating as expected" is answered with instruments, not vibes: per-seat
+completed/failed generations (`fleet-health.mjs`), the wake-reason census from the broker log, and the queue census.
+Three findings follow, each with the measurement attached.
+
+1. **The fleet is working, and its throughput is bounded by admission, not by slots.** Since 08:00Z: **216 completed
+   generations, 20 failed, 9 commits** across 12 seats. Failure classes: engine exit **-11** (llama crash under load),
+   "the engine stopped while this request waited; it was not sent", and **`auditor` 6 × `Compaction failed:
+   Summarization hit the token limit; the summary is incomplete`** — the verifier seat compacts against a slot shape it
+   cannot satisfy. Meanwhile **11 `pi.generation` rows were `running` against a box declaring `total_slots: 4`** while
+   `GET /status` said `queued: 0`. Admission is `DURIG_MAX_CONCURRENT_SEATS`, and it is inert for `local/*` until the
+   gate lands (**#5488**, re-cut as **#5736**, `item-5736` = `f4554164`, verified green on a current base by an
+   independent runner: `demo/local-slot-gate.test.mjs` exit 0, 11 assertions, suite 261/262).
+2. **A wake body that names a capability the seat lacks is a defect, not a wording nit.** `WAKE_CONTENT_PARKED`
+   (`src/driver.mjs:55`) says "Check `status` for which rows are parked"; the seat registry has ten tools and no `status`
+   (`src/rig.mjs:632–1327`: `send_work`, `claim_work`, `complete_work`, `defer_work`, `resume_work`, `hold_work`,
+   `release_work`, `revise_work`, `cancel_work`, `peek_queue`). Counted today: **174 parked wakes vs 72 claimable wakes**. `lead`'s own
+   reasoning: "It's the fifth repetition… I don't have a `status` tool." **#4607** fixed the wake that lied about
+   *work*; this one lies about *capability*. The failing-first demo writes itself: cross-check every tool name
+   mentioned in a wake body against the registry.
+3. **`main` is red for two reasons, and neither is a regression.** `node scripts/test.mjs --all --jobs 6` → **259/261**:
+   `demo/clockin-digest.test.mjs` (live digest **41,614 B** vs a 20,000 B budget — the whole excess is the 28 KB
+   deferred dump **#5398** replaces, so landing #5398 is the fix) and `demo/verifier-arm-probe.test.mjs` (**ROADMAP
+   294**, cause pinned: the demo scrubs only `API_KEY|SECRET|TOKEN$` from the environment while the probe reads
+   `durig.config.json` at the repo root, which on this host legitimately carries verifier prices; the tool already
+   supports `--config=PATH`, the demo does not pass it). **A `--suite` landing is therefore refused today** — the
+   landing pass must carry #5398 with it.
+4. **Recorded, not closed:** the operator's "re-evaluate whether we can afford to host a verifier model on localhost
+   again — don't let us forget" has **no queue row** (`SELECT … record LIKE '%localhost%verifier%'` → 0 rows). It is
+   carried here and in `docs/NEXT.md`, bounded by RTX 3090 **22,387/24,576 MiB (91 %)** with eleven generations in
+   flight. Minting the row is a seat act (`pm`), not a delegate act.
+
+**Why.** Every one of these is the same milestone question — *can the rig finish the work it admits* — and each answer
+came from a number, not from a wake count.
+
+## D240 — the operator re-orders the milestone: **avoid compaction; continuation notes are the mechanism, and they live on the extension plane** (2026-11-09T03:2xZ, delegate recording; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The ruling, as given.** "The priority is to avoid context compaction. If a task cannot be completed in a single
+context window, ensure the team member is properly maintaining notes to ensure they can continue working on the task
+from a fresh context, in case the team harness forces them to work in a new context." The operator did not know where
+the notes should live or whether that should be configurable per installation, and ruled the mechanism must be **an
+extension**, "as is proper in the Pi ecosystem" (D212: a customization that cannot be an extension means the base is
+missing a seam — grow the seam, not the feature).
+
+**What the delegate adopted, and the measurement behind each choice.**
+
+1. **Source of truth is a store document**, `defineDoc({kind: "durig.notes", scope: "conversation", history: "rewindable", fork: "asOf"})` — the shape
+   ROADMAP **177** already ruled for typed state, and the shape the pi-durable `PlanDoc` example uses. *Why not a file
+   in the seat's worktree:* `.durig/` is gitignored (`.gitignore:16`), seats work in per-item worktrees (D49), and the
+   rig has a recorded incident where worktree and scratch state were swept
+   (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`). A note that dies with the worktree is not a continuity
+   mechanism, and a gate cannot read it.
+2. **A mirror file, configurable per installation:** `DURIG_NOTES_DIR/item-<id>.md`, default `<rig root>/.durig/notes/`,
+   resolved through `src/config.mjs` like every other setting and printed by `check` so the effective path is never
+   guessed. This answers the operator's "configurable per installation" question with one env var, not a new config
+   surface.
+3. **Compaction stays as a fallback, but the summariser model call is removed.** `beforeCompact`
+   (`pi-durable dist/harness/compaction.js:82-88`) lets an extension return `{summary}` and `place()` commits it at
+   `:374` — the summariser request is never constructed. That deletes the fragile part: **218** "Summarization hit
+   the token limit; the summary is incomplete" records, **209** refusals by `DURIG_SPEND_CAP_RUN_USD` before any
+   request was sent, and 1 provider 429, out of **2,333** attempts (430 failed). It does **not** `{decline: true}`:
+   ROADMAP **176** forbids a competing summariser, and the hook writing the summary *is* pi-durable's own mechanism.
+4. **The note is not put in the prompt.** ROADMAP **175** is the gate — pi-durable rebuilds the system prompt from
+   sections before every request and provider caching is prefix-exact, so a `render` that changes per request may be a
+   full-prefix cache miss every request. Static pointer section only; the mutable body arrives at boundaries: wake
+   (`src/driver.mjs:54, 242`), compaction (`beforeCompact`), and reset (`src/reset.mjs:70`, `harness.reset(handoff)`
+   at `dist/harness/harness.js:45-48`). The reset path matters because a compaction summary is *always* fenced
+   (`compaction.js:12-13, :374`), so a structured seed can only come from a reset.
+5. **The 331 nesting fix is still required** — as the fallback's plumbing, not as the milestone. `src/config.mjs:513`
+   emits `out.modelOverrides` as a sibling of `compaction`, which `dist/harness/compaction.js:196` never reads, and
+   `demo/config.test.mjs:333-341` asserts the sibling shape, so the test currently pins the bug (pitfall 161).
+
+**Why this ordering, and not "make compaction better."** Compaction cannot be the answer to task completion because
+the wall is not the window. Measured this session: the auditor's live context is **106 %** of its declared 24,576-token
+window; **9 of 12 seats** are `AT RISK` on turn shape — a strict alternating template refuses the next user turn before
+any token limit is reached; and a seat's current window carries **1–11 queue items** (impl references 108 distinct
+`item-\d+` in its last 200 entries), so the summariser is being asked to compress a hundred unrelated tasks. A perfect
+summary of a window holding a hundred tasks still does not let one task finish. The note is the unit of continuity;
+the window is just where it is carried.
+
+**Deliberately left to the operator.** Whether the verifier/auditor moves to the local family (it is the seat at the
+wall — every one of the 209 run-cap refusals belongs to conversation 4936) or whether `DURIG_VERIFIER_MAX_TOKENS` /
+verifier context is raised: capacity is a grant, not a delegate action. Whether notes are per-project or per-rig is
+already answered by D130/R1 (per project; this rig is one project today).
+
+**Recorded, not done.** No code was written by this delegate. The design is
+`docs/reviews/architecture-context-continuity-2026-11-09.md`; the intent is spooled to `pm` as
+`delegate-20261109-continuity` (broker `pid 114848`, first pass `INTENT delivered=5 dead=0 dup=0`).
+
+## D241 — 2026-11-09T04:4xZ: landing becomes a **role**, not an errand — a release seat owns the readiness plan, the quiesce-then-merge pass stays outside the broker (operator question, delegate answer; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The decision.** The operator asked whether the team should have a release manager / ops seat responsible for
+merging all completed branches, instead of the delegate landing them by hand. The delegate agrees, and records the
+shape the role can actually take, because the rig already contains the constraint that decides it.
+
+**Why the naive version cannot work.** `docs/runbooks/land.md:427-431`, read in-tree: "**A landing pass CANNOT be
+driven by a broker-hosted seat.** Quiescing requires stopping the broker, and stopping the broker ENDS the run of any
+seat hosted by it — so such a seat cannot stop the broker and then land and report. (2026-10-17: the exclusive
+landing window closed QUIET BUT EMPTY for exactly this reason.)" The same runbook states plainly that `land` is the
+delegate's/operator's action, not the team's. So "the ops seat merges everything" is not implementable today; a seat
+that stops the broker stops itself.
+
+**What the role CAN own (measured need, 04:4xZ).** `git branch --list` → 151 item branches; **62 ahead of `main**;
+**83 commits** unlanded; `git merge-tree --write-tree main <branch>` → **43 merge clean, 19 conflict**. This recurs
+after every pass: `docs/DECISIONS.md:7404` requires re-establishing the seat-root invariant after every landing pass,
+and ROADMAP 311 records 21 worktrees the rig classified as `reapable` and nothing consumed — the delegate removed them
+by hand. ROADMAP 310 shows the land helper refuses the whole train on a dirty tree, and the dirt was the rig's own
+`selfdev.sqlite.spend.jsonl`. That is a continuous job with a name, not an occasional favour.
+
+**The split, spooled to `pm` as `delegate-20261109-release-role`:**
+- **Part A, seat-ownable, no model spend:** keep the landing list current against the three gates in
+  `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md` §5 (verified in queue; tip matches the landing list vs `git rev-parse`;
+  clean against the **current** `main` by `git merge-tree`); order the train and name every stacked entry's base
+  (`land.md:400-410`); report the conflict set with a named owner per conflict; own worktree/branch hygiene.
+  Acceptance: one command prints an ordered, executable plan; after a pass `git rev-list --count main..<branch>` is 0
+  for every branch in it.
+- **Part B, not seat-ownable:** the quiesce-then-merge act. If the team wants it inside the rig, it is a **base seam**
+  question (ROADMAP 131 `pause`, a broker-side quiesced boundary), not a seat question — and per D212 customization
+  belongs on the extension plane, so the missing seam must be named rather than wired around.
+
+**Deliberately left to the operator.** Creating a new seat is a capacity grant: 12 seats today, `DURIG_MAX_CONCURRENT_SEATS = 4` (D238), and 9 of 12 seats are already `AT RISK` on turn shape — adding a seat is not free. The operator decides whether the role is a new seat, a redefinition of `lead` (which already writes landing entries) or `devtools` (which owns rebase-then-land per DISPOSITIONS:200), or a delegate-run cadence with the seat only preparing the plan.
+
+**Recorded, not done.** No branch was merged by this session. `main` = `429f2b5a` (docs + gate only).

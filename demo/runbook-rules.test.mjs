@@ -112,13 +112,27 @@ assert.equal(mixed.summary.error, 1, "one stale error");
 assert.equal(mixed.summary["fix-now"], 1, "one unverified fix-now");
 assert.ok(!mixed.findings.some((f) => f.subject === "docs/runbooks/ok.md"), "the healthy runbook is not reported");
 
-// 5. Legible silence: no runbook data supplied -> both rules SKIPPED with a reason, never a false pass.
+// 5. Legible silence (#5767): no runbook data supplied -> the three rules report UNKNOWN with a
+//    reason, never "skipped" (which a reader takes for "ran, found nothing") and never a false pass.
 const none = audit(undefined);
 const noneChecks = new Map(none.checks.map((c) => [c.id, c]));
-assert.equal(noneChecks.get("runbook-stale").status, "skipped", "runbook-stale is skipped without data");
-assert.equal(noneChecks.get("runbook-unverified").status, "skipped", "runbook-unverified is skipped without data");
-assert.ok(noneChecks.get("runbook-stale").why, "the skip says why");
+assert.equal(noneChecks.get("runbook-stale").status, "unknown", 'runbook-stale is "unknown" without data, not "skipped"');
+assert.equal(noneChecks.get("runbook-unverified").status, "unknown", "runbook-unverified is unknown without data");
+assert.equal(noneChecks.get("runbook-front-matter").status, "unknown", "runbook-front-matter is unknown without data");
+assert.ok(noneChecks.get("runbook-stale").why, "the unknown says why");
 assert.equal(none.summary.error, 0, "no false error without data");
+
+// 5b. THE CONTRAST THAT MAKES 5 NON-VACUOUS: the no-data case and the stale-data case must print
+//     DIFFERENT lines. If UNKNOWN and a real finding rendered the same string, the fix would be a
+//     rename, not a distinction.
+const noneRender = formatCheck(none, { rigDisplay: "rig.json", color: false, seats: 2, storeReason: "absent"});
+const staleRender = formatCheck(mixed, { rigDisplay: "rig.json", color: false, seats: 2, storeReason: "read" });
+assert.match(noneRender, /runbook-stale UNKNOWN: no runbook data was supplied/, "no data renders as UNKNOWN with its reason");
+assert.ok(!/runbook-stale skipped/.test(noneRender), "no data must not render as a plain skip");
+assert.match(staleRender, /runbook-stale/, "the stale fixture renders runbook-stale as a finding");
+assert.ok(!/runbook-stale UNKNOWN/.test(staleRender), "a rule that DID receive data never renders UNKNOWN");
+assert.ok(mixed.checks.some((c) => c.id === "runbook-stale" && c.status === "fail"), "with data, the rule is fail/pass — not unknown");
+assert.ok(noneRender !== staleRender, "the two trees render differently");
 
 // 6. An explicitly EMPTY runbook set is a PASS (the caller read the dir and found none).
 const empty = audit([]);
