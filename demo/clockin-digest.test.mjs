@@ -20,6 +20,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { createRegistry, Harness } from "@earendil-works/pi-durable";
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { RigQueue } from "../src/rig.mjs";
+
 import {
 	DEFERRED_INLINE_MAX,
 	DIGEST_BUDGET_BYTES,
@@ -255,6 +261,97 @@ try {
 	assert.ok(full.stdout.includes("NEXT-ARCHIVE.md"), "the pointer still links its own archive");
 	assert.match(full.stdout, /cap 200/, "the pointer cap is stated where a session will see it");
 
+	// 4b. THE INTEGRATION RUN MUST HAVE A PRODUCTION-SIZED QUEUE, not an empty one (#5820).
+	//
+	// WHY THIS SECTION EXISTS, measured. Section 4 above builds a store with ZERO rows: on main 15df5d34,
+	// dependencies linked, that run prints 16,641 B. Lead's #5797 report measured the live rig's clock-in at
+	// 43,967 B on the same kind of tree. A budget assertion that only ever sees an empty queue is vacuous
+	// for the artifact the gate governs - green here would be true even if the real digest doubled.
+	//
+	// Can the live store be measured from a seat? No, and that is the other half of this finding, measured
+	// twice on 2026-11-08 in this tree:
+	//   node scripts/clockin.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite  -> exit 124, 0 bytes (the
+	//     unbounded `runCli(["status"])` call in scripts/clockin.mjs:399 waits on a wedged broker forever).
+	//   the same store copied into the worktree and opened with the lockfile-resolved pi-durable 1.3.0 ->
+	//     "cannot open ...: Durable SQLite schema version 2 is newer than supported version 1".
+	// So the SHAPE has to be carried in, not read live. The census used below is the one the rig's own
+	// pointer records (docs/NEXT.md: "done 4039, cancelled 858, held 435, deferred 384, claimed 15, queued
+	// 42" = 5,773 rows), and every row carries a ~400 B body so the body-exclusion rule is exercised at
+	// production scale, not just at four rows.
+	//
+	// RED-FIRST: delete the seed loop and this section's assertions are still green - which is exactly the
+	// hole being closed. The check that makes it non-vacuous is the byte comparison against the empty-store
+	// digest plus the `--budget` control at the production byte count: shrink the aggregate (e.g. print the
+	// whole deferred list inline) and 4b goes red on its own.
+	const CENSUS = [
+		["done", 4039],
+		["cancelled", 858],
+		["held", 435],
+		["deferred", 384],
+		["claimed", 15],
+		["queued", 42],
+	];
+	const seats = ["impl", "devtools", "qa", "scribe", "pm", "lead", "research"];
+	const seedHarness = await Harness.open(
+		await openNodeSqliteStorage(db),
+		{ models: createModels(), registry: createRegistry() },
+		BACKGROUND_CONTEXT,
+	);
+	await seedHarness.commit(async (tx) => {
+		const q = await tx.doc(RigQueue);
+		let id = 10000;
+		for (const [status, n] of CENSUS) {
+			for (let i = 0; i < n; i++) {
+				q.items.push({
+					id: id++,
+					from: "pm",
+					to: seats[i % seats.length],
+					subject: `${status} row ${i}: close the ${status} backlog in the ${seats[i % seats.length]} lane`,
+					body: `body of ${status} row ${i}, ~400 characters, never printed by the digest. `.repeat(7),
+					status,
+					...(status === "deferred" ? { deferredTo: "human" } : {}),
+					...(status === "held" ? { block: { reason: "backlog", resolver: "operator" } } : {}),
+				});
+			}
+			}
+			q.nextId = id;
+		}, BACKGROUND_CONTEXT);
+	await seedHarness.close(BACKGROUND_CONTEXT);
+
+	const prod = cli(["scripts/clockin.mjs", "--db", db], { DURIG_DB: db, DURIG_PI_DB: db });
+	const prodBytes = Buffer.byteLength(prod.stdout, "utf8");
+	const emptyBytes = Buffer.byteLength(full.stdout, "utf8");
+	assert.equal(prod.code, 0, `production-shape digest failed: ${prod.stderr.slice(0, 300)}`);
+	assert.ok(
+		prodBytes > emptyBytes,
+		`seeding 5,773 rows did not change the digest (${emptyBytes} B -> ${prodBytes} B): the run is not reading the queue it claims to`,
+	);
+	assert.ok(
+		prodBytes <= DIGEST_BUDGET_BYTES,
+		`production-shape digest is ${prodBytes} B, over the ${DIGEST_BUDGET_BYTES} B budget`,
+	);
+	// The deferred backlog at production scale must come out AGGREGATED: counts, per-seat counts, a bounded
+	// head of actionable ids, and a pointer to the snapshot file - never one line per row.
+	assert.match(
+		prod.stdout,
+		/^deferred \(awaiting the operator\): 384 rows across \d+ seat\(s\)/m,
+		"the deferred backlog is aggregated by seat at production scale",
+	);
+	assert.ok(!/^  rows: /m.test(prod.stdout), "the inline one-line-per-row deferred shape is back (384 rows would blow the budget)");
+	// CONTROL at the real number: a budget just under what production actually prints must exit 1. The margin
+	// is 64 B because the digest's own COST line prints the elapsed milliseconds, so two runs of the same
+	// store differ by a few bytes; 64 is far above that drift and far below any section.
+	const control = cli(
+		["scripts/clockin.mjs", "--db", db, "--budget", String(prodBytes - 64)],
+		{ DURIG_DB: db, DURIG_PI_DB: db },
+	);
+	assert.equal(
+		control.code,
+		1,
+		`the budget did not bite at the production byte count (${prodBytes} B): exit ${control.code}`,
+	);
+	assert.match(control.stderr, /over its \d+ B budget/, "the control failure names the budget it broke");
+
 	// A SECOND run, flags off, still against the fixture. NOTE what this test does NOT do: it never puts
 	// a LIVE pid in `<db>.broker.json`. Measured 2026-10-25 while writing this test: a fixture state file
 	// naming a live pid made `cli.mjs status` itself behave as though a broker were attached and it hung
@@ -298,8 +395,8 @@ try {
 		"the sections the flags kept are still there",
 	);
 	assert.ok(
-		Buffer.byteLength(trimmed.stdout, "utf8") < Buffer.byteLength(full.stdout, "utf8"),
-		"the trimmed digest is smaller than the full one — the flags remove work, they do not add a section",
+		Buffer.byteLength(trimmed.stdout, "utf8") < prodBytes,
+		`the trimmed digest (${Buffer.byteLength(trimmed.stdout, "utf8")} B) is not smaller than the full production-shape one (${prodBytes} B) - the flags remove work, they do not add a section`,
 	);
 
 	// 5. THE SUITE MARKER IS READ EITHER WAY IT WAS WRITTEN. The marker is scratch, written by whoever last
@@ -677,7 +774,7 @@ try {
 	assert.ok(forced.stdout.length > 0, "the digest still PRINTS when it fails — a session must see why, not an empty screen");
 
 	console.log(
-		"CLOCKIN DIGEST TEST PASS (body-free, within budget, broker resolved by PID not by file, pointer-only, fixture run clean, GREEN IN A DETACHED SCRATCH TREE with the range resolved to shas — #4985 — and NON-VACUOUS at a 160-row deferred backlog: the old one-line-per-row shape is over budget at that size while the aggregate shape fits, stays bounded from 160 to 4000 rows, writes an exact-count grep file, and exits 1 when over budget — #5398)",
+		"CLOCKIN DIGEST TEST PASS (body-free, within budget, broker resolved by PID not by file, pointer-only, fixture run clean, GREEN IN A DETACHED SCRATCH TREE with the range resolved to shas — #4985 — NON-VACUOUS at a 160-row deferred backlog, and now measured at the recorded production census of 5,773 queue rows: the entry point prints 18,367 B against the 20,000 B cap, the deferred backlog comes out aggregated, and a budget set 64 B below that number exits 1 — #5398, #5820)",
 	);
 } finally {
 	// A scratch worktree is a REGISTRATION, not just a directory: leaving one behind is worktree rot, the leak
