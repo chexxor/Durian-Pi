@@ -52,7 +52,27 @@ export const WAKE_CONTENT_STALLED =
  * designer already refuted for `idle_with_queued_work`.
  */
 export const WAKE_CONTENT_PARKED =
-  "Your queue holds parked rows awaiting release — there is nothing claimable for you. Check `status` for which rows are parked; do not call claim_work expecting work.";
+  "Your queue holds parked rows awaiting release - there is nothing claimable for you. Read them with peek_queue (pass all: true for the team view); do not call claim_work expecting work.";
+
+/**
+ * The parked SET of one seat, as a comparable string: the sorted (itemId, status) pairs of that seat's
+ * held/deferred rows. Pure (#5740 ruling, option A), so a demo can assert it without a harness and the
+ * dedup cannot hide a state change it never looked at.
+ *
+ * Deliberately NOT in the wake body: the wake text is a fixed string so it does not zero the prompt cache
+ * (ROADMAP 33). The signature is selection-state only.
+ *
+ * @param {Array<{to:string,status:string,id:number|string}>} items queue rows
+ * @param {string} seatName
+ * @returns {string} "" when the seat has nothing parked
+ */
+export function parkedSignature(items, seatName) {
+  return (items ?? [])
+    .filter((it) => it.to === seatName && (it.status === "held" || it.status === "deferred"))
+    .map((it) => `${it.id}:${it.status}`)
+    .sort()
+    .join(",");
+}
 
 /**
  * Which seats to wake. A seat is woken when it has work to advance:
@@ -82,6 +102,13 @@ export function selectWakes({
   // supplied by the caller (it has the submission rows); without it the trace still names the reason.
   onSkip = () => {},
   pendingAgeMs = null,
+  // #5740 option A: a seat whose parked SET has not changed since it was last told needs no wake - the
+  // wake would carry zero new information and would itself dirty the scheduler, which is how the loop
+  // sustains (4 wakes in 120 s for one held row, measured in the review §1). `parkedChanged(seat, sig)`
+  // is supplied by the WakeScheduler, which OWNS the last-seen signature; the default (no predicate) keeps
+  // the old behaviour so callers and existing demos are unaffected.
+  parkedChanged = null,
+  onParked = () => {},
 }) {
   const wakes = [];
   for (const [name, seat] of Object.entries(seats ?? {})) {
@@ -102,13 +129,18 @@ export function selectWakes({
         !stoppedConvIds.has(convId),
     );
     // #4607: PARKED ROWS AND NOTHING CLAIMABLE. A row the seat holds or that is otherwise unclaimable
-    // is not a claim offer and not a stalled claim — but telling the seat NOTHING leaves it polling. It gets
+    // is not a claim offer and not a stalled claim - but telling the seat NOTHING leaves it polling. It gets
     // its own reason and its own fixed body, so the wake names the state instead of advertising work.
-    const hasParked = !hasQueued && (items ?? []).some(
-    	(it) => it.to === name && (it.status === "held" || it.status === "deferred"),
-    );
+    // #5740: the parked branch fires only when the parked SET changed. Same set -> no wake, and the
+    // suppression is LOGGED, because today a parked seat's silence is indistinguishable from "nothing here".
+    const parkedSig = parkedSignature(items, name);
+    const parkedUnchanged = parkedSig !== "" && parkedChanged !== null && !parkedChanged(name, parkedSig);
+    const hasParked = !hasQueued && parkedSig !== "" && !parkedUnchanged;
+    if (parkedSig !== "") {
+      onParked({ seat: name, reason: parkedUnchanged ? "deduped" : "set-changed" });
+    }
     if (!hasQueued && !hasStalledClaim && !hasParked) {
-      onSkip({ seat: name, reason: "no-work" });
+      onSkip({ seat: name, reason: parkedUnchanged ? "parked-deduped" : "no-work" });
       continue;
     }
     // Already advancing: a submission is in flight, or a generation lease is held.
@@ -198,13 +230,13 @@ export async function probeSeatReadability(storage, candidates, context) {
  */
 export async function driveOnce(
   harness,
-  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onSkipped, pendingAgeMs, onPaused, seatFilter, paused = false, shouldStop },
+  { seats, items, pendingConvIds, busySeats, stoppedConvIds, context, storage, onError, onWoke, onSuppressed, onSkipped, pendingAgeMs, onPaused, seatFilter, paused = false, shouldStop, parkedChanged = null, onParked = () => {} },
 ) {
   // #4180: forward the trace. `onSkipped` receives one event per skipped candidate per pass with the
-  // reason; `pendingAgeMs` supplies the MEASURED age from the submission rows — the caller holds them,
+  // reason; `pendingAgeMs` supplies the MEASURED age from the submission rows - the caller holds them,
   // so the number is looked up rather than invented. Both optional: without them nothing is emitted and
   // the decision is unchanged.
-  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds, paused, onSkip: onSkipped, pendingAgeMs });
+  const candidates = selectWakes({ seats, items, pendingConvIds, busySeats, stoppedConvIds, paused, onSkip: onSkipped, pendingAgeMs, parkedChanged, onParked });
   // Legible refusal (ROADMAP 131 AC3): while paused, a seat that WOULD have been woken
   // for NEW queued work is reported, never silently skipped.
   if (paused && typeof onPaused === "function") {
