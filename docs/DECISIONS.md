@@ -10564,6 +10564,58 @@ by hand. ROADMAP 310 shows the land helper refuses the whole train on a dirty tr
 
 **Recorded, not done.** No branch was merged by this session. `main` = `429f2b5a` (docs + gate only).
 
+(do not hard-code; the source item is #4846).
+
+## D242 — One ledger reader, one host-qualified verdict, no unscoped prune: the shape `pruneWorktrees` and the broker sweep must converge on (architect, item #4846, 2026-11-06)
+
+**Status.** Proposed. It is the **design-of-record that opens the gate on #4850 / ROADMAP 232** (241's closure signal:
+the note must exist before 232 is claimed), and it is *not* 232 — no code changed here. Full note with the measured
+probe output: `docs/reviews/worktree-seat-state-resolution-2026-11-06.md`.
+
+**Context.** Four things resolve the same question — "is this registered working tree known to this host, and is it
+ours?" — and only the blind one has a destructive verb: `pruneWorktrees` (`src/worktree.mjs:649-658`, called from
+`src/broker.mjs:1167`, `src/worktree.mjs:667`, `src/worktree.mjs:1326`), `classifyWorktrees`'s `norm`
+(`src/broker.mjs:989`), `resolveSeatRoot`/`sameRoot` (`src/seatroot.mjs:28-38`), and a *third* inline normalizer 263 did
+not count (`src/broker.mjs:1069`). The seam defect is exact: the sweep reads the ledger **non-strict**
+(`src/broker.mjs:1065`, and `cleanVerifyScratch` at `:1091` — an act-caller), so a failed read yields `[]`
+(`src/worktree.mjs:1414`) and the sweep reaps nothing — **and then prunes unconditionally anyway**
+(`src/broker.mjs:1167`, its own comment: *"whether or not it removed anything this pass"*). **The destructive act is not
+gated by the same predicate as the read.** That is the mechanism of the 36 → 1 ledger collapse
+(`docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md`) and of a demo suite pruning a checkout it was
+never meant to touch.
+
+**Options considered.** (A) *git-native quarantine only* — the workspace-move runbook locks every foreign-shaped
+registration so any prune skips it: cheapest, fully reversible, but protects only what was locked first. (B) *scope the
+plane* — one reader, computed verdicts, act per name, quarantine the rest, report N: narrower blast radius, but more code
+in the most safety-loaded path, and it depends on 263's resolver. (C) *never prune* — reject as primary (ghost
+registrations are real; 25 were cleared on 2026-10-19 per `src/broker.mjs:1164-1166`), retain only as the shape of a
+named operator verb.
+
+**Decision: B, with A shipped as the interim act.** Rules: **D-a** one ledger reader, extended to carry the `prunable
+<reason>` line git already emits, and every act-caller passes `{strict:true}`; **D-b** a host-qualified verdict per row
+(`this-host-present` / `this-host-missing` / `foreign` / `unknown`) computed by 263's resolver, and only
+`this-host-missing` may be cleared; **D-c** foreign/unknown rows are **quarantined (locked) and recorded**, never
+cleared — measured that a lock survives `prune` and is reversible by `unlock`; **D-d** no bare `git worktree prune` from
+any decision path (delete the unconditional calls; any surviving prune is a named verb with an allow-list *and* git's
+`--expire` grace); **D-e** N is never silent (diagnostic + attention row + `--status`, beside the existing count in
+`tools/instrument-provenance.mjs:130`); **D-f** `unknown` beats `keep` beats `act` — if the resolver cannot classify a
+stored seat root, the sweep skips itself and reports rather than running with a guard that cannot fire (266).
+
+**Consequences.** The transferable part of the Codex research (241) is *reachability, not verb-matching*
+(`core-plugins/src/git_policy.rs:7-85`, via `docs/reviews/codex-enforcement-design-2026-10-28.md` §3): a runtime guard on
+the broker's own call is unenforceable because the broker calls itself (`docs/ROADMAP.md` 241 Do-not), so the design
+removes the plane instead of intercepting it. A wrong prune turns out to be **less** catastrophic for tracked work than
+the incident reads — registrations go, refs survive (measured: `git for-each-ref` still listed every branch after their
+registrations were pruned) — so the loss to protect is the **ledger as evidence** (209-214, 212's input) and untracked
+work, which need different controls. Two costs named, not hidden: (1) B adds code to the sweeper, and quarantine can
+strand a reapable row, so the quarantine must be recorded with an owner and a `reviewBy` (F5/F6); (2) the lock is **not**
+a general barrier — `removeClaimedWorktree` unlocks by design (`src/worktree.mjs:1207-1229`), so the *record* of the
+verdict is the authority for our own verbs (F11). And the instrument that appears to cover this is not honest: `node
+tools/rig-portability-audit.mjs --self-test` measured `SELF-TEST PASS … for a foreign-OS root: not-terminal` (exit 0) —
+it asserts the classifier's current behaviour, so it certifies the hole; it must assert the protective property and go
+red until 263/266 land.
+
+
 ## D244 — a seat's attention state is a named, owned state; idle (S2/S5/S6) may never reach the reset actuator, and a `pi.reset` record must carry its cause (2026-11-06; architect acting, queue #5211 / ROADMAP 313)
 
 **Status.** Design accepted and in force as the contract for ROADMAP 314/316/317. Docs-only: **this entry changes no number and no knob** — it does not raise `DURIG_MAX_CONCURRENT_SEATS`, touch the verifier slot, or set a backoff value, per the operator's ordering ruling (D at `docs/DECISIONS.md:9489`: **backoff before capacity**, because every capacity knob multiplies the measured reset storm). Full table and failure modes: `docs/reviews/architecture-idle-attention-2026-11-06.md`.
