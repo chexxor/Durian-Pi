@@ -54,7 +54,15 @@ for (const [key, w] of Object.entries(windows)) {
   const p = comp.compactionPolicy(stored, { provider: key.split("/")[0], modelId: key.split("/").slice(1).join("/") });
   const headroom = declared - p.reserveTokens;
   const pct = (100 * p.keepRecentTokens / headroom).toFixed(0);
+  // The floor a compaction can never get below: the kept recent turns plus the summary the harness
+  // caps at min(floor(0.8 * reserveTokens), model.maxTokens). Verified in the pinned dist:
+  // generation.js:238-243 (trigger at contextWindow - reserveTokens) and compaction.js:95 (the cap).
+  const maxTokens = Number(config[family === "VERIFIER" ? "DURIG_VERIFIER_MAX_TOKENS" : "DURIG_LOCAL_MAX_TOKENS"] ?? Number.POSITIVE_INFINITY);
+  const summaryCap = Math.min(Math.floor(0.8 * p.reserveTokens), Number.isFinite(maxTokens) ? maxTokens : Number.POSITIVE_INFINITY);
+  const floor = p.keepRecentTokens + summaryCap;
   console.log(`  ${key}: window=${declared} headroom=${headroom} keepRecent=${p.keepRecentTokens} = ${pct}% of headroom`);
+  console.log(`    post-compaction floor: ${p.keepRecentTokens} kept + ${summaryCap} summary cap = ${floor} tokens vs a ${declared} window (${floor > declared ? "FLOOR IS ABOVE THE WINDOW - compaction can never fit it" : `${Math.round(100 * floor / declared)}% of the window`})`);
+  if (floor > declared) failures.push(`${key}: a compaction can never bring this seat under its window - keeping ${p.keepRecentTokens} recent tokens plus the ${summaryCap}-token summary floor is ${floor - declared} tokens above the declared ${declared}.`);
   if (p.keepRecentTokens > headroom) failures.push(`${key}: keepRecentTokens (${p.keepRecentTokens}) exceeds the headroom of a ${declared}-token window (${headroom}); any compaction attempt on this seat is guaranteed to truncate.`);
 }
 
