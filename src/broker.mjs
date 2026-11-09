@@ -232,6 +232,55 @@ function onlyReadIntents(dbPath) {
   return true;
 }
 
+/* ---------------------- closed-handle retry (#5822) ---------------------- */
+// pi-durable's Session AUTO-CLOSES its Storage when it fails (dist/storage/sqlite/storage.js:
+// `assertOpen()` -> "SqliteStorage is closed"), and the broker keeps the handle it opened until
+// a pass REACHES the reopen branch. Every spooled intent drained in the window between the
+// failure and the reopen hit a closed handle and was dead-lettered — and nothing ever reads the
+// error dir back, so the intent was LOST, not delayed (59 such files on the selfdev rig, all with
+// the same reason, correlated with 43 `PASS-FAILED SessionFailed` / `HARNESS-REOPEN` lines).
+// A closed handle is TRANSIENT by construction: `reopen()` replaces it. So an apply that fails
+// because the handle is closed is retried, bounded by `INTENT_RETRY_LIMIT`, and the retry is
+// logged and reported; only after the budget is exhausted is it dead-lettered — with a
+// structured reason the producer can read.
+export const INTENT_RETRY_LIMIT = 3;
+
+/** Is this error "the storage/session handle I am using is closed"? Walks the cause chain the
+ * same way `isSessionFailed` does, because pi-durable wraps backend errors. */
+export function isClosedStoreError(error) {
+  for (let e = error, depth = 0; e && depth < 8; e = e?.cause, depth++) {
+    const msg = String(e?.message ?? "");
+    if (/SqliteStorage is closed|Storage is closed|Session is closed/i.test(msg)) return true;
+  }
+  return false;
+}
+
+/** How many apply attempts this spooled file has already burned. A sidecar beside the intent
+ * file (the same shape as the dead-letter `.reason`), so the retry BUDGET is real and the
+ * intent itself is never rewritten by the broker. */
+function retryAttempts(file) {
+  try {
+    const n = Number(readFileSync(`${file}.retry`, "utf8"));
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function recordRetryAttempt(file) {
+  const n = retryAttempts(file) + 1;
+  writeFileSync(`${file}.retry`, String(n), "utf8");
+  return n;
+}
+
+function clearRetryAttempt(file) {
+  try {
+    unlinkSync(`${file}.retry`);
+  } catch {
+    /* no sidecar: nothing to clean */
+  }
+}
+
 /**
  * Move an undeliverable intent out of the spool into the error dir with its reason, so
  * a bad intent is surfaced once instead of being retried every pass forever.
@@ -776,11 +825,38 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
       if (requestId) {
         writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
       }
+      clearRetryAttempt(file);
       unlinkSync(file);
       delivered += 1;
     } catch (err) {
-      deadLetterIntent(dbPath, file, `apply failed: ${err?.message ?? err}`);
-      onDiagnostic?.({ kind: "intent-undeliverable", op, seat: request.to, reason: String(err?.message ?? err) });
+      const reason = String(err?.message ?? err);
+      // A CLOSED handle is transient: the loop's reopen replaces it. Do not consume the intent —
+      // leave it in the spool, count the attempt, log it, and rethrow so the pass reaches the
+      // recovery branch. The intent is DELAYED; only after the retry budget is exhausted is it
+      // dead-lettered, and then with a reason the producer can read (#5822).
+      if (isClosedStoreError(err)) {
+        const attempts = recordRetryAttempt(file);
+        if (attempts <= INTENT_RETRY_LIMIT) {
+          logBrokerLine(dbPath, `INTENT-RETRY op=${op} request=${requestId ?? basename(file)} attempts=${attempts}/${INTENT_RETRY_LIMIT} reason=${reason}`);
+          onDiagnostic?.({ kind: "intent-retry", op, requestId, seat: request.to ?? request.seat ?? null, reason, attempts });
+          throw err;
+        }
+        deadLetterIntent(dbPath, file, `apply failed after ${attempts} attempts: ${reason}`, {
+          code: "apply-failed",
+          op,
+          requestId,
+          reason,
+          attempts,
+          decision: "retry-exhausted",
+        });
+        clearRetryAttempt(file);
+        onDiagnostic?.({ kind: "intent-undeliverable", op, requestId, seat: request.to ?? request.seat ?? null, reason, attempts });
+        deadLettered += 1;
+        continue;
+      }
+      deadLetterIntent(dbPath, file, `apply failed: ${reason}`, { code: "apply-failed", op, requestId, reason });
+      clearRetryAttempt(file);
+      onDiagnostic?.({ kind: "intent-undeliverable", op, requestId, seat: request.to ?? request.seat ?? null, reason });
       deadLettered += 1;
     }
   }
@@ -1889,7 +1965,11 @@ export async function runWakeLoop({
       // recovers (every later call throws it again). Close+reopen via the caller's callback,
       // bounded by `reopenCap`; past the cap the broker STOPS with a terminal diagnostic rather
       // than looping forever on a dead Session.
-      if (reopen && isSessionFailed(error)) {
+      // #5822: "SqliteStorage is closed" is the SAME failure in its second form — the Session
+      // auto-closes its Storage when it fails, so a spooled read can meet the closed handle
+      // BEFORE any harness call throws SessionFailed. Treating it as recoverable is what lets
+      // the retried intent actually be delivered instead of burning its budget on a dead handle.
+      if (reopen && (isSessionFailed(error) || isClosedStoreError(error))) {
         reopenAttempts++;
         if (reopenAttempts > reopenCap) {
           logBrokerLine(dbPath, `HARNESS-REOPEN-CAP-EXCEEDED attempts=${reopenAttempts}`);
