@@ -26,7 +26,7 @@ whoever writes the next doc saying it is done.
 node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite
 ```
 
-Baseline measured 2026-11-09: **2 PASS, 1 PARTIAL, 5 FAIL.** M5 is not close.
+Baseline measured 2026-11-09: **2 PASS, 2 PARTIAL, 4 FAIL.** M5 is not close.
 
 ---
 

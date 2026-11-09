@@ -104,17 +104,35 @@ report("C6", "there is a token-budgeted read path over stored history (search_hi
 	recallTools > 0 ? "PASS" : "FAIL",
 	`recall tool names found in the tool surface: ${recallTools}; durable entries with no read path: ${entries}`);
 
-/* C7 — cache economics are measured before prompt sections change. */
-let cached = 0, calls = 0;
+/* C7 — cache economics are measured before prompt sections change. Two sources, because the ledger only sees
+ * metered endpoints and the durable entries only see what the harness chose to record. */
+let cachedLedger = 0, calls = 0, usageEntries = 0, cacheReadEntries = 0, freshInput = 0, cacheReadFromEntries = 0;
 const ledger = `${DB}.spend.jsonl`;
 if (existsSync(ledger)) {
 	for (const line of read(ledger).split("\n").filter(Boolean)) {
-		try { const r = JSON.parse(line); calls++; cached += Number(r.cached_tokens || 0); } catch {}
+		try { const r = JSON.parse(line); calls++; cachedLedger += Number(r.cached_tokens || 0); } catch {}
 	}
 }
+if (existsSync(DB)) {
+	const db = new DatabaseSync(DB, { readOnly: true });
+	for (const row of db.prepare("select record from entries where record like ?").all("%\"cacheRead\"%")) {
+		try {
+			const usage = (JSON.parse(row.record).model || [])[0]?.usage;
+			if (!usage) continue;
+			usageEntries++;
+			freshInput += Number(usage.input || 0);
+			const cr = Number(usage.cacheRead || 0);
+			if (cr > 0) cacheReadEntries++;
+			cacheReadFromEntries += cr;
+		} catch {}
+	}
+	db.close();
+}
+const reportExists = existsSync(join(ROOT, "docs/reviews/cache-evidence"));
+const measured = cacheReadFromEntries > 0 || cachedLedger > 0;
 report("C7", "prompt-cache economics are measured, so a changing prompt section is a known cost, not a guess",
-	cached > 0 ? "PASS" : "FAIL",
-	`${ledger}: ${calls} metered calls, ${cached} cached tokens recorded (zero recorded means the cache premise of the memory plan is unverified on this rig)`);
+	measured && reportExists ? "PASS" : measured ? "PARTIAL" : "FAIL",
+	`ledger ${ledger}: ${calls} metered calls, ${cachedLedger} cached tokens (the ledger only sees metered endpoints); durable entries: ${usageEntries} usage-bearing, ${cacheReadEntries} with a cache read, ${cacheReadFromEntries.toLocaleString()} cacheRead tokens vs ${freshInput.toLocaleString()} fresh input (${cacheReadFromEntries ? (100 * cacheReadFromEntries / (freshInput + cacheReadFromEntries)).toFixed(1) : "n/a"}% hit). Measured, not yet written up: docs/reviews/cache-evidence ${reportExists ? "exists" : "does not exist"}`);
 
 /* C8 — the mediator is not the only line of defence, or the gap is stated. */
 const spawnWrapper = ["src/spawn-wrapper.mjs", "src/landlock.mjs", "src/seccomp.mjs", "src/egress-proxy.mjs"].filter((p) => existsSync(join(ROOT, p)));

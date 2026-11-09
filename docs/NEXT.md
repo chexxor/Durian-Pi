@@ -12,7 +12,7 @@ still unclaimed; the delegate built and verified the mechanism but asserted no r
 
 **New this window:** the milestone ledger is now a file — **`docs/MILESTONES.md`** (previous milestone = the
 auto-clean ceiling, D249; current = 331; next = M5) — and **M5 has a runnable definition of done**: `node
-docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite`, baseline **2 PASS, 1 PARTIAL, 5 FAIL**,
+docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite`, baseline **2 PASS, 2 PARTIAL, 4 FAIL**,
 decomposed in `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Roadmap **347–349** registered from this
 measurement.
 
@@ -156,7 +156,7 @@ The team's rows **#5931–#5942** remain unclaimed; the delegate asserted nothin
 `CONTINUITY PASS`, the offline delegation loop, `STATUS VIEW BOUND OK`; 0.63 s / 0.29 s / 1.8 s, no broker, no key,
 no model). Then the two milestone gates — `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db
 ./selfdev.sqlite` (exit **0**, *PASS (mechanism)*, 8 operational blockers, 1 advisory) and `node
-docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (exit **1**: **2 PASS, 1 PARTIAL, 5 FAIL** —
+docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (exit **1**: **2 PASS, 2 PARTIAL, 4 FAIL** —
 that is M5's honest baseline, not a bug). Then
 `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`). If the

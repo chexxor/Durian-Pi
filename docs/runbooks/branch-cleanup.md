@@ -239,6 +239,18 @@ demo asserts `dry.candidates` / `dry.refusedSoleCarrier` / `dry.kept` / `dry.cou
 `git worktree add --detach .spike/probe item-5301 && ln -s $(pwd)/node_modules .spike/probe/node_modules && cd .spike/probe && node cli.mjs worktree reap --dry-run`.
 The ref is KEPT (`git branch -d` refuses it, correctly). It is a **re-cut job for a seat**, not a delegate merge.
 
+2026-11-09 (delegate re-check session N19, broker DOWN, read-only): the git side is **stable, not unfinished**.
+`git worktree list | wc -l` → **9**, `git branch --format='%(refname:short)' | wc -l` → **12**, `cli.mjs worktree audit`
+→ `total: 9`, `reapable: 0`, `dirty: 0` for item trees, all `seat-root`. A per-ref census
+(`.spike/delegate/branch-landing-census.mjs <db>`, read-only, ~1 s) reports patches ahead of `main` per ref: only
+`item-5301` (**1**) and `wip/seat-prompt-files` (**1**, ledger: SUPERSEDED-BY-EVENTS); every other ref prints **0**.
+Four refs are ancestors of `main` while their rows are non-terminal — `#5604 claimed`, `#5829 claimed`, `#5834
+claimed`, `#5912 held` — which is the ceiling, not a cleanup job. Two trees are dirty with seat scratch
+(`item-5829`: 4 probe files; `durian-dev/seatroot`: 7), and scratch belongs to its owner: removing it is a seat act,
+not a delegate act. **Nothing was merged, pruned, unlocked or deleted in this pass.** The only landable item is
+`item-5301`, and it is not landable until its author seat fixes the `usages:` template literal and the
+`reapWorktrees` return shape.
+
 ## Evidence
 2026-11-09 (delegate land+reap pass, broker DOWN, operator-directed): **58 worktrees → 9**, **60 refs → 12**,
 `main` `6787bd24` → `ea12fe04`, **zero `--force`**. Six branches landed (`item-5387`, `item-5501`, `item-5829`,
