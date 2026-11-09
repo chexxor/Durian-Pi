@@ -1546,6 +1546,9 @@ export async function runWakeLoop({
   // When the CALLER observed its own stop signal (ms since epoch), or null. Only the
   // signal path needs it; a `.stop` file carries its own request time in its content.
   stopRequestedAt = () => null,
+  // Injected so a demo can exercise the heartbeat/progress legs exactly instead of waiting 20 s.
+  // Same pattern as `now` and `random` above (#2483).
+  heartbeatMs = BROKER_HEARTBEAT_MS,
 }) {
   const failedSeats = new Set();
   const escalations = [];
@@ -1636,14 +1639,19 @@ export async function runWakeLoop({
     const state = readBrokerState(dbPath);
     if (state && state.pid === process.pid) {
       stateSeed = { pid: state.pid, since: state.since, runToken: state.runToken };
-      lastPassAt = typeof state.lastPassAt === "number" ? state.lastPassAt : now();
+      // #5698: carry a COMPLETED pass forward, but never INVENT one. A broker taking over a state
+      // file with no completed pass used to seed `lastPassAt = now()`, so a loop that throws on
+      // every pass stamped progress from the ATTEMPT to start and read `up` for one full progress
+      // bound (default 300 s + 60 s margin) while doing nothing. `null` keeps `brokerHealth` honest:
+      // "no pass has completed yet".
+      lastPassAt = typeof state.lastPassAt === "number" ? state.lastPassAt : null;
       heartbeat = setInterval(() => {
         try {
           writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
         } catch (err) {
           console.error(`BROKER WARNING: heartbeat write failed: ${err?.message ?? err}`);
         }
-      }, BROKER_HEARTBEAT_MS);
+      }, heartbeatMs);
       if (typeof heartbeat.unref === "function") heartbeat.unref();
     }
   }

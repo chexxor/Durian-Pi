@@ -85,6 +85,7 @@
       "demo/broker-max-duration.test.mjs",
       "demo/broker-one-connection.test.mjs",
       "demo/broker-pass-survival.test.mjs",
+      "demo/broker-progress-is-a-completed-pass.test.mjs",
       "demo/broker-read-nopass.test.mjs",
       "demo/broker-read.test.mjs",
       "demo/broker-reconcile.test.mjs",
