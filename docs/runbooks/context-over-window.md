@@ -20,8 +20,10 @@ the number describing a turn that already happened?**
 A seat whose turns keep moving more than its window pays real prompt time on every call and risks truncation, so it
 is worth acting on. Acting on the WRONG reading is worse: `consumed` is one turn's **moved** tokens, not the live
 head, so a seat that was compacted after a long turn keeps printing that old turn until its next one. That artifact
-is on the live store right now (one conversation at 244,751 tokens = **1.22x** its declared 200,000 window, behind a
-compaction boundary), and a guard that shouted about it would be switched off within a week — the #3539 failure
+is on the live store right now (one conversation at **244,751 tokens**: **1.22x** the 200,000 window that seat declared
+**on 2026-11-04**, the day it was read, and **9.9x** the 24,576 window it declares now — the same numerator, two
+readings, because only one of them carried its denominator's date), behind a compaction boundary, and a guard that
+shouted about an undated ratio would be switched off within a week — the #3539 failure
 shape, where a rule that starts red gets disabled and the real signal goes with it.
 
 ## Preconditions
@@ -41,21 +43,29 @@ node cli.mjs config
 
 Read the notice in this order:
 
-1. **The denominator's STATE** — `measured | declared | advertised` (`src/context.mjs`). `declared` is the
+1. **The denominator itself, read now** — `node cli.mjs status --json` → `context.window` per seat (or
+   `node cli.mjs config`). Do not carry a window across days: `durig.config.default.json:5` ships
+   `DURIG_LOCAL_CONTEXT: "200000"` as a **default**, while the live per-seat value is whatever the operator's untracked
+   `durig.config.json` declares — on 2026-11-07 the verifier-family seats declare **24,576**, not 200,000. The
+   `244,751` artifact above is therefore 1.22x on the 2026-11-04 tree and 9.9x on the 2026-11-07 one, and a ratio quoted
+   without its date and its seat is not a measurement. **Not re-measured in the 2026-11-07 pass:** `node cli.mjs status`
+   against the live store returned `{"ok": false, "error": "read health: timed out awaiting the broker's result"}`
+   (broker busy), so the 24,576 figure is recorded as the delegate's measurement, not this pass's.
+2. **The denominator's STATE** — `measured | declared | advertised` (`src/context.mjs`). `declared` is the
    operator's config and is what this rig has today; `advertised` is a vendor catalog figure and the weakest claim;
    `measured` (the effective window, item 97) is reserved and absent. A fraction over an `advertised` window is a
    much weaker statement than one over a `declared` window. **A number with no window has no fraction at all** — the
    measure refuses to make a percentage out of nothing.
-2. **The axis** — the text says `tokens the provider MOVED in one turn … NOT the live head`. `cacheRead` is inside
+3. **The axis** — the text says `tokens the provider MOVED in one turn … NOT the live head`. `cacheRead` is inside
    that sum, so the fraction can exceed 1 while the actual prompt is small: on this rig an 8,757-token cached prefix
    costs ~0.1 s of prompt time, and the live artifact had 243,200 of its 244,751 as cache reads (~20x difference).
-3. **The head state** — `measure is current (no pi.compaction/pi.reset entry after entry N)`. If `status` shows a
+4. **The head state** — `measure is current (no pi.compaction/pi.reset entry after entry N)`. If `status` shows a
    fraction over 1.0 and NO notice fired, the measure is **behind a boundary**: a compaction or reset is newer than
    the turn the number came from. That is the D199/D200 artifact. The number stays on screen (hiding a measurement is
    worse than labelling it) but it is not this seat's current pressure.
 
 ## Do
-1. **Confirm the head is current** (step 3 above). A stale measure needs no action: the seat's next turn replaces it.
+1. **Confirm the head is current** (step 4 above). A stale measure needs no action: the seat's next turn replaces it.
 2. If it is current, look at `willCut=` in the notice. The compaction verb's gate is the **accumulation budget**
    (`keepRecentTokens`), **not the window** (#4898) — an over-window fraction does not mean `compact` has anything to
    cut. `willCut=false` means the verb would decline; `willCut=unknown` means no `DURIG_COMPACTION_*` value is set, so
@@ -105,6 +115,10 @@ of an actuator that stops a seat on context pressure; until it exists, this row 
 Item #5049 (ROADMAP 208), commit `4c1c3e4c`. The two blind spots the guard carries are recorded in
 `src/context.mjs`'s header; the cause name is in `src/causes.mjs` so the notice and the rule cannot drift apart
 (#5047's lesson). Population numbers are from a read-only query of the live store on 2026-11-04 (aggregate counts
-only — the store holds other seats' transcripts and none of that content belongs in a runbook). Verified
+only — the store holds other seats' transcripts and none of that content belongs in a runbook).
+**2026-11-07 truth-up (#5362):** the `1.22x` quoted in Impact is a 2026-11-04 reading against the seat's **then**-declared
+200,000 window, while this runbook's own Verify section scores the same artifact at **9.9x** — the two ratios sat side by
+side with no reconciliation, which is how a stale denominator reads as a live fact. `last_verified` stays **2026-11-04**:
+this pass corrected prose and did **not** re-run the Verify step against a readable store. Verified
 2026-11-04 by the implement seat: `node demo/context-over-window.test.mjs` exit 0, and the full suite in the item
 worktree 250/250.
