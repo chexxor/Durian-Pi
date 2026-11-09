@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// MILESTONE GATE — "does a seat's task fit inside its context window?" (D226 / ROADMAP 331)
+// MILESTONE GATE — "does a seat's task fit inside its context window, and if not, does it have a note to
+// resume from?" (D226 / ROADMAP 331, continuity leg added 2026-11-09)
 // One command, no model spend, broker-down safe. Exit 0 = the milestone is met; exit 1 = it is not, with the reason.
 // usage: node docs/evidence/2026-11-08-context-window/milestone-check.mjs [--db ./selfdev.sqlite]
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 let ROOT = dirname(fileURLToPath(import.meta.url));
@@ -189,6 +190,33 @@ try {
   }
 } catch (e) { console.log(`  broker progress probe failed: ${e.message}`); }
 
+console.log("== continuity mechanism: is there a note a fresh context could resume from? (docs/reviews/architecture-context-continuity-2026-11-09.md) ==");
+try {
+  const exts = String(config.DURIG_EXTENSIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const present = exts.filter((p) => existsSync(isAbsolute(p) ? p : join(ROOT, p)));
+  console.log(`  DURIG_EXTENSIONS: ${exts.length ? exts.join(", ") : "(unset) - no extension is loaded, so the mechanism cannot exist yet"}`);
+  if (exts.length && present.length < exts.length) console.log(`  ${exts.length - present.length} listed extension path(s) do not exist - the rig looks configured and is not.`);
+  if (existsSync(DB)) {
+    const s = new DatabaseSync(DB, { readOnly: true });
+    const kinds = s.prepare("select kind, count(*) n from documents group by kind order by kind").all().map((r) => String(r.kind).replace(/"/g, ""));
+    const notesDocs = kinds.filter((k) => /notes/i.test(k));
+    console.log(`  note documents in the store: ${notesDocs.length ? notesDocs.join(", ") : "none - durig.notes is not defined"}`);
+    if (!notesDocs.length) failures.push("no continuation-note document exists in the store, so a seat forced into a fresh context has nothing to resume from - the mechanism is rows #5931-#5940.");
+    let writes = 0;
+    try { writes = s.prepare("select count(*) n from entries where record like ?").all("%write_note%").get().n; } catch { writes = 0; }
+    console.log(`  transcript evidence of a note write: ${writes} entr(ies) mentioning write_note`);
+    const rawDir = config.DURIG_NOTES_DIR || ".durig/notes";
+    const mirrorPath = isAbsolute(rawDir) ? rawDir : join(ROOT, rawDir);
+    console.log(`  DURIG_NOTES_DIR: ${config.DURIG_NOTES_DIR ? rawDir : "(unset) - default below"}`);
+    const mirrorCount = existsSync(mirrorPath) ? readdirSync(mirrorPath).filter((f) => f.endsWith(".md")).length : 0;
+    console.log(`  mirror files at ${mirrorPath}: ${mirrorCount}`);
+    if (mirrorCount === 0 && notesDocs.length) failures.push(`the note is in the store but not mirrored to ${mirrorPath} - seats and humans cannot read it with ordinary file tools.`);
+    const last24 = s.prepare("select count(*) n from tasks where kind='\"pi.compaction\"' and json_extract(record,'$.startedAt') >= ?").get(Date.now() - 86400000).n;
+    console.log(`  compaction attempts in the last 24 h: ${last24} (each still costs a summariser call until the hook supplies the note)`);
+    s.close();
+  }
+} catch (e) { console.log(`  continuity probe failed: ${e.message}`); }
+
 console.log("== live window occupancy (entries after each seat's head marker) ==");
 try {
   const j = JSON.parse(execFileSync(process.execPath, ["tools/seat-turn-shape.mjs", "--db", DB, "--json"], { encoding: "utf8", timeout: 60000, stdio: ["ignore", "pipe", "ignore"] }));
@@ -219,7 +247,7 @@ try {
 
 console.log("");
 if (failures.length === 0) {
-  console.log("PASS — the override reaches the harness and every declared window can hold its policy.");
+  console.log("PASS — the override reaches the harness, every declared window holds its policy, and a seat has a note it can resume from.");
   process.exit(0);
 }
 console.log(`FAIL (${failures.length}) —`);
