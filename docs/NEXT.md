@@ -109,7 +109,9 @@ The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktre
 1. **Close the install gap** (registered as **ROADMAP 352**, unclaimed): nothing at session start runs
    `tools/compaction-guard-install.mjs`, so a fresh clone, a new worktree or another machine starts **unguarded with
    no signal** (`.pi/` is gitignored by design, `.gitignore:15`). Fix shape: `scripts/clockin.mjs` prints a `guard:`
-   line from `install --check` (<100 ms, no model/key/network). A seat job, not a delegate job.
+   line from `install --check` (<100 ms, no model/key/network), and a `demo/compaction-guard-gate.test.mjs` wrapper
+   puts the 28-check gate inside the area suite (discovery scans only `demo/*.test.mjs`, `src/testareas.mjs:31-38`, so
+   today the pre-landing gate never runs it). A seat job, not a delegate job.
 2. **Arm the continuity extension** (operator grant) — procedure in `docs/runbooks/continuation-notes.md`. The
    seat plane is *not* protected by this guard: pi-durable caps its own summarization output at
    `min(floor(0.8*reserveTokens), model.maxTokens)` and has its own failure string. A pi-durable `beforeCompact`
