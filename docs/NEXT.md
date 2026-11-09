@@ -121,8 +121,12 @@ refused, `kill` logged `2026-11-09T06:13:32.508Z EXIT pid=114848 reason=deadline
 
 **Blocker:** two, and only the operator can clear the second. (1) the release-role intent is spooled and undrained —
 `ls -1 selfdev.sqlite.broker.inbox` still shows 1 file and the last `INTENT` line in `selfdev.sqlite.broker.log` is
-03:45:30Z; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall 141). (2) `DURIG_VERIFIER_API_KEY` is unset,
-so no verifier provider registers a model — a grant the operator holds.
+03:45:30Z; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall 141). (2) **no provider will register a
+model on this box right now** — `broker-serve --status` reports four BLOCKs: `provider-DURIG_LOCAL_-unauthorized`
+(127.0.0.1:8080 answers `/v1/models` with 401 — set `DURIG_LOCAL_API_KEY`), `provider-verifier-no-key` and
+`provider-verifier-refuses-inference` (`DURIG_VERIFIER_API_KEY` unset; the store shows this shape 18,309 times, 402
+"You need positive balance to do inference"), and the spend cap refuses `google/gemini-3.1-pro` ($14 max call exposure
+against a $4 store cap). Keys and balance are grants the operator holds.
 
 **Traps this window** — `docs/SELFDEV.md` **173–177** (this pass: re-preflight inside the loop; the text-integrity gate
 is absolute, so `main`'s own BOMs block otherwise-clean branches; a batch landing must regenerate
