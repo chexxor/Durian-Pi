@@ -10,9 +10,14 @@
 //   - the request carried an explicit max_tokens far below the model's 32768 output limit,
 //   - the thinking phase was switched off for that request,
 //   - the stored summary is at or under the guard's ceiling.
-// Cost: one real local model call. With the default caps the prompt is ~15k tokens; the local
-// server runs ~83 tok/s on prompt and ~156 tok/s on generation, so expect ~3-4 minutes.
-// Speed the loop up with COMPACT_GUARD_INPUT_CHARS=12000 COMPACT_GUARD_OUTPUT_TOKENS=800.
+// Cost: one real local model call. The guard caps the summarization input at 60,000 chars, so the
+// prompt is ~15k tokens and the call takes ~3-4 seconds on the local server (~83 tok/s prompt,
+// ~156 tok/s generation). Override with COMPACT_GUARD_INPUT_CHARS / COMPACT_GUARD_OUTPUT_TOKENS.
+// Turn count: pi's prepareCompaction() cuts the history where it has accumulated `keepRecentTokens`
+// (default 20000; settings-defaults.js:11) scanning backwards. A seeded branch under that has NO
+// history to summarise and compact() throws "Nothing to compact (session too small)" — the guard is
+// never reached. 160 turns seeds ~63k tokens, comfortably over the cut. Use COMPACT_GUARD_E2E_TURNS
+// only for a bigger session, never a smaller one.
 import { createAgentSession, DefaultResourceLoader, getAgentDir, SessionManager } from "@earendil-works/pi-coding-agent";
 import { existsSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
 
@@ -42,7 +47,7 @@ function probe(pi) {
 }
 
 const sessionManager = SessionManager.inMemory(cwd);
-const turns = Number(process.env.COMPACT_GUARD_E2E_TURNS ?? 40);
+const turns = Number(process.env.COMPACT_GUARD_E2E_TURNS ?? 160);
 for (let i = 0; i < turns; i++) {
 	sessionManager.appendMessage({ role: "user", content: [{ type: "text", text: `turn ${i}: check src/module-${i}.mjs and fix the guard wiring ` + "-".repeat(600) }], timestamp: Date.now() });
 	sessionManager.appendMessage({ role: "assistant", content: [{ type: "text", text: `worked on module ${i}: ` + "x".repeat(900) }], timestamp: Date.now() });
@@ -73,6 +78,9 @@ const elapsed = Date.now() - started;
 console.log(`compact() took ${elapsed} ms`);
 if (error) {
 	console.log(`FAIL  compaction threw: ${error.message}`);
+	if (error.message.includes("too small")) {
+		console.log(`  the seeded branch is under pi's keepRecentTokens cut (default 20000 tokens); seed more turns with COMPACT_GUARD_E2E_TURNS=160`);
+	}
 	session.dispose();
 	process.exit(1);
 }

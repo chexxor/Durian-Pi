@@ -93,6 +93,12 @@ node tools/compaction-guard-test.mjs                # ALL PASS, 28 checks, 0.54 
 node tools/compaction-guard-e2e.mjs                 # real harness + installed extension + real model call
 ```
 
+The E2E seeds **160 turns** by default, and that number is not arbitrary: `prepareCompaction()` cuts the history
+where it has accumulated `keepRecentTokens` (default **20000**, `dist/core/settings-defaults.js:11`) scanning
+backwards. A branch under that has nothing to summarise and `compact()` throws `Nothing to compact (session too
+small)` (`dist/core/agent-session.js:2221`) — the guard is never reached, and the run reads as a failure. Do not
+lower `COMPACT_GUARD_E2E_TURNS`; make the run cheaper with `COMPACT_GUARD_INPUT_CHARS` / `COMPACT_GUARD_OUTPUT_TOKENS`.
+
 Measured on this box (2026-11-09):
 
 | run | config | result |

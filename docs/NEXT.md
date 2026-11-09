@@ -6,7 +6,7 @@ end-to-end verified and documented; nothing was claimed in the queue).
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240, first tranche ROADMAP 331)**.
 This pass closed the **harness-plane** half of it: auto-compaction in the interactive/delegate session can no
 longer fail. Registered as **ROADMAP 351**, decided as **D252**, runbook
-**`docs/runbooks/harness-compaction-guard.md`**, pitfalls **211–215**. The team's rows for this cluster,
+**`docs/runbooks/harness-compaction-guard.md`**, pitfalls **211–216**. The team's rows for this cluster,
 **#5931–#5942**, are still unclaimed; the delegate asserted nothing.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
@@ -27,7 +27,9 @@ operator grant (`DURIG_EXTENSIONS` is unset; `cli.mjs config` reports `null`). P
 
 **First thing to run:**
 `node tools/compaction-guard-install.mjs --check && node tools/compaction-guard-test.mjs && node tools/compaction-guard-e2e.mjs`
-(expect `UP TO DATE`, `ALL PASS` 28 checks in ~0.5 s, then `ALL PASS` with one real local model call in ~4–8 s).
+(expect `UP TO DATE`, `ALL PASS` 28 checks in ~0.5 s, then `ALL PASS` with one real local model call in ~4–8 s;
+the e2e seeds 160 turns on purpose — a smaller seed hits pi's "Nothing to compact (session too small)" precondition
+before the guard ever runs).
 Then `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`), then
 `node cli.mjs status` once a broker is healthy.
@@ -63,7 +65,7 @@ in a live session `/compaction-guard` prints caps and `fired=`.
   `chat_template_kwargs {"enable_thinking": false}` → "stop", 5 tokens.
 - **Verified three ways.** Gate: `node tools/compaction-guard-test.mjs` → **ALL PASS, 28 checks, 0.53 s**, no
   model/key/network/broker. E2E: `node tools/compaction-guard-e2e.mjs` → **ALL PASS**; span 158,764 chars →
-  1,481-char summary, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, `compact()` 4.0 s. Forced
+  1,454-char summary, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, `compact()` 3.4 s. Forced
   length stop (`COMPACT_GUARD_OUTPUT_TOKENS=256`): **ALL PASS**, `details.reason "length-rescued"`, 7,591-char
   checkpoint, 5.1 s. Composition: with `@woksin/pi-context-budget` also loaded, compaction succeeded in 6.9 s with
   `details {"guard":true,"reason":"bounded","spanChars":155353}`.
@@ -127,9 +129,10 @@ nothing here tested it.
 every call this pass went to the local loopback server, which the ledger does not meter, so **$0.00** was spent.
 Wall clock ~25 min of which the E2E runs are ~20 s total; the gate is 0.5 s.
 
-**Traps this window** — `docs/SELFDEV.md` **211–215** (the failure is a request-shape bug; a one-character typo in a
+**Traps this window** — `docs/SELFDEV.md` **211–216** (the failure is a request-shape bug; a one-character typo in a
 safety net is invisible to `node --check`; last-non-null wins on `session_before_*`; `thinking_budget: 0` is
-ignored on this server; the harness plane and the seat plane are different compaction code). Earlier blocks:
+ignored on this server; the harness plane and the seat plane are different compaction code; an e2e seeded under
+`keepRecentTokens` (20000) fails as "session too small", not as a guard failure). Earlier blocks:
 191–210, 186–190, 173–185. Grep for the symptom; the file is ~50,000 tokens.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).

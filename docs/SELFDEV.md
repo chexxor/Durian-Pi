@@ -3711,3 +3711,12 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     compaction is tuned with `DURIG_COMPACTION_*` (ROADMAP 331, D250); a pi-durable `beforeCompact` extension is the
     way to apply the same bound there, and no pi-coding-agent extension can load into the durable plane
     (`src/extensions.mjs` header). Do not report "compaction is safe" from a harness-plane test.
+
+216. **A compaction test that seeds too little history fails for a reason unrelated to what it is testing.**
+    `node tools/compaction-guard-e2e.mjs` shipped with 40 seeded turns and threw `Nothing to compact (session too
+    small)`: `prepareCompaction()` (`dist/core/compaction/compaction.js:609-643`) cuts the history where it has
+    accumulated `keepRecentTokens` — default **20000** (`dist/core/settings-defaults.js:11`) — so a ~16k-token branch
+    leaves `messagesToSummarize` empty, the extension never runs, and the gate reports FAIL. Fixed by seeding 160 turns
+    (measured `tokensBefore=63340`, span 158,764 chars). General rule: when an end-to-end hook test says "nothing to
+    compact" or "nothing to do", check the harness's own precondition before blaming the extension — the cheapest read
+    is the number the tool prints (`seeded N turns`, `tokensBefore=`), not the extension's log.
