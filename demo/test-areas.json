@@ -17,6 +17,7 @@
       "demo/compaction-harness.test.mjs",
       "demo/compaction-nesting.test.mjs",
       "demo/config-credential-surface.test.mjs",
+      "demo/keycheck.test.mjs",
       "demo/config-unknown-key.test.mjs",
       "demo/config.test.mjs",
       "demo/constitution.test.mjs",
