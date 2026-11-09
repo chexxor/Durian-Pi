@@ -321,8 +321,11 @@ export function renderDigest(s) {
 	say(`last_run_failed: ${JSON.stringify(fails)}`);
 	if (Object.keys(parked).length) say(`deferred_awaiting_answer: ${JSON.stringify(parked)}`);
 	say(`broker: ${s.broker.detail}`);
-	say(`\n## QUEUE  ${(s.items || []).length} rows ${JSON.stringify(s.counts)}`);
-	const deferred = deferredTerm(s.items, s.deferredFile || null);
+	say(
+		`\n## QUEUE  ${s.census?.rows ?? (s.items || []).length} rows ${JSON.stringify(s.counts)}` +
+			(s.census ? ` (view carries ${s.items?.length ?? 0} of them; ${s.census.terminal} terminal)` : ""),
+	);
+	const deferred = deferredTerm(s.deferred ?? s.items, s.deferredFile || null);
 	if (deferred) say(deferred);
 	if (s.git) {
 		const head = s.git.head ? `${s.git.head.state}${s.git.head.at ? `@${s.git.head.at}` : ""}` : "?";
@@ -546,7 +549,7 @@ export async function main(argv = process.argv.slice(2)) {
 	const t0 = Date.now();
 	const opts = parseArgs(argv);
 	const db = resolve(opts.db);
-	const status = runCli(["status"], db);
+	const status = runCli(opts.git ? ["status", "--with-terminal-index"] : ["status"], db);
 	const config = runCli(["config"], db); // cli.mjs config puts DURIG_* at the TOP level
 	const nextText = readFileSync(resolve("docs/NEXT.md"), "utf8");
 	const selfdevText = readFileSync(resolve("docs/SELFDEV.md"), "utf8");
@@ -560,14 +563,26 @@ export async function main(argv = process.argv.slice(2)) {
 	} catch {
 		marker = null;
 	}
+	// The queue DERIVATIONS come from the census and the deferred backlog, not from the bounded `queueItems` view:
+	// a view capped at 200 rows is not the rig, and a terminal-only drop hides precisely the rows that are waiting
+	// on the operator. `??` keeps the old path for a status that predates these fields.
+	const deferredRows =
+		status.queueDeferred ?? (status.queueItems || []).filter((i) => i.status === "deferred");
 	const state = {
 		pointer: pointerSection(nextText),
 		seats: (status.seats || []).length,
 		attention: status.attention || [],
 		broker: brokerLiveness({ stateFile: `${db}.broker.json` }),
 		items: status.queueItems || [],
-		counts: queueCounts(status.queueItems),
-		git: opts.git ? branchDebt({ items: status.queueItems, base: opts.base }) : null,
+		census: status.queueCensus ?? null,
+		deferred: deferredRows,
+		counts: status.queueCensus?.counts ?? queueCounts(status.queueItems),
+		git: opts.git
+			? branchDebt({
+					items: (status.queueItems || []).concat(status.queueTerminalIndex || []),
+					base: opts.base,
+				})
+			: null,
 		runbooks: opts.runbooks ? staleRunbooks({}) : null,
 		config: {
 			provider: config.DURIG_PROVIDER,
@@ -580,13 +595,8 @@ export async function main(argv = process.argv.slice(2)) {
 		// backlog is big enough that inlining costs more than the indirection. Decided here, in the half
 		// that touches the disk; `deferredTerm` stays pure.
 		deferredFile:
-			opts.deferredFile &&
-			(status.queueItems || []).filter((i) => i.status === "deferred").length > DEFERRED_INLINE_MAX
-				? writeDeferredList(
-						(status.queueItems || []).filter((i) => i.status === "deferred"),
-						opts.deferredFile,
-						db,
-					)
+			opts.deferredFile && deferredRows.length > DEFERRED_INLINE_MAX
+				? writeDeferredList(deferredRows, opts.deferredFile, db)
 				: null,
 		selfdevLines: selfdevLines.length,
 		selfdevHeadings: selfdevLines

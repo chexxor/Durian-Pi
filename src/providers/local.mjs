@@ -188,6 +188,9 @@ function providerIdForPrefix(prefix) {
 	return prefix.slice("DURIG_".length).replace(/_$/, "").toLowerCase();
 }
 
+/** Exposed so the config layer can resolve a FAMILY key against the same prefix set this module builds. */
+export { providerIdForPrefix };
+
 function labelForPrefix(prefix) {
 	const id = providerIdForPrefix(prefix);
 	return id.charAt(0).toUpperCase() + id.slice(1);

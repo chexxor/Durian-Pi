@@ -21,6 +21,7 @@
       "demo/config-unknown-key.test.mjs",
       "demo/config.test.mjs",
       "demo/constitution.test.mjs",
+      "demo/continuity-note.test.mjs",
       "demo/context-over-window.test.mjs",
       "demo/control-plane-gate.test.mjs",
       "demo/converter.test.mjs",
@@ -249,6 +250,7 @@
       "demo/context-measure.test.mjs",
       "demo/read-no-create-store.test.mjs",
       "demo/readapi-activity.test.mjs",
+      "demo/status-view-bound.test.mjs",
       "demo/readapi.test.mjs",
       "demo/viewmodel.test.mjs"
     ],

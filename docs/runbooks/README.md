@@ -166,6 +166,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [compaction-eval.md](compaction-eval.md) | a compaction threshold needs a MEASUREMENT: the compacted-vs-full delta or a model’s real window | no |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
+| [continuation-notes.md](continuation-notes.md) | a seat cannot finish its item inside one context window; compaction summaries come back truncated ("Summarization hit the token limit") or are refused by the run cap before a request is sent; a seat woken into a fresh context starts from nothing; `cli.mjs status` returns tens of megabytes | yes (config edit; the diagnosis is read-only) |
 | [context-over-window.md](context-over-window.md) | a seat shows a `context_over_window` notice or `check` reports `context-over-window`; the `ctx` fraction prints over 1.0 and you need to know whether that number describes the seat's current head or a turn that already ended | no |
 | [format-before-commit.md](format-before-commit.md) | my diff shows whitespace or line-ending churn I did not intend | no |
 | [degeneration-guard.md](degeneration-guard.md) | a seat was auto-reset (`pi.reset` naming `degenerate-text=...`); tell a real loop from a false positive, or add a shape | no |

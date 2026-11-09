@@ -85,10 +85,10 @@ import { readCitations } from "./src/citation.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readData } from "./src/readclient.mjs";
-import { partialView } from "./src/viewmodel.mjs";
+import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
 import { SeatGuard } from "./src/seatguard.mjs";
@@ -2954,7 +2954,7 @@ async function cmdWorktreePruneBranch(name) {
   }
 }
 
-async function cmdStatus() {
+async function cmdStatus(args = []) {
   const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
     readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
   );
@@ -2974,7 +2974,63 @@ async function cmdStatus() {
   const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
   const notes =
     outOfBand > 0 ? [`${outOfBand} measure(s) out of band - see: node cli.mjs metrics`] : [];
-  out({ ok: true, command: "status", db: DB_PATH, ...health, broker, notes });
+
+  // BOUND THE PAYLOAD (ROADMAP 331, the read-surface leg). Measured on this rig 2026-11-09:
+  // `cli.mjs status --json` printed 28,543,835 bytes, of which `queueItems` was 24,746,566 — 88% of it rows in
+  // `done`/`cancelled` that a status view cannot act on. A continuation note that lets a seat survive its window
+  // is worth nothing if reading the rig re-introduces the same blowup, so the view ships the rows still in play
+  // and NAMES what it dropped, in rows and bytes. The DERIVATION (counts, attention, peer graph) still runs over
+  // the full row set — the #5016 rule — so a smaller payload never means a smaller rig.
+  const wantFull = args.includes("--full-queue");
+  const capArg = args.find((a) => a.startsWith("--queue-limit"));
+  const cap = capArg ? Number(capArg.split("=")[1]) : QUEUE_VIEW_ROW_CAP;
+  if (!Number.isInteger(cap) || cap <= 0) fail(`--queue-limit must be a positive integer (1..${QUEUE_VIEW_ROW_CAP})`);
+  if (cap > QUEUE_VIEW_ROW_CAP) fail(`--queue-limit ${cap} exceeds the bounded view's cap of ${QUEUE_VIEW_ROW_CAP}; use --full-queue to ask for the whole document`);
+  // The refusal is the point: an unbounded read of a store this size is the read that sits in the broker's
+  // result channel until the stream times out. Ask for it and get a count, not a hang.
+  if (wantFull) {
+    const refusal = refuseOversizedQueueRead(health.queueItems, { capRows: cap });
+    if (refusal) {
+      out({ ok: false, command: "status", db: DB_PATH, error: refusal, rows: health.queueItems?.length ?? 0 });
+      process.exitCode = 1;
+      return;
+    }
+  }
+  const view = projectQueueView(health.queueItems, { cap: wantFull ? Number.MAX_SAFE_INTEGER : cap, dropTerminal: !wantFull });
+  // The derivations that a bounded view CANNOT recover from its own rows travel with it. Two of them are load-
+  // bearing: the census (a capped view of 200 rows is not the rig's 6,021 rows), and the deferred backlog, which
+  // is exactly the rows a session can act on and exactly the rows a terminal-only drop would hide. Measured
+  // 2026-11-09: bounding status without this made `scripts/clockin.mjs` — which reads status for its queue
+  // section — report a 200-row store and a zero deferred backlog against a store holding 384 deferred rows.
+  out({
+    ok: true,
+    command: "status",
+    db: DB_PATH,
+    ...health,
+    queueItems: view.rows,
+    queueCensus: queueCensusOf(health.queueItems),
+    queueDeferred: deferredBacklogRows(health.queueItems),
+    // The peer graph is derived from the rows the view actually carries, so the graph a reader sees is the graph
+    // of what they were shown - not a 6,021-edge history attached to 200 rows. The omitted edge count is named so
+    // the smaller view cannot read as a smaller rig (the same rule as the census header in `queue`).
+    peerGraph: peerGraph(view.rows),
+    graphOmittedEdges: Math.max(0, (health.peerGraph?.edges ?? []).length - view.rows.length),
+    queueView: {
+      shown: view.shown,
+      total: view.total,
+      droppedTerminal: view.droppedTerminal,
+      droppedCapped: view.droppedCapped,
+      bytes: view.bytes,
+      how: wantFull ? "full document" : `non-terminal rows, capped at ${cap}`,
+      widen: "node cli.mjs status --full-queue",
+    },
+    // Opt-in, and named so a reader knows they asked for it: the ids+statuses of the rows the view dropped, so a
+    // script that must join a branch to its row's state (clock-in's landing debt) can do it without re-reading
+    // 24 MB of bodies.
+    queueTerminalIndex: args.includes("--with-terminal-index") ? terminalStatusIndex(health.queueItems) : null,
+    broker,
+    notes,
+  });
 }
 
 /** Every seat's resolved model, from the spec. One definition so `check`'s
@@ -3484,7 +3540,7 @@ try {
     // terminal gets the readable view and a pipe keeps the JSON contract.
     const human = rest.includes("--human") || (Boolean(process.stdout.isTTY) && !rest.includes("--json"));
     await cmdWatch(rest.includes("--once"), human);
-  } else if (cmd === "status") await cmdStatus();
+  } else if (cmd === "status") await cmdStatus(rest);
   else if (cmd === "pause" || cmd === "unpause") {
     // ROADMAP 131. `pause [--wait] [reason]`; `unpause` takes no reason.
     const paused = cmd === "pause";

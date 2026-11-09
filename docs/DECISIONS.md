@@ -10855,3 +10855,52 @@ seat (`docs/runbooks/land.md` Do 0b) — `wip/seat-prompt-files` is left for its
 **Boundary.** This records why the ceiling exists and who must decide the remedy. It authorises no delegate queue write, no unlock of a live seat's tree, no push. The seven remaining item trees are the seats' own roots (`item-5604 auditor, 5801 devtools, 5829 impl, 5834 qa, 5912 scribe, 5965 architect, 5976 security`) and stay.
 
 **Probe that falsifies it.** `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` → `total: 9`, `reapable: 0`, all `seat-root`; and for every remaining `item-*` ref, `git merge-base --is-ancestor refs/heads/<ref> main` exits **0** except `item-5301`, whose `git rev-list --count main..refs/heads/item-5301` is **1**. If a future pass finds a merged tree whose row is terminal and still `keepReason: "live"`, this decision is wrong.
+
+## D250 — 2026-11-09T09:0xZ: **a bounded view must carry the derivations it can no longer show** (delegate acting on the continuity-note leg of ROADMAP 331; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**What was decided.** Two things, one mechanism and one rule that the mechanism forced.
+
+1. **The continuity mechanism ships as `extensions/continuity.mjs`** — a pi-durable extension on the extension
+   plane (D212), loaded **only** through `DURIG_EXTENSIONS` (no auto-discovery: `src/extensions.mjs` treats "which
+   code runs in here" as an explicit list because an extension has the harness API and the process's OS
+   permissions). It defines `durig.notes` (`defineDoc`, conversation-scoped, rewindable, fork `asOf`), the
+   `read_note` / `write_note` / `continue_from_note` tools, a static `durig-continuity` prompt section (ROADMAP
+   175: the prompt section is static), and a `beforeCompact` hook on `CompactionTask` that supplies the summary
+   body itself, so the summariser model call never happens. The store document is the source of truth;
+   `DURIG_NOTES_DIR` (default `<rig root>/.durig/notes`) holds human-readable mirrors only (D130/R2).
+2. **A view may be smaller than the store, but it must not be smaller than the rig.** `cli.mjs status` now prints
+   200 non-terminal rows instead of 6,021, and ships `queueCensus` (rows, per-state counts, terminal/active),
+   `queueDeferred` (every deferred row's id, seat, status and a 55-char subject) and, on request,
+   `queueTerminalIndex` (ids+statuses of the dropped rows). `peerGraph` is derived from the rows actually shown,
+   and `graphOmittedEdges` names what is not there. `--full-queue` on a store over the cap **exits 1 with the
+   count** instead of hanging the read.
+
+**Why this and not "just cap the output".** The measurement: `node cli.mjs status --json` on this rig printed
+**28,543,835 bytes**, of which `queueItems` was **24,746,566** — 88% of it rows in `done`/`cancelled`. After the
+bound the same command prints **587,109 bytes** (`queueItems` 389,829, `queueDeferred` 51,353, `peerGraph` 49,315,
+`queueCensus` 133). The first cut of the bound **broke clock-in silently**: `scripts/clockin.mjs (`runCli(["status"])` in `main`)` runs
+`runCli(["status"])` for its queue section, so a 200-row view made the digest print `## QUEUE 200 rows` and a
+**zero** deferred backlog against a store holding 383 rows awaiting the operator. Nothing else in the suite looked
+at that line against a production-shaped store, so 280 demos stayed green while the entry point lied. The rule is
+now enforced by code and by a demo: `demo/status-view-bound.test.mjs` seeds a 400-row store (100 terminal, 250
+deferred — more deferred rows than the cap) and asserts the census and the full deferred backlog travel, that the
+index is opt-in and body-free, and that `droppedTerminal + droppedCapped === total − shown`.
+
+**Consequences.** Any new read verb that projects a document must answer three questions in its payload: how many
+rows exist, which rows it dropped and why, and what size it saved. A derived number (census, attention, graph)
+that a reader could recompute only from the full row set must be computed before projection and shipped — the
+#5016 rule, now applied to bytes as well as to counts. The compaction policy that pairs with the notes uses
+**family keys** (`"verifier/*"`, `"local/*"`) which expand to the model the family actually declares
+(`overrideKeysForFamily` in `src/config.mjs`), because a key pinned to a concrete model id is read by nobody once
+the family repoints — the same accepted-and-ignored class as an unknown config key (#5071).
+
+**Boundary.** The extension is **not armed on the live rig**: `cli.mjs config` reports `DURIG_EXTENSIONS: null` and
+`selfdev.sqlite` contains no `durig.notes` document. Arming it changes what code runs in every seat, which is the
+operator's grant, not the delegate's. No queue row was claimed, completed or deferred by this decision; no push
+was made.
+
+**Probe that falsifies it.** `node cli.mjs status --json | wc -c` under 600,000 on this store while
+`node cli.mjs status --json` still reports `queueCensus.rows: 6021` and `queueDeferred.length: 383`;
+`node cli.mjs status --full-queue` exits **1** naming `6021 rows / 23.6 MB`; and `node scripts/clockin.mjs --db
+./selfdev.sqlite` prints `## QUEUE 6021 rows` with a non-zero deferred line. If a future status view reports a
+row count equal to its shown count on a store larger than the cap, the rule has regressed.

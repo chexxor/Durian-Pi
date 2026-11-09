@@ -346,6 +346,39 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 		/\["local\/qwen"\]\.keepRecentTokens must be a positive number of tokens/,
 		"a bad per-model value names the model AND the field",
 	);
+	// A FAMILY KEY (2026-11-09, ROADMAP 331). pi-durable matches `modelOverrides` by the exact
+	// `provider/modelId` string (dist/harness/compaction.js:201-203 in the pinned 1.5.0, byte-identical to
+	// the installed 1.3.0 - see the pin note in docs/DECISIONS.md), so an entry keyed on a model id is pinned
+	// to that id: repoint the seat at another quantization and the schedule stops applying while the key still
+	// reads configured. `verifier/*` is expanded at build time against the model the family declares, so the
+	// schedule follows the family instead of a stale name.
+	assert.deepEqual(
+		compactionSettings({
+			DURIG_COMPACTION_MODEL_OVERRIDES: { "verifier/*": { reserveTokens: 4096, keepRecentTokens: 8192, backgroundTokens: 8192 } },
+			DURIG_VERIFIER_MODEL: "openai/gpt-oss-120b",
+		}),
+		{ compaction: { modelOverrides: { "verifier/openai/gpt-oss-120b": { reserveTokens: 4096, keepRecentTokens: 8192, backgroundTokens: 8192 } } } },
+		"a family key reaches the model the family actually serves",
+	);
+	assert.deepEqual(
+		compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: { "verifier/*": { reserveTokens: 4096 } } }),
+		{},
+		"a family that declares no model is not armed, so the entry is DROPPED rather than emitted as a key nothing can match",
+	);
+	assert.throws(
+		() => compactionSettings({ DURIG_COMPACTION_MODEL_OVERRIDES: { "nosuchfamily/*": { reserveTokens: 4096 } } }),
+		/names a family this rig cannot build/,
+		"a family key that names no provider is an error, not an inert entry",
+	);
+	// The shipped defaults now carry the verifier-class schedule: a 24,576-token window is SMALLER than
+	// pi-durable's own 16,384-token reserve, so on that family compaction can never leave room for a reply.
+	const shippedValues = JSON.parse(readFileSync(join(import.meta.dirname, "..", "durig.config.default.json"), "utf8"));
+	const armed = compactionSettings({ ...shippedValues, DURIG_LOCAL_MODEL: "qwen3.8-flash-next-q2_0", DURIG_VERIFIER_MODEL: "openai/gpt-oss-120b" });
+	assert.ok(armed.compaction.modelOverrides["verifier/openai/gpt-oss-120b"], "the defaults file's verifier family expands to a real model key");
+	const verifierPolicy = armed.compaction.modelOverrides["verifier/openai/gpt-oss-120b"];
+	// pi-durable's own floor arithmetic (compaction.js selectCut + summarizer): kept recent + min(0.8*reserve, maxTokens).
+	const floor = verifierPolicy.keepRecentTokens + Math.min(0.8 * verifierPolicy.reserveTokens, 6000);
+	assert.ok(floor <= 24576, `the verifier schedule must fit the 24,576 window; floor computed ${floor}`);
 	// The reporting half: three states, DISTINCT exit codes, the numbers beside the verdict.
 	assert.deepEqual(
 		compactionReport({ consumed: 20109, policy: { keepRecentTokens: 8192 }, summaryEntry: { id: 275457 } }),

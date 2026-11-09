@@ -1,0 +1,56 @@
+== ROADMAP 331: does the configured override reach the harness? ==
+  store under inspection: .spike/delegate/continuity-store/with.sqlite
+  config source: durig.config.json
+  compactionSettings() -> {"compaction":{"modelOverrides":{"local/qwen3.8-flash-next-q2_0":{"reserveTokens":20480},"verifier/openai/gpt-oss-120b":{"reserveTokens":4096,"keepRecentTokens":8192,"backgroundTokens":8192}}}}
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  verifier/openai/gpt-oss-120b: reserve=4096 keepRecent=8192 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+  local/qwen3.8-flash-next-q2_0: reserve=20480 keepRecent=20000 enabled=true
+== per-window feasibility ==
+  local/qwen3.8-flash-next-q2_0: window=204800 headroom=184320 keepRecent=20000 = 11% of headroom
+    post-compaction floor: 20000 kept + 16384 summary cap = 36384 tokens vs a 204800 window (18% of the window)
+  verifier/openai/gpt-oss-120b: window=24576 headroom=20480 keepRecent=8192 = 40% of headroom
+    post-compaction floor: 8192 kept + 3276 summary cap = 11468 tokens vs a 24576 window (47% of the window)
+== observed failures in the store ==
+  pi.compaction rows: 1; failed 0; truncated summaries 0; refused by the run cap 0
+  last 60 min: 1 compactions, 0 truncated
+  by conversation (cap refusals | truncations):
+    conv 28: 0 | 0
+  truncations: 0 lifetime, first 1970-01-01T00:00:00.000Z, last 1970-01-01T00:00:00.000Z; 0 in the last 24 h
+  cap refusals: 0 lifetime, first 1970-01-01T00:00:00.000Z, last 1970-01-01T00:00:00.000Z; 0 in the last 24 h
+== run-cap headroom for the summariser (the budget that starves compaction) ==
+  no spend ledger or START line — headroom unmeasurable
+== turn shape (tools/seat-turn-shape.mjs, read-only) ==
+  2 of 3 seats cannot be spoken to right now: seat stuffed, seat handoff
+== broker progress leg: alive vs healthy (src/broker.mjs:1628-1631, BROKER_HEARTBEAT_MS 20000) ==
+  no broker state file — no resident broker
+== continuity mechanism: can EVERY seat resume from a note, and did compaction stop costing a model call? ==
+  DURIG_EXTENSIONS: extensions/continuity.mjs
+  note documents in the store: durig.notes
+  transcript evidence of a note write: 11 entr(ies) mentioning write_note
+  DURIG_NOTES_DIR: .spike/delegate/continuity-store/notes
+  mirror files at /home/chexxor/Git/Durian-Pi/.spike/delegate/continuity-store/notes: 3
+  compaction attempts in the last 24 h: 1 (each still costs a summariser call until the hook supplies the note)
+  seats in the roster: 3
+  worker    conv 2     note rev 1 | 702 chars of resume text | goal=yes next=yes verified=1 fresh-boundaries=0
+  stuffed   conv 28    note rev 1 | 278 chars of resume text | goal=yes next=yes verified=1 fresh-boundaries=0
+  handoff   conv 127   note rev 1 | 255 chars of resume text | goal=yes next=yes verified=1 fresh-boundaries=0
+  mechanism armed at the first write_note call: 2026-11-09T08:36:22.135Z
+  24 h before: 0 compactions, 0 truncated summaries, 0 note-backed (the mechanism did not exist yet)
+  since: 1 compactions, 0 truncated summaries, 1 note-backed
+== live window occupancy (entries after each seat's head marker) ==
+  worker    no head marker — the whole transcript is in the window
+  stuffed   window not declared for its model — occupancy unmeasurable
+  handoff   window not declared for its model — occupancy unmeasurable
+  note: token count is chars/4 over durable entries; the provider's own tokenizer is the ground truth.
+
+FAIL (1) —
+  · 2 seats are AT RISK on turn shape — a strict alternating template refuses a user turn before any window limit, so no window sizing can make them complete work.

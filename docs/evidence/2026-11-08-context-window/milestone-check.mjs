@@ -15,7 +15,14 @@ const dur = await import(pathToFileURL(join(ROOT, "node_modules", "@earendil-wor
 const comp = await import(pathToFileURL(join(ROOT, "node_modules", "@earendil-works", "pi-durable", "dist", "harness", "compaction.js")).href);
 
 const { DatabaseSync } = await import("node:sqlite");
-const DB = process.argv.find((a) => a.startsWith("--db"))?.split("=")[1] || process.env.DURIG_DB || join(ROOT, "selfdev.sqlite");
+// Accept BOTH `--db path` and `--db=path`. A gate whose flag is silently ignored falls back to the live store
+// and reports numbers for a rig the operator never asked about - the accepted-and-ignored class (#5071).
+const dbFlag = (() => {
+  const i = process.argv.indexOf("--db");
+  if (i >= 0 && process.argv[i + 1]) return process.argv[i + 1];
+  return process.argv.find((a) => a.startsWith("--db="))?.split("=")[1];
+})();
+const DB = dbFlag || process.env.DURIG_DB || join(ROOT, "selfdev.sqlite");
 
 const readFile = (p, e) => readFileSync(p, e);
 const shipped = await cfg.loadShippedDefaults({ readFile, anchors: [join(ROOT, "durig.config.default.json")] });
@@ -25,6 +32,7 @@ const settings = cfg.compactionSettings(config);
 const failures = [];
 const seen = new Set();
 console.log("== ROADMAP 331: does the configured override reach the harness? ==");
+console.log(`  store under inspection: ${DB}`);
 console.log(`  config source: ${source}`);
 console.log(`  compactionSettings() -> ${JSON.stringify(settings)}`);
 if (settings.compaction === undefined) {
@@ -35,7 +43,13 @@ const rigPath = join(ROOT, "rig.selfdev.json");
 const rig = JSON.parse(readFileSync(rigPath, "utf8"));
 const windows = {};
 for (const seat of rig.seats ?? []) {
-  const [provider, modelId] = String(seat.model ?? "").split("/");
+  // Resolve the seat model exactly as src/seatmodel.mjs:17-19 does: provider = up to the first slash,
+  // modelId = the rest. The naive split read "verifier/openai/gpt-oss-120b" as model "openai", so this gate
+  // looked up an override key that pi-durable can never match - a gate that mis-keys is a gate that lies.
+  const modelString = String(seat.model ?? "");
+  const slash = modelString.indexOf("/");
+  const provider = slash > 0 ? modelString.slice(0, slash) : modelString;
+  const modelId = slash > 0 ? modelString.slice(slash + 1) : modelString;
   const key = `${provider}/${modelId}`;
   windows[key] = cfg.declaredContextWindow(config, key) ?? windows[key];
   const p = comp.compactionPolicy(stored, { provider, modelId });
@@ -51,7 +65,7 @@ for (const [key, w] of Object.entries(windows)) {
   const family = key.startsWith("verifier/") ? "VERIFIER" : "LOCAL";
   const declared = w ?? Number(config[`DURIG_${family}_CONTEXT`] ?? 0);
   if (!declared) { console.log(`  ${key}: window not declared — cannot check`); continue; }
-  const p = comp.compactionPolicy(stored, { provider: key.split("/")[0], modelId: key.split("/").slice(1).join("/") });
+  const p = comp.compactionPolicy(stored, { provider: key.slice(0, key.indexOf("/")), modelId: key.slice(key.indexOf("/") + 1) });
   const headroom = declared - p.reserveTokens;
   const pct = (100 * p.keepRecentTokens / headroom).toFixed(0);
   // The floor a compaction can never get below: the kept recent turns plus the summary the harness
@@ -198,12 +212,28 @@ try {
   }
 } catch (e) { console.log(`  broker progress probe failed: ${e.message}`); }
 
-console.log("== continuity mechanism: is there a note a fresh context could resume from? (docs/reviews/architecture-context-continuity-2026-11-09.md) ==");
+console.log("== continuity mechanism: can EVERY seat resume from a note, and did compaction stop costing a model call? ==");
+/*
+ * The gate has three parts, and each one is answered from the store, not from the docs:
+ *   A. is the extension armed at all (DURIG_EXTENSIONS names it, and the file exists)?
+ *   B. per seat: does a `durig.notes` document exist for that seat's conversation, and does it render into
+ *      a body a fresh context could actually work from (a goal or a next action, plus evidence)?
+ *   C. before/after the first note was written: how many compactions ran, how many still built a summariser
+ *      request (a `submissionId` in the task result), and how many of those summaries were truncated.
+ * "Before/after" is anchored on the first `write_note` in the transcript, because that is the moment the
+ * mechanism became real on this rig - not the moment a file was written to disk.
+ */
 try {
   const exts = String(config.DURIG_EXTENSIONS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const present = exts.filter((p) => existsSync(isAbsolute(p) ? p : join(ROOT, p)));
   console.log(`  DURIG_EXTENSIONS: ${exts.length ? exts.join(", ") : "(unset) - no extension is loaded, so the mechanism cannot exist yet"}`);
-  if (exts.length && present.length < exts.length) console.log(`  ${exts.length - present.length} listed extension path(s) do not exist - the rig looks configured and is not.`);
+  if (exts.length && present.length < exts.length) {
+    console.log(`  ${exts.length - present.length} listed extension path(s) do not exist - the rig looks configured and is not.`);
+    failures.push(`${exts.length - present.length} DURIG_EXTENSIONS path(s) do not exist; the rig reports an extension it never loaded.`);
+  }
+  const continuityListed = exts.some((p) => /continuity/.test(p));
+  if (!continuityListed) failures.push("extensions/continuity.mjs exists but is not in DURIG_EXTENSIONS - by design it is never auto-discovered, so an unlisted extension is an absent one.");
+
   if (existsSync(DB)) {
     const s = new DatabaseSync(DB, { readOnly: true });
     const kinds = s.prepare("select kind, count(*) n from documents group by kind order by kind").all().map((r) => String(r.kind).replace(/"/g, ""));
@@ -211,7 +241,7 @@ try {
     console.log(`  note documents in the store: ${notesDocs.length ? notesDocs.join(", ") : "none - durig.notes is not defined"}`);
     if (!notesDocs.length) failures.push("no continuation-note document exists in the store, so a seat forced into a fresh context has nothing to resume from - the mechanism is rows #5931-#5940.");
     let writes = 0;
-    try { writes = s.prepare("select count(*) n from entries where record like ?").all("%write_note%").get().n; } catch { writes = 0; }
+    try { writes = s.prepare("select count(*) n from entries where record like ?").get("%write_note%").n; } catch { writes = 0; }
     console.log(`  transcript evidence of a note write: ${writes} entr(ies) mentioning write_note`);
     const rawDir = config.DURIG_NOTES_DIR || ".durig/notes";
     const mirrorPath = isAbsolute(rawDir) ? rawDir : join(ROOT, rawDir);
@@ -221,6 +251,68 @@ try {
     if (mirrorCount === 0 && notesDocs.length) failures.push(`the note is in the store but not mirrored to ${mirrorPath} - seats and humans cannot read it with ordinary file tools.`);
     const last24 = s.prepare("select count(*) n from tasks where kind='\"pi.compaction\"' and json_extract(record,'$.startedAt') >= ?").get(Date.now() - 86400000).n;
     console.log(`  compaction attempts in the last 24 h: ${last24} (each still costs a summariser call until the hook supplies the note)`);
+
+    // B. per seat. The roster is read through pi-durable's own storage API, because the SQL rows for a
+    // document hold only its header - the value is delta-encoded in `document_revisions` and reading it by
+    // hand would be a second, wrong implementation of a decoder that already exists.
+    try {
+      const { renderNote } = await import(join(ROOT, "extensions", "continuity.mjs"));
+      const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
+      const { BACKGROUND_CONTEXT } = await import("@earendil-works/chord/context");
+      const ctx = BACKGROUND_CONTEXT;
+      const store = await openNodeSqliteStorage(DB);
+      const rosterRec = await store.findDocument({ kind: "durig.seats", scope: { kind: "session" } }, "current", ctx);
+      const roster = rosterRec ? (await store.document(rosterRec.id, "current", ctx))?.value?.seats ?? {} : {};
+      console.log(`  seats in the roster: ${Object.keys(roster).length}`);
+      const seatsWithoutNote = [];
+      const seatsNotResumable = [];
+      for (const [name, entry] of Object.entries(roster)) {
+        const conv = entry?.conversationId;
+        if (conv == null) { seatsWithoutNote.push(`${name} (no conversation)`); continue; }
+        const rec = await store.findDocument({ kind: "durig.notes", scope: { kind: "conversation", conversationId: conv } }, "current", ctx);
+        if (!rec) { seatsWithoutNote.push(`${name} (conv ${conv})`); continue; }
+        const note = (await store.document(rec.id, "current", ctx))?.value;
+        const body = renderNote(note);
+        const revisions = s.prepare("select count(*) n from document_revisions where document_id=?").get(rec.id).n;
+        const boundary = s.prepare("select count(*) n from entries where conversation_id=? and record like ?").get(conv, "%\"type\":\"pi.reset\"%").n;
+        const resumable = body.length > 0 && (note?.goal || note?.next);
+        console.log(`  ${String(name).padEnd(9)} conv ${String(conv).padEnd(5)} note rev ${revisions} | ${body.length} chars of resume text | goal=${note?.goal ? "yes" : "no"} next=${note?.next ? "yes" : "no"} verified=${(note?.verified ?? []).length} fresh-boundaries=${boundary}`);
+        if (!resumable) seatsNotResumable.push(`${name}: note exists but renders nothing a fresh context could act on (${body.length} chars)`);
+      }
+      if (seatsWithoutNote.length) failures.push(`${seatsWithoutNote.length} of ${Object.keys(roster).length} seats have no continuity note (${seatsWithoutNote.slice(0, 12).join(", ")}) - a forced fresh context for those seats starts empty.`);
+      if (seatsNotResumable.length) failures.push(seatsNotResumable.join("; "));
+      await store.close(ctx);
+    } catch (e) {
+      console.log(`  per-seat note read failed: ${e.message}`);
+      failures.push(`the gate could not read the notes: ${e.message}`);
+    }
+
+    // C. before/after the mechanism. The anchor is the first real `write_note` TOOL CALL (not the system
+    // section, which also contains the string).
+    const firstNoteRow = s.prepare("select min(json_extract(record,'$.model[0].timestamp')) ts from entries where record like ?").get("%\"name\":\"write_note\",\"arguments\"%");
+    const boundaryTs = firstNoteRow?.ts ?? null;
+    if (boundaryTs) {
+      console.log(`  mechanism armed at the first write_note call: ${new Date(boundaryTs).toISOString()}`);
+      // A compaction task record always carries a `submissionId` - the harness creates the submission even when
+      // an extension supplies the summary - so "did the summariser run" cannot be read from the task row. What
+      // CAN be read is the summary the boundary placed: a note-backed summary begins with CONTINUITY NOTE, and a
+      // summariser-backed one is model output that truncates with "hit the token limit". The zero-model-call
+      // claim itself is gated by demo/continuity-note.test.mjs, which counts the provider's own call counter.
+      const window = (from, to) => s.prepare(
+        "select count(*) n, sum(record like ?) summariser_calls, sum(record like ?) truncated from tasks where kind='\"pi.compaction\"' and json_extract(record,'$.startedAt') >= ? and json_extract(record,'$.startedAt') < ?",
+      ).get("%hit the token limit%", "%hit the token limit%", from, to);
+      const noteBacked = (from, to) => s.prepare(
+        "select count(*) n from entries where record like ? and json_extract(record,'$.model[0].timestamp') >= ? and json_extract(record,'$.model[0].timestamp') < ?",
+      ).get("%was compacted into the following summary%CONTINUITY NOTE%", from, to).n;
+      const before = window(boundaryTs - 86400000, boundaryTs);
+      const after = window(boundaryTs, Date.now());
+      console.log(`  24 h before: ${before.n} compactions, ${before.truncated ?? 0} truncated summaries, 0 note-backed (the mechanism did not exist yet)`);
+      console.log(`  since: ${after.n} compactions, ${after.truncated ?? 0} truncated summaries, ${noteBacked(boundaryTs, Date.now())} note-backed`);
+      if ((after.truncated ?? 0) > 0) failures.push(`${after.truncated} compaction summaries truncated in the rolling 24 h since the first note - the note path is not yet the one compaction takes.`);
+      if (after.n > 0 && noteBacked(boundaryTs, Date.now()) === 0) failures.push(`none of the ${after.n} compactions since the first note used a note as its summary - the beforeCompact hook is not supplying it.`);
+    } else {
+      console.log("  no write_note call in the transcript yet: the before/after comparison has no anchor - the mechanism has never run on this store.");
+    }
     s.close();
   }
 } catch (e) { console.log(`  continuity probe failed: ${e.message}`); }

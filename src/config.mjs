@@ -11,6 +11,11 @@
 // silently acted on the default ./rig.sqlite instead of their configured store
 // — the rig looked broken when it was simply pointed at a different database.
 
+// The provider families are owned by src/providers/local.mjs; the compaction override map needs them so a
+// "family/*" key resolves against the SAME prefix set that builds the provider ids, instead of a second,
+// hand-written list that can drift (see `overrideKeysForFamily`).
+import { LOCAL_ENV_PREFIXES, providerIdForPrefix } from "./providers/local.mjs";
+
 export const DEFAULT_CONFIG_PATHS = ["durig.config.json", ".durig/config.json"];
 
 // The SHIPPED defaults file (#491 C6): discovered the same way the runtime
@@ -155,6 +160,11 @@ export const CONFIG_KEYS = [
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",
 	"DURIG_SEAT_ROOT",
+	// Where continuation-note MIRROR files are written (D240). Registered because `assertNoUnknownFileKeys`
+	// (src/config.mjs:227-234) refuses a config file that sets an unregistered key: an operator who puts
+	// `DURIG_NOTES_DIR` in `durig.config.json` without this row gets the same accepted-and-ignored class as
+	// #5071. The source of truth is the durable store doc (`durig.notes`); this directory is the mirror a gate,
+	// another seat or a human can read without opening the store. Unset means `<cwd>/.durig/notes`.
 	// The compaction policy surface (#4887, registered by the #4931 re-cut). Measured, not assumed:
 	// nothing in `src/` or `cli.mjs` consumes this array - there is NO unknown-key rule at load time -
 	// so `CONFIG_KEYS` is the DECLARED inventory of what a config file may set, and the demos are what
@@ -463,12 +473,41 @@ export function declaredContextWindow(config, modelKey = null) {
  * LEFT ON THE DEFAULTS on purpose - 20,000 kept tokens is affordable there, and inventing a number for
  * a class that was never measured is how a policy becomes folklore.
  *
+ * A key may name a FAMILY (`"verifier/*"`) instead of a model id. pi-durable matches `modelOverrides` by
+ * the exact `provider/modelId` string (dist/harness/compaction.js:197), so an entry keyed on a model id is
+ * pinned to that id: repoint the seat at another quantization and the schedule stops applying while the key
+ * still reads configured - inert-by-name, the same class `assertNoUnknownFileKeys` exists for. The family
+ * key is expanded at build time against the model ids the config declares for that family
+ * (`DURIG_LOCAL_MODEL` / `DURIG_VERIFIER_MODEL` / `DURIG_LOCAL2_MODEL`, the same prefixes
+ * `src/providers/local.mjs` builds the provider ids from). A family that declares no model is not armed,
+ * so its entry is dropped rather than emitted as a key nothing can ever match.
+ *
  * @param {Record<string, unknown>} [config]
  * @returns {{compaction?: {enabled?: boolean, reserveTokens?: number, keepRecentTokens?: number,
  *   backgroundTokens?: number, modelOverrides?: Record<string, object>}}}
  * ONE key, not two: `modelOverrides` nests INSIDE `compaction` because that is the only object the
  * harness reads (ROADMAP 331 - a sibling `modelOverrides` is read by nobody).
  */
+/**
+ * The concrete `provider/modelId` keys a map key can stand for. An exact key passes through unchanged;
+ * `family/*` expands to the model that family's own config keys declare. Exported so a gate can print
+ * which keys a schedule actually reaches rather than which keys an operator typed.
+ */
+export function overrideKeysForFamily(key, config = {}) {
+	if (!String(key).endsWith("/*")) return [key];
+	const family = String(key).slice(0, -2);
+	const prefix = LOCAL_ENV_PREFIXES.find((pre) => providerIdForPrefix(pre) === family);
+	if (prefix === undefined) {
+		throw new Error(
+			`DURIG_COMPACTION_MODEL_OVERRIDES["${key}"] names a family this rig cannot build ` +
+			`(known: ${LOCAL_ENV_PREFIXES.map(providerIdForPrefix).join(", ")}) - a key no model can match is inert, not a default`,
+		);
+	}
+	const model = config?.[`${prefix}MODEL`];
+	if (model === undefined || model === null || String(model).trim() === "") return [];
+	return [`${family}/${String(model).trim()}`];
+}
+
 export function compactionSettings(config) {
 	const out = {};
 	const policy = {};
@@ -527,7 +566,13 @@ export function compactionSettings(config) {
 				}
 				one[field] = n;
 			}
-			if (Object.keys(one).length > 0) layered[model] = one;
+			if (Object.keys(one).length > 0) {
+				// A FAMILY key ("verifier/*") is written once and expanded to the concrete "provider/modelId"
+				// keys pi-durable actually matches (dist/harness/compaction.js:197). Writing the model id by hand
+				// pins the entry to a model the operator may repoint next week, and the schedule then sits inert -
+				// the same inert-by-name class `assertNoUnknownFileKeys` exists for. See `overrideKeysForFamily`.
+				for (const key of overrideKeysForFamily(model, config)) layered[key] = one;
+			}
 		}
 		if (Object.keys(layered).length > 0) compaction.modelOverrides = layered;
 	}
@@ -600,6 +645,9 @@ export function describeConfig({ config, source }) {
 		DURIG_COMPACTION_KEEP_RECENT_TOKENS: config.DURIG_COMPACTION_KEEP_RECENT_TOKENS ?? null,
 		DURIG_COMPACTION_BACKGROUND_TOKENS: config.DURIG_COMPACTION_BACKGROUND_TOKENS ?? null,
 		DURIG_COMPACTION_MODEL_OVERRIDES: config.DURIG_COMPACTION_MODEL_OVERRIDES ?? null,
+		// Where the continuation-note mirrors live (D240). Reported as a path, never as its contents, so this
+		// summary stays safe to print (secrets rule above).
+		DURIG_NOTES_DIR: config.DURIG_NOTES_DIR ?? ".durig/notes (default)",
 		DEEPINFRA_API_KEY: config.DEEPINFRA_API_KEY ? "set" : "unset",
 	};
 }

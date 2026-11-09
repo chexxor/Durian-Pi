@@ -214,6 +214,109 @@ export function queueAttention(items, seats) {
 }
 
 /**
+ * A row that will never change again. `done` and `cancelled` are the two states a queue row can reach and then
+ * stop being about: 5,027 of the 6,021 rows in this rig's store (measured 2026-11-09) are terminal, and they are
+ * 21.8 MB of the 24.7 MB the queue document serialises to. A "status" that carries them is showing history, not
+ * state - and history is what ROADMAP 176 makes recallable from the transcript.
+ */
+export const TERMINAL_QUEUE_STATUSES = ["done", "cancelled"];
+
+/** The row count a bounded status/queue view may carry. Chosen so a view fits in a terminal scrollback, not so it
+ * fits the store: 200 active rows is more than a rig can be acting on at once. */
+export const QUEUE_VIEW_ROW_CAP = 200;
+
+/** Rows still in play: anything that is not terminal. */
+export function activeQueueItems(items) {
+	return (items ?? []).filter((it) => !TERMINAL_QUEUE_STATUSES.includes(it.status));
+}
+
+/**
+ * BOUND A QUEUE PAYLOAD FOR A VIEW (ROADMAP 331, the read-surface leg).
+ *
+ * The read is not the cost - the queue is ONE document, so whoever asks has already read all 6,021 rows out of
+ * SQLite. The cost is what the view SERIALISES and hands to a broker, a TUI or a human pipe: measured on this
+ * rig, `cli.mjs status` returned 28.5 MB, 24.7 MB of it `queueItems`. That is the blowup the continuation notes
+ * must not re-introduce.
+ *
+ * The projection reports what it dropped, in rows AND bytes, so a small view never reads as a small rig. Counts
+ * and attention are always derived from the FULL row set before projection (the #5016 rule); this function only
+ * decides what travels.
+ *
+ * @param {Array<object>} items full rows
+ * @param {{cap?: number, dropTerminal?: boolean}} [opts]
+ * @returns {{rows: Array<object>, shown: number, total: number, droppedTerminal: number, droppedCapped: number,
+ *   bytes: {before: number, after: number}}}
+ */
+export function projectQueueView(items, { cap = QUEUE_VIEW_ROW_CAP, dropTerminal = true } = {}) {
+	const rowsAll = items ?? [];
+	const active = dropTerminal ? activeQueueItems(rowsAll) : rowsAll;
+	const rows = active.slice(0, cap);
+	return {
+		rows,
+		shown: rows.length,
+		total: rowsAll.length,
+		droppedTerminal: dropTerminal ? rowsAll.length - active.length : 0,
+		droppedCapped: active.length - rows.length,
+		bytes: { before: JSON.stringify(rowsAll).length, after: JSON.stringify(rows).length },
+	};
+}
+
+/**
+ * Counts over a row set, without touching the store. Same derivation as `readQueueCensus`, but pure, so a view
+ * that already has the rows in memory (status, a broker pass) can report the census without a second read.
+ */
+export function queueCensusOf(items) {
+	const rows = items ?? [];
+	const counts = {};
+	for (const it of rows) counts[it.status] = (counts[it.status] || 0) + 1;
+	return {
+		rows: rows.length,
+		counts,
+		terminal: rows.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
+		active: rows.filter((it) => !TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
+	};
+}
+
+/**
+ * The deferred backlog, projected to the fields a clock-in digest aggregates: id, seat, subject sliced.
+ * A bounded status view drops terminal rows and caps the rest, so the rows that are AWAITING THE OPERATOR can
+ * fall out of the payload while the store still holds them — and the digest then reports a backlog of 0 for a
+ * store with 384 deferred rows. That is the bug this projection closes: the backlog is a DERIVATION over the full
+ * row set, so it must travel with the view that hides the rows it came from (#5016).
+ */
+export function deferredBacklogRows(items, { subjectChars = 55 } = {}) {
+	return (items ?? [])
+		.filter((it) => it.status === "deferred")
+		.map((it) => ({
+			id: it.id,
+			to: it.to,
+			status: it.status,
+			subject: String(it.subject || "").slice(0, subjectChars),
+			deferredTo: it.deferredTo,
+		}));
+}
+
+/** Body-free index of the rows a bounded view dropped: `[{id, status}]`. Opt-in, because it is ~80 KB on this
+ * rig's store — a script that must join a branch to its row's state needs it; a seat reading status does not. */
+export function terminalStatusIndex(items) {
+	return (items ?? [])
+		.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status))
+		.map((it) => ({ id: it.id, status: it.status }));
+}
+
+/**
+ * Refuse an UNBOUNDED read with a count. A caller who asks for the whole document is asking for something this
+ * rig has measured at 24.7 MB; the refusal names the size and the way to widen deliberately, rather than letting
+ * the payload sit in the broker's read channel until it times out.
+ */
+export function refuseOversizedQueueRead(items, { capRows = QUEUE_VIEW_ROW_CAP } = {}) {
+	const rows = (items ?? []).length;
+	if (rows <= capRows) return null;
+	const bytes = JSON.stringify(items).length;
+	return `the queue document holds ${rows} rows / ${(bytes / 1048576).toFixed(1)} MB, more than a bounded view's cap of ${capRows} rows. Ask for a slice: --status claimed --to <seat>, or --limit N (1..${capRows}). The full history is in the durable store and is recallable by row id.`;
+}
+
+/**
  * The census a narrow queue read carries with it (#5016): how many rows exist, the per-state counts, and the
  * row-derived attention — all computed over the FULL, UN-PROJECTED row set, BEFORE any projection. That order is
  * the point: `--no-body` and the filters drop bytes from the ANSWER, never rows from the DERIVATION, so a smaller

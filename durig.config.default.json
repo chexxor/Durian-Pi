@@ -5,7 +5,17 @@
   "DURIG_LOCAL_CONTEXT": "200000",
   "DURIG_LOCAL_MAX_TOKENS": "16384",
   "DURIG_COMPACTION_MODEL_OVERRIDES": {
-    "local/iq3_s": { "reserveTokens": 20480 }
+    "local/*": {
+      "reserveTokens": 20480
+    },
+    "local2/*": {
+      "reserveTokens": 20480
+    },
+    "verifier/*": {
+      "reserveTokens": 4096,
+      "keepRecentTokens": 8192,
+      "backgroundTokens": 8192
+    }
   },
   "DURIG_SPEND_CAP_CALL_USD": "0.05",
   "DURIG_SPEND_CAP_RUN_USD": "0.10",

@@ -3543,3 +3543,59 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     _readme, version, seats, edges, ownership, constitution in ./rig.selfdev.json`. `cli.mjs queue` run normally
     exits 0. Until the tool is fixed, read state with `node cli.mjs status` and
     `node tools/queue-drain-audit.mjs --db ./selfdev.sqlite` (1.2 s, read-only, works with the broker down).
+
+## Operational pitfalls (delegate continuity-note pass, 2026-11-09 — numbered 191-196, continuing from 190; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+191. **A tool with no `parameters` faults the whole run before the tool ever executes.** pi-ai's
+    `toToolDeclaration` (`node_modules/@earendil-works/pi-ai/dist/utils/transcript.js:106-110`) does
+    `JSON.parse(JSON.stringify(tool.parameters))`; for an argument-free tool that is `JSON.parse(undefined)`
+    → `"undefined" is not valid JSON`, and the submission settles `unanswered` with `reason: "faulted"`. The
+    run looks like a model failure. Declare `parameters: Type.Object({})` even when a tool takes nothing —
+    `extensions/continuity.mjs`'s `read_note` and `continue_from_note` both do.
+192. **Inside a hook, `runtime.commit(...)`'s callback return value BECOMES the task state.** `scheduler.js:1994`
+    feeds it to `#commitState` (`:1797`). Returning a rendered summary string from `beforeCompact` writes it into
+    the `tasks.record` column and dies with `Provided value cannot be bound to SQLite parameter 4`. Capture the
+    text in a local and `return undefined` from the commit callback; return the decision object from the hook.
+193. **faux scripted replies use `stopReason: "toolUse"`, not `"toolcall"`.** The wrong spelling settles the turn
+    as `model_error` and the test then blames the extension for a fixture bug.
+194. **`modelOverrides` nests INSIDE `compaction`, and a key pinned to a model id goes inert when the family
+    repoints.** pi-durable matches `modelOverrides` by the exact `"provider/modelId"` string
+    (`dist/harness/compaction.js:201-203`), so `local/iq3_s` in `durig.config.default.json` stopped matching the
+    moment the local family moved to `qwen3.8-flash-next-q2_0`: declared, read by nothing — the same
+    accepted-and-ignored class as an unknown config key (#5071), and the ROADMAP 209 shape (the launcher that
+    exists is the wrong one, so the work sits unread). Family keys (`"verifier/*"`) expand against
+    `DURIG_VERIFIER_MODEL`/`DURIG_LOCAL_MODEL`/`DURIG_LOCAL2_MODEL` in `overrideKeysForFamily` (`src/config.mjs`);
+    an un-armed family's entry is dropped, not kept. Probe: `node docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs`.
+    Two related traps: (a) a config FILE's override map **replaces** the shipped defaults map wholesale (the merge
+    is per key, not deep), so a rig that names its own overrides must name every family it wants scheduled;
+    (b) the gate's own model split must be `indexOf("/")`, not `split("/")` — `verifier/openai/gpt-oss-120b`
+    resolves as provider `verifier`, model `openai/gpt-oss-120b`, and a naive split looks up a key that can never
+    match.
+195. **Do not read a durable document out of `document_revisions` by kind.** The `kind` column there holds
+    `base`/`delta`, not the document kind: measured on `selfdev.sqlite`, `select kind, count(*) from
+    document_revisions group by kind` returns only `delta` (14,900) and `base` (1,989). `src/fleethealth.mjs:99`
+    queries `where kind = ?` with `JSON.stringify("durig.seats")` and therefore always gets 0 rows — it survives
+    because it falls back to the supplied seat map, but it is a silent no-op. Read docs through the storage API
+    (`storage.findDocument({kind, scope}, "current", ctx)` then `storage.document(id, "current", ctx)`), which
+    decodes the deltas. The milestone gate does this, and it is the only correct way to get the roster.
+196. **Every compaction task record carries a `submissionId`, even when no model was called** — so "did the
+    summariser run?" cannot be read from the task row. Read the summary the boundary placed instead: a note-backed
+    summary starts with `CONTINUITY NOTE`, a summariser-backed one truncates with "hit the token limit". The
+    zero-call claim itself is gated by `demo/continuity-note.test.mjs`, which counts the faux provider's own
+    `callCount` across the compaction (22 before, 22 after). Also: `cli.mjs status` was **28,543,835 bytes** on
+    this rig and is now **516,311** with the bounded view; `--full-queue` exits 1 with the row count — that is the
+    guard working, not a bug.
+197. **A bounded view is not a census, and a script that reads the view as one goes silently green.** Bounding
+    `cli.mjs status`'s `queueItems` to 200 rows made `scripts/clockin.mjs` (whose `main` reads status for the queue
+    section) print `## QUEUE 200 rows` for a 6,021-row store and a **zero** deferred backlog for a store
+    holding 383 rows awaiting the operator. The suite stayed green for the whole pass because no demo asserted the
+    deferred line against the *production-shaped* store — until the seeded-store section caught it: 280/280 green,
+    then this failure. Rule now enforced in code: `queueCensus` and `queueDeferred` travel with the view
+    (`src/readapi.mjs` `queueCensusOf` / `deferredBacklogRows`), and `--with-terminal-index` adds the
+    ids+statuses of the dropped rows for scripts that must join a branch to its row. Measured 2026-11-09: status
+    28,543,835 B → 587,109 B, of which `queueItems` 389,829 B, `queueDeferred` 51,353 B, `queueCensus` 133 B.
+198. **A substring assertion is a vacuity trap.** `!JSON.stringify(queueItems).includes("ROW-BODY-1")` passed while
+    terminal rows were still absent for the wrong reason — `"ROW-BODY-1"` is a prefix of `"ROW-BODY-101"`. Assert
+    on the FIELD (`rows.every(r => r.id > TERMINAL_ROWS)`), not on a printable fragment, and when an assertion's
+    arithmetic is a formula (`droppedTerminal + droppedCapped === total - shown`), write the formula, not one side
+    of it: the first version of that assertion was self-consistent only by accident.
