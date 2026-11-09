@@ -1,6 +1,12 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T20:5xZ (delegate session **N21** — the harness compaction guard is built, gated,
+**Last update:** 2026-11-09T21:3xZ (delegate session **N22** — the seat plane is **armed**
+(`durig.config.json` → `"DURIG_EXTENSIONS": "extensions/continuity.mjs"`, `cli.mjs config` confirms it), and the one
+FAIL on the N18 gate turned out to be a **gate bug, not a mechanism bug**: `milestone-check.mjs` now runs the mocked-plane
+proof before blaming the code and exits **0** — `PASS (mechanism)`, 8 operational blockers, 3.7 s. **N18 is not closed**:
+its acceptance (ROADMAP 331, "truncated summaries drop to zero over 100 compactions") needs real seat runs, and no
+provider on this box registers a model. **M5 is ready to start**, not started — its gate re-ran in **1.6 s** at
+**3 PASS, 1 PARTIAL, 4 FAIL**. Earlier in this thread, session **N21** — the harness compaction guard is built, gated,
 end-to-end verified and documented; this window **re-ran the whole verification chain from a cold resume and it is
 still green** — install `UP TO DATE`, gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto e2e 6/6 in 85.5 s.
 This window also **registered ROADMAP 352** (nothing at session start guarantees the guard is installed). Nothing
@@ -18,17 +24,23 @@ longer fail. Registered as **ROADMAP 351**, decided as **D252**, runbook
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**; this pass closed the
-harness-plane half of it (ROADMAP **351**, **D252**). The *other* open thread is the auto-clean ceiling (D249,
-ROADMAP **311** cut 2 / **344**), still spooled, not delivered.
+**Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**; this pass armed the seat
+plane and corrected the gate that said the mechanism was broken when the real state was "armed, never exercised".
+The *other* open thread is the auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**), still spooled, not delivered.
 
-**Current item:** the guard is built, gated and documented; **the only thing left on this thread is the seat plane**,
-which needs the same bound applied through a pi-durable `beforeCompact` extension — and arming any extension is an
-operator grant (`DURIG_EXTENSIONS` is unset; `cli.mjs config` reports `null`). Procedure:
-**`docs/runbooks/continuation-notes.md`** and **`docs/runbooks/harness-compaction-guard.md`**. The team's rows
-**#5931–#5942** remain unclaimed; the delegate asserted nothing.
-
-**First thing to run:**
+**Current item:** N18 cannot be closed, and the reason is now measured rather than assumed. `node
+docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` → **exit 0**, `PASS (mechanism)`,
+**8 operational blockers**: the extension is armed but 0 transcript entries declare `read_note` (newest entry
+2026-11-09T07:54:09Z, before the arming), 0 `durig.notes` documents exist, 12/12 seats have no note, and 219 truncated
+summaries / 209 run-cap refusals are still on the record. The only thing between this rig and a measurable N18 is a
+**provider that registers a model** — an operator grant. **Next milestone M5** is ready: 171 → 172 → 173 → 175 → 176
+(`docs/reviews/milestone-m5-solidified-2026-11-09.md`), gate re-runnable in 1.6 s, four criteria open (C1, C3, C4, C6).
+Nothing can be routed while the broker is down. The team's rows **#5931–#5942** (N18) and the M5 decomposition remain
+unclaimed; the delegate asserted nothing.
+`node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (1.6 s, no model, no broker — expect
+`3 PASS, 1 PARTIAL, 4 FAIL`) then
+`node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` (3.7 s, expect `PASS
+(mechanism)` exit 0 with 8 blockers; a `FAIL` now means code, not configuration). Then the harness-plane guard chain:
 `node tools/compaction-guard-install.mjs --check && node tools/compaction-guard-test.mjs && node tools/compaction-guard-e2e.mjs && COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs`
 (expect `UP TO DATE ... (+ .pi/extensions/compaction-guard-core.mjs)`, `ALL PASS` 28 checks in ~0.5 s, then
 `ALL PASS` manual mode 3–5 s, then `ALL PASS` auto mode **50–86 s** — measured 52 s and 86 s on this box on the same
@@ -112,10 +124,10 @@ The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktre
    line from `install --check` (<100 ms, no model/key/network), and a `demo/compaction-guard-gate.test.mjs` wrapper
    puts the 28-check gate inside the area suite (discovery scans only `demo/*.test.mjs`, `src/testareas.mjs:31-38`, so
    today the pre-landing gate never runs it). A seat job, not a delegate job.
-2. **Arm the continuity extension** (operator grant) — procedure in `docs/runbooks/continuation-notes.md`. The
-   seat plane is *not* protected by this guard: pi-durable caps its own summarization output at
-   `min(floor(0.8*reserveTokens), model.maxTokens)` and has its own failure string. A pi-durable `beforeCompact`
-   extension is the way to apply the same bound to seats — that is the same arming step.
+2. **Get a provider that registers a model** (operator grant) — the extension is armed
+   (`durig.config.json`, `cli.mjs config`), so the remaining step is a live seat run: `DURIG_LOCAL_API_KEY` unset →
+   **401** on 127.0.0.1:8080. Until then N18's acceptance cannot be measured, and the gate will keep reporting
+   "armed but never exercised" as a blocker (pitfall **219**). Procedure: **`docs/runbooks/continuation-notes.md`**.
 3. **Decide how a landing closes its row** (D249) — spooled as `delegate-20261109-auto-clean`, undrained while the
    broker is down.
 4. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2) — a seat job.
@@ -155,7 +167,10 @@ every call this pass went to the local loopback server, which the ledger does no
 Wall clock: the gate is **0.46 s**, the manual e2e **3.25 s**, the auto (threshold) e2e **85.5 s** — that last one is
 the only expensive instrument on this thread and it is a once-per-session witness, not a loop (SELFDEV **218**).
 
-**Traps this window** — `docs/SELFDEV.md` **211–218** (the failure is a request-shape bug; a one-character typo in a
+**Traps this window** — `docs/SELFDEV.md` **219–220** (a store-based gate cannot tell "broken" from "armed and never
+run" — prove the mechanism on the mocked plane before blaming it; `cli.mjs config` reporting a setting is not proof it
+is in effect: check the registry install, then the `pi.agent` selection, then a real request in the transcript). Also
+**211–218** (the failure is a request-shape bug; a one-character typo in a
 safety net is invisible to `node --check`; last-non-null wins on `session_before_*`; `thinking_budget: 0` is
 ignored on this server; the harness plane and the seat plane are different compaction code; an e2e seeded under
 `keepRecentTokens` (20000) fails as "session too small", not as a guard failure; an extension whose core module

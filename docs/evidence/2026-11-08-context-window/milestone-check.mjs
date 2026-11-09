@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // MILESTONE GATE — "does a seat's task fit inside its context window, and if not, does it have a note to
 // resume from?" (D226 / ROADMAP 331, continuity leg added 2026-11-09)
-// One command, no model spend, broker-down safe. Exit 0 = the milestone is met; exit 1 = it is not, with the reason.
+// One command, no model spend, broker-down safe. Exit 0 = the MECHANISM is sound (the override reaches the harness
+// and the note path is the one compaction takes); exit 1 = it is not, with the reason. Operational blockers can
+// sit at exit 0 and still mean the milestone is not met: they are grants or a running broker the operator holds,
+// not defects - the milestone's outcome (ROADMAP 331: "truncated summaries drop to zero over 100 compactions")
+// is only measurable when real seats run, so read the blocker list before calling the milestone closed.
 // usage: node docs/evidence/2026-11-08-context-window/milestone-check.mjs [--db ./selfdev.sqlite]
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -257,8 +261,34 @@ try {
     try { writes = s.prepare("select count(*) n from entries where record like ?").get("%write_note%").n; } catch { writes = 0; }
     console.log(`  transcript evidence of a note write: ${writes} entr(ies) mentioning write_note`);
     const sectionSeen = s.prepare("select count(*) n from entries where record like ?").get("%durig-continuity%").n;
+    // The extension's tools are declared in the `pi.system` entry that offers them, so this counts requests in
+    // which the extension was selected. Grounded, not assumed: with the extension installed the mocked-plane store
+    // has 7 entries carrying the section and 9 declaring read_note; without it, 0 and 0
+    // (DURIG_CONTINUITY_KEEP_DIR=.spike/continuity-proof node demo/continuity-note.test.mjs).
+    const toolSeen = s.prepare("select count(*) n from entries where record like ?").get("%\"name\":\"read_note\"%").n;
     console.log(`  pi.system entries carrying the durig-continuity section: ${sectionSeen}`);
-    if (continuityListed && sectionSeen === 0) failures.push("the extension is listed but its prompt section never reached a request - the seat is never told the note tools exist, so it will not use them.");
+    console.log(`  requests offering the note tools (read_note declared): ${toolSeen}`);
+    if (continuityListed && sectionSeen === 0) {
+      // Two causes look identical from here and need different answers: the mechanism is broken, or the extension
+      // was armed and no seat has run a request since. A gate that reports the second as the first sends the next
+      // session chasing a bug that is not there. Tell them apart by running the mechanism on the mocked plane
+      // (no key, no network, no broker, ~0.4 s).
+      let proof = "";
+      let proven = false;
+      try {
+        proof = execFileSync(process.execPath, [join(ROOT, "demo", "continuity-note.test.mjs")], { encoding: "utf8", cwd: ROOT, timeout: 60000, stdio: ["ignore", "pipe", "pipe"] });
+        proven = proof.includes("CONTINUITY PASS");
+      } catch (e) { proof = e?.message ?? String(e); }
+      const newest = s.prepare("select max(json_extract(record,'$.model[0].timestamp')) ts from entries").get()?.ts;
+      console.log(`  mechanism proof on the mocked plane (demo/continuity-note.test.mjs): ${proven ? "PASS" : "FAIL"}`);
+      if (!proven) {
+        failures.push(`the continuity mechanism does not work even on the mocked plane: ${proof.split("\n").filter((l) => l.includes("FAIL")).slice(0, 3).join(" | ") || proof.slice(0, 200)}`);
+      } else if (toolSeen === 0) {
+        blockers.push(`the extension is armed and loads, but no seat has run a request with it on this store (0 entries declare read_note or carry the section; newest transcript entry ${newest ? new Date(newest).toISOString() : "none"}) - the mechanism is proven offline, and proving it on a live fleet needs a provider that registers a model, which is an operator grant.`);
+      } else {
+        failures.push(`the note tools reached ${toolSeen} request(s) but the durig-continuity section reached none - the section is being dropped for these conversations.`);
+      }
+    }
     const rawDir = config.DURIG_NOTES_DIR || ".durig/notes";
     const mirrorPath = isAbsolute(rawDir) ? rawDir : join(ROOT, rawDir);
     console.log(`  DURIG_NOTES_DIR: ${config.DURIG_NOTES_DIR ? rawDir : "(unset) - default below"}`);

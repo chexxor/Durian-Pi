@@ -52,7 +52,9 @@ The data layer and a durable TUI exist. Parked on the operator's TUI Q2 (Q1 was 
 operator UI to read the same store, and `cli.mjs status`/`queue` now do — see below), not on a missing
 prerequisite.
 
-## M5 — the rig can say what a seat was allowed to do, and can remember what it saw. ⏳ next
+## M5 — the rig can say what a seat was allowed to do, and can remember what it saw. ⏳ next — ready to start
+
+**Ready, not started.** Every criterion has a runnable probe and the gate re-runs in **1.6 s**; re-measured 2026-11-09: **3 PASS, 1 PARTIAL, 4 FAIL**. C5 (the security position) and C7 (cache economics) already pass. The four open criteria and the roadmap ids that close them: **C1** (172 — a refusal written as a structured record), **C3** (173, 269 — reach as data consulted at the claim), **C4** (268, 276 — an egress destination policy that demonstrably refuses), **C6** (176, 162 — a token-budgeted read path over the 209,680 durable entries that have no read path). Sequence: 171 → 172 → 173 → 175 → 176, then memory. Nothing can be routed while the broker is down.
 
 Definition of done and decomposition: `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Gate:
 `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` — **3 PASS, 1 PARTIAL, 4 FAIL** as of
@@ -99,14 +101,14 @@ delegate closing those rows would be asserting an acceptance the verification ga
 | 3 | compaction supplies the note instead of summarising | done | faux model `callCount` 22 before = 22 after: zero summariser calls |
 | 4 | a seat wakes into the note | done | `node demo/offline.mjs`, 0.29 s: one `pi.reset` boundary, fresh context = 1 message carrying the note, item `done` with the result summary |
 | 5 | ROADMAP 331 itself — repair the compaction fallback | done | `src/config.mjs` nests `modelOverrides` inside `compaction` and expands family keys against the provider-family vocabulary in `src/providers/local.mjs`; `demo/config.test.mjs` green |
-| 6 | extend the milestone gate | done | `docs/evidence/2026-11-08-context-window/milestone-check.mjs` reads per-seat notes through pi-durable storage, separates mechanism failure from operational blocker, reports truncations since the first real `write_note` |
+| 6 | extend the milestone gate | done | `docs/evidence/2026-11-08-context-window/milestone-check.mjs` reads per-seat notes through pi-durable storage, separates mechanism failure from operational blocker, reports truncations since the first real `write_note`. Added 2026-11-09: when the section never appears, the gate runs the mocked-plane proof (`demo/continuity-note.test.mjs`, 0.43 s, no key/network/broker) **before** calling it a defect — measured `PASS (mechanism)`, 8 operational blockers, exit 0, 3.7 s |
 | 7 | bound the read surfaces the mechanism depends on | done | `cli.mjs status --json` 28,543,835 B → 587,109 B on the live store; census and deferred backlog travel with the view (D250); `--full-queue` refuses with a count |
 | 8 | the operator workflow | done | `docs/runbooks/continuation-notes.md`, indexed in the README symptom table; pitfalls 191–202; D250 |
-| 9 | **arm it on the live rig** | **open — operator action** | `cli.mjs config` prints `DURIG_EXTENSIONS: null`; `selfdev.sqlite` has 0 `durig.notes` documents; 12 seats have no note |
+| 9 | **arm it on the live rig** | **armed, never exercised — open on a provider grant** | `durig.config.json` carries `"DURIG_EXTENSIONS": "extensions/continuity.mjs"` and `node cli.mjs config` reports it; `cli.mjs:494-495` installs it into the registry every seat conversation uses, and no `pi.agent` document stores an `extensions` selection, so the host default (everything installed) applies. Still 0 `durig.notes` documents, 0 transcript entries declaring `read_note`, 12/12 seats without a note — the newest transcript entry is 2026-11-09T07:54:09Z, before the arming |
 | 10 | the decomposition the PM minted | open | `#5931`–`#5942`, all `queued`, all unclaimed |
 
 **Why row 9 is not delegate work:** `DURIG_EXTENSIONS` changes what code runs in every seat on this rig. That is a
-capacity grant, and the operator holds it.
+capacity grant, and the operator holds it — and granted it on 2026-11-09. What is still missing is a provider that registers a model, so no seat can run a request at all (`curl http://127.0.0.1:8080/v1/models` → **401** `missing or wrong API key`, `DURIG_LOCAL_API_KEY` unset). Arming without a running seat proves nothing, and the gate now says that instead of reporting a mechanism failure.
 
 **Milestone-level caveat, stated rather than smoothed over:** ROADMAP 331's acceptance is "truncated summaries drop
 to zero over 100 compactions measured by `compacteval`". That cannot be measured until real seat runs stop failing

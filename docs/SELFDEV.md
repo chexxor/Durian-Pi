@@ -3739,3 +3739,20 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `node tools/compaction-guard-test.mjs` (28 checks, 0.54 s, no model/key/network/broker): run that on every edit,
     the auto e2e once before a session closes. Same rule for every number in `docs/NEXT.md` — measure in the command
     you report, do not carry a previous session's estimate.
+219. **A store-based gate cannot tell "the mechanism is broken" from "the mechanism was armed and nothing has run
+    yet" — and it will report the second as the first.** `docs/evidence/2026-11-08-context-window/milestone-check.mjs`
+    armed `extensions/continuity.mjs` on 2026-11-09 and printed `FAIL (mechanism): the extension is listed but its
+    prompt section never reached a request`. The transcript's newest entry was **2026-11-09T07:54:09Z** and the config
+    was written at **20:59:08Z** — no seat had run a request since the arming; the section was not dropped.
+    The discriminator, grounded rather than assumed: with the extension installed the mocked-plane store has **7**
+    entries carrying `durig-continuity` and **9** declaring `read_note`; without it **0** and **0**
+    (`DURIG_CONTINUITY_KEEP_DIR=.spike/continuity-proof node demo/continuity-note.test.mjs`). So the gate now runs
+    the mocked-plane proof before blaming the code, and reports `toolSeen == 0` as a blocker (no provider, no broker)
+    rather than a failure. Recipe for any gate that reads a live store: ask "has this path ever been exercised here?"
+    before "is this path broken?", and prove the mechanism in the cheap plane the rig already has.
+220. **`cli.mjs config` reporting a setting is not evidence the setting is in effect.** `DURIG_EXTENSIONS` appeared
+    in `cli.mjs config` and `src/extensions.mjs loadExtensions` returned `durig-continuity` with 2 hooks and 3 tools,
+    yet the live store carried no trace of it. The chain to check, in order: config value → registry install
+    (`cli.mjs:494-495`) → the conversation's `pi.agent` document (a stored `extensions` array **overrides** the host
+    default — here 0 of 13 `pi.agent` docs store one, so the default applies) → an actual request in the transcript
+    (`select count(*) from entries where record like '%"name":"read_note"%'`). Only the last one is proof.

@@ -11016,3 +11016,43 @@ gitignored by design (`.gitignore:15`), so a fresh clone or another machine star
 That gap is registered as **ROADMAP 352** (session-start check in `scripts/clockin.mjs`); the delegate registered it
 and asserted no row. The decision is still "the extension plane, never the base" (D212) — the missing piece is a
 *seam for presence*, not a change to pi.
+
+## D253 — 2026-11-09T21:3xZ: **a gate that reads a live store must prove the mechanism before it blames the mechanism** (delegate acting on the operator's "I accept your recommendations. Implement them, close out the current milestone if it is complete, then prepare to start the next milestone"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The what.** Two things changed, both on the extension/evidence plane (D212 — nothing in the base).
+1. The seat plane is **armed**: `durig.config.json` now carries `"DURIG_EXTENSIONS": "extensions/continuity.mjs"`. The
+   operator granted it; the delegate applied it with the broker stopped, per `docs/runbooks/continuation-notes.md`.
+2. `docs/evidence/2026-11-08-context-window/milestone-check.mjs` no longer reports "the section never reached a
+   request" as a mechanism failure on its own. It now counts requests offering the note tools and, when the section
+   is absent, runs the mechanism's own offline proof (`demo/continuity-note.test.mjs`) before deciding which bucket
+   the finding belongs to.
+
+**The why, which is the part worth keeping.** The gate said `FAIL (1) — the extension is listed but its prompt section
+never reached a request`. That reading is unfalsifiable from the store alone: a store records only what ran, so
+"broken" and "armed and never exercised" produce the identical zero. They were distinguished with numbers, not
+reading: live store — 0 entries carrying `durig-continuity`, 0 declaring `read_note`, newest transcript entry
+**2026-11-09T07:54:09Z**, config written at **20:59:08Z** the same day; mocked-plane store — **7** entries carrying the
+section and **9** declaring `read_note` with the extension installed, **0** and **0** without it. No `pi.agent` document
+stores an `extensions` selection (0 of 13), so the host default — everything installed — applies, which is why the
+extension would have reached requests had any seat run.
+A gate that mislabels a missing grant as a broken mechanism costs the next session a hunt for a bug that is not there,
+and it makes a finished mechanism look unfinished. Hence the rule: **before a store-based gate calls a mechanism
+broken, run the mechanism in the plane that needs no key, no network and no broker, and report the delta between the
+two as an operational blocker.** Exit codes now mean: 0 = mechanism sound (blockers may remain, each naming the grant
+that closes it); 1 = the code is not sound.
+
+**What this does NOT decide.** It does not close **N18**. ROADMAP 331's acceptance — "truncated summaries drop to zero
+over 100 compactions measured by `compacteval`" — is an outcome claim about real seats, and no seat on this box can
+run (`curl http://127.0.0.1:8080/v1/models` → **401**, `DURIG_LOCAL_API_KEY` unset; 10 intents spooled, 118
+dead-letters). Rows **#5931–#5942** remain unclaimed; the delegate asserted nothing. Closure is the team's and the
+operator's call, made when the acceptance is measured.
+
+**Portability, stated plainly.** `durig.config.json` is gitignored by design (`.gitignore:12`, verified with
+`git check-ignore -v durig.config.json`), so this arming is **host-local**: a fresh clone, a new worktree or another
+machine starts with nothing listed and no signal — the same presence gap **ROADMAP 352** registers for the harness
+guard. The tracked place a fleet-wide default would live is `durig.config.default.json`.
+
+**Evidence.** `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` → `PASS
+(mechanism)`, **8 operational blockers**, 1 advisory, exit **0**, **3.7 s** (Linux, Fedora 45, kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1). `node demo/continuity-note.test.mjs` → `CONTINUITY PASS`, 0.43 s.
+`node demo/offline.mjs` → `DEMO PASS`. `node scripts/test.mjs --area docs` → 6/6, 1.0 s. Pitfalls **219–220**.
