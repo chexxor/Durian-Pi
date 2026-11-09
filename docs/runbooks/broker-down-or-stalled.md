@@ -168,6 +168,20 @@ tail -8 selfdev.sqlite.broker.log
 Expect a fresh `START`, `WAKE <seat>`, and `PASS` lines. `status` shows the previously idle seats
 generating. (The broker also logs `STRANDED settled=N` / `RECONCILE …` when it heals on start.)
 
+### Reading a seat that wakes but never works (#5741)
+If a seat is woken repeatedly while holding nothing claimable, look for `PARKED-WAKE seat=<seat>
+reason=<set-changed|deduped>` lines in the same log. Since #5741 a parked seat is woken only when its
+parked SET changes; `reason=deduped` means the broker saw the same set again and deliberately did not wake
+it, so the silence is recorded rather than inferred. A seat still waking every ~30 s with the same set
+means the dedup is not in effect - check that the broker is the build that carries
+`src/scheduler.mjs::parkedChanged`, and that the queue rows for that seat really are unchanged
+(`node cli.mjs queue --status held --with-gates` is the bounded read; do not dump the whole queue).
+
+Re-run check: `node demo/parked-wake-dedup.test.mjs` (exit 0), and the integration probe from the ruling -
+one held row, `DURIG_PROVIDER=faux node cli.mjs serve --max-duration 120`, then
+`grep -c 'WAKE <seat>' <db>.broker.log`: 4 before the fix, 1 after (measured 2026-11-09 on main
+f5a73c61 and on the fix branch).
+
 ## If it fails
 - Won't start, or dies again with a storage error → `store-corruption-recovery.md`.
 - Starts but a seat still will not run → `seat-reset.md`.
