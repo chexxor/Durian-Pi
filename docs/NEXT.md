@@ -20,15 +20,14 @@ measurement.
 `git rev-parse --short main`. The 9 trees left are the seats' own roots; **the next git-side work is a queue-design
 act, not a git act** (D249) — see Current item 1.
 
-**Host for every number below**, measured in the same command as the measurement: **Linux**, Fedora Linux 45
-(Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
+**Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
 `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` (**never sign
 work with a hostname** — D205, ROADMAP 281).
 
-**Cost (from `selfdev.sqlite.spend.jsonl`, measured 07:5xZ):** 2,030 ledger lines, **$0.92401** cumulative,
-**$0.03462** on 2026-11-09 UTC — **all of it before this pass**; the land+reap pass itself spent **$0.00000** (no
-model call was made; the fleet was down). Wall clock of the pass: ~50 minutes, dominated by two full-suite runs
-(60 s each) and the conflict compositions.
+**Cost (from `selfdev.sqlite.spend.jsonl`):** 2,030 ledger lines, **$0.92401** cumulative, **$0.03462** on
+2026-11-09 UTC — all of it before this pass; the land+reap pass spent **$0.00000** (no model call; the fleet was
+down). Wall clock ~50 min, dominated by two full-suite runs (60 s each).
 
 ## What this pass actually changed (evidence, not activity)
 
@@ -40,16 +39,15 @@ model call was made; the fleet was down). Wall clock of the pass: ~50 minutes, d
 - **Removed:** **49** item worktrees, **48** refs. Every removal was preceded by `git diff HEAD --binary` and a
   move of every `??` path into `.spike/delegate/cleanup-20261109/quarantine/` (52 files, 2 non-empty diffs). No
   `git worktree remove --force`, no `git branch -D`, no unlock of a live seat's tree.
-- **Proved nothing was lost:** each pruned ref was checked with `git merge-base --is-ancestor <ref> main` before
+- **Proved nothing was lost:** every pruned ref was checked with `git merge-base --is-ancestor <ref> main` before
   `git branch -d`; `main` advanced only by clean fast-forwards and merges.
 - **One regression caught and fixed:** the `item-5226` composition dropped `LOCAL2_ENV_PREFIX` from
   `LOCAL_ENV_PREFIXES`. The **46-test derived suite passed**; the **278-test full suite** failed
   (`demo/local2-provider-prefix.test.mjs`). Fixed in `ea12fe04`; suite re-run green. Rule now in
   `docs/runbooks/branch-cleanup.md` Do step 7 and pitfall **186**.
-- **The ceiling, measured:** before the pass, 49 trees had branches that were **provably ancestors of `main`**
-  while their rows read `deferred` (35), `held` (11) or `claimed` (3). `src/broker.mjs:1117` keeps any tree whose
-  item is live, so `worktree audit`'s `reapable: 0` was **correct**. That is the defect the next pass must fix
-  (D249).
+- **The ceiling, measured:** before the pass, 49 trees had branches provably **ancestors of `main`** while their
+  rows read `deferred` (35), `held` (11) or `claimed` (3). `src/broker.mjs:1117` keeps any tree whose item is live,
+  so `worktree audit`'s `reapable: 0` was **correct**. That is the defect the next pass must fix (D249).
 
 ## Current item (priority order)
 
@@ -88,6 +86,8 @@ node demo/offline.mjs                     # pm -> worker -> done with one mid-it
 node demo/status-view-bound.test.mjs      # STATUS VIEW BOUND OK — the view reports what it dropped
 node scripts/test.mjs --area rig          # 8/8;  node scripts/test.mjs --area readapi  # 6/6
 node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite
+node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite   # M5 baseline: 3 PASS, 1 PARTIAL, 4 FAIL, exit 1
+node docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs              # 6 of 9 named escapes reach no rule
 ```
 
 Expected from the last line (exit **0** now — the mechanism passes and the gate lists what is operational):
@@ -107,17 +107,17 @@ nothing):
 makes the tool itself fail (pitfall **190**).
 
 **Is the team operating?** No — the fleet is stopped with the broker. Queue: 6,021 rows,
-`done 4154 / cancelled 873 / held 461 / deferred 383 / claimed 12 / queued 138`. `cli.mjs worktree audit` now
-reports **9** trees, all `seat-root`: `main`, `durian-dev/seatroot`, and `item-5604` (auditor), `item-5801`
-(devtools), `item-5829` (impl), `item-5834` (qa), `item-5912` (scribe), `item-5965` (architect), `item-5976`
-(security). Landed-but-still-non-terminal rows this pass: **#5221, #5226, #5387, #5501, #5829** — their owners
-close them; the delegate claims nothing.
+`done 4154 / cancelled 873 / held 461 / deferred 383 / claimed 12 / queued 138`. `cli.mjs worktree audit` reports
+**9** trees, all `seat-root`: `main`, `durian-dev/seatroot`, `item-5604` (auditor), `item-5801` (devtools),
+`item-5829` (impl), `item-5834` (qa), `item-5912` (scribe), `item-5965` (architect), `item-5976` (security).
+Landed-but-still-non-terminal rows: **#5221, #5226, #5387, #5501, #5829** — their owners close them; the delegate
+claims nothing.
 
-**Blocker:** the two provider grants above, plus 10 spooled intents (including `delegate-20261109-release-role`
-and `delegate-20261109-auto-clean`) that cannot be delivered while the broker is down, and **118 dead-letters**
-(measured 2026-11-09: `ls -1 selfdev.sqlite.broker.inbox.error | wc -l` → 118; 10 intents still spooled in
-`selfdev.sqlite.broker.inbox/`, 0 delivered in `.out/`) in
-`selfdev.sqlite.broker.inbox.error` — read one before assuming an intent was lost.
+**Blocker:** the two provider grants above, plus 10 spooled intents (`delegate-20261109-release-role`,
+`delegate-20261109-auto-clean`) that cannot be delivered while the broker is down, and **118 dead-letters**
+(`ls -1 selfdev.sqlite.broker.inbox.error | wc -l` → 118, measured 2026-11-09; 10 intents spooled in
+`selfdev.sqlite.broker.inbox/`, 0 delivered in `.out/`) in `selfdev.sqlite.broker.inbox.error` — read one before
+assuming an intent was lost.
 
 **Traps this window** — `docs/SELFDEV.md` **191–210** (N18: a tool with no `parameters` faults the run
 before any tool runs; a hook's `runtime.commit` callback return value becomes the task state; faux replies use
@@ -132,10 +132,9 @@ symptom; the file is ~50,000 tokens.
 `.spike/delegate/cleanup-20261109/reap.sh` (this pass's whole reclaim: capture residue, unlock, remove, then
 `git branch -d` only on proven ancestors — 49 trees, 48 refs, zero `--force`),
 `.spike/delegate/cleanup-20261109/roots-probe.cjs` (read the store's tables with `node:sqlite`, no dependency),
-`.spike/delegate/queue-census-ro.mjs`, `.spike/delegate/preflight.sh`, `.spike/delegate/dump-conflicts.sh`,
-`.spike/delegate/prune-refs.mjs`, `.spike/delegate/compose-loop.mjs`, `.spike/delegate/compaction-policy-probe.mjs`,
-`.spike/delegate/context-window-health.mjs`, `.spike/delegate/fleet-health.mjs`. Promotion is a row from `lead`
-(#5617 is the precedent id).
+`.spike/delegate/queue-census-ro.mjs`, `.spike/delegate/usage-census.mjs` (the cache table ROADMAP 349 needs),
+`.spike/delegate/preflight.sh`, `.spike/delegate/branch-landing-census.mjs`, `.spike/delegate/compose-loop.mjs`,
+`.spike/delegate/context-window-health.mjs`. Promotion is a row from `lead` (#5617 is the precedent id).
 
 ## NEXT SESSION
 
