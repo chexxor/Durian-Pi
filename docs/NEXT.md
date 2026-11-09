@@ -1,9 +1,9 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T10:0xZ (delegate session **N19** — the continuity mechanism from N18 is committed and
+**Last update:** 2026-11-09T11:0xZ (delegate session **N19** — the continuity mechanism from N18 is committed and
 re-verified; the milestone ledger and the next milestone's definition of done were written; the git verdict is
-unchanged: worktrees **9**, refs **12**, suite **280/280** in 57 s, `git status --short -- .` clean at
-`79c76a73` before this session's doc writes.)
+unchanged: worktrees **9**, refs **12**, suite **280/280** in 57 s, doc guard **0 hard, 0 soft**, `git status
+--short -- .` clean.)
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240), first tranche ROADMAP 331** — a
 seat can now carry a durable continuation note instead of a compaction summary, and the read surfaces that would
@@ -163,7 +163,7 @@ that is M5's honest baseline, not a bug). Then
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip **`1e9cef42`** (check with `git rev-parse --short main`),
+**State:** refs **12**, worktrees **9**, `main` tip **`b645a8ec`** (check with `git rev-parse --short main`),
 `git status --short -- .` empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced.
 Continuity evidence: `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism,
 8 operational blockers, 1 advisory) and `...-demo-store.txt` (PASS mechanism, 1 blocker) — both exit 0. M5
