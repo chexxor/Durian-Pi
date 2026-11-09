@@ -160,7 +160,8 @@ that is M5's honest baseline, not a bug). Then
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip **`b645a8ec`** (check with `git rev-parse --short main`),
+**State:** refs **12**, worktrees **9**, `main` tip **`89a4b3c5`** (re-read with `git rev-parse --short main` — this
+pointer goes stale by its own commits),
 `git status --short -- .` empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced.
 Continuity evidence: `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism,
 8 operational blockers, 1 advisory) and `...-demo-store.txt` (PASS mechanism, 1 blocker) — both exit 0. M5
