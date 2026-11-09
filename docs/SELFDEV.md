@@ -3479,3 +3479,35 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `--force`); `item-5488` and `item-5686` each hold 155 staged paths whose diff against `main` is 22 files / 21
     insertions. `complete_work` still refuses worktree removal over npm `.bin` symlinks (pitfall 133), so the sweep —
     not a hand pass — should own this every session.
+
+## Operational pitfalls (delegate reclaim pass, 2026-11-09 — numbered 182-185, continuing from 181; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+182. **The archive the reclaim runbooks point at does not exist on this box, so the "relocate out-of-tree" path is not the
+    one to reach for.** `docs/runbooks/leaked-worktrees.md` and `branch-cleanup.md` send a dirty-but-merged tree to
+    `../pi-opendurig.worktrees/`; measured 2026-11-09 `ls ../pi-opendurig.worktrees` prints **No such file or directory**
+    (that archive lives on the other machine; here `../` holds only `durian-dev/`, `Durian-Pi-ops/` and the five
+    `resolve-*` scratch trees). The local, lossless route is: export `git diff HEAD --binary` plus every `??` path into
+    `.spike/delegate/quarantine/<date>/<branch>/`, then `git reset --hard` and `git clean -fd` inside the tree, then
+    `git worktree unlock` and `git worktree remove`. Measured: **22 worktrees removed with zero refusals and zero
+    `--force`**, 80 → 58 trees, 76 → 60 refs, `main` unmoved at `dd217b88`. The whole pass is scripted at
+    `.spike/delegate/reclaim-pass.sh` (promotion candidate; `.spike/` is gitignored).
+183. **`git merge --abort` in a composition scratch destroys the composition, and a failed redirect is silent until you
+    look.** The parked conflict scratch `../resolve-wip/seat-prompt-files` held a live mid-merge (`git rev-parse MERGE_HEAD`
+    = `262dc1c2`, `UU cli.mjs`, one `AA`). Export the merge state with `git diff HEAD --binary` **before** aborting, and
+    `mkdir -p` the quarantine subdirectory **first**: the first redirect failed with "No such file or directory" and
+    nothing else in the compound command noticed. After the abort the tree is clean, so `git worktree remove` succeeds and
+    the composition would have vanished with no refusal. This pass kept the 5,779,403 B patch in
+    `.spike/delegate/quarantine/2026-11-09/wip-seat-prompt-files/` and the ref `04e3ba6b` is intact.
+184. **A merge-commit branch is invisible to every instrument that decides a ref's fate.** `verify-5180` is 1 commit ahead
+    of `main` and that commit is a merge. `git cherry` prints **nothing** for it, so `cli.mjs worktree prune-branch`
+    refuses with "already an ANCESTOR of main (git cherry prints nothing)" — a wrong reason for a correct refusal — and
+    `git branch -d` refuses with "not fully merged". A snapshot ref therefore has **no** mechanical close: it needs a row
+    in `docs/DISPOSITIONS.md`, not a tool. Same blind spot in the opposite direction on `item-5094`, whose tip was a merge
+    of `main` into the branch: `prune-branch` approved the delete on the two non-merge patches alone. Before trusting that
+    verb on a merge-tipped branch, run `git show --stat <tip>` and read what the merge itself brought in.
+185. **The worktree count is pinned by queue state, not by git.** After the pass `cli.mjs worktree audit` reports 58 trees:
+    **49** are item trees whose branches are all merged into `main` (`ahead=0`) but whose rows are non-terminal — 35
+    `deferred`, 11 `held`, 3 `claimed` — and **9** are live seat roots. `reapable: 0` is the correct answer, not a failed
+    pass: the sweep contract needs TERMINAL + UNLOCKED + CLEAN, and unlocking a tree whose item is not terminal is a queue
+    act the delegate cannot take. Report the true number ("56 merged refs are pinned by non-terminal rows") rather than a
+    stuck cleanup, and route it to the release role rather than to a git verb.

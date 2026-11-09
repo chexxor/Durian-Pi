@@ -1,7 +1,12 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T07:0xZ (delegate session **N15** — the operator said "run the landing pass now".
-**58 branches landed** in two passes: `main` moved `7609831c` → `429f2b5a` → `08a8453c` → `85e1127f`
+**Last update:** 2026-11-09T07:5xZ (delegate session **N16** — the operator said "finish landing and cleaning up branches
+and worktrees". **There is nothing left to land, and the clutter is down**: `git worktree list` **80 → 58**, `git branch`
+**76 → 60**, `main` unmoved at **`dd217b88`**, `git status --short -- .` empty, `git worktree prune --dry-run --verbose`
+silent, **zero `--force`**. The two refs still ahead of `main` are **not merge jobs** — see the census below. The other
+49 item worktrees are pinned by **queue state**, not by git, so the next pass is a queue pass.
+
+**N15 recap** — the operator said "run the landing pass now". **58 branches landed** in two passes: `main` moved `7609831c` → `429f2b5a` → `08a8453c` → `85e1127f`
 → `fca496a9` → `b8b94380` → **`21114c36`** (58 `merge: land` commits; 170 commits, 147 files, +7,926/−485 since
 session start). Every landing went through `scripts/land.mjs` (tree-clean gate, text-integrity gate, genlock slot); the 20
 conflicts were **composed in scratch worktrees**, never side-picked in the shared tree (D248, pitfall 179). Suite: **262/265
@@ -33,8 +38,10 @@ gitignored**, which is why `land.mjs` refuses a dirty tree (ROADMAP 310).
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **landing the unlanded backlog** (release-role intent
-`delegate-20261109-release-role`, Part A: inventory + train), and inside it **ensuring LLM task completion (D226)**,
+**Milestone this window worked** — **landing the unlanded backlog and clearing the branch/worktree clutter**
+(release-role intent `delegate-20261109-release-role`, Part A: inventory + train; ROADMAP **311** and **344**). The
+backlog is now *closed as a merge problem*: 2 refs remain ahead of `main`, neither is a merge job, and the hand pass is
+80 → 58 worktrees / 76 → 60 refs with nothing forced. Inside it, **ensuring LLM task completion (D226)**,
 first tranche **ROADMAP 331**: `item-5306` landed `fix(331,#5306): nest per-model compaction overrides inside`, so
 `src/config.mjs:520` reads `compaction.modelOverrides = layered` and `demo/config.test.mjs` is green in the 278-test
 suite. N13's priority order still stands: compaction is the thing to *avoid*, not perfect — the continuity design is
@@ -56,17 +63,23 @@ wake/compaction/reset; **#5936/#5937** `impl` the `beforeCompact` hook; **#5939/
 3. **The compaction fallback fix** #5785 — the code is on `main` now; the row is `deferred` and its own subject reads
 "nesting DONE on item-5306", so closing it is a zero-build act for its owner, not work.
 
-**Unlanded backlog (measured 07:1xZ against `4a29a116`): 5 refs, and only one is a merge job.** Four are
-already on `main` **by patch** — `git cherry main item-5094` prints two `-`, `item-5488` and `item-5686` one
-`-` each — so they are zero-build closes for their owners, not merges. `verify-5180` merges clean but is a verify-tree
-snapshot (189 files, −18,269 lines): never merge a snapshot (branch-cleanup step 4), its disposition is the operator's.
-The one real conflict is `wip/seat-prompt-files` (`cli.mjs`, `prompts/impl.md`, `rig.selfdev.json`) — a **re-cut job
-for its author seat** (land.md Do 0b), left unlanded on purpose. `item-5094`'s **worktree** is now released: its lock
-reason was `park marker (#5161/#5175): item-5094 @e173f397 is NOT content-present on main; landing entry routed to pm
-as #5173 - do not reap until landed/dispositioned` — both patches are on `main` (`git cherry main item-5094` → two
-`-`) and #5173 is `done`, so the lock's own release condition is met. `git branch -d item-5094` still refuses ("not
-fully merged") because the tip is patch-applied rather than an ancestor: `git branch -D item-5094` is its owner's
-one-line close, not the delegate's.
+**Reclaim census (measured at `dd217b88`, session N16). Only **2** refs are ahead of `main`, and neither is a merge job.**
+`git cherry main item-5094` = two `-`, `item-5488` = one `-`, `item-5686` = one `-`: all three refs removed with the
+sanctioned verb `node cli.mjs worktree prune-branch <ref>`, which prints the recovery command (`item-5094` came back with
+`git branch item-5094 5593bc0391251a72c5f6b09cd4bfd4f246ec6970`). Its **worktree** was already released in N15 because the
+lock's own release condition was met (#5173 `done`). `wip/seat-prompt-files` (one `+`) is dispositioned
+**SUPERSEDED-BY-EVENTS** (DISPOSITIONS:199): a **re-cut job for its author seat** (land.md Do 0b), not a delegate merge. Its
+parked mid-merge scratch (`MERGE_HEAD 262dc1c2`, `UU cli.mjs`) is exported to
+`.spike/delegate/quarantine/2026-11-09/wip-seat-prompt-files/residue.patch` (5,779,403 B) and the tree released; the ref is
+intact at `04e3ba6b`. `verify-5180` is a verify-tree **snapshot** whose only commit ahead is a merge, so `git cherry`
+prints nothing, `prune-branch` refuses it and `git branch -d` refuses it - recorded **NOTHING-TO-LAND** in
+`docs/DISPOSITIONS.md`; the ref stays (rule R-B). Thirteen more refs went by `git branch -d`, each proved an ancestor of
+`main` first (`git merge-base --is-ancestor`): 4827 5272 5306 5331 5338 5487 5655 5669 5675 5713 4846 5208
+impl-item-5094-recut.
+**What remains, and why it is a floor rather than debt:** `cli.mjs worktree audit` total 58 = **49 item trees** (35
+`deferred`, 11 `held`, 3 `claimed`; every branch merged, `ahead=0`, `dirty 0`) + **9 seat roots**. `reapable: 0` is the
+CORRECT answer, not a failed pass - the sweep needs TERMINAL + UNLOCKED + CLEAN, and closing those 49 rows is the seats'
+act, not a git verb (SELFDEV pitfall 185).
 **Six landed rows are still non-terminal** and their owners must close them (the delegate claims nothing): #5362,
 #5491, #5501, #5699 deferred; #5820 claimed; #5912 held. 36 of the 42 landed rows are `done`.
 
@@ -91,7 +104,7 @@ Landing census, run **inside the loop**, not once (pitfall 173):
 generation; the pass needs a quiesced window (`docs/runbooks/land.md`, `docs/runbooks/merge.md`). Before a pass,
 `git status --porcelain` must be empty **including untracked** (ROADMAP 310 — `selfdev.sqlite.spend.jsonl` is untracked
 and not ignored, and it blocked a whole train), and stray `item-*/` directories block the helper even when porcelain is
-clean (`/item-*/` is gitignored): 81 registered worktrees right now (162 → 81). **Pruning is no longer stuck:** `cli.mjs worktree audit` classified
+clean (`/item-*/` is gitignored): **58 registered worktrees** right now (162 → 81 → 58). **Pruning is no longer stuck:** `cli.mjs worktree audit` classified
 **80 trees as `reapable`** (terminal item, unlocked, clean), `git worktree remove` took all 80 with **zero refusals**,
 and `git worktree prune` + `git branch -d` deleted **80 refs** — 156 → 76 refs, `main` unmoved, nothing forced. What
 is left is explained, not stuck: **54** merged+clean trees stay because their item is not terminal (49 rows are
@@ -107,7 +120,8 @@ stalled pass loop makes every read block with 0 bytes while a direct read-only s
 and "cannot read the queue" print the same thing (pitfalls 152, 176). An empty `genlock` is **not** proof no generation
 is in flight (pitfall 150); compare `heartbeatAt` with `lastPassAt` before calling a stall (pitfall 165).
 
-**Suite on `main` (`21114c36`): `node scripts/test.mjs --all --jobs 8` → **278/278 in 60.5 s** (278 tests, 9
+**Suite on `main` (`21114c36`; `main` is now `dd217b88`, the two commits since are docs-only — `git diff --stat 21114c36..dd217b88`
+prints DECISIONS/NEXT/SELFDEV only): `node scripts/test.mjs --all --jobs 8` → **278/278 in 60.5 s** (278 tests, 9
 areas). **Green.** The two reds at `d6118d0e` were stale tests, not landing damage, and both are fixed in `21114c36
 (pitfall 180): `demo/clockin-digest.test.mjs` asserted #5596's per-seat inline list against #5398's shipped aggregate,
 and `demo/verifier-arm-probe.test.mjs` asserted an unpriced metered endpoint while `durig.config.json` now prices one.
@@ -137,7 +151,7 @@ model on this box right now** — `broker-serve --status` reports four BLOCKs: `
 "You need positive balance to do inference"), and the spend cap refuses `google/gemini-3.1-pro` ($14 max call exposure
 against a $4 store cap). Keys and balance are grants the operator holds.
 
-**Traps this window** — `docs/SELFDEV.md` **173–181** (this pass: re-preflight inside the loop; the text-integrity
+**Traps this window** — `docs/SELFDEV.md` **173–185** (this pass: re-preflight inside the loop; the text-integrity
 gate is absolute, so `main`'s own BOMs block otherwise-clean branches; a batch landing must regenerate
 `demo/test-areas.json`; a wedged broker reads exactly like an empty queue; run `git cherry` before calling a branch
 unlanded; a conflict is a stop and the composition goes stale when `main` moves; a landed branch can ship a test that
@@ -146,6 +160,9 @@ Grep for the symptom; the file is ~50,000 tokens.
 
 **Probes left for promotion** (gitignored `.spike/`, read-only, no model spend, broker-down safe):
 `.spike/delegate/queue-census-ro.mjs` (branch-vs-queue census that works with the broker down),
+`.spike/delegate/reclaim-pass.sh` (the whole branch/worktree reclaim: diagnose the ahead set, export each terminal tree's
+residue, remove, prune refs, then close patch-equivalent refs with `worktree prune-branch` — ran 2026-11-09, 22 trees
+and 16 refs, zero `--force`),
 `.spike/delegate/preflight.sh` (clean/conflict census against current `main`),
 `.spike/delegate/dump-conflicts.sh` (one file per branch of the conflicting hunks, under
 `.spike/delegate/conflicts/`), `.spike/delegate/prune-refs.mjs` (delete refs that are ancestors of
