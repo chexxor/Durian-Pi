@@ -78,7 +78,7 @@ scans the store broker-stopped.
 4. **Inventory the copies.** `git log --all -S` + worktree list; the delegate adds `.spike/`, inbox
    and store. Report the list, then **leave history rewrite to the operator** — `filter-branch`/BFG/
    force-rebase decisions belong to the person who holds push; durian-pi never pushes without
-   `DURIAN_PI_ALLOW_PUSH`, so the leak is local until the operator publishes.
+   `DURIG_ALLOW_PUSH`, so the leak is local until the operator publishes.
 5. **Close the mechanism that let the value in.** Controls confirmed at rev 7e5d16e:
    - `src/confine.mjs` L110/L122: an env name matching `SECRET_NAME`
      (`/(key|token|secret|password|passwd|credential|cookie|authorization)/i`) never crosses into a
@@ -119,7 +119,7 @@ git log --oneline --all -S'sk-ant-' -- . | head -5   # compare the newest hit wi
   broker-stopped (see `broker-safe-change.md`).
 
 ## Escalate to
-- **Operator:** rotation, any history rewrite, publication status (push grant / `DURIAN_PI_ALLOW_PUSH`).
+- **Operator:** rotation, any history rewrite, publication status (push grant / `DURIG_ALLOW_PUSH`).
 - **Delegate:** store / inbox redaction (broker-stopped procedure).
 - **lead/pm:** landing #700's scanner and the #828/#837 tie-ins — they adopt; this seat recommends
   only.

@@ -208,6 +208,7 @@
       "demo/watchview.test.mjs"
     ],
     "guard": [
+      "demo/allow-push-env-name.test.mjs",
       "demo/commit-secrets.test.mjs",
       "demo/confine-rebase-property.test.mjs",
       "demo/confine-token-awareness.test.mjs",

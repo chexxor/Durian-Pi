@@ -92,7 +92,7 @@ Five operator-facing behaviours are load-bearing:
   tool layer, `src/confine.mjs` `refusalFor` for the environment â€” one policy,
   so the two cannot drift). Read-only git (`status`/`log`/`diff`/`show`/`rev-parse`)
   passes; **`git commit` is allowed**, scoped and `-C` forms included; `git push`
-  **is refused** unless the operator granted `DURIAN_PI_ALLOW_PUSH=1` in durian-pi's own
+  **is refused** unless the operator granted `DURIG_ALLOW_PUSH=1` in durian-pi's own
   environment (a seat's own inline assignment cannot forge it); and every
   destructive form â€” `reset`, `checkout`, `restore`, `revert`, `clean`, `stash`,
   `branch -D`, and unscoped `add -A`/`add .` â€” is refused with the reason as a
