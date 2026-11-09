@@ -6,7 +6,7 @@ precondition: "broker-stopped"   # diagnosis half is read-only; the Do half writ
 last_verified: unverified
 verified_by: delegate
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
-evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. Addendum 2026-11-08T07:4xZ (impl, #5663): the three read shapes in the section below were reproduced deterministically in an item worktree of main `7ccb2163` on a 139,264 B store made by `node cli.mjs up rig.starter.json` — no live store, no broker process, so the shape is NOT size- or load-dependent. No state file: `node cli.mjs status --json` exit 0. Forged state naming a live pid (a `sleep 400`) with a fresh heartbeat and nothing draining the spool: exit 1 after 120 s, and exit 124 with ZERO bytes when an external `timeout 60` killed the wait. The `Do` half (kill, `resume`, restart) was NOT run in that repro and stays unverified. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
+evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. Addendum 2026-11-08T07:4xZ (impl, #5663): the three read shapes in the section below were reproduced deterministically in an item worktree of main `7ccb2163` on a 139,264 B store made by `node cli.mjs up rig.starter.json` — no live store, no broker process, so the shape is NOT size- or load-dependent. No state file: `node cli.mjs status --json` exit 0. Forged state naming a live pid (a `sleep 400`) with a fresh heartbeat and nothing draining the spool: exit 1 after 120 s, and exit 124 with ZERO bytes when an external `timeout 60` killed the wait. The `Do` half (kill, `resume`, restart) was NOT run in that repro and stays unverified. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here. Addendum 2026-11-07 (same host, the 05:18Z diagnostic pass, pid 1673276, `--max-duration 120`, 14 passes): the signature recurred, and three instrument facts were measured — `pgrep -a node | grep \"cli.mjs serve\"` returned NOTHING while the broker was ALIVE (do not call a run uncleanly exited off it); the reads that work are `cat <db>.broker.json` then `ps -o pid,etime,args -p <pid>`; and that broker's `EXIT … reason=deadline passes=-` is a hard-coded CLI-side line (`cli.mjs:2105`, on the stop-grace force timer) whose reason and pass count are both untrustworthy — see ROADMAP 328. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
 check_rule: null
 ---
 # Broker down or stalled
@@ -47,10 +47,15 @@ node tools/broker-serve.mjs --status      # one read: state + genlock + spool de
 DURIG_DB=./selfdev.sqlite node cli.mjs status   # DURIG_*, not DURIAN_PI_* — the CLI ignores the latter (D103)
 pgrep -af 'cli.mjs serve'                 # a serve process? (empty is a real answer, not an error)
 tail -12 selfdev.sqlite.broker.log
-cat selfdev.sqlite.broker.json 2>/dev/null
+cat selfdev.sqlite.broker.json 2>/dev/null   # THE identity read: it names the pid
+ps -o pid,etime,args -p <pid from broker.json>   # the liveness read: alive, and for how long
 ls -1 selfdev.sqlite.genlock* 2>/dev/null  # a live generation means do NOT kill
 tail -8 .spike/serve.err 2>/dev/null
 ```
+**Order matters on Linux (measured 2026-11-07):** read `broker.json` for the pid, then `ps -o pid,etime,args -p <pid>`.
+The `pgrep` probe is NOT a substitute — it returned **nothing** while a broker with a fresh heartbeat was alive, and a
+session reported a false "exited uncleanly" from that empty result. It answers "did my pattern match a command line",
+not "is the broker alive"; `broker.json` + `ps` answer liveness and are the two to quote in a report.
 The instrument is delegate-side (`tools/`, ROADMAP 209 asks for the productized `scripts/serve.mjs`). Without it, the
 same read is the six commands above — what the instrument adds is the two facts a human forgets to ask for: **how long
 each spooled intent has been waiting**, and **whether the provider each seat names actually advertises that model**.
@@ -77,8 +82,15 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   150,347 in **111 ms**, and `tools/latency-budget.mjs` (which opens the store itself) returned full numbers throughout.
   `serve --stop` does **not** fix it: `"stopped": false … "did not exit within the stop grace; no forced kill"`. With no
   `genlock` held, `kill <pid>` is the remedy (Linux; the runbook's `taskkill /F` is the Windows half) and the broker then
-  logs `EXIT reason=deadline passes=-`. Suspect class: `SKIP <seat> reason=pending conv=…` lines just before it goes quiet
-  — a run with in-flight seat conversations drains instead of exiting, while the prior run with none exited cleanly
+  logs `EXIT reason=deadline passes=-` — **do not read that line as the record of how the run ended**: on the forced path
+  it is a hard-coded CLI-side literal (`cli.mjs:2105`, fired by the stop-grace force timer), so `deadline` means *the stop
+  grace expired* (not the run's `--max-duration` bound) and `passes=-` is a dash because the CLI cannot see the loop's
+  counter, even when the same log holds `PASS 1`…`PASS 14` (measured twice; ROADMAP 328). The suspect class named here in
+  2026-11-06 — `SKIP <seat> reason=pending conv=…` lines just before it goes quiet — is **not** a discriminator and must
+  not be used as one: `reason=pending` is back-pressure from the wake the previous pass issued (76,337 such lines in one
+  day, and a working rig prints them), while the wedge signature is the `admitted_not_started` **notice** being raised and
+  never cleared (measured: 0 notices at 05:18Z with the SKIP lines still streaming, i.e. NOT wedged — ROADMAP 314).
+  A run with in-flight seat conversations drains instead of exiting, while the prior run with none exited cleanly
   (`reason=max-duration passes=1245`). **Never write to the store to fix this signature.**
 - **Alive but dormant** (case b): `START` present, `broker.json` heartbeat fresh, last `PASS` minutes
   old, no `genlock.*`. The broker rests in `signal.wait` with `scheduler.shouldRun()` false.
