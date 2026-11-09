@@ -452,7 +452,10 @@ export function declaredContextWindow(config, modelKey = null) {
  * a class that was never measured is how a policy becomes folklore.
  *
  * @param {Record<string, unknown>} [config]
- * @returns {{compaction?: object, modelOverrides?: Record<string, object>}}
+ * @returns {{compaction?: {enabled?: boolean, reserveTokens?: number, keepRecentTokens?: number,
+ *   backgroundTokens?: number, modelOverrides?: Record<string, object>}}}
+ * ONE key, not two: `modelOverrides` nests INSIDE `compaction` because that is the only object the
+ * harness reads (ROADMAP 331 - a sibling `modelOverrides` is read by nobody).
  */
 export function compactionSettings(config) {
 	const out = {};
@@ -477,7 +480,11 @@ export function compactionSettings(config) {
 		}
 		policy[{"DURIG_COMPACTION_RESERVE_TOKENS": "reserveTokens", "DURIG_COMPACTION_KEEP_RECENT_TOKENS": "keepRecentTokens", "DURIG_COMPACTION_BACKGROUND_TOKENS": "backgroundTokens"}[key]] = n;
 	}
-	if (Object.keys(policy).length > 0) out.compaction = policy;
+	// The per-model map and the harness-wide policy are ONE object (ROADMAP 331). Emitting the map as a
+	// sibling meant `settings.compaction` stayed undefined, so pi-durable merged its defaults over nothing
+	// and every seat ran the defaults - including the 24,576-window verifier family, whose whole window is
+	// smaller than the default 16,384 reserve.
+	const compaction = { ...policy };
 	const overrides = config?.DURIG_COMPACTION_MODEL_OVERRIDES;
 	if (overrides !== undefined && overrides !== null && overrides !== "") {
 		// Accepted as an object (a config FILE may hold one) or as a JSON string (an ENVIRONMENT
@@ -510,8 +517,9 @@ export function compactionSettings(config) {
 			}
 			if (Object.keys(one).length > 0) layered[model] = one;
 		}
-		if (Object.keys(layered).length > 0) out.modelOverrides = layered;
+		if (Object.keys(layered).length > 0) compaction.modelOverrides = layered;
 	}
+	if (Object.keys(compaction).length > 0) out.compaction = compaction;
 	// Nothing set means NO override, so pi-durable's documented defaults stand rather than a made-up
 	// durian-pi number - the same honesty rule as `streamSettings({})` returning `{}`.
 	return out;
