@@ -3,7 +3,7 @@
 **Last update:** 2026-11-09T07:5xZ (delegate session **N17** — the operator said "finish landing and cleaning up
 branches and worktrees… After this cleanup, we should prioritize to fix the rig auto landing and auto cleaning
 process". **The git side is closed.** `git worktree list` **58 → 9**, `git branch` **60 → 12**, `main`
-`6787bd24` → **`ea12fe04`**, `git status --short -- .` empty, **zero `--force`**, suite **278/278 in 60 s**. What
+`6787bd24` → **`ea12fe04`** on the code (six landings + one composition fix), then docs-only pointer commits — read the live tip with `git rev-parse --short main`, `git status --short -- .` empty, **zero `--force`**, suite **278/278 in 60 s**. What
 removes no more clutter is not git: the 9 trees left are the **seats' own roots**, and the 12 refs left are those
 seven seat-root branches plus `main`, `seatroot/linux`, `verify-5180`, `wip/seat-prompt-files` and `item-5301`.
 **The next work is a queue-design act, not a git act** — see Current item 1.)
@@ -133,7 +133,7 @@ closure) — the delegate claims nothing.
 has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the two
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` **`58ff9746`**, suite **278/278**, tree clean, nothing forced.
+**State:** refs **12**, worktrees **9**, `main` tip from `git rev-parse --short main` (code landed at `ea12fe04`), suite **278/278**, tree clean, nothing forced.
 Nothing on the git side is pending. The remaining 12 refs: 7 seat-root branches, `main`, `seatroot/linux`,
 `verify-5180` (ledger: NOTHING-TO-LAND), `wip/seat-prompt-files` (SUPERSEDED-BY-EVENTS, author re-cut),
 `item-5301` (the unlandable reap verb).
