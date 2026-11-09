@@ -140,3 +140,27 @@ output cap took **3.8–4.5 s** (local server ~83 tok/s prompt, ~156 tok/s gener
 - **Do not read `thinking_budget` as "thinking off"** on this server: it is ignored. `chat_template_kwargs.enable_thinking`
   or `reasoning_effort:"none"` are the two that work.
 - A `--dry-run` style preview proves nothing here: the guard only reports what it did after a real compaction.
+
+## 4. Reproduce the failure, then prove the guard closes it (both measured 2026-11-09)
+
+The failure is reproducible on the **auto (threshold)** path, the one the operator hit:
+
+```bash
+COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs
+```
+
+| run | guard state | span | outcome |
+|---|---|---|---|
+| auto path, guard on disk but not loadable | default pi path, **no max_tokens** | 640,861 chars | `session_compact_failed reason=threshold` — `Auto-compaction failed: Summarization failed: generation hit the token cap and the summary is incomplete` |
+| auto path, guard loaded | guard takes over, `max_tokens 4000`, thinking off | 640,861 chars | summary 2,320 chars in 8.4 s, `details {"guard":true,"reason":"bounded"}`, **no failure event** |
+| auto mode as shipped | guard loaded | 408,516 chars | 6/6 PASS, 52 s wall, 2,007-char summary |
+| unguarded control, small span | default pi path | 63,340 tokens | succeeded in 254 s — the cap is hit at large spans, not at every compaction |
+
+Trap that hid the reproduction: the extension resolves its core with `./compaction-guard-core.mjs` then
+`../../tools/compaction-guard-core.mjs` (`tools/compaction-guard-extension.js:44`). The fallback only works
+when the extension is at `<repo>/.pi/extensions/`; copied anywhere else the loader reports
+`Failed to load extension: Cannot find module '../../tools/compaction-guard-core.mjs'` and the session runs
+**unguarded without saying so**. `tools/compaction-guard-install.mjs` now installs the core next to the
+extension, and `--check` verifies both files. If a session ever reports a compaction failure, the first
+question is "is the guard actually loaded?" — `node tools/compaction-guard-install.mjs --check` and, in a
+live session, `/compaction-guard`.

@@ -3720,3 +3720,14 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     (measured `tokensBefore=63340`, span 158,764 chars). General rule: when an end-to-end hook test says "nothing to
     compact" or "nothing to do", check the harness's own precondition before blaming the extension — the cheapest read
     is the number the tool prints (`seeded N turns`, `tokensBefore=`), not the extension's log.
+
+217. **A guard that fails to load is worse than no guard, because nothing says it is off.** The compaction
+    guard's extension resolves its pure logic with `./compaction-guard-core.mjs` then
+    `../../tools/compaction-guard-core.mjs` (`tools/compaction-guard-extension.js:44); that fallback is only
+    correct at `<repo>/.pi/extensions/`. Copied into any other cwd the loader silently reports
+    `Failed to load extension: Cannot find module '../../tools/compaction-guard-core.mjs'` and the session
+    runs unguarded — which is exactly how the reproduction of "Auto-compaction failed: Summarization failed:
+    generation hit the token cap and the summary is incomplete" was produced. Fixed by
+    `tools/compaction-guard-install.mjs` installing `.pi/extensions/compaction-guard-core.mjs` next to the
+    extension and `--check` covering both. Rule: any extension that must never be absent needs a
+    load-yourself check, not a source-only check.

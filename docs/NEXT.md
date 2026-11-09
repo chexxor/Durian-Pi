@@ -26,10 +26,9 @@ operator grant (`DURIG_EXTENSIONS` is unset; `cli.mjs config` reports `null`). P
 **#5931–#5942** remain unclaimed; the delegate asserted nothing.
 
 **First thing to run:**
-`node tools/compaction-guard-install.mjs --check && node tools/compaction-guard-test.mjs && node tools/compaction-guard-e2e.mjs`
-(expect `UP TO DATE`, `ALL PASS` 28 checks in ~0.5 s, then `ALL PASS` with one real local model call in ~4–8 s;
-the e2e seeds 160 turns on purpose — a smaller seed hits pi's "Nothing to compact (session too small)" precondition
-before the guard ever runs).
+`node tools/compaction-guard-install.mjs --check && node tools/compaction-guard-test.mjs && node tools/compaction-guard-e2e.mjs && COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs`
+(expect `UP TO DATE ... (+ .pi/extensions/compaction-guard-core.mjs)`, `ALL PASS` 28 checks in ~0.5 s, then
+`ALL PASS` manual mode ~4-6 s, then `ALL PASS` auto mode ~50 s — both use the local model, no money).
 Then `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`), then
 `node cli.mjs status` once a broker is healthy.
@@ -45,9 +44,8 @@ honest baseline, not a bug).
 ($14 exposure against a $4 store cap). Only the operator holds those grants; 10 intents are spooled and **118** sit
 as dead-letters in `selfdev.sqlite.broker.inbox.error`.
 
-**Unverified:** no unguarded control run reproducing the failure at a faithful span (~160k tokens ≈ 30 min on this
-box); the auto-compaction (mid-turn `threshold`) path shares the hook with manual `/compact` but only the manual
-path was exercised end-to-end; the seat plane's own compaction is untested here.
+**Unverified:** the seat plane's own compaction is untested here; the exact failing turn of the operator's session
+cannot be recovered from the transcript (failure events are not persisted). The threshold path is now exercised end-to-end and the unguarded failure was reproduced verbatim — see below.
 
 **Cheap probe that proves the guard is in place:** `node tools/compaction-guard-install.mjs --check` → exit 0, and
 in a live session `/compaction-guard` prints caps and `fired=`.
@@ -63,6 +61,18 @@ in a live session `/compaction-guard` prints caps and `fired=`.
   `dist/core/agent-session.js:2594-2595` prints it. Provider probe on the local server: `max_tokens:32` →
   `finish_reason "length"`, all 32 completion tokens are `reasoning_content`; `max_tokens:48` +
   `chat_template_kwargs {"enable_thinking": false}` → "stop", 5 tokens.
+- **The failure was reproduced, then closed, on the path the operator hit.** Auto (threshold) compaction on a
+  640,861-char span with the guard NOT loaded emitted `Auto-compaction failed: Summarization failed: generation
+  hit the token cap and the summary is incomplete` — the operator's string, verbatim. With the guard loaded the
+  same span succeeded: `details {"guard":true,"reason":"bounded"}`, 2,320-char summary, 8.4 s, no failure event.
+  Permanent gate: `COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs` → ALL PASS (6 checks, 52 s,
+  408,516-char span bounded). Unguarded control at a *small* span (63,340 tokens) succeeded in 254 s — the cap is
+  a large-span failure, not every compaction.
+- **A second bug found and fixed this pass:** the extension imported its core as `./compaction-guard-core.mjs`
+  with a `../../tools/...` fallback (`tools/compaction-guard-extension.js:44) — correct only at
+  `<repo>/.pi/extensions/`. Anywhere else the extension silently does not load and the session runs unguarded
+  (SELFDEV **217**). `tools/compaction-guard-install.mjs` now installs the core next to the extension and
+  `--check` verifies both files.
 - **Verified three ways.** Gate: `node tools/compaction-guard-test.mjs` → **ALL PASS, 28 checks, 0.53 s**, no
   model/key/network/broker. E2E: `node tools/compaction-guard-e2e.mjs` → **ALL PASS**; span 158,764 chars →
   1,454-char summary, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, `compact()` 3.4 s. Forced
@@ -80,7 +90,8 @@ in a live session `/compaction-guard` prints caps and `fired=`.
 cd /home/chexxor/Git/Durian-Pi
 node tools/compaction-guard-install.mjs --check   # exit 0 = the guard is installed and current
 node tools/compaction-guard-test.mjs              # ALL PASS (28 checks) in ~0.5 s, no broker, no key, no model
-node tools/compaction-guard-e2e.mjs              # one real local model call, ~4-8 s
+node tools/compaction-guard-e2e.mjs              # manual path: one real local model call, ~5 s
+COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs   # the threshold path, ~50 s
 node scripts/clockin.mjs                          # BEFORE starting a broker; it hangs while one drives
 node tools/broker-serve.mjs --status
 DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
@@ -118,21 +129,20 @@ them. Rows **#5931–#5942** unclaimed. The delegate asserted no row.
 ($14 exposure against a $4 store cap). 10 intents are spooled in `selfdev.sqlite.broker.inbox/`, **118** dead-letters
 in `selfdev.sqlite.broker.inbox.error/`.
 
-**Unverified:** (1) **no unguarded control run** reproducing the operator's failure on a span big enough to be
-faithful (a faithful control needs a ~160k-token prompt, ≈30 min on this box at ~83 tok/s); the mechanism is
-established from the shipped harness code plus the provider probe. (2) Auto-compaction (mid-turn, reason
-`threshold`) shares the hook with manual `/compact` (`agent-session.js:2224`, `:2514`) but only the manual path was
-exercised end-to-end. (3) Whether a seat's pi-durable compaction can fail the same way — its own cap is smaller, and
-nothing here tested it.
+**Unverified:** (1) the exact turn the operator's session failed on is not recoverable from the transcript
+(compaction failure events are not persisted); the mechanism is established from the shipped harness code, the
+provider probe and the reproduced threshold-path failure above. (2) Whether a seat's pi-durable compaction can
+fail the same way — its own cap is smaller, and nothing here tested it.
 
 **Cost:** the spend ledger is unchanged at **2,030 lines / $0.92401 cumulative** (last row 2026-11-09T05:22:59Z);
 every call this pass went to the local loopback server, which the ledger does not meter, so **$0.00** was spent.
 Wall clock ~25 min of which the E2E runs are ~20 s total; the gate is 0.5 s.
 
-**Traps this window** — `docs/SELFDEV.md` **211–216** (the failure is a request-shape bug; a one-character typo in a
+**Traps this window** — `docs/SELFDEV.md` **211–217** (the failure is a request-shape bug; a one-character typo in a
 safety net is invisible to `node --check`; last-non-null wins on `session_before_*`; `thinking_budget: 0` is
 ignored on this server; the harness plane and the seat plane are different compaction code; an e2e seeded under
-`keepRecentTokens` (20000) fails as "session too small", not as a guard failure). Earlier blocks:
+`keepRecentTokens` (20000) fails as "session too small", not as a guard failure; an extension whose core module
+does not resolve simply does not load, and nothing says the guard is off). Earlier blocks:
 191–210, 186–190, 173–185. Grep for the symptom; the file is ~50,000 tokens.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
