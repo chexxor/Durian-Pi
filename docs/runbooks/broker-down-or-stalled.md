@@ -394,6 +394,21 @@ which is thrown at `node_modules/@earendil-works/pi-durable/dist/storage/sqlite/
 slow — its read intent was rejected, and `src/readclient.mjs:106-111` still waits for a broker result that will never
 arrive. Read the reason files before debugging the store; they name the failure class.
 
+**Since #5822 a closed handle does not consume the intent.** `drainIntentInbox` classifies the error with
+`isClosedStoreError` (src/broker.mjs) and, while the handle is closed, leaves the intent in the spool, records an
+attempt on a sidecar `<spool file>.json.retry`, logs `INTENT-RETRY op=... request=... attempts=N/3 reason=...`, and
+rethrows — so `runWakeLoop` reaches its reopen branch (a closed store is now treated like `SessionFailed there`) and
+the SAME intent is delivered against the fresh handle. Only after `INTENT_RETRY_LIMIT` (3) attempts is it dead-lettered,
+and then the `.error.json` carries a structured `refusal` (`code: "apply-failed"`, `requestId`, `attempts`) that
+`readIntentError(db, requestId)` surfaces to the producer instead of a silent timeout.
+
+Verify (both checks were run in this tree):
+
+```bash
+node demo/broker-closed-store-retry.test.mjs   # exit 0: delayed, bounded, visible, delivered after reopen
+node -e 'const fs=require("node:fs");const d="selfdev.sqlite.broker.inbox.error";const r=fs.existsSync(d)?fs.readdirSync(d).filter(f=>f.endsWith(".reason")).map(f=>fs.readFileSync(d+"/"+f,"utf8").trim()):[];const g={};for(const x of r)g[x]=(g[x]||0)+1;console.log(r.length,"dead letters",g);'
+```
+
 **Do not confuse this with the pass loop being merely slow.** `<db>.broker.json` separates the two legs
 (`src/broker.mjs:1628-1631`): `heartbeatAt` is LIVENESS (the event loop is turning, every 20 s), `lastPassAt` is
 PROGRESS (the last COMPLETED pass). A fresh heartbeat with a frozen `lastPassAt` is the documented wedge signature —
