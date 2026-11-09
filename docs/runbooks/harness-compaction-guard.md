@@ -4,7 +4,7 @@ symptom: "Auto-compaction failed: Summarization failed: generation hit the token
 writes: true
 precondition: "none (the gate needs no broker, no key, no model); the E2E needs the local model server reachable"
 last_verified: 2026-11-09
-verified_by: delegate (gate + two E2E runs + a two-extension composition probe, all run on this box 2026-11-09)
+verified_by: delegate (gate + E2E runs + a two-extension composition probe, all run on this box 2026-11-09; re-run cold from a resume the same day: install --check exit 0, gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto e2e 6/6 in 85.5 s)
 evidence: "node tools/compaction-guard-test.mjs (ALL PASS, 28 checks, 0.53 s) + node tools/compaction-guard-e2e.mjs (ALL PASS; 158,764-char span, sentMaxTokens 4000, thinkingOff true, 1,481-char summary, 4.0 s; forced length stop rescued into 7,591 chars) + .spike/probe-compaction-composition.mjs (both extensions loaded, compaction succeeded in 6.9 s with details {guard:true,reason:bounded}) + dist/core/compaction/compaction.js:454,459,495 and dist/core/agent-session.js:2594-2595, dist/core/extensions/runner.js:814-822, read from the shipped 1.3.0 dist 2026-11-09"
 check_rule: null
 ---
@@ -104,7 +104,7 @@ Measured on this box (2026-11-09):
 | run | config | result |
 |---|---|---|
 | gate | default caps | **ALL PASS, 28 checks, 0.54 s** |
-| E2E A | default caps, 160 seeded turns | ALL PASS; span 158,764 chars, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, output 385 tokens, summary 1,481 chars, `compact()` 4.45 s |
+| E2E A | default caps, 160 seeded turns | ALL PASS; span 158,764 chars, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, output 385 tokens, summary 1,481 chars, `compact()` 4.45 s (re-run: 3.25 s wall, 1,148-char summary, output 285 tokens in 2,575 ms) |
 | E2E B | `OUTPUT_TOKENS=256 INPUT_CHARS=30000` | ALL PASS; `stopReason "length"` → **rescued**, summary 7,591 chars, `details.reason: "length-rescued"`, 5.15 s |
 | composition probe | both project extensions loaded | compaction succeeded in 6.9 s with `details:{"guard":true,"reason":"bounded","spanChars":155353}` |
 
@@ -129,6 +129,11 @@ unclaimed idea, not built here. A pi-durable extension and a pi-coding-agent ext
 The gate: 0.54 s, $0, no network. A takeover: one model call; on this box a 60k-char bounded prompt with a 4,000-token
 output cap took **3.8–4.5 s** (local server ~83 tok/s prompt, ~156 tok/s generation). No broker, no seat wake.
 
+**The auto-mode e2e is not a fast loop** (D213): it seeds ~282 turns to cross `contextWindow − reserveTokens` and then
+makes one real turn over that context, so it costs **50–86 s** of local-server time — the spread is the server's input
+throughput, not the guard. Run the gate on every edit and the auto e2e once before a session closes. Never quote a
+pinned second-count for it: re-measure in the same command that reports it.
+
 ## 6. Traps learned in this pass
 
 - **The safety net can itself be the bug.** A `srecord(` typo (one missing character) made the deterministic-fallback
@@ -141,7 +146,7 @@ output cap took **3.8–4.5 s** (local server ~83 tok/s prompt, ~156 tok/s gener
   or `reasoning_effort:"none"` are the two that work.
 - A `--dry-run` style preview proves nothing here: the guard only reports what it did after a real compaction.
 
-## 4. Reproduce the failure, then prove the guard closes it (both measured 2026-11-09)
+## 7. Reproduce the failure, then prove the guard closes it (all measured 2026-11-09)
 
 The failure is reproducible on the **auto (threshold)** path, the one the operator hit:
 
@@ -153,7 +158,8 @@ COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs
 |---|---|---|---|
 | auto path, guard on disk but not loadable | default pi path, **no max_tokens** | 640,861 chars | `session_compact_failed reason=threshold` — `Auto-compaction failed: Summarization failed: generation hit the token cap and the summary is incomplete` |
 | auto path, guard loaded | guard takes over, `max_tokens 4000`, thinking off | 640,861 chars | summary 2,320 chars in 8.4 s, `details {"guard":true,"reason":"bounded"}`, **no failure event** |
-| auto mode as shipped | guard loaded | 408,516 chars | 6/6 PASS, 52 s wall, 2,007-char summary |
+| auto mode as shipped, run 1 | guard loaded | 408,516 chars | 6/6 PASS, 52 s wall, 2,007-char summary |
+| auto mode as shipped, run 2 (re-verified, same box, same day) | guard loaded | 408,516 chars, 282 seeded turns | 6/6 PASS, **85.5 s** wall, 2,104-char summary, `details {"guard":true,"reason":"bounded"}`, zero failure events |
 | unguarded control, small span | default pi path | 63,340 tokens | succeeded in 254 s — the cap is hit at large spans, not at every compaction |
 
 Trap that hid the reproduction: the extension resolves its core with `./compaction-guard-core.mjs` then

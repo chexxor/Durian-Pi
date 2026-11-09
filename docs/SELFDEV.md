@@ -3731,3 +3731,11 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `tools/compaction-guard-install.mjs` installing `.pi/extensions/compaction-guard-core.mjs` next to the
     extension and `--check` covering both. Rule: any extension that must never be absent needs a
     load-yourself check, not a source-only check.
+
+218. **A one-minute proof is not a fast loop, and a doc that pins a second-count goes stale the same day.**
+    `COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs` seeds ~282 turns to cross
+    `contextWindow − reserveTokens` and then makes one real turn over ~110k tokens: **52 s** on one run, **86 s** on
+    the next, same box, same code — the spread is the local server's input throughput, not the guard. The fast loop is
+    `node tools/compaction-guard-test.mjs` (28 checks, 0.54 s, no model/key/network/broker): run that on every edit,
+    the auto e2e once before a session closes. Same rule for every number in `docs/NEXT.md` — measure in the command
+    you report, do not carry a previous session's estimate.

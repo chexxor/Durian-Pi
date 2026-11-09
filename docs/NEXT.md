@@ -1,7 +1,9 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T20:3xZ (delegate session **N20** — the harness compaction guard is built, gated,
-end-to-end verified and documented; nothing was claimed in the queue).
+**Last update:** 2026-11-09T20:5xZ (delegate session **N21** — the harness compaction guard is built, gated,
+end-to-end verified and documented; this window **re-ran the whole verification chain from a cold resume and it is
+still green** — install `UP TO DATE`, gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto e2e 6/6 in 85.5 s;
+nothing was claimed in the queue).
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240, first tranche ROADMAP 331)**.
 This pass closed the **harness-plane** half of it: auto-compaction in the interactive/delegate session can no
@@ -28,7 +30,8 @@ operator grant (`DURIG_EXTENSIONS` is unset; `cli.mjs config` reports `null`). P
 **First thing to run:**
 `node tools/compaction-guard-install.mjs --check && node tools/compaction-guard-test.mjs && node tools/compaction-guard-e2e.mjs && COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs`
 (expect `UP TO DATE ... (+ .pi/extensions/compaction-guard-core.mjs)`, `ALL PASS` 28 checks in ~0.5 s, then
-`ALL PASS` manual mode ~4-6 s, then `ALL PASS` auto mode ~50 s — both use the local model, no money).
+`ALL PASS` manual mode 3–5 s, then `ALL PASS` auto mode **50–86 s** — measured 52 s and 86 s on this box on the same
+commit; the spread is local-server input throughput, not the guard. Both use the local model, no money).
 Then `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`), then
 `node cli.mjs status` once a broker is healthy.
@@ -91,7 +94,7 @@ cd /home/chexxor/Git/Durian-Pi
 node tools/compaction-guard-install.mjs --check   # exit 0 = the guard is installed and current
 node tools/compaction-guard-test.mjs              # ALL PASS (28 checks) in ~0.5 s, no broker, no key, no model
 node tools/compaction-guard-e2e.mjs              # manual path: one real local model call, ~5 s
-COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs   # the threshold path, ~50 s
+COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs   # the threshold path, 50-86 s (witness, not a loop)
 node scripts/clockin.mjs                          # BEFORE starting a broker; it hangs while one drives
 node tools/broker-serve.mjs --status
 DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
@@ -113,10 +116,16 @@ The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktre
 5. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5,
    `docs/reviews/milestone-m5-solidified-2026-11-09.md` §4; gate baseline **3 PASS, 1 PARTIAL, 4 FAIL**.
 
-**Promotion candidates** (gitignored `.spike/`, read-only, no model spend, broker-down safe):
+**Promotion candidates** (gitignored `.spike/`, broker-down safe, no spend beyond the local model):
 `.spike/probe-extension-discovery.mjs` (prints the extension set the harness actually loads — the only instrument
 that answers "which extension wins a `session_before_*` event?"), `.spike/probe-compaction-composition.mjs`
-(compaction with both project extensions loaded). Promotion is a row from `lead` (#5617 is the precedent).
+(compaction with both project extensions loaded), `.spike/probe-auto-compaction-path.mjs` (drives the harness's own
+threshold compaction with project compaction settings overridden), `.spike/control-unguarded-compaction.mjs` (the
+negative control: pi's default path on the same span, **5–15 min** because the request carries no output cap).
+The auto-path and control logic are already folded into the tracked
+`tools/compaction-guard-e2e.mjs` (`COMPACT_GUARD_E2E_MODE=auto`); promoting the other two keeps the discovery and
+composition reads available after `.spike/` is cleared. Promotion is a row from `lead` (#5617 is the precedent) —
+the broker is down, so it could not be routed this window.
 
 ## State the team is in
 
@@ -136,13 +145,15 @@ fail the same way — its own cap is smaller, and nothing here tested it.
 
 **Cost:** the spend ledger is unchanged at **2,030 lines / $0.92401 cumulative** (last row 2026-11-09T05:22:59Z);
 every call this pass went to the local loopback server, which the ledger does not meter, so **$0.00** was spent.
-Wall clock ~25 min of which the E2E runs are ~20 s total; the gate is 0.5 s.
+Wall clock: the gate is **0.46 s**, the manual e2e **3.25 s**, the auto (threshold) e2e **85.5 s** — that last one is
+the only expensive instrument on this thread and it is a once-per-session witness, not a loop (SELFDEV **218**).
 
-**Traps this window** — `docs/SELFDEV.md` **211–217** (the failure is a request-shape bug; a one-character typo in a
+**Traps this window** — `docs/SELFDEV.md` **211–218** (the failure is a request-shape bug; a one-character typo in a
 safety net is invisible to `node --check`; last-non-null wins on `session_before_*`; `thinking_budget: 0` is
 ignored on this server; the harness plane and the seat plane are different compaction code; an e2e seeded under
 `keepRecentTokens` (20000) fails as "session too small", not as a guard failure; an extension whose core module
-does not resolve simply does not load, and nothing says the guard is off). Earlier blocks:
+does not resolve simply does not load, and nothing says the guard is off; the auto-mode e2e is a 50–86 s witness, not
+a fast loop, and a doc that pins a second-count goes stale the same day). Earlier blocks:
 191–210, 186–190, 173–185. Grep for the symptom; the file is ~50,000 tokens.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
