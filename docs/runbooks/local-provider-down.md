@@ -5,7 +5,7 @@ writes: false
 precondition: "none"
 last_verified: 2026-11-06
 verified_by: delegate
-evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. 2026-11-06: state 6 (a LAN strata box passes /models and /health yet misses the preflight's 20s completion bound -> `START REFUSED`) and state 7 (per-box keys after a rotation: one 74-char `DURIG_LOCAL_API_KEY` 401s on BOTH boxes) found; ROADMAP 325/326. PARTIAL re-verification 2026-11-06T08:0xZ (host signature in docs/NEXT.md): the PORT pointers re-measured — `curl` to `127.0.0.1:47831` and `127.0.0.1:47832` both exit **7** (ECONNREFUSED, `HTTP 000`); `ps -eo pid,args` shows the live launch `-m serve.server … --host 0.0.0.0 --port 8080` and `ss -ltnp` shows **`0.0.0.0:8080`** owned by that serve.server pid; `curl http://127.0.0.1:8080/v1/models` answers `authentication_error: missing or wrong API key`. The firewall section is **NOT** re-verified: `firewall-cmd --state` returns a D-Bus `Did not receive a reply` error with exit **254**, so a delegate cannot answer those questions today. `last_verified: 2026-11-06` records the state-6/state-7 legs only — the Do/Verify legs of this runbook were NOT re-run."
+evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. 2026-11-06: state 6 (a LAN strata box passes /models and /health yet misses the preflight's 20s completion bound -> `START REFUSED`) and state 7 (per-box keys after a rotation: one 74-char `DURIG_LOCAL_API_KEY` 401s on BOTH boxes) found; ROADMAP 325/326. PARTIAL re-verification 2026-11-06T08:0xZ (host signature in docs/NEXT.md): the PORT pointers re-measured — `curl` to `127.0.0.1:47831` and `127.0.0.1:47832` both exit **7** (ECONNREFUSED, `HTTP 000`); `ps -eo pid,args` shows the live launch `-m serve.server … --host 0.0.0.0 --port 8080` and `ss -ltnp` shows **`0.0.0.0:8080`** owned by that serve.server pid; `curl http://127.0.0.1:8080/v1/models` answers `authentication_error: missing or wrong API key`. The firewall section is **NOT** re-verified: `firewall-cmd --state` returns a D-Bus `Did not receive a reply` error with exit **254**, so a delegate cannot answer those questions today. `last_verified: 2026-11-06` records the state-6/state-7 legs only — the Do/Verify legs of this runbook were NOT re-run. 2026-11-07 (#5387, expectation-semantics edit only): the `47832` query's `expect` now names its condition — `yes` (exit 0) only after the two OPERATOR (root) lines, `no` (exit 1) is the default/pre-enable state, exit 254 is the instrument not answering; re-ran the two READ-ONLY queries in an item worktree and both exit 254, so the OPERATOR leg and the `yes` it produces remain unverified by any delegate."
 check_rule: null
 ---
 
@@ -315,10 +315,33 @@ To let another computer reach the **inference-only** listener (recommended over 
 carries the UI and host APIs):
 
 ```bash
-sudo firewall-cmd --permanent --add-port=47832/tcp
-sudo firewall-cmd --reload
-firewall-cmd --query-port=47832/tcp        # expect: yes
+sudo firewall-cmd --permanent --add-port=47832/tcp   # OPERATOR step (root) — not a delegate lane
+sudo firewall-cmd --reload                            # OPERATOR step (root)
+firewall-cmd --query-port=47832/tcp        # expect: yes ONLY after the two OPERATOR lines ran on THIS host; `no` is the default
 ```
+
+> **That `expect` is conditional, so read its exit code before believing it is a failure.** `yes` (exit 0) is the state
+> *after* the two OPERATOR lines above. `no` (exit 1) is the **default, pre-enable state** — measured on this host
+> 2026-11-04: the same query was `no` at 12:2xZ and `yes` by 13:0xZ with only those two lines between
+> (`docs/NEXT-ARCHIVE.md:11433-11438`), and the app's share listener is itself "off until enabled in the app" (option 1
+> above). A `no` on a correctly-configured box with sharing left off is this runbook telling the truth, and it is the
+> state you should expect to arrive in. What each answer does and does not decide:
+>
+> - **`no` (exit 1) rules out ONE thing:** LAN reachability of that port from a second machine — firewalld drops it
+>   however correct the server is (the `NOT allowed` fact above). It does **not** rule out the provider serving seats on
+>   this box: measured 2026-11-06, `127.0.0.1:8080/v1/models` answered HTTP **401** (listener up, key required) while
+>   `curl` to `47832` exit **7** (nothing listening) and the port query said `no`. Reachability and provider health are
+>   different questions; this line answers only the first.
+> - **`yes` (exit 0) does not rule in an end-to-end LAN path either.** The app's share listener must be enabled and the
+>   client must carry the bearer key (the 401-without-key / 200-with-key pair above). Confirm from the second machine.
+> - **Exit 254 is not `no`.** On this host `firewall-cmd` returned D-Bus `Did not receive a reply` with exit **254** for
+>   every verb on 2026-11-06 (marker above), and again when re-run 2026-11-07 in an item worktree — both queries exit
+>   254. That is the instrument not answering, not a `no`; report "the instrument did not answer", never `yes`/`no`.
+> - **The port literal is a pointer, per the marker above** — `47832` was the 2026-11-04 launch's `PORT + 1`. If the
+>   live launch is now `--port 8080`, querying 47832 can answer `no` on a host where the *current* share port *is*
+>   opened. Re-derive `sharePort` from the measured `--port` before reading the answer.
+> - **`yes` today can be `no` after a reboot.** The runtime-vs-permanent split above (`--permanent --list-ports`, no
+>   root needed) is what tells you whether the opening survives a reload.
 
 Then from the other computer:
 
