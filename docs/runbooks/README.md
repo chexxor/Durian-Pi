@@ -84,8 +84,15 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 
 > **CAVEAT — this is manual today.** The `runbook-stale`, `runbook-unverified` and
 > `runbook-front-matter` rules EXIST in `src/checkup.mjs` but `cli.mjs` never passes a `runbooks`
-> collection into `auditRig`, so `check` reports all three as `skipped — no runbook data was supplied`.
-> Nothing automatically verifies runbooks OR topic docs yet; that wiring is the gap (routed to `pm`).
+> collection into `auditRig`, so `check` reports all three as **`UNKNOWN (not judged) — no runbook data
+> was supplied`** (#5767). **UNKNOWN is not a pass and not a skip**: a skip means the rule looked at a
+> structure that legitimately does not exist (e.g. a rig with no `ownership` block); UNKNOWN means nothing
+> was judged at all, so it must never be read as clean. Measured on the live rig: `node cli.mjs check
+> /home/chexxor/Git/Durian-Pi/rig.json --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite` -> exit 0, the
+> render line reads `3 UNKNOWN (not judged)`, and each of the three rules prints its reason. Supplying
+> runbook data flips them to `pass`/`fail` — `demo/runbook-rules.test.mjs` §5b asserts the two renders
+> differ, so the distinction is testable and not a rename. Nothing automatically verifies runbooks OR
+> topic docs yet; that wiring is the gap (routed to `pm`).
 > Related false positive a verifier must know: `runbookFrontMatterProblems` expects TYPED front-matter
 > (`writes` as a boolean), so a naive YAML parse of the files reports `writes: must be true or false` for
 > **every** runbook — including all the pre-existing ones.
