@@ -1,0 +1,16 @@
+usage-bearing entries: 73,326
+fresh input 695,331,530  output 35,007,307  cacheRead 9,639,752,590  cacheWrite 0
+cache-read share of prompt-side tokens: 93.3%
+per model (turns, fresh input, cacheRead, hit rate):
+  deepseek-ai/DeepSeek-V4.1-Flash: turns=17,015 input=41,240,690 cacheRead=3,219,644,928 hit=98.7%
+  zai-org/GLM-5.3-Flash: turns=12,950 input=125,288,933 cacheRead=950,758,016 hit=88.4%
+  deepseek-ai/DeepSeek-V4.1-Flash-1017: turns=11,588 input=21,305,067 cacheRead=3,002,118,400 hit=99.3%
+  deepseek-ai/DeepSeek-V4-Flash-0731: turns=7,285 input=140,128,321 cacheRead=1,520,310,016 hit=91.6%
+  qwen36: turns=5,213 input=34,408,604 cacheRead=72,775,555 hit=67.9%
+  qwen3.8-flash-next-iq3_s: turns=4,905 input=54,225,828 cacheRead=101,157,592 hit=65.1%
+  Qwen/Qwen3.6-35B-A3B: turns=4,380 input=202,835,688 cacheRead=290,985,584 hit=58.9%
+  qwen3.8-flash-next-q2_0: turns=3,708 input=30,021,948 cacheRead=234,173,233 hit=88.6%
+  iq3_s: turns=2,705 input=16,280,948 cacheRead=233,430,578 hit=93.5%
+  google/gemma-4-31B-it: turns=1,856 input=9,690,620 cacheRead=0 hit=0.0%
+  openai/gpt-oss-120b: turns=1,476 input=18,010,943 cacheRead=0 hit=0.0%
+  XiaomiMiMo/MiMo-V2.6-Flash: turns=152 input=1,473,092 cacheRead=14,138,464 hit=90.6%

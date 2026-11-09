@@ -3634,8 +3634,8 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     ordering, with no experiment that decides it. That let the same milestone be described as "next" for three
     sessions without anyone being able to say how far it is. The fix is a gate file whose exit code is the
     status, and per-criterion probes printed next to each criterion:
-    `docs/evidence/2026-11-09-milestone-m5/gate.mjs`. Measure before decomposing — the baseline (2 PASS, 1
-    PARTIAL, 5 FAIL) changed which package comes first.
+    `docs/evidence/2026-11-09-milestone-m5/gate.mjs`. Measure before decomposing — the baseline (3 PASS, 1
+    PARTIAL, 4 FAIL) changed which package comes first.
 205. **Before asserting an escape exists, run the guard's own function on the command.** "Seat egress is
     unmediated" was true, but the interesting part was which specific rules *do* fire: `git config --global`,
     a redirect outside the worktree and `git push` are refused; `nc 127.0.0.1 8080`, `curl` to a LAN address,

@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-11-09
 verified_by: delegate
-evidence: "2026-11-09, Linux Fedora 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1: `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` exits 1 and prints 2 PASS, 2 PARTIAL, 4 FAIL in about 1 s; `node docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs` prints 6 of 9 escapes reaching no rule. Both read only the store and two src/ modules."
+evidence: "2026-11-09, Linux Fedora 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1: `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` exits 1 and prints 3 PASS, 1 PARTIAL, 4 FAIL in about 1 s; `node docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs` prints 6 of 9 escapes reaching no rule. Both read only the store and two src/ modules."
 check_rule: null
 ---
 

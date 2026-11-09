@@ -48,7 +48,7 @@ prerequisite.
 ## M5 — the rig can say what a seat was allowed to do, and can remember what it saw. ⏳ next
 
 Definition of done and decomposition: `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Gate:
-`node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` — **2 PASS, 2 PARTIAL, 4 FAIL** as of
+`node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` — **3 PASS, 1 PARTIAL, 4 FAIL** as of
 2026-11-09. Operator ratification is owed (D141).
 
 ---

@@ -132,7 +132,7 @@ const reportExists = existsSync(join(ROOT, "docs/reviews/cache-evidence"));
 const measured = cacheReadFromEntries > 0 || cachedLedger > 0;
 report("C7", "prompt-cache economics are measured, so a changing prompt section is a known cost, not a guess",
 	measured && reportExists ? "PASS" : measured ? "PARTIAL" : "FAIL",
-	`ledger ${ledger}: ${calls} metered calls, ${cachedLedger} cached tokens (the ledger only sees metered endpoints); durable entries: ${usageEntries} usage-bearing, ${cacheReadEntries} with a cache read, ${cacheReadFromEntries.toLocaleString()} cacheRead tokens vs ${freshInput.toLocaleString()} fresh input (${cacheReadFromEntries ? (100 * cacheReadFromEntries / (freshInput + cacheReadFromEntries)).toFixed(1) : "n/a"}% hit). Measured, not yet written up: docs/reviews/cache-evidence ${reportExists ? "exists" : "does not exist"}`);
+	`ledger ${ledger}: ${calls} metered calls, ${cachedLedger} cached tokens (the ledger only sees metered endpoints); durable entries: ${usageEntries} usage-bearing, ${cacheReadEntries} with a cache read, ${cacheReadFromEntries.toLocaleString()} cacheRead tokens vs ${freshInput.toLocaleString()} fresh input (${cacheReadFromEntries ? (100 * cacheReadFromEntries / (freshInput + cacheReadFromEntries)).toFixed(1) : "n/a"}% hit); written up in docs/reviews/cache-evidence ${reportExists ? "(exists)" : "(MISSING — the number is measured but no doc carries it)"}`);
 
 /* C8 — the mediator is not the only line of defence, or the gap is stated. */
 const spawnWrapper = ["src/spawn-wrapper.mjs", "src/landlock.mjs", "src/seccomp.mjs", "src/egress-proxy.mjs"].filter((p) => existsSync(join(ROOT, p)));

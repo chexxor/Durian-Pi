@@ -10939,7 +10939,7 @@ with 1. `node demo/continuity-note.test.mjs` → `CONTINUITY PASS`, 0.630 s, fiv
    milestone a session is working on, what tasks were documented for it, and what command decides it. M5's
    definition of done is eight criteria, each with its probe, in
    `docs/evidence/2026-11-09-milestone-m5/gate.mjs`; exit 0 means the milestone is complete. Baseline measured
-   2026-11-09: **2 PASS, 2 PARTIAL, 4 FAIL**.
+   2026-11-09: **3 PASS, 1 PARTIAL, 4 FAIL**.
 2. **M5's order is enforcement record first, memory second.** Not preference — dependency. `src/seatguard.mjs`
    has 14 mediation decision points and writes **no** record (`select count(*) from documents where kind like
    '%audit%' or kind like '%decision%'` → **0**; 1,532 entries contain the prose `refused by durig:`, 0 contain a

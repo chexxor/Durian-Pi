@@ -1,11 +1,21 @@
+FAIL     C1  a refusal is written as a structured record (subject, object, permission, rule, result), not only as prose in a tool result
+          probe: store documents whose kind contains audit/decision: 0; audit-record identifiers in 7 enforcement files: 0
+PARTIAL  C2  the number of enforcement decisions is derivable from the store, not from grepping transcript text
+          probe: entries containing 'refused by durig:' (substring count, untyped): 1532; structured decision rows: 0
+FAIL     C3  reach comes from declarative rules consulted at the claim, not from a per-seat removal list computed at `up`
+          probe: rule-as-data identifiers in policy files: 2; toolRemovalsFor signature: (seat) — claim-scoped: false
+FAIL     C4  a seat's outbound network reach is governed by a destination policy that can be shown to refuse
+          probe: refusalFor() refused 0 of 3 egress probes (public host, link-local metadata endpoint, raw local socket)
+PASS     C5  a written security position (boundary, threat model, enforcement points, fallback) precedes isolation code
+          probe: matching documents in docs/reviews: security-seat-sandbox-position.md
 FAIL     C6  there is a token-budgeted read path over stored history (search_history or equivalent)
           probe: recall tool names found in the tool surface: 0; durable entries with no read path: 209680
-PARTIAL  C7  prompt-cache economics are measured, so a changing prompt section is a known cost, not a guess
-          probe: ledger ./selfdev.sqlite.spend.jsonl: 2030 metered calls, 0 cached tokens (the ledger only sees metered endpoints); durable entries: 73326 usage-bearing, 49264 with a cache read, 9,639,752,590 cacheRead tokens vs 695,331,530 fresh input (93.3% hit). Measured, not yet written up: docs/reviews/cache-evidence does not exist
+PASS     C7  prompt-cache economics are measured, so a changing prompt section is a known cost, not a guess
+          probe: ledger ./selfdev.sqlite.spend.jsonl: 2030 metered calls, 0 cached tokens (the ledger only sees metered endpoints); durable entries: 73326 usage-bearing, 49264 with a cache read, 9,639,752,590 cacheRead tokens vs 695,331,530 fresh input (93.3% hit); written up in docs/reviews/cache-evidence (exists)
 PASS     C8  either an OS-level backstop exists at the spawn point, or the record states in plain words that in-process hooks are not a boundary
           probe: spawn-time wrapper modules present: 0; documents stating the in-process limit explicitly: 1
 
-M5 GATE: 2 PASS, 2 PARTIAL, 4 FAIL of 8 criteria.
+M5 GATE: 3 PASS, 1 PARTIAL, 4 FAIL of 8 criteria.
 Milestone M5 is NOT complete. Each FAIL below is one of its acceptance criteria, and each has a
 probe above that can be re-run. Roadmap ids in parentheses are the work that closes the criterion:
   · C1 (ROADMAP 172): a refusal is written as a structured record (subject, object, permission, rule, result), not only as prose in a tool result

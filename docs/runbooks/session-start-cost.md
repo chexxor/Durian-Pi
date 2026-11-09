@@ -719,3 +719,25 @@ while the rig is busy is a gate that gets skipped.
 node demo/clockin-digest.test.mjs            # exit 0, prints "… NON-VACUOUS at a 160-row deferred backlog …"
 node scripts/clockin.mjs --db ./selfdev.sqlite | wc -c   # ≤ 20000 on the live store; exit 1 if it is not
 ```
+
+## 29. HOW FAR IS THE MILESTONE? two reads, ~2 s total, and neither touches the broker (2026-11-09T10:0xZ, delegate session N19; Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+The session that starts by reading `docs/ROADMAP.md`'s 6,300 lines to work out "where are we" is spending the
+session, not measuring it. Two committed probes answer it directly:
+
+```bash
+node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite   # 1.6 s, exit 1: 3 PASS, 1 PARTIAL, 4 FAIL
+node docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs              # 0.24 s: 6 of 9 escapes reach no rule
+```
+
+Both are read-only (one opens the store `readOnly: true`, the other imports two `src/` functions and spawns
+nothing), so they work with the broker down, no key, no model. `docs/MILESTONES.md` is the ledger they report
+into: previous milestone, current milestone, next milestone, and the command that decides each.
+
+**The one number these do NOT give you, and the read that does.** Cache economics are not in the spend ledger —
+`selfdev.sqlite.spend.jsonl` records `cached_tokens: 0` on all 2,030 rows because a row is only written for a
+*metered* endpoint. The durable entries carry the real usage. `.spike/delegate/usage-census.mjs` reads it in about
+2 s and prints per-model hit rates (DeepSeek-V4.1-Flash-1017 99.3%, the seat model 88.6%, the verifier 0.0% over
+1,476 turns). That probe is gitignored; promoting it into `tools/` is a row from `lead` (ROADMAP **349**, the
+same promotion rule as **312**) — until it is promoted, the next session re-derives it, and the runbook's snippet
+in `docs/runbooks/milestone-gate.md` is the copy that survives.

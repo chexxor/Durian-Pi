@@ -12,7 +12,7 @@ still unclaimed; the delegate built and verified the mechanism but asserted no r
 
 **New this window:** the milestone ledger is now a file — **`docs/MILESTONES.md`** (previous milestone = the
 auto-clean ceiling, D249; current = 331; next = M5) — and **M5 has a runnable definition of done**: `node
-docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite`, baseline **2 PASS, 2 PARTIAL, 4 FAIL**,
+docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite`, baseline **3 PASS, 1 PARTIAL, 4 FAIL**,
 decomposed in `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Roadmap **347–349** registered from this
 measurement.
 
@@ -156,17 +156,19 @@ The team's rows **#5931–#5942** remain unclaimed; the delegate asserted nothin
 `CONTINUITY PASS`, the offline delegation loop, `STATUS VIEW BOUND OK`; 0.63 s / 0.29 s / 1.8 s, no broker, no key,
 no model). Then the two milestone gates — `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db
 ./selfdev.sqlite` (exit **0**, *PASS (mechanism)*, 8 operational blockers, 1 advisory) and `node
-docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (exit **1**: **2 PASS, 2 PARTIAL, 4 FAIL** —
+docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (exit **1**: **3 PASS, 1 PARTIAL, 4 FAIL** —
 that is M5's honest baseline, not a bug). Then
 `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`). If the
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip from `git rev-parse --short main`, `git status --short -- .`
-empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced. Continuity evidence:
-`docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism, 8 operational
-blockers, 1 advisory) and `...-demo-store.txt` (PASS mechanism, 1 blocker) — both exit 0. The 12 refs: 7 seat-root
+**State:** refs **12**, worktrees **9**, `main` tip **`0248b8a3`** (check with `git rev-parse --short main`),
+`git status --short -- .` empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced.
+Continuity evidence: `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism,
+8 operational blockers, 1 advisory) and `...-demo-store.txt` (PASS mechanism, 1 blocker) — both exit 0. M5
+evidence: `docs/evidence/2026-11-09-milestone-m5/gate-baseline-2026-11-09.txt` and
+`docs/evidence/2026-11-09-milestone-m5/escape-baseline-2026-11-09.txt`. The 12 refs: 7 seat-root
 branches, `main`, `seatroot/linux`, `verify-5180` (ledger: NOTHING-TO-LAND), `wip/seat-prompt-files`
 (SUPERSEDED-BY-EVENTS, author re-cut), `item-5301` (the unlandable reap verb).
 
@@ -181,7 +183,10 @@ needs the two provider grants. (2) Whether the note-injection cost is acceptable
 provider estimates tokens as chars/4 and never shows a real tokenizer's cache behaviour. Cheapest probe once a key
 exists: `node tools/model-probes/…` / the compacteval A/B rows #5939–#5940. (3) Whether `pm` will accept the D249
 framing — the intent is spooled, not delivered; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall
-141). Probe: `ls -1 selfdev.sqlite.broker.inbox.out/` after the broker's first pass.
+141). Probe: `ls -1 selfdev.sqlite.broker.inbox.out/` after the broker's first pass. (4) **The cost of a
+spawn-time OS wrapper on this box is unmeasured.** The research report says Landlock is unprivileged and
+self-imposed; nothing here has run one. Anyone scheduling ROADMAP 174 must measure the spawn tax in seconds first
+(D213), not assume it.
 
 **Traps this window** — `docs/SELFDEV.md` **191–207** (N19 adds: the spend ledger cannot see cache hits because it
 only meters metered endpoints, while the durable entries carry 9.64 billion `cacheRead` tokens; a milestone
@@ -189,6 +194,6 @@ sentence is not a milestone; before claiming an escape exists, call the guard's 
 `toolRemovalsFor` has no claim argument and no rule data to consult; 93 registered roadmap items have no queue
 row). Grep for the symptom; the file is ~50,000 tokens.
 
-**Cheap probe that proves the git pass is closed:** `git worktree list | wc -l` → **9**, `git branch --format='%(refname:short)' | wc -l` → **12**, `git status --short -- .` → empty, `node scripts/suite.mjs --jobs 8` → **278/278**.
+**Cheap probe that proves the git pass is closed:** `git worktree list | wc -l` → **9**, `git branch --format='%(refname:short)' | wc -l` → **12**, `git status --short -- .` → empty, `node scripts/suite.mjs --jobs 8` → **280/280**.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
