@@ -3648,7 +3648,28 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     the policy files for `allowRules` / `policyRev` / `denyByDefault` returns 0 — ROADMAP 173 has no data layer
     to build on yet. Anyone sequencing 269 (ask → adjudicate → raise → revoke) must know 173 is empty, not thin.
 207. **Roadmap intent without a queue row is not work.** `node tools/roadmap-queue-coverage.mjs` on the live store:
-    146 registered items ≥200, **53** named by at least one queue row, **93** named by none. A milestone
-    decomposition that only names roadmap ids leaves 93 items with no owner, no dependency and no test. Mint the
+    **150** registered items ≥200, **54** named by at least one queue row, **96** named by none. A milestone
+    decomposition that only names roadmap ids leaves 96 items with no owner, no dependency and no test. Mint the
     rows (owner, acceptance check, falsifiable evidence) or say the item is parked — do not leave it as prose in
     ROADMAP and treat it as scheduled.
+208. **`check`'s `single-model-rig` passes while the verifier cannot run — read the two lines ABOVE the verdict.**
+    Measured 2026-11-09: `node cli.mjs check rig.selfdev.json` prints `"id": "single-model-rig", "status": "pass",
+    "found": 0`, which reads as "independence delivered". It is not. `src/checkup.mjs:600-612` compares **resolved
+    model strings from the rig file**, and the rig file now declares two families, so the rule is satisfied on paper.
+    The same command's first two stdout lines — before the JSON body — are the real state:
+    `{"spend":"registration-refused","provider":"verifier","model":"openai/gpt-oss-120b","causes":["metered-endpoint-unkeyed"],
+    "effect":"the provider registers NO model row, so a seat naming verifier/openai/gpt-oss-120b fails as no_model BEFORE any request"}`.
+    A rule that passes because a declaration changed, not because a capability works, is a rule that cannot be
+    trusted for gating. Probe both: `grep -A3 '"id": "single-model-rig"'` on the JSON, and the two spend lines at the
+    top. Any doc saying "check reports X" must quote the line it read, not the rule's name.
+209. **A gate that only reads the spend ledger measures an empty table.** `selfdev.sqlite.spend.jsonl` records
+    `cached_tokens: 0` on all 2,030 rows — because `src/providers/spend.mjs` writes a row only for a **metered**
+    endpoint. Every loopback call is invisible. The usage is in the durable entries: 73,326 usage-bearing records,
+    9,639,752,590 `cacheRead` vs 695,331,530 fresh input (93.3% hit), with `openai/gpt-oss-120b` at **0.0%** over
+    1,476 turns. Written up: `docs/reviews/cache-evidence/2026-11-09.md`. When a criterion says "measured", name
+    the store that actually holds the measurement.
+210. **When a criterion flips to PASS because you wrote a doc, that is the signal the criterion needs a second
+    half.** M5's C7 ("cache economics are measured") went FAIL → PARTIAL on measurement and PASS when the write-up
+    landed. Measurement plus a document is not the same as an instrument that keeps the measurement current. Before
+    ratifying any criterion, ask: if this drifted tomorrow, what would notice? If the answer is "nothing", the
+    criterion is a snapshot, not a gate.

@@ -64,7 +64,7 @@ declarative rule file: `grep` for `allowRules`, `policyRev`, `denyByDefault` in 
 
 ### 2.3 Egress has no policy at all
 
-Probing the actual guard functions with real commands (script: `.spike/delegate/egress-census.mjs`):
+Probing the actual guard functions with real commands (script: `docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs` (committed, re-runnable in 0.24 s)):
 
 ```
 curl -s https://example.com/api        ALLOWED   (no rule matched)
@@ -121,7 +121,7 @@ cache-safe before it ships" — is measurable now, and the answer for the curren
 ### 2.5 Memory: nothing exists, and 93 roadmap items have no queue row
 
 `grep -rn "search_history" src/ cli.mjs` → 0. There is no `remember`, no `recall`, no `forget`. Meanwhile
-`node tools/roadmap-queue-coverage.mjs` reports **93 registered roadmap items with no queue row naming them**.
+`node tools/roadmap-queue-coverage.mjs` reports **96 of the 150 registered roadmap items >=200 have no queue row naming them** (54 have at least one).
 Roadmap intent without a queue row is intent without an owner, a dependency, or a test.
 
 ---

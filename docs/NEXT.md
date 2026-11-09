@@ -10,15 +10,15 @@ seat can now carry a durable continuation note instead of a compaction summary, 
 have re-introduced the blowup are bounded. Rows **#5931–#5942** (the team's decomposition of this cluster) are
 still unclaimed; the delegate built and verified the mechanism but asserted no row.
 
-**New this window:** the milestone ledger is now a file — **`docs/MILESTONES.md`** (previous milestone = the
-auto-clean ceiling, D249; current = 331; next = M5) — and **M5 has a runnable definition of done**: `node
+**New this window:** the milestone ledger is now a file — **`docs/MILESTONES.md`** (previous = the auto-clean
+ceiling, D249; current = 331; next = M5) — and **M5 has a runnable definition of done**: `node
 docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite`, baseline **3 PASS, 1 PARTIAL, 4 FAIL**,
-decomposed in `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Roadmap **347–349** registered from this
+decomposed in `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Roadmap **347–350** registered from this
 measurement.
 
-**N17 still holds the git verdict**: worktrees **58 → 9**, refs **60 → 12**, `main` `6787bd24` → **`ea12fe04`** on
-the code, zero `--force`. Read the live tip with `git rev-parse --short main`. The 9 trees left are the seats'
-own roots; **the next git-side work is a queue-design act, not a git act** (D249) — see Current item 1.
+**N17 still holds the git verdict**: worktrees **58 → 9**, refs **60 → 12**, zero `--force`; read the live tip with
+`git rev-parse --short main`. The 9 trees left are the seats' own roots; **the next git-side work is a queue-design
+act, not a git act** (D249) — see Current item 1.
 
 **Host for every number below**, measured in the same command as the measurement: **Linux**, Fedora Linux 45
 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -163,7 +163,7 @@ that is M5's honest baseline, not a bug). Then
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip **`0248b8a3`** (check with `git rev-parse --short main`),
+**State:** refs **12**, worktrees **9**, `main` tip **`1e9cef42`** (check with `git rev-parse --short main`),
 `git status --short -- .` empty, suite **280/280** (`node scripts/suite.mjs --jobs 8`, 57 s), nothing forced.
 Continuity evidence: `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` (PASS mechanism,
 8 operational blockers, 1 advisory) and `...-demo-store.txt` (PASS mechanism, 1 blocker) — both exit 0. M5
@@ -176,7 +176,6 @@ branches, `main`, `seatroot/linux`, `verify-5180` (ledger: NOTHING-TO-LAND), `wi
 on 127.0.0.1:8080; `DURIG_VERIFIER_API_KEY` unset → 402 balance), and the spend cap refuses `google/gemini-3.1-pro`
 ($14 exposure against a $4 store cap). Only the operator holds those grants; 10 intents are spooled and **118** sit
 as dead-letters in `selfdev.sqlite.broker.inbox.error` (measured 2026-11-09).
-
 **Unverified:** (1) whether an armed live rig produces a note for every seat in one broker pass — the offline
 proof is `demo/continuity-note.test.mjs` (5 scenarios) and `demo/offline.mjs`; the live proof needs a broker, which
 needs the two provider grants. (2) Whether the note-injection cost is acceptable on a real provider: the faux
@@ -188,11 +187,12 @@ spawn-time OS wrapper on this box is unmeasured.** The research report says Land
 self-imposed; nothing here has run one. Anyone scheduling ROADMAP 174 must measure the spawn tax in seconds first
 (D213), not assume it.
 
-**Traps this window** — `docs/SELFDEV.md` **191–207** (N19 adds: the spend ledger cannot see cache hits because it
+**Traps this window** — `docs/SELFDEV.md` **191–210** (N19 adds: the spend ledger cannot see cache hits because it
 only meters metered endpoints, while the durable entries carry 9.64 billion `cacheRead` tokens; a milestone
 sentence is not a milestone; before claiming an escape exists, call the guard's own function on the command;
-`toolRemovalsFor` has no claim argument and no rule data to consult; 93 registered roadmap items have no queue
-row). Grep for the symptom; the file is ~50,000 tokens.
+`toolRemovalsFor` has no claim argument and no rule data to consult; 95 registered roadmap items have no queue
+row; `check`'s `single-model-rig` passes while the verifier is unregistered — read the two spend lines above the
+verdict). Grep for the symptom; the file is ~50,000 tokens.
 
 **Cheap probe that proves the git pass is closed:** `git worktree list | wc -l` → **9**, `git branch --format='%(refname:short)' | wc -l` → **12**, `git status --short -- .` → empty, `node scripts/suite.mjs --jobs 8` → **280/280**.
 

@@ -35,9 +35,14 @@ Queue semantics, org edges, the Router at harness open, seat prompts, real-model
 Both halves are in the tree: tools are installed and capability-narrowed (`src/seattools.mjs`), and a completion
 carries evidence (`checkup.mjs` `verification-without-evidence` and `evidence-tree` rules live in `check`).
 
-**Still open:** independence. `cli.mjs check` reports `single-model-rig` — all 12 seats resolve to the same model
-family. Registered as ROADMAP 189, D137/D140. This gap is why M5's verifier-adjudicated grants (ROADMAP 269)
-cannot be accepted yet: a verifier that is the same model as the subject is not a verifier.
+**Still open:** independence is declared, not armed. Measured 2026-11-09: `node cli.mjs check rig.selfdev.json` prints
+`single-model-rig` with **status pass, found 0** — the rig file declares two families, `local/qwen3.8-flash-next-q2_0`
+(11 seats) and `verifier/openai/gpt-oss-120b` (`auditor`). The same run's first two lines are the blocker: the
+verifier's registration is refused (`metered-endpoint-unkeyed`, remedy "set `DURIG_VERIFIER_API_KEY`"), whose stated
+effect is "the provider registers NO model row, so a seat naming verifier/openai/gpt-oss-120b fails as `no_model`
+BEFORE any request". Diversity exists in the rig file and in history (1,476 verifier turns in the store); it does not
+run today. Registered as ROADMAP 189, D137/D140. This is why M5's verifier-adjudicated grants (ROADMAP 269) cannot
+be accepted yet: the adjudicator is not currently reachable.
 
 ## M4 — interactive client over the same store. ⏸ parked
 
