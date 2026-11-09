@@ -119,7 +119,7 @@ and `delegate-20261109-auto-clean`) that cannot be delivered while the broker is
 `selfdev.sqlite.broker.inbox/`, 0 delivered in `.out/`) in
 `selfdev.sqlite.broker.inbox.error` — read one before assuming an intent was lost.
 
-**Traps this window** — `docs/SELFDEV.md` **191–198** (this pass: a tool with no `parameters` faults the run
+**Traps this window** — `docs/SELFDEV.md` **191–210** (N18: a tool with no `parameters` faults the run
 before any tool runs; a hook's `runtime.commit` callback return value becomes the task state; faux replies use
 `stopReason: "toolUse"` not `"toolcall"`; a per-model override pinned to a model id goes inert when the family
 repoints, and a config file's override map REPLACES the shipped defaults wholesale; a durable document cannot be
