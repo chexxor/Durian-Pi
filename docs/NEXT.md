@@ -123,7 +123,9 @@ reports **9** trees, all `seat-root`: `main`, `durian-dev/seatroot`, and `item-5
 close them; the delegate claims nothing.
 
 **Blocker:** the two provider grants above, plus 10 spooled intents (including `delegate-20261109-release-role`
-and `delegate-20261109-auto-clean`) that cannot be delivered while the broker is down, and **59 dead-letters** in
+and `delegate-20261109-auto-clean`) that cannot be delivered while the broker is down, and **118 dead-letters**
+(measured 2026-11-09: `ls -1 selfdev.sqlite.broker.inbox.error | wc -l` → 118; 10 intents still spooled in
+`selfdev.sqlite.broker.inbox/`, 0 delivered in `.out/`) in
 `selfdev.sqlite.broker.inbox.error` — read one before assuming an intent was lost.
 
 **Traps this window** — `docs/SELFDEV.md` **191–198** (this pass: a tool with no `parameters` faults the run
@@ -167,20 +169,20 @@ no model). Then `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the two
 spooled intents; otherwise the only landable work is the `item-5301` re-cut, which needs a seat.
 
-**State:** refs **12**, worktrees **9**, `main` tip from `git rev-parse --short main` (code landed at `ea12fe04`),
-suite **280/280** (`node scripts/suite.mjs --jobs 8`, 60 s), nothing forced. This session's writes are uncommitted
-at the time of editing: `extensions/continuity.mjs`, `demo/continuity-note.test.mjs`,
-`demo/status-view-bound.test.mjs`, `docs/runbooks/continuation-notes.md`, plus edits to `cli.mjs`,
-`src/readapi.mjs`, `src/config.mjs`, `src/providers/local.mjs`, `scripts/clockin.mjs`,
+**State:** refs **12**, worktrees **9**, `main` tip from `git rev-parse --short main` (code landed at `ea12fe04`;
+this session's work is committed as **`26d52d43`** — `git status --short -- .` is empty), suite **280/280**
+(`node scripts/suite.mjs --jobs 8`, 56 s), nothing forced. What `26d52d43` contains: `extensions/continuity.mjs`,
+`demo/continuity-note.test.mjs`, `demo/status-view-bound.test.mjs`, `docs/runbooks/continuation-notes.md`, plus
+edits to `cli.mjs`, `src/readapi.mjs`, `src/config.mjs`, `src/providers/local.mjs`, `scripts/clockin.mjs`,
 `durig.config.default.json`, `demo/config.test.mjs`, `demo/offline.mjs`, `demo/test-areas.json`,
-`docs/SELFDEV.md`, `docs/runbooks/README.md` and this file. The remaining 12 refs: 7 seat-root branches, `main`,
+`docs/SELFDEV.md`, `docs/DECISIONS.md`, `docs/runbooks/README.md` and this file. The remaining 12 refs: 7 seat-root branches, `main`,
 `seatroot/linux`, `verify-5180` (ledger: NOTHING-TO-LAND), `wip/seat-prompt-files` (SUPERSEDED-BY-EVENTS, author
 re-cut), `item-5301` (the unlandable reap verb).
 
 **Blocker:** the broker is down and no provider registers a model on this box (`DURIG_LOCAL_API_KEY` unset → 401
 on 127.0.0.1:8080; `DURIG_VERIFIER_API_KEY` unset → 402 balance), and the spend cap refuses `google/gemini-3.1-pro`
 ($14 exposure against a $4 store cap). Only the operator holds those grants; 10 intents are spooled and 59 sit as
-dead-letters in `selfdev.sqlite.broker.inbox.error`.
+dead-letters in `selfdev.sqlite.broker.inbox.error` (118 measured 2026-11-09).
 
 **Unverified:** (1) whether the extension armed on the **live** rig produces a note for every seat in one broker
 pass — the offline proof is `demo/continuity-note.test.mjs`; the live proof needs a broker, which needs the two
