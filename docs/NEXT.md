@@ -1,12 +1,12 @@
 # NEXT.md — current state and next actions
 
 **Last update:** 2026-11-09T06:2xZ (delegate session **N15** — the operator said "run the landing pass now". **42
-branches landed**: `main` moved `429f2b5a` → `08a8453c` → `d6118d0e`, 42 two-parent merge commits, 97 commits, 84 files
-changed, +4,783/−253. Every landing went through `scripts/land.mjs` (tree-clean gate, text-integrity gate, genlock
-slot), and the pass was proven by a full suite before and after: **262/265 before** (`08a8453c`) and **276/278 after**
-(`d6118d0e`, 61.1 s and 65.5 s, `--jobs 8`) — no landing introduced a red; the only new reds were two derived-manifest
-failures caused by a landed demo and fixed in `58dd8ad2`. Backlog after the pass: **24 refs / 35 commits ahead of
-`main`** — **4** merge clean — three of them then refused by the BOM gate, see pitfall 174), **20** conflict. Broker was
+branches landed**: `main` moved `7609831c` → `429f2b5a` → `08a8453c` → **`85e1127f`** (42 `merge: land` commits; 99
+commits, 87 files, +5,114/−387 since session start). Every landing went through `scripts/land.mjs` (tree-clean gate,
+text-integrity gate, genlock slot), and the pass was proven by a full suite before and after: **262/265 before**
+(`08a8453c`) and **277/278 after** (`85e1127f`, 60.1 s, `--jobs 8`) — no landing introduced a red; the only new reds were
+two derived-manifest failures caused by a landed demo and fixed in `58dd8ad2`. Backlog after the pass: **24 refs / 35
+commits ahead of `main`** — **4** merge clean, three of them then refused by the BOM gate (pitfall 174), **20** conflict. Broker was
 wedged (`pid 114848`, heartbeat fresh, last pass 05:20:31Z = 3,162 s before the pass) — `serve --stop` refused, `kill`
 logged `EXIT pid=114848 reason=deadline passes=-`, and with it down `cli.mjs status` answers in **0.96 s** and
 `tools/queue-drain-audit.mjs` in **1.26 s**. **The fleet is stopped**; restarting it is the operator's call (see the
@@ -92,8 +92,11 @@ Landing census, run **inside the loop**, not once (pitfall 173):
 generation; the pass needs a quiesced window (`docs/runbooks/land.md`, `docs/runbooks/merge.md`). Before a pass,
 `git status --porcelain` must be empty **including untracked** (ROADMAP 310 — `selfdev.sqlite.spend.jsonl` is untracked
 and not ignored, and it blocked a whole train), and stray `item-*/` directories block the helper even when porcelain is
-clean (`/item-*/` is gitignored): 154 registered worktrees right now. A stale base is a **re-cut job for the author
-seat**, not a merge job for the delegate (`land.md` Do 0b).
+clean (`/item-*/` is gitignored): 154 registered worktrees right now. **Branch pruning is stuck behind those worktrees:**
+after this pass 131 refs are fully merged into `main` and **all 131 are still checked out** in a registered worktree
+(`git worktree list --porcelain | grep -c '^branch refs/heads/'` = 151), so nothing is free to delete; the rig's own
+`complete_work` step refuses to remove them because of npm `.bin` symlinks (pitfall 133). A stale base is a **re-cut job
+for the author seat**, not a merge job for the delegate (`land.md` Do 0b).
 
 **Read-path caveat.** While a broker is resident every CLI read routes through it (`src/readclient.mjs:106-111`); a
 stalled pass loop makes every read block with 0 bytes while a direct read-only sqlite query answers fine — "empty queue"
