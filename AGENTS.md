@@ -112,7 +112,7 @@ seconds** on the row that adds it. Diagnose with `docs/runbooks/slow-loop.md`.
   session shipped three citations to files that do not exist (D211 CORRECTION).
 - **Do not push or publish.** The operator holds that grant; the delegate may commit its own item's
   work (the commit boundary is scoped per item — stage explicit paths only, never `git add -A`).
-  Push requires the operator's explicit grant (or `DURIAN_PI_ALLOW_PUSH=1` at launch).
+  Push requires the operator's explicit grant (or `DURIG_ALLOW_PUSH=1` at launch).
 - **Native host OS only** — never `wsl`, `docker`, or `docker-compose`. Linux and Windows are both operating
   platforms for this rig (D131); run natively wherever it lives, and **name the OS in every measurement you
   report**: seat tool names, path fixtures and process-death semantics differ (`src/seatguard.mjs:122` registers

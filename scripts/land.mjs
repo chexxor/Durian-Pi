@@ -54,7 +54,7 @@
 // mid-merge.
 
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
 import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
@@ -499,6 +499,28 @@ if (added.code !== 0) {
 	report({ ...base, error: `cannot create the scratch worktree at ${scratch}: ${added.err}` }, 1);
 }
 
+/* ───────── the scratch must carry the SAME dependencies as the tree it claims to measure ───────── */
+// #5793 (first registered as #5832). A detached worktree gets the TRACKED tree only: `node_modules` is
+// gitignored and lives in the working checkout. So `--suite` ran in a scratch with no dependencies at all,
+// every demo that imports `@earendil-works/*` died with ERR_MODULE_NOT_FOUND, and the runner stops at the
+// FIRST red — a green branch never reached main. Measured: main, 262/262 green with deps, was reported as
+// `STOPPED: demo/commit-discipline-personas.test.mjs failed in the scratch worktree (exit 1)`.
+// Symlink, not copy: node_modules is hundreds of MB and the scratch is disposable. If the checkout has NO
+// node_modules the gate REFUSES instead of running a suite whose red is about its own environment.
+function linkScratchDependencies(root, scratchPath) {
+	const source = join(root, "node_modules");
+	const target = join(scratchPath, "node_modules");
+	if (!existsSync(source)) return { linked: false, source, target, reason: `${root} has no node_modules - the suite cannot resolve its imports there` };
+	try {
+		if (existsSync(target)) return { linked: true, source, target, reason: "node_modules already present in the scratch" };
+		symlinkSync(source, target, "dir");
+		return { linked: true, source, target, reason: `linked ${source} into the scratch` };
+	} catch (err) {
+		return { linked: false, source, target, reason: `could not link node_modules: ${err.message}` };
+	}
+}
+const scratchDeps = linkScratchDependencies(repoRoot, scratch);
+
 const merged = [];
 for (const branch of branches) {
 	const sha = git(repoRoot, ["rev-parse", branch]);
@@ -556,7 +578,15 @@ const skipSummary = () =>
 let suiteScope = null;
 await (async () => {
 	if (wantSuite || wantChangedSuite) {
-	const demoDir = join(scratch, "demo");
+		if (!scratchDeps.linked) {
+			// Not a refusal: a scratch with no dependencies is still a valid measurement for demos that import
+			// nothing external, and refusing here would stop landings that are fine. What IS refused is blaming a
+			// branch for a dependency red - see the classification in recordFailure below (#5793).
+			console.error(`suite environment: node_modules MISSING in the scratch (${scratchDeps.reason}). A demo that fails with ERR_MODULE_NOT_FOUND here is the instrument, not the branch.`);
+		} else {
+			console.error(`suite environment: node_modules linked into the scratch (${scratchDeps.reason})`);
+		}
+		const demoDir = join(scratch, "demo");
 	const allTests = existsSync(demoDir)
 		? readdirSync(demoDir)
 				.filter((n) => n.endsWith(".test.mjs"))
@@ -729,14 +759,21 @@ await (async () => {
 	}
 
 	function recordFailure(result) {
+		// #5793: ERR_MODULE_NOT_FOUND in a scratch with no node_modules is the INSTRUMENT, not the branch. Say
+		// which it is: the runner stops at the FIRST red, and a bare scratch otherwise reads as "this branch is
+		// broken" — which is how a 262/262-green main got refused for a branch that had done nothing wrong.
+		const dependencyRed = !scratchDeps.linked && /ERR_MODULE_NOT_FOUND/.test(result.stderr ?? "");
 		if (!keepScratch) removeScratch();
 		report(
 			{
 				...base,
-				error: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
+				error: dependencyRed
+					? `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) with ERR_MODULE_NOT_FOUND, and the scratch had NO node_modules (${scratchDeps.reason}) — that is the INSTRUMENT, not the branch (#5793). Install the checkout's dependencies (npm ci, then node scripts/sync-pi.mjs --sync) and re-run. main was NOT advanced.`
+					: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
 				merged,
 				suite: suiteResults,
 				suiteSkips,
+				scratchDeps,
 				scratch: keepScratch ? scratch : null,
 			},
 			1,
@@ -792,10 +829,13 @@ await (async () => {
 			report(
 				{
 					...base,
-					error: `STOPPED: demo/${test} failed in the scratch worktree (exit ${run.status}) — main was NOT advanced.`,
+					error: !scratchDeps.linked && /ERR_MODULE_NOT_FOUND/.test(run.stderr ?? "")
+						? `STOPPED: demo/${test} failed in the scratch worktree (exit ${run.status}) with ERR_MODULE_NOT_FOUND, and the scratch had NO node_modules (${scratchDeps.reason}) — that is the INSTRUMENT, not the branch (#5793). Install the checkout's dependencies (npm ci, then node scripts/sync-pi.mjs --sync) and re-run. main was NOT advanced.`
+						: `STOPPED: demo/${test} failed in the scratch worktree (exit ${run.status}) — main was NOT advanced.`,
 					merged,
 					suite: suiteResults,
 					suiteSkips,
+					scratchDeps,
 					scratch: keepScratch ? scratch : null,
 				},
 				1,
@@ -928,6 +968,9 @@ report(
 		// #4936: a subset number with no statement of what it did NOT cover is not a measurement
 		// (#3743's four-state probe, #4858's rule). `null` means the FULL gate ran — every area covered.
 		suiteScope,
+		// #5793: what the scratch's environment actually was. A suite result without this field cannot be
+		// read as a measurement of the tree, because a bare scratch is a different tree.
+		scratchDeps,
 	},
 	0,
 );

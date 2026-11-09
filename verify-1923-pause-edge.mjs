@@ -1,4 +1,4 @@
-﻿// verify-1923-pause-edge.mjs — second-verifier boundary probe for impl-item-1841 @22ae784 (#1923).
+// verify-1923-pause-edge.mjs — second-verifier boundary probe for impl-item-1841 @22ae784 (#1923).
 // Pins the artifact via the throwaway detached worktree ./verify-22ae784 (commit 22ae784).
 // It DOCUMENTS boundary behavior; it is not the artifact's own suite (that is demo/pause.test.mjs).
 // Run: node verify-1923-pause-edge.mjs  (exit 0 = probes behaved as documented)

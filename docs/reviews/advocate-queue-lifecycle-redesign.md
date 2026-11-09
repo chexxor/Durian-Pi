@@ -1,4 +1,4 @@
-﻿# Advocate review — queue-lifecycle redesign (stuck items made impossible)
+# Advocate review — queue-lifecycle redesign (stuck items made impossible)
 
 **Item:** #2985 (read-only review; operator-directed). **Against:** `docs/reviews/queue-lifecycle-redesign.md`
 (@3904020 on main) + `WORK-ITEM-LIFECYCLE.md` + `WORK-ITEM-SCHEMA.md` (R4/R5/§7/§9/§11) +
