@@ -10767,3 +10767,45 @@ closed-storage specimen, the `watch --once` non-zero-with-cause assertion, and
 - **Bar (a) was NOT re-measured by the delegate and is BLOCKED, not unmet:** `node scripts/clockin.mjs` fails without a broker (`Error: Command failed: … cli.mjs status`, inner payload `"error": "read health: timed out awaiting the broker's result"`, exit 1). Re-run the one command once the broker is back; whoever closes #5398 owes that number, and its completion must carry it as `evidence` with `artifact` naming the tree (`LANDED at <sha>`, never bare `done` — D233 (4)).
 
 **(5) HOST SIGNATURE for the window, so runs are attributable.** `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**; **Fedora Linux 45 (Forty Five)**; kernel **`7.2.15-300.fc45.x86_64`**; **node v24.22.1**; **git 2.56.0**. Re-run in this worktree at record time, **exit 0**, byte-identical to D233's — the machine-scoped half of "which run was this".
+
+## D247 — 2026-11-08T08:2xZ: a parked-only seat is woken once per change of its parked set, not once per cooldown
+
+**Decision (proposed, #5740; number minted at land time per #3075).** The wake contract for a seat whose only
+non-terminal rows are `held` or `deferred` is: **wake when that seat's parked set changes**. `selectWakes`
+(`src/driver.mjs:107`, the `hasParked` branch introduced by #4607) keeps its branch, and the broker supplies the
+seat's last-known parked signature — the sorted set of `(itemId, status)` for that seat's parked rows — firing the
+parked wake only when the signature differs. The signature lives on `WakeScheduler` (created once in `cmdServe`,
+`cli.mjs:2023-2025`), not in `selectWakes`, which stays pure so the rule is demo-assertable.
+
+**Context, measured.** Three runs against a throwaway single-seat rig, `DURIG_PROVIDER=faux`, counts from
+`<db>.broker.log`, all exit 0: one held row + `serve --max-duration 120` → **4** wakes, at +0/+30/+60/+90 s;
+two held rows + 60 s → **2** wakes; no queue rows + 60 s → **0**. The cadence is exactly
+`SERVE_SEAT_COOLDOWN_MS = 30_000` (`cli.mjs:2688`). The wake's own submission is a commit that
+`isWakeRelevantCommit` (`src/scheduler.mjs:44`) counts, and the cooldown-suppressed candidate schedules
+`cooldownRevisitAt`, so the seat re-wakes itself with no external activity. The count is per seat, not per row.
+
+**Alternatives considered.** (B) drop the parked wake and surface parked state as an attention kind — fewer turns,
+but `src/attention.mjs` has no kind for a park, so the state becomes invisible rather than quieter. (C) a wake that
+does not trigger a run — the cleanest semantics, unavailable: a submitted user entry drives a task in the pinned
+pi-durable, and adding a non-running input is an upstream change. (A) was chosen because it is one predicate plus
+one field, reversible, and preserves the informative wake #4607 exists to deliver.
+
+**Consequences.** Accepted: a seat may hold stale knowledge of its parked set if nothing changed — it is one
+`peek_queue` call away from refreshing it, and the wake would have carried no new information anyway. Rejected:
+the unbounded alternative, which spends a seat turn every 30 s per parked seat, contends with the single
+generation slot under the shipped `DURIG_MAX_CONCURRENT_SEATS: 1`, erodes the meaning of a wake, and never
+converges. Suppression must be legible: `PARKED-WAKE seat=<n> reason=<set-changed|deduped>`, and the existing
+`WAKE ${name}` line (`src/broker.mjs:1798`) must carry `reason=<queued|stalled-claim|parked>` — today it does not,
+so the parked-vs-work split is not measurable from the log and the defect has to be argued from prose. Release still wakes,
+because `held → queued` is a wake condition; a parked row whose gate cleared but nobody released remains invisible
+— that is the attention-kind gap, deliberately not solved here. The parked wake body must also stop telling the
+seat to "check `status`", a CLI verb no seat tool provides and which the cwd guard makes unreachable from a
+degraded seat cwd; it should name `peek_queue` instead.
+
+**Boundary.** This rules on the parked branch only. Making submission commits non-wake-relevant, or otherwise
+redefining wake-relevance, is a lead ruling and is explicitly not decided here.
+
+**Probe that falsifies it.** `DURIG_PROVIDER=faux node cli.mjs serve --max-duration 120` on a rig where one seat
+holds only a `held` row, then `grep -c 'WAKE <seat>' <db>.broker.log`: **4 today, 1 after the fix**. A
+pure assertion on `selectWakes` must cover both directions — unchanged set → no wake; added or released row →
+wake — because a suppression-only test is vacuous. Full analysis: `docs/reviews/architecture-parked-wake-loop-2026-11-08.md`.
