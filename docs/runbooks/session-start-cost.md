@@ -690,7 +690,7 @@ being decorative:
    the session sees why it failed. `--budget <B>` is the seam that makes the cap bite on demand instead of only once
    the store has grown — that is what let the demo prove the gate without a 561 MB store.
 
-Measured on a **snapshot copy** of the live store (561 MB, 5,636 queue rows, **365** deferred, 9 seats), same tree,
+Measured on a **snapshot copy** of the live store (561 MB, 5,636 queue rows, 365 deferred rows — a measurement, not a ROADMAP id — pitfall 177), same tree,
 same command, both code paths:
 
 | shape | digest bytes | exit | cost (`real`) |

@@ -3415,3 +3415,25 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     "Summarization hit the token limit" records. `docs/evidence/2026-11-08-context-window/milestone-check.mjs` prints
     this floor per family in its `== per-window feasibility ==` block; read the floor line, not just the headroom
     line.
+
+## Operational pitfalls (2026-11-09T06:2xZ, delegate session N15 — the pass that put 42 branches on `main`, and the four places a landing pass goes silently wrong; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+173. **A merge preflight is true only for the `main` it was run against.** At 04:4xZ the backlog measured 43 clean / 19
+    conflicting. Landing changes `main`, so a branch clean at T0 is not clean at T1: after 42 landings the surviving
+    backlog measured **4 clean / 20 conflicting** (`git merge-tree --write-tree main <branch>` exit code). Run the
+    preflight **inside the loop, immediately before each `land`**, not once at the start of the pass:
+    `git merge-base --is-ancestor "$b" main && continue; git merge-tree --write-tree main "$b" >/dev/null 2>&1 || { echo "SKIP $b"; continue; }; node scripts/land.mjs "$b" --db ./selfdev.sqlite`.
+    Stacked branches are handled by the same loop: land the base first and the child re-preflights against a `main`
+    that already contains it (`item-5306` → `item-5834` share a tip; the second reported `ALREADY-LANDED`).
+174. **`scripts/land.mjs`'s text-integrity gate is absolute, not relative to the base, so `main`'s own faults block
+    other branches.** Three branches (`item-5094`, `item-5400`, `impl-item-5094-recut`) were refused with `1 file(s)
+    fail TEXT INTEGRITY — scripts/sync-pi.mjs ... bom: UTF-8 BOM present`, yet `git show main:scripts/sync-pi.mjs |
+    head -c 3 | xxd` → `00000000: efbb bf` — `main` carries the same BOM. A branch that touches a file `main` already
+    ships broken cannot land until the fault is stripped **on `main`**. `node tools/text-integrity-scan.mjs` on HEAD:
+    **842 tracked files read, 46 with faults — 35 no-trailing-newline, 11 BOM**. Strip the 11 BOMs first and three
+    otherwise-clean branches become landable in one pass.
+175. **A batch landing must regenerate the derived manifests, or the suite goes red on files the pass never touched.**
+    After the batch, `node scripts/test.mjs --all --jobs 8` reported **2 reds that did not exist at the baseline**:
+    `demo/test-areas.test.mjs` and `demo/land-changed-suite.test.mjs`, both asserting the same thing — `"demo/keycheck.test.mjs" is on disk but not mapped to any area (add it to demo/test-areas.json)`. The demo came in with `item-5277` (`tools: promote the credential-surface keycheck out of .spike/`) and the manifest is hand-maintained, so the branch could not have updated it. Fix: `git diff --name-only <base> main -- demo | grep 'test.mjs$'` after a batch, then map every new file. The rule that catches it is `demo/test-areas.test.mjs` — run the **full** suite on `main` after a batch; per-area runs cannot see a manifest gap.
+176. **A wedged broker is indistinguishable from an empty queue, and one `kill` restores the read path in under a second.** pid 114848 (started 03:20:33Z, `--max-duration 7200`) logged 1,002 passes, then passed nothing for **3,162 s** while its heartbeat stayed fresh. Every CLI read hung: `cli.mjs queue --status queued` hit a 60 s cap with **0 bytes** and rc 124, while `node -e 'new DatabaseSync("./selfdev.sqlite",{readOnly:true})'` answered in milliseconds. `node tools/broker-serve.mjs --stop` refused; with no `selfdev.sqlite.genlock*` file present, `kill 114848` logged `2026-11-09T06:13:32.508Z EXIT pid=114848 reason=deadline passes=-`. Afterwards: `cli.mjs status` **0.96 s**, `cli.mjs resume` 0.45 s (one stranded run cancelled, `impl` submission 418542), `tools/queue-drain-audit.mjs --db ./selfdev.sqlite` **1.26 s / 6,021 rows**. **A landing pass cannot be gated on queue state until the broker read path is working** — check `heartbeatAt` vs `lastPassAt` before the first `cli.mjs` call, not after.
+177. **Before a pass, run the two guards that cost under a second, and read `git cherry` before calling a branch unlanded.** `node tools/doc-integrity-guard.mjs` exits **1** today: `docs/runbooks/session-start-cost.md cites **365** but docs/ROADMAP.md registers no item 365`. And `item-5488` looked like a conflict branch (`ahead=1`), but `git cherry main item-5488` prints a single `-` — its only patch is already on `main`, so it is a zero-build close, not a landing. `tools/queue-drain-audit.mjs` reports the same shape for the queue: `146 non-terminal LANDING rows — 98 already fully on main (21% of the 277 held = zero-build closable)`.
