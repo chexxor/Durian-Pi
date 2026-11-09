@@ -66,11 +66,29 @@ both graphs** - the npm release and the pinned build carry the same version numb
 is NOT parity; compare **link state and artifact hash**. A version-only diagnose passes silently on the
 broken tree, which is exactly the failure mode this entry exists to stop.
 
-**`sync-pi`'s own report does NOT tell you the state.** The default (drift) command prints
-`"buildTree": null, "built": [], "linked": null` even in a fully built AND linked tree, because
-`scripts/sync-pi.mjs:205-206` fills those fields only when `--sync`/`--update`/`--link` was requested and
-never inspects what is already there. So `built: []` is not evidence of "unbuilt": the file probe above is
-the only reliable detector. (Reporting gap routed as its own row.)
+**`sync-pi`'s own report DOES tell you the state (#5400, fixed 2026-11-07).** It used to print
+`"buildTree": null, "built": [], "linked": null` even in a fully built AND linked tree, because those
+fields were ACTION OUTPUTS - filled only when `--sync`/`--update`/`--link` was requested - so `built: []`
+was not evidence of "unbuilt" and the file probe below was the only detector. They are now MEASUREMENTS
+read back from disk on every path, and the default (drift-only) command answers the question on its own:
+
+```bash
+node scripts/sync-pi.mjs      # buildTree = the HEAD sha it is at, buildTreeAtPin, built = the pin
+                              # packages that HAVE dist/index.js, linked = [{name,target,spec}] for the
+                              # node_modules entries that RESOLVE into vendor/pi-main, dependencySet
+exit 0
+```
+
+Measured in one worktree, same tree both ways: the pre-fix script printed `buildTree: null, built: [],
+linked: null` (exit 0); the fixed one printed `buildTree` = the pinned sha with `buildTreeAtPin: true`,
+`built: 9`, `linked: 9` naming `…/vendor/pi-main/packages/<dir>` for each, `dependencySet: "built-pin"`
+(exit 0). After `--sync` alone in an unlinked tree: `built: 9`, `linked: 0`, `dependencySet:
+"lockfile-released"`.
+
+`dependencySet` is the field to quote in a verdict: a green in a `built-pin` tree and a green in a
+`lockfile-released` tree measure DIFFERENT graphs and are not comparable. What the report does NOT give
+you is artifact IDENTITY - two graphs can carry the same version and different bytes - so the `sha256sum`
+probe above stays the check for "is this the same build"; only the link/built probes moved into the report.
 
 The missing build tree is the usual cause: `--link` has nothing to point at, so it exits 1 with
 `nothing built yet; run --sync before --link`, and provisioning continues on the lockfile by design.

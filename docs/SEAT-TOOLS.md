@@ -51,7 +51,7 @@ cannot drift into a hole.
 `HarnessOptions.env` from `makeSeatEnv`, and fills the roster from the store; `up` narrows
 verifier seats through `scopeVerifierTools`. The test opens by asserting that **cli.mjs contains
 those calls**, because a module that is never installed protects nothing while looking finished,
-and only then proves behaviour: the tool set is read/write/edit/PowerShell + `prepare_workspace` with **no bash**, an
+and only then proves behaviour: the tool set is read/write/edit/**one shell** + `prepare_workspace` + `seat_root` — the shell is whichever one THIS host can start, taken from `src/shellregistry.mjs` (`seatShell`), not a literal. On the original Windows host that was PowerShell and there was **no bash**; on the Linux host this rig now runs on it is bash and there is no PowerShell. `demo/seattools.test.mjs` asserts "exactly one shell tool is bundled, never both candidates" and "no shell is bundled that this host cannot start" (exit 0). an
 author can write inside its root, a verifier **cannot** write through the file API whatever tools it was offered (its shell can write — isolation is a convention, SC2 states the three facts), an
 **unknown conversation fails closed** rather than open, and an escape is refused even for an
 author. A live scratch `up` / `check` / `ps` on a throwaway store confirms the real path still
@@ -161,11 +161,26 @@ insufficient.
 
 Good for the env allowlist and a legible refusal. Never the control (F4).
 
-### Shell is PowerShell, not bash
+### The shell is host-conditional, chosen by one registry
 
-WSL/Docker are host NOs, and native-Windows `bash` means an undeclared Git Bash dependency.
-`createPowerShellTool()` tries `pwsh` then `powershell`. F4's warning applies: a PowerShell
-allowlist is **not disqualifying** *only because* the boundary is the execution environment.
+At the time of the review the seat shell was hardcoded to `createPowerShellTool()` (which tries
+`pwsh` then `powershell`) on the reasoning that WSL/Docker are host NOs and native-Windows `bash`
+means an undeclared Git Bash dependency. That reasoning was true **of Windows** and became a dead
+tool when the rig moved to Linux: neither `pwsh` nor `powershell` exists here, every seat shell call
+was `spawn … ENOENT`, and `bash` — which does exist — was unreachable because nothing registered it
+(ROADMAP 217 / #4849).
+
+Today both surfaces read ONE registry, `src/shellregistry.mjs`: `src/seattools.mjs:227-232` bundles
+`seatShellSelection.tool` and `src/seatguard.mjs:186` builds `SHELL_TOOLS` from `shellToolNames()`,
+so the tool set and the guard cannot disagree about what a shell is. The registry keeps the two
+questions apart — `startOn(host)` (can this shell launch here) and `preferredOn(host)` (which shell
+this host should get) — and carries `programs` as data (#4977), so an instrument may READ
+`vendor/pi-main` but must not GATE a host verdict on its text.
+
+Proved by `node demo/seattools.test.mjs` (exit 0) and `node demo/seatguard.test.mjs` (exit 0);
+`node -e 'import("./src/shellregistry.mjs").then(m=>console.log(m.seatShellSelection.name, m.seatShellSelection.degraded))'` prints the shell this box actually got.
+F4's warning still applies unchanged: whichever shell is registered, an allowlist on it is **not**
+disqualifying *only because* the boundary is the execution environment.
 
 ### The worktree — what it is now for
 

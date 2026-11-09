@@ -85,8 +85,9 @@ Two facts a reader must internalise:
 ## 3. Why `held` exists at all (and why it is the orphan shape)
 
 `held` was added so a "registered, do not start" **backlog/roadmap registration** could sit in the queue
-*without* starving a working seat: it is unclaimable and it does **not** wake anyone
-(`src/rig.mjs:338-349`). That is the correct tool for a genuine backlog row. It is the wrong tool for
+*without* starving a working seat: it is unclaimable, and it never takes the seat's oldest-first claim
+slot (`src/rig.mjs:338-349`). It does still generate a wake — the `parked` one (§4) — so the seat learns
+the row exists instead of polling for it. That is the correct tool for a genuine backlog row. It is the wrong tool for
 "waiting on a thing that will finish by itself", because:
 
 - The hold reason is **free prose** (`heldReason`), so nothing can query whether the reason still holds.
@@ -103,18 +104,36 @@ See [`incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md`](incidents/20
 
 ## 4. Liveness — what actually wakes a seat
 
-The driver wakes a seat only for two conditions (`selectWakes`, `src/driver.mjs:38-72`):
+The driver wakes a seat for three conditions (`selectWakes`, `src/driver.mjs:71-130`):
 
 - **`hasQueued`** — a `queued` item addressed to it (suppressed while `paused`), or
 - **`hasStalledClaim`** — a `claimed` item it holds with no in-flight submission, no live lease, and no
-  operator stop.
+  operator stop,
+- **`hasParked`** — no queued work AND no stalled claim, but the seat has at least one non-terminal
+  `held` or `deferred` row. This is #4607: a parked row is not a claim offer, yet silence left the seat
+  polling, so it gets its own wake that names the state instead of advertising work.
 
-Suppressed if a submission is already pending for the seat's conversation, or the seat is busy. **`held`
-and `deferred` are not wake conditions.** So:
+Each reason carries its own FIXED wake body so the seat is never told to do something its queue refuses:
+`WAKE_CONTENT` (queued), `WAKE_CONTENT_STALLED` (stalled claim), `WAKE_CONTENT_PARKED` (parked rows only)
+— `src/driver.mjs:21-56`. They are constants, not per-item strings, because the wake is committed as a
+user entry and a varying body would zero the prompt cache (ROADMAP 33).
 
-> A `queued` item always eventually wakes its seat. A `held` item never wakes anyone. A `deferred` item
-> wakes the seat it was deferred *to* only if that was a seat (via the enqueued question), or the human
-> via attention.
+**Known wording gap, not fixed here:** the `send_work` tool descriptions in `src/rig.mjs` still say a held
+item is "unclaimable and un-waking" (`src/rig.mjs:635`) and "unclaimable and no wake" (`src/rig.mjs:686`).
+Those two sentences disagree with `selectWakes` above, and the code wins: a held row is unclaimable but does
+produce the `parked` wake. Correcting the tool text is a `rig.mjs` change, so it is routed to the seat that
+owns that file rather than patched in a docs commit.
+
+All three are suppressed if a submission is already pending for the seat's conversation, or the seat is
+busy. Proven by `node demo/held-item.test.mjs` (exit 0), which asserts "a HELD item wakes its seat" and
+that the wake's `reason` is `parked`.
+
+So:
+
+> A `queued` item eventually wakes its seat. A `claimed`-but-stalled item re-wakes its seat. A `held` item
+> wakes nobody to CLAIM — it wakes its seat only to say the row is parked; it becomes claimable through
+> `release_work`. A `deferred` item wakes its seat the same parked way, plus a `QUESTION` item is queued to
+> the seat named in `deferredTo` (§3), and `deferredTo: human` is surfaced by attention (§5).
 
 ## 5. What is surfaced — the attention kinds
 
@@ -275,8 +294,10 @@ grep -nE 'item.status = "(queued|held|deferred|claimed|done|cancelled)"' src/rig
 # 3. release_work is sender-or-recipient, held-only
 sed -n '781,800p' src/rig.mjs
 
-# 4. what wakes a seat (queued or stalled claim only)
-sed -n '38,72p' src/driver.mjs
+# 4. what wakes a seat (queued, stalled claim, or parked rows - expect all three branches)
+sed -n '71,130p' src/driver.mjs
+grep -n 'WAKE_CONTENT' src/driver.mjs   # three fixed bodies, one per wake reason
+node demo/held-item.test.mjs            # exit 0; asserts the parked wake and its reason
 
 # 5. the attention kinds (expect none about parks)
 grep -nE 'kind: "' src/attention.mjs

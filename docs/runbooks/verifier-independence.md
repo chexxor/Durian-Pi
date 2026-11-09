@@ -3,8 +3,8 @@ runbook: verifier-independence
 symptom: "a verifier edited the artefact it was asked to verify (or is tempted to); a verifier's only write is a report; a verify leg must say which kind of independence it actually has when author and verifier run the same model"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-31
-verified_by: scribe
+last_verified: 2026-11-08
+verified_by: verifier
 evidence: "demo/runbook-frontmatter.test.mjs; 2026-10-21 incident: a non-author verifier EDITED the demo to make it pass, then reported exit 0 with `artifact: main` while the fix was UNLANDED (isolation held — the edit was in its own worktree — independence broke). Step-zero gate demonstrated live 2026-10-21: `git merge-base --is-ancestor bbc8e42 main` exit 1 (scribe-item-4447, unlanded) vs main tip exit 0. Re-verified 2026-10-31 in the item-4958 worktree: step-zero gate exit 1 against the unlanded `8fa8f3a2` (item-4931 tip) and exit 0 against the main tip; the re-point instruments measured directly — `demo/deepinfra-catalog.test.mjs` exit 1 (`seat \"qa\" names verifier/mistralai/ministral-3-14b-reasoning, which is not in the fallback catalog`), `demo/local-model-pointer.test.mjs` exit 1 in a checkout with no machine config, `demo/runbook-frontmatter.test.mjs` exit 0"
 check_rule: null
 ---
@@ -110,6 +110,15 @@ git merge-base --is-ancestor <fix-sha> main; echo "exit=$?"
 6. **The isolation rule is necessary but not sufficient.** An edit inside your own item worktree is CORRECT
    location-wise; it does NOT make the edit correct. Two rules, two outcomes: isolation held, independence
    broke. A correct location does not make an act correct.
+7. **AN EVIDENCE COMMAND MUST BE ONE THAT COULD FAIL.** An exit code proves the verdict only if a
+   bad artefact can produce a nonzero exit. `git show <sha>:<path> > /dev/null` can fail only when the
+   object is MISSING — its exit 0 proves the file was READABLE, not CLEAN, so it is not evidence for a
+   "no mojibake" claim. Use a command whose exit status IS the verdict: `node demo/<name>.test.mjs`
+   (exit 0 = pass) or `node scripts/fix-mojibake.mjs <files>` (exit 0 = clean, exit 1 = hit list). To
+   show a guard is load-bearing rather than vacuous, run it once against a deliberately damaged input
+   (`DURIG_ENCODING_EXTRA=<damaged file> node demo/seat-instruction-encoding.test.mjs` -> exit 1). The
+   same shape as a test that reaches a branch without forcing the condition it guards: a check that
+   cannot express the failure it is meant to detect has not checked anything.
 
 ## Verify
 The step-zero gate discriminates: against an UNLANDED sha it exits 1 (report and stop), against a LANDED

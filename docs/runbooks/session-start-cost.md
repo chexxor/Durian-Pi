@@ -15,7 +15,8 @@ evidence: "measured 2026-10-31 on `label-withheld-per-D205` (Linux, node v24.22.
   supported version 1`) — from a worktree this shallow, those steps answer with that error, so run them in the seat root.
   Re-read 2026-11-02 (D189, same box): every Diagnose step above still costs the same, but TWO of its reads now print false verdicts — §5's served-window pair (LM Studio has no instance loaded at all) and `scripts/clockin.mjs`'s `## PROVIDER` line — see §7–§9 below.
   Re-measured 2026-11-02 in #4986: the census is **21,927,512 B**, and there is now a row-scoped read — measured on a fixture the same library wrote, the dump grows with the store (126,629 B at 60 rows, 1,114,112 B at 600 rows) while `queue --id`/`show <id>` stays flat at 2,201 B → 2,202 B: 57.5×, then 506× cheaper.
-  Re-measured 2026-11-04 in #5079, the re-cut of #4955 onto `main` 7567a0ff (devtools, linked worktree, node v24.22.1): the defect is live on that trunk — with `DURIG_DB` at a path that does not exist, `status`, `queue` and `ps` exit **0** and create a **122,880 B** store answering `{ok:true, seats:0}`, and `log lead` creates the same file while exiting 1. At the re-cut all four exit **1**, create nothing, and name `cause: no_store` with the absolute `db`. `node demo/read-no-create-store.test.mjs` exits 0 at the merged tree. The schema-era byte count moved (118,784 B → 122,880 B); the false verdict did not."
+  Re-measured 2026-11-04 in #5079, the re-cut of #4955 onto `main` 7567a0ff (devtools, linked worktree, node v24.22.1): the defect is live on that trunk — with `DURIG_DB` at a path that does not exist, `status`, `queue` and `ps` exit **0** and create a **122,880 B** store answering `{ok:true, seats:0}`, and `log lead` creates the same file while exiting 1. At the re-cut all four exit **1**, create nothing, and name `cause: no_store` with the absolute `db`. `node demo/read-no-create-store.test.mjs` exits 0 at the merged tree. The schema-era byte count moved (118,784 B → 122,880 B); the false verdict did not.
+  Added 2026-11-08 (delegate session N8, Linux Fedora 45 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0): **§27** prices the provider preflight that belongs BEFORE `serve --start` — `GET /props` (with the key) prints `total_slots: 3, n_ctx: 204800` for the seat box in ~2 s, and `broker-serve --status` re-run twice costs ~1 s. The avoided cost is measured: with the model server down inside a live window, `deferred` went 207 → 376 and the store's actionable surface collapsed (`queued 123 → 7`, `claimed 35 → 11`) — ~158 rows parked on a human, none of it visible in the broker log."
 check_rule: "demo/read-no-create-store.test.mjs"
 ---
 
@@ -633,7 +634,43 @@ with the `NEXT-ARCHIVE.md` mention sitting in the header *above* `## NEXT SESSIO
 (pre-change digest: 0 occurrences of `NEXT-ARCHIVE`), and naming the archive inside the `## NEXT SESSION` block makes it
 green again — one line, no re-derivation. Put the archive link in the pointer body, not the header.
 
-## 27. THE DEFERRED LIST IS NOW AGGREGATED, AND THE BYTE BUDGET IS AN EXIT CODE (2026-11-08T01:3xZ, #5398; Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+## 27. BEFORE YOU START A WINDOW: prove the provider answers and count its slots — 3 s, and it prevents a 169-row sweep
+(2026-11-07T23:5xZ, delegate session N8; Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+git 2.56.0)
+
+Two failures this session cost real rows, and both are visible for seconds before `--start`:
+
+```bash
+cd /home/chexxor/Git/Durian-Pi
+# 1. is the seat provider actually answering, and how many requests can it take at once? (needs the key, 2 s)
+set -a; . "$HOME/.config/durig/env"; set +a
+curl -s --max-time 15 -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/props | head -c 200
+#    -> {"default_generation_settings":{"n_ctx":204800,...},"total_slots":3,"model_alias":"qwen3.8-flash-next-iq3_s",...}
+# 2. is the metered verifier answering? re-run `--status` twice before believing one BLOCK (0.5 s each)
+node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK'
+```
+
+Measured at `total_slots: 3` (Linux, same command as the numbers): **3 concurrent** 96-token completions in
+**3,436 ms wall** (individual 3,115 / 3,179 / 3,408 ms) vs **3 sequential in 799 ms** (282 / 257 / 260 ms warm).
+So this box genuinely serves three at once now — and `DURIG_MAX_CONCURRENT_SEATS` does not gate `local/*` (#5488),
+which is why `running` sits at **9-10** while the cap says 1. Read the two numbers together before "wake more seats":
+the slot count is the real concurrency, and the cap is currently a no-op for every seat on this rig.
+
+Why the first read is worth 3 seconds: the operator took the server down mid-window for maintenance and the broker
+kept waking seats. The broker log shows only `WAKE` / `SKIP` / `STRANDED settled=N`; the failure is only visible in
+`cli.mjs status` attention — `last_run_failed: stranded: Connection error.` + `repeated_failure: 5 consecutive
+failed runs` for **9 of 12 seats** — and the supervisor then deferred **169 rows to the human in 25 seconds**
+(`deferred 207 -> 376`), including the rows the window existed to land. Repairing that costs a seat turn per lane,
+so the 3-second preflight is the whole saving.
+
+What it does not cover: `GET /v1/models` without the key answers `authentication_error: missing or wrong API key`,
+which is the same string as the unkeyed-broker incident (pitfall 102). Always probe with the key.
+
+A probe that does both reads and adds the latency shape is at
+`.spike/delegate-20261107g/provider-slots-probe.mjs` — **unpromoted** (gitignored, so it may be gone; `docs/NEXT.md`
+(F) asks `lead` for the row that moves it into `tools/`). Measured with it at 00:5xZ on this box: `slots 3`,
+`qwen3.8-flash-next-iq3_s`, `n_ctx 204800`, 3 concurrent **2,306 ms** vs 3 sequential **905 ms**.
+## 28. THE DEFERRED LIST IS NOW AGGREGATED, AND THE BYTE BUDGET IS AN EXIT CODE (2026-11-08T01:3xZ, #5398; Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
 
 §26's diagnosis shipped. Two changes in `scripts/clockin.mjs`, and one rule about how to make a byte guard stop
 being decorative:
@@ -653,7 +690,7 @@ being decorative:
    the session sees why it failed. `--budget <B>` is the seam that makes the cap bite on demand instead of only once
    the store has grown — that is what let the demo prove the gate without a 561 MB store.
 
-Measured on a **snapshot copy** of the live store (561 MB, 5,636 queue rows, **365** deferred, 9 seats), same tree,
+Measured on a **snapshot copy** of the live store (561 MB, 5,636 queue rows, 365 deferred rows — a measurement, not a ROADMAP id — pitfall 177), same tree,
 same command, both code paths:
 
 | shape | digest bytes | exit | cost (`real`) |
@@ -682,4 +719,3 @@ while the rig is busy is a gate that gets skipped.
 node demo/clockin-digest.test.mjs            # exit 0, prints "… NON-VACUOUS at a 160-row deferred backlog …"
 node scripts/clockin.mjs --db ./selfdev.sqlite | wc -c   # ≤ 20000 on the live store; exit 1 if it is not
 ```
-
