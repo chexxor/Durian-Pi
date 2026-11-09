@@ -56,12 +56,17 @@ wake/compaction/reset; **#5936/#5937** `impl` the `beforeCompact` hook; **#5939/
 3. **The compaction fallback fix** #5785 — the code is on `main` now; the row is `deferred` and its own subject reads
 "nesting DONE on item-5306", so closing it is a zero-build act for its owner, not work.
 
-**Unlanded backlog (measured 07:0xZ against `21114c36`): 5 refs, and only one is a merge job.** Four are
+**Unlanded backlog (measured 07:1xZ against `4a29a116`): 5 refs, and only one is a merge job.** Four are
 already on `main` **by patch** — `git cherry main item-5094` prints two `-`, `item-5488` and `item-5686` one
 `-` each — so they are zero-build closes for their owners, not merges. `verify-5180` merges clean but is a verify-tree
 snapshot (189 files, −18,269 lines): never merge a snapshot (branch-cleanup step 4), its disposition is the operator's.
 The one real conflict is `wip/seat-prompt-files` (`cli.mjs`, `prompts/impl.md`, `rig.selfdev.json`) — a **re-cut job
-for its author seat** (land.md Do 0b), left unlanded on purpose.
+for its author seat** (land.md Do 0b), left unlanded on purpose. `item-5094`'s **worktree** is now released: its lock
+reason was `park marker (#5161/#5175): item-5094 @e173f397 is NOT content-present on main; landing entry routed to pm
+as #5173 - do not reap until landed/dispositioned` — both patches are on `main` (`git cherry main item-5094` → two
+`-`) and #5173 is `done`, so the lock's own release condition is met. `git branch -d item-5094` still refuses ("not
+fully merged") because the tip is patch-applied rather than an ancestor: `git branch -D item-5094` is its owner's
+one-line close, not the delegate's.
 **Six landed rows are still non-terminal** and their owners must close them (the delegate claims nothing): #5362,
 #5491, #5501, #5699 deferred; #5820 claimed; #5912 held. 36 of the 42 landed rows are `done`.
 
