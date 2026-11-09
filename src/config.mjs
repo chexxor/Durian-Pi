@@ -148,6 +148,13 @@ export const CONFIG_KEYS = [
 	// `_USD_CACHE_READ` / `_AS_OF`, then `<PREFIX>PRICE_JSON` or the shared `DURIG_PRICE_JSON`. Note the spelling:
 	// the cache-read key is `..._PRICE_USD_CACHE_READ`; registering a near-miss name would create an INERT key that
 	// reads as priced and is not, which is exactly the half-armed failure ROADMAP 272 records.
+	// THE SAME FAMILY FOR THE `local` PROVIDER (RM-323 / ROADMAP 323), which was MISSING. The shape of the bug is the
+	// rule: `createLocalProvider` refuses an unpriced metered family with a remedy saying `declare
+	// DURIG_LOCAL_PRICE_USD_IN/_OUT`, and the loader then refused THAT key as `unknown config-file key(s)` on EVERY
+	// verb — so the remedy was unactionable in a file, the price could live only in the launch environment, and a
+	// broker started without `--env-file` registered NO model row and darkened every author seat. THE KEYS A REFUSAL
+	// TELLS YOU TO DECLARE MUST BE THE KEYS THE LOADER ACCEPTS; `demo/config-local-price.test.mjs` pins that equality
+	// for BOTH families against `priceKeyNames()` (src/providers/local.mjs), the names `declaredPrice` reads.
 	// WHY THE ASYMMETRY IS INTENTIONAL: a config key is auditable because it is IN a file (`durig.config.json` is
 	// gitignored but still inside the tree — gitignored is not outside), and a credential is auditable because it is
 	// NOT in a file. So the price of a class belongs to the inventory and the KEY that pays it does not; the value
@@ -158,6 +165,11 @@ export const CONFIG_KEYS = [
 	"DURIG_VERIFIER_PRICE_USD_CACHE_READ",
 	"DURIG_VERIFIER_PRICE_AS_OF",
 	"DURIG_VERIFIER_PRICE_JSON",
+	"DURIG_LOCAL_PRICE_USD_IN",
+	"DURIG_LOCAL_PRICE_USD_OUT",
+	"DURIG_LOCAL_PRICE_USD_CACHE_READ",
+	"DURIG_LOCAL_PRICE_AS_OF",
+	"DURIG_LOCAL_PRICE_JSON",
 	"DURIG_PRICE_JSON",
 	// Where a metered run writes its bill (#5099 scoping key; `tools/model-probes/metered.mjs:41`, `cli.mjs:292`).
 	"DURIG_SPEND_LEDGER",

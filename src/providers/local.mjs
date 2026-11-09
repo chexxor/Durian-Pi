@@ -37,6 +37,9 @@ export const VERIFIER_PROVIDER_ID = "verifier";
 export const LOCAL_ENV_PREFIX = "DURIG_LOCAL_";
 export const VERIFIER_ENV_PREFIX = "DURIG_VERIFIER_";
 
+/** The one price-catalog key shared by every family (a DeepInfra-shaped snapshot, stamped `fetchedAt`). */
+export const SHARED_PRICE_JSON_KEY = "DURIG_PRICE_JSON";
+
 /** Registration order: authors first, verifiers second. */
 export const LOCAL_ENV_PREFIXES = [LOCAL_ENV_PREFIX, VERIFIER_ENV_PREFIX];
 
@@ -92,19 +95,53 @@ export const LOOPBACK_PLACEHOLDER_KEY = "no-key-required";
  * `data[].metadata.pricing`, stamped `fetchedAt`). No third vocabulary: the caps keep their own keys and prices
  * keep these.
  */
+/**
+ * THE PRICE KEY NAMES FOR ONE PROVIDER FAMILY - the single source (RM-323).
+ *
+ * Before this, the names existed three times: inline in `declaredPrice`, inline in the refusal text, and inline in
+ * `CONFIG_KEYS`. The refusal told you to `declare DURIG_LOCAL_PRICE_USD_IN/_OUT` while the loader refused that exact
+ * key as `unknown config-file key(s)`, so the config-file route the endpoint-class rule demands was a dead end and a
+ * LAN-served family could only be armed through the launch environment. A name that exists only in a message is an
+ * instruction no config file can obey.
+ *
+ * So the resolver reads the fields of this object and the refusal quotes the SAME fields; `demo/config-local-price
+ * .test.mjs` asserts every key a remedy names is present in `CONFIG_KEYS` for BOTH families, which is what makes the
+ * mismatch impossible to reintroduce silently. Price keys are config-FILE keys (a price is auditable because it is in
+ * a file); the credential keys stay out of the inventory - see the note at the price block in `src/config.mjs`.
+ */
+export function priceKeysForPrefix(prefix) {
+	return {
+		in: `${prefix}PRICE_USD_IN`,
+		out: `${prefix}PRICE_USD_OUT`,
+		cacheRead: `${prefix}PRICE_USD_CACHE_READ`,
+		asOf: `${prefix}PRICE_AS_OF`,
+		json: `${prefix}PRICE_JSON`,
+		sharedJson: SHARED_PRICE_JSON_KEY,
+	};
+}
+
+/** Every price key of every locally-served family, plus the shared snapshot key. Consumers that must accept what a
+ * remedy tells you to write (the config-file inventory) read this list. */
+export function priceKeyNames(prefixes = LOCAL_ENV_PREFIXES) {
+	const names = new Set([SHARED_PRICE_JSON_KEY]);
+	for (const prefix of prefixes) Object.values(priceKeysForPrefix(prefix)).forEach((k) => names.add(k));
+	return [...names];
+}
+
 export function declaredPrice(cfg, spec) {
 	const prefix = spec?.prefix ?? LOCAL_ENV_PREFIX;
-	const inU = Number(cfg?.[`${prefix}PRICE_USD_IN`]);
-	const outU = Number(cfg?.[`${prefix}PRICE_USD_OUT`]);
+	const keys = priceKeysForPrefix(prefix);
+	const inU = Number(cfg?.[keys.in]);
+	const outU = Number(cfg?.[keys.out]);
 	if (Number.isFinite(inU) && Number.isFinite(outU) && inU >= 0 && outU >= 0) {
-		const cacheU = Number(cfg?.[`${prefix}PRICE_USD_CACHE_READ`]);
+		const cacheU = Number(cfg?.[keys.cacheRead]);
 		return {
 			price: { in: inU, out: outU, cacheRead: Number.isFinite(cacheU) && cacheU >= 0 ? cacheU : inU },
 			priceSource: `${prefix}PRICE_USD_IN/OUT`,
-			priceAsOf: cfg?.[`${prefix}PRICE_AS_OF`] ?? null,
+			priceAsOf: cfg?.[keys.asOf] ?? null,
 		};
 	}
-	for (const key of [`${prefix}PRICE_JSON`, "DURIG_PRICE_JSON"]) {
+	for (const key of [keys.json, keys.sharedJson]) {
 		const file = cfg?.[key];
 		if (!file || !existsSync(file)) continue;
 		try {
@@ -242,6 +279,7 @@ export function declaredLocalWindow(specs, modelKey) {
  */
 export function createLocalProvider(spec, { createProvider, api, env, report } = {}) {
 	const metered = endpointClass(spec.baseUrl) === "metered";
+	const keys = priceKeysForPrefix(spec.prefix ?? LOCAL_ENV_PREFIX);
 	const keyEnv = spec.apiKeyEnv ?? `${spec.prefix ?? LOCAL_ENV_PREFIX}API_KEY`;
 	const declaredKey = env?.(keyEnv) ?? process.env[keyEnv];
 	const keyPresent = Boolean(declaredKey && String(declaredKey).trim());
@@ -250,7 +288,9 @@ export function createLocalProvider(spec, { createProvider, api, env, report } =
 	if (metered && !price)
 		causes.push({
 			cause: "metered-endpoint-unpriced",
-			fix: `declare ${spec.prefix ?? ""}PRICE_USD_IN/${spec.prefix ?? ""}PRICE_USD_OUT (0 is a legitimate declared price) or point ${spec.prefix ?? ""}PRICE_JSON / DURIG_PRICE_JSON at a dated catalog snapshot`,
+			// The names come from `priceKeysForPrefix`, i.e. from the keys `declaredPrice` actually reads, so the
+			// remedy can never instruct a key the loader rejects (RM-323).
+			fix: `declare ${keys.in}/${keys.out} (0 is a legitimate declared price; both are config-file keys) or point ${keys.json} / ${keys.sharedJson} at a dated catalog snapshot`,
 		});
 	if (metered && !keyPresent)
 		causes.push({ cause: "metered-endpoint-unkeyed", fix: `set ${keyEnv}; the placeholder credential is for loopback servers only` });
