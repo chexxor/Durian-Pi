@@ -203,7 +203,7 @@ widens a live subject.** Build that invariant into the demo, not into prose.
 | id | task | owner | depends on | acceptance | loop |
 |---|---|---|---|---|---|
 | D1 | Choose the mediation shape: (a) allowlist proxy outside the sandbox, (b) in-process guard on the tool path, (c) OS-level backstop plus guard, (d) network=none plus host proxy. Each option gets a written pro/con and a named failure mode | lead + security | A2 | the decision is recorded in `docs/DECISIONS.md` with the rejected options named | — |
-| D2 | The escape probe suite: the six escapes the position doc names (read a key outside the root, TCP to an ungranted loopback port, TCP to a LAN address, `git config --global core.hooksPath`, `rm -rf` a sibling worktree, an npm lifecycle script writing outside) — recorded as a baseline that **passes today** | qa | — | `node demo/egress-escape-baseline.test.mjs` prints, per probe, today's verdict | <1 s |
+| D2 | The escape probe suite: the nine escapes the baseline names (read a key outside the root, TCP to an ungranted loopback port, TCP to a LAN address, the link-local metadata endpoint, `git config --global core.hooksPath`, `rm -rf` a sibling worktree, an npm lifecycle script writing outside, a redirect outside the root, `git push`) — recorded as a baseline that **passes today** | qa | — | `node demo/egress-escape-baseline.test.mjs` asserts, per probe, the verdict in `escape-baseline-2026-11-09.txt` | <1 s |
 | D3 | Implement the chosen shape; the same suite must now block, each block writing an audit row | impl | D1, D2, A2 | the suite flips from ALLOWED to REFUSED on at least the loopback and LAN probes | <1 s |
 | D4 | State, in the product docs, what a seat shell can reach — re-tested, not re-asserted | scribe | D3 | a runbook section whose numbers come from the suite's output | — |
 
@@ -256,8 +256,8 @@ the write gate needs the mediation substrate that A and C build.
    complete" is undefined.
 2. **Choose the egress shape** (D1). This is a product-posture decision: deny-by-default with an allowlist is a
    different product than permissive-with-audit.
-3. **Arm the verifier** (`DURIG_VERIFIER_API_KEY`). Without it, Package E cannot start and criterion C7 has no
-   metered model to measure against.
+3. **Arm the verifier** (`DURIG_VERIFIER_API_KEY`). Without it, Package E cannot start, and the declared second
+   family (`verifier/openai/gpt-oss-120b`) never registers a model row, so independence stays a declaration.
 4. **Grant `DURIG_EXTENSIONS`** for the continuity extension already built (see
    `docs/runbooks/continuation-notes.md`). That is the closing act of the current milestone, not the next one.
 
@@ -267,7 +267,10 @@ the write gate needs the mediation substrate that A and C build.
 
 - The **cost** of a spawn-time wrapper on this host has not been measured. The research report says Landlock is
   unprivileged and self-imposed; no probe on this box has run one.
-- Whether the six named escapes actually pass today has been asserted by the position doc, not yet encoded as a
-  runnable suite. D2 is the row that turns the assertion into an instrument.
+- The escape set **is** now a runnable instrument — `docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs`
+  (0.24 s, read-only, committed baseline in the same directory) — but it is a *printed table*, not a demo wired
+  into `scripts/test.mjs`. Until it is a demo, an enforcement change can silently move it. D2 is the row that
+  closes that.
 - The per-seat cache numbers above are aggregated per conversation id, not per seat name; the mapping from
-  conversation to seat is not currently exposed by a cheap read. That is a small instrumentation gap worth a row.
+  conversation to seat is not currently exposed by a cheap read. That is a small instrumentation gap worth a row
+  (ROADMAP **349**).
