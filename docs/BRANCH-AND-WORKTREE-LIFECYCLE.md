@@ -207,7 +207,38 @@ ARRANT facts the audit needs before believing that row (all quoted from src/suit
 THE RULE: `fail=2` was true three times and meant three non-identical things; `environmental=1` is the
 same shape one column over, except that a non-failing bucket reads all-clear without an audit. Any suite
 report MUST carry the runner's per-row lines (stderr), because that is where the name and reason live:
-`ENV demo/<name> - <reason>`. A count without its rows cannot see the tree-dependent flips recorded by the sibling trap 6.3 (qa-item-4530) the same
+`ENV demo/<name> - <reason>`.
+
+**CAVEAT the bucket needs before the row is believed: the classifier names an ABORT SHAPE, not a CAUSE —
+fail-fast `0xC0000409` is NOT provably starvation.** Quoted line-for-line from `src/suite.mjs` as read in
+this tree:
+- `src/suite.mjs:23-24` — the map labels both forms of the code as
+  `"STATUS_STACK_BUFFER_OVERRUN/fail-fast (0xC0000409)"`. The label itself places this code in a
+  DIFFERENT NT exception family from `STATUS_COMMITMENT_LIMIT` (`src/suite.mjs:21-22`): fail-fast is a
+  crash guard, not a headroom signal.
+- `src/suite.mjs:49-50` — `if (code !== null && ENVIRONMENTAL_ABORT_CODES.has(code)) return { kind: "environmental", ... }`.
+  That arm consults **the number only**: no signal, no stderr, no headroom measurement is consulted.
+- `src/suite.mjs:52` — the only arm that even quotes a cause is the stderr match, and it is the narrow
+  regex at `src/suite.mjs:35` (`/STATUS_COMMITMENT_LIMIT|C000012D|commitment limit|C0000409|page file is too small/i`),
+  which matches the CODE TEXT as readily as a starvation message.
+
+So an `ENV ... - STATUS_STACK_BUFFER_OVERRUN/fail-fast (0xC0000409)` row proves exactly one thing: the
+runner never reached a verdict, so the run is not green. It does NOT prove the box ran out of commit
+headroom. Report it as `fail-fast (0xC0000409), cause UNESTABLISHED`, never as "starvation" — the same
+rule the queue already ratified: a cheap signal may ACCEPT but must never DECIDE (#3575), and a produced
+value must DEGRADE TO UNKNOWN, NOT EMPTY (#4058). What would actually establish the cause, in order of
+strength: (a) the same demo green on the SAME tree at lower concurrency in the same window — the
+`--jobs 24` vs 8-job pair above is that control, and it is the only one the rig runs today; (b) a stderr
+line from THAT demo matching `src/suite.mjs:35`; (c) a direct headroom measurement, which does not exist
+yet (the pre-flight probe is registered and unlanded as #2288). Until (c) exists the bucket is a
+candidate list, not a diagnosis.
+
+**Re-verify this caveat (run, and name the exit code):**
+```bash
+sed -n '21,24p;49,50p;52p' src/suite.mjs                                        # the by-number arms, verbatim
+grep -niE 'cause UNESTABLISHED|ABORT SHAPE, not a CAUSE' docs/BRANCH-AND-WORKTREE-LIFECYCLE.md   # exit 0
+```
+A count without its rows cannot see the tree-dependent flips recorded by the sibling trap 6.3 (qa-item-4530) the same
 way it cannot detect a member that died of a resource abort.
 ### 6.3 Tree-dependent reds are deterministic: two named tests, two measured rates (2026-10-21)
 

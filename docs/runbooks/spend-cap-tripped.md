@@ -1,11 +1,11 @@
 ---
 runbook: spend-cap-tripped
-symptom: "an item parks with reason `spend_cap_exceeded`; a seat says `spend_cap_exceeded (spend_cap_call_usd: 0.05)` instead of sending; a model-probe refuses before sending with `spend cap ... would be exceeded`"
+symptom: "an item parks with reason `spend_cap_exceeded`; a seat says `spend_cap_exceeded (spend_cap_call_usd: 0.05)` instead of sending; a model-probe refuses before sending with `spend cap ... would be exceeded`; a seat's compaction fails with `Summarization failed: spend_cap_exceeded` and its context window never settles"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-04
-verified_by: impl
-evidence: "#5047 (commits 6f3e14ba f88137b3 68bc73cb fb43b61e 894dac60 2142eafa 8740d3a3 4f6674b7 e5308cc1); `node tools/model-probes/spend-cap-acceptance.mjs --snapshot .spike/5015/catalog-2026-11-04.json` exits 0, 11/11"
+last_verified: 2026-11-09
+verified_by: scribe
+evidence: "#5047 (commits 6f3e14ba f88137b3 68bc73cb fb43b61e 894dac60 2142eafa 8740d3a3 4f6674b7 e5308cc1); `node tools/model-probes/spend-cap-acceptance.mjs --snapshot .spike/5015/catalog-2026-11-04.json` exits 0, 11/11. Re-verified 2026-11-09T03:4xZ in worktree item-5912: `node demo/spend-cap-guard.test.mjs` exit 0; `grep -n SPEND_CAP durig.config.default.json` -> lines 10-12 (0.05 / 0.10 / 4.00)"
 check_rule: "demo/spend-cap-guard.test.mjs; demo/probe-metered-ledger.test.mjs"
 ---
 
@@ -17,7 +17,8 @@ Something stopped rather than failed. The observable forms:
 - an item is parked with `reason: spend_cap_exceeded`, and its `attention_reason` row says which cap;
 - a seat's last assistant message is `spend_cap_exceeded (spend_cap_call_usd: 0.05; spent 0.0412; projected 0.0610): refusing a request that would cost more than the cap …`;
 - a probe prints `REFUSED before sending: spend cap spend_cap_store_usd (4) would be exceeded` and made **no** request;
-- `durian-pi` notices include kind `spend_cap_exceeded`.
+- `durian-pi` notices include kind `spend_cap_exceeded`;
+- a seat's compaction reports `Summarization failed: spend_cap_exceeded ... would cross DURIG_SPEND_CAP_RUN_USD $0.1000 (this process, spent $0.098924)` — see "The compaction shape: money, not the window" below.
 
 ## Impact
 Nothing is broken and nothing is retrying. A cap stop is **non-retryable** by design — it is named with
@@ -51,6 +52,33 @@ not from memory, so an interrupted run still reports what it spent). Read the re
 not an estimate: an unpriced metered model projects to `Infinity`, which is why a cap fires on a row whose price is
 missing rather than sending an unpriced request. `unknownCostRows` is not missing money — it is money we cannot
 CONFIRM, and it makes a cumulative cap a lower bound. A non-zero count is itself something to fix.
+
+## The compaction shape: money, not the window
+
+A seat that "cannot compact" is most often stopped by the **run** cap, not by the context window. Grouping the 426
+failed `pi.compaction` records on `./selfdev.sqlite` (`docs/SELFDEV.md` pitfall 146, measured 21:4xZ): **209** are
+`Summarization failed: spend_cap_exceeded ... would cross DURIG_SPEND_CAP_RUN_USD $0.1000` and **214** are
+`Summarization hit the token limit; the summary is incomplete`. Those are **two different causes with two different
+owners** — the second belongs to ROADMAP 331 (#5785, #5821) — so reading one as the other sends a money problem to a
+plumbing fix.
+
+Why it bites a long-lived broker specifically: the caps are the defaults in `durig.config.default.json`
+(`DURIG_SPEND_CAP_CALL_USD 0.05`, `DURIG_SPEND_CAP_RUN_USD 0.10`, `DURIG_SPEND_CAP_STORE_USD 4.00`, lines 10-12), and
+the run axis is **per process**. Once a broker has spent $0.098924 of its $0.10, every compaction on every seat in
+that process is refused while the window keeps growing — the seat can never settle. Check the cap before blaming the
+model.
+
+**A reserved compaction slice is DECIDED but NOT BUILT.** Lead ruled (#5912, from #5851) that compaction
+summarisation gets a slice carved *inside* the run cap and fails **loudly** when the slice is exhausted — not an
+exemption (that would leave only the store pool, a lifetime bound on a file rather than a bound on a process) and not
+a route to the zero-priced `local/*` family (that trades money starvation for slot contention under
+`DURIG_MAX_CONCURRENT_SEATS`, and the local server IGNORES the requested model id — measured, a completion naming
+`swift-1.5` returned `qwen3.8-flash-next-iq3_s` — so the summarisation model cannot be pinned). As of this commit
+there is no slice in the code: `refuseCall` (`src/providers/spend.mjs:95-127`) tests exactly three axes — call, run,
+store — and `grep -rni "slice" src/providers/spend.mjs src/readapi.mjs scripts/clockin.mjs` returns only JavaScript
+`.slice()` calls (5 hits, all string truncation), no compaction budget and no remaining-balance line in any digest. Do not write a probe, a config key or an expectation that
+assumes one exists; the decision entry is held until the implementation lands and its D-number is minted at land
+time (#3075), never hardcoded in a branch.
 
 ## Do
 1. Decide which of the two questions you are answering: *is the price wrong*, or *is the job too big*? A cap that

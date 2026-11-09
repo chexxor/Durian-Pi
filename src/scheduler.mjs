@@ -67,6 +67,11 @@ export class WakeScheduler {
   #inFlight = false;
   #lastStartMs = null;
   #lastWakeBySeat = new Map();
+  // #5740 option A: the parked SET each seat was last told about. It lives HERE, on the scheduler instance
+  // created once in cmdServe, so a harness reopen (broker recovery) does not lose it and the selection
+  // predicate in src/driver.mjs stays pure. Losing it on restart is acceptable by ruling: one
+  // informational wake per broker lifetime per unchanged set is not a defect.
+  #parkedSignatures = new Map();
 
   constructor({ minIntervalMs = 500, seatCooldownMs = 0, now = Date.now } = {}) {
     if (minIntervalMs < 0) throw new Error("minIntervalMs must be >= 0");
@@ -127,6 +132,27 @@ export class WakeScheduler {
 
   endPass() {
     this.#inFlight = false;
+  }
+
+  /**
+   * Did this seat's parked SET change since the last wake? Returns true the FIRST time a signature is
+   * seen (and records it), false on every identical repeat. Empty signature (nothing parked) never counts
+   * as a change - there is nothing to tell the seat.
+   *
+   * @param {string} seat
+   * @param {string} signature from parkedSignature() in src/driver.mjs
+   */
+  parkedChanged(seat, signature) {
+    if (!signature) return false;
+    const prev = this.#parkedSignatures.get(seat);
+    if (prev === signature) return false;
+    this.#parkedSignatures.set(seat, signature);
+    return true;
+  }
+
+  /** Read-back for tests and for the log: what the scheduler last saw for a seat. */
+  parkedSignatureOf(seat) {
+    return this.#parkedSignatures.get(seat) ?? null;
   }
 
   /** Per-seat backoff: has `name`'s cooldown elapsed since its last wake? */

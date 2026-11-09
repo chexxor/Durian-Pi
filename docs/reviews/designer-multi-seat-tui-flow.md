@@ -1,4 +1,4 @@
-﻿# Designer consultation — the intuitive user flow for the multi-seat TUI
+# Designer consultation — the intuitive user flow for the multi-seat TUI
 
 **Status:** consultation delivered; a proposal for pm to sequence and lead/operator to rule on.
 Not a ruling, and not yet implementation intent. Item: #2629 (re-registration of the cancelled #2103).
