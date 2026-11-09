@@ -1,4 +1,4 @@
-﻿# Designer proposal — the surface/UX for "waiting on the operator" (visibility + answering)
+# Designer proposal — the surface/UX for "waiting on the operator" (visibility + answering)
 
 **Status:** design exploration delivered to pm. This is the SURFACE half of the sibling set
 (pm's explore intake, operator directives 2026-10-19 §3): advocate owns the workflow fit,

@@ -3,9 +3,9 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-21
-verified_by: delegate
-evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean."
+last_verified: 2026-11-09
+verified_by: scribe
+evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders)."
 check_rule: null
 ---
 
@@ -67,6 +67,22 @@ the original — and cancel the other citing the shared tip. Never rebase, verif
 land both: two claims on one tip will eventually produce two landing entries for
 the same content, and the second one lands a duplicate. *Worked example:*
 `impl-item-1151` and `impl-item-1261` both resolve to tip `85c5d95f6`.
+
+**Step 0e — DECISIONS-number pre-flight before anything appends a `D` entry.** A branch
+that adds a `## D<number>` heading must be checked against `main` **before** it lands,
+because the number is minted at land time, not in the branch (#3075): a branch that hardcodes a
+number collides with whatever gets minted first. Two read-only probes, both on `main`:
+
+```bash
+git show main:docs/DECISIONS.md | grep -oE '^## D[0-9]+' | sort | uniq -d   # every number used twice
+git show main:docs/DECISIONS.md | grep -nE '^## (D###|D-<mint>)'           # every un-minted placeholder
+```
+
+Both ran on 2026-11-09, exit 0 each: the first printed `## D91` and `## D111`–`## D120` (**11
+collisions**), the second printed **5** placeholder headings. If either prints anything, the landing
+pass must mint the collisions in issue order **before** the new entry is appended — an append on top
+of a collision leaves every later `D111` citation ambiguous, and the ambiguity is invisible until two
+seats cite different entries for the same number.
 
 **Step 0d — a rebase is safe ONLY where a demo can catch the error it
 introduces.** Before attempting a rebase, ask what would FAIL if the resolution
@@ -173,6 +189,12 @@ ledger, never re-derived**:
 grep -E 'architect-item-3005|security-item-1475' docs/DISPOSITIONS.md  # both rows present (CANCEL)
 git diff --exit-code docs/DISPOSITIONS.md                              # append-only: a row added this pass, none edited
 ```
+**The minting pre-flight (Step 0e) is present and runnable:**
+```bash
+grep -c 'Step 0e — DECISIONS-number pre-flight' docs/runbooks/branch-cleanup.md   # >= 1
+git show main:docs/DECISIONS.md | grep -oE '^## D[0-9]+' | sort | uniq -d          # exit 0 while collisions exist
+```
+
 **The three disposition rules (Step 0b / Step 0c / Step 0d) are present:**
 ```bash
 grep -c 'Step 0b — a SEMANTIC conflict is NOT a "pending rebase"' docs/runbooks/branch-cleanup.md  # >= 1

@@ -1,4 +1,4 @@
-﻿import { refusalFor } from './src/confine.mjs';
+import { refusalFor } from './src/confine.mjs';
 const D = String.fromCharCode(45, 68);
 const cases = [
   ['git -C x ' + 'branch ' + D + ' foo', 'want-block'],
