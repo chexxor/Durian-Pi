@@ -734,6 +734,12 @@ Both are read-only (one opens the store `readOnly: true`, the other imports two 
 nothing), so they work with the broker down, no key, no model. `docs/MILESTONES.md` is the ledger they report
 into: previous milestone, current milestone, next milestone, and the command that decides each.
 
+**Registered intent that is not yet work, measured in one second.** `node tools/roadmap-queue-coverage.mjs`
+(1.0 s, one queue read) prints: queue rows 6,021 — `done=4154, cancelled=873, held=461, deferred=383,
+claimed=12, queued=138`; **CLAIMABLE 150**; registered items ≥200: **150**, named by ≥1 row: **54**, with **no**
+row naming them: **96**. The last number is the one a session should not guess: roadmap intent without a queue row
+is not work, and `cli.mjs status` does not show it. (Measured 2026-11-09; pitfall **207**.)
+
 **The one number these do NOT give you, and the read that does.** Cache economics are not in the spend ledger —
 `selfdev.sqlite.spend.jsonl` records `cached_tokens: 0` on all 2,030 rows because a row is only written for a
 *metered* endpoint. The durable entries carry the real usage. `.spike/delegate/usage-census.mjs` reads it in about
