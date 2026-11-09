@@ -10809,3 +10809,37 @@ redefining wake-relevance, is a lead ruling and is explicitly not decided here.
 holds only a `held` row, then `grep -c 'WAKE <seat>' <db>.broker.log`: **4 today, 1 after the fix**. A
 pure assertion on `selectWakes` must cover both directions — unchanged set → no wake; added or released row →
 wake — because a suppression-only test is vacuous. Full analysis: `docs/reviews/architecture-parked-wake-loop-2026-11-08.md`.
+
+## D248 — 2026-11-09T07:0xZ: a landing pass **composes** a journal conflict and mints the D-number at land time; it never picks a side in the shared tree (delegate acting on the operator's "run the landing pass now"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**What was decided.** When `scripts/land.mjs` reports a conflict in an append-only journal — `docs/DECISIONS.md`,
+`docs/SELFDEV.md`, `docs/NEXT.md`, a runbook — the resolution is a **union**: main's already-landed content stays,
+the branch's new entry is appended, and any placeholder or stale number the branch carried is **minted at land time**
+from the next free slot in the ledger. Where the branch proposes code for a behaviour `main` already ships, main's
+version wins and the branch's test is rewritten to assert the shipped shape.
+
+**Why this and not "choose one side".** Three facts measured in the pass. (1) `scripts/land.mjs` merges in a scratch
+detached worktree and advances `main` only by a clean fast-forward, so a conflict is a *stop*, not an accident: it
+prints `STOPPED: 'item-5400' conflicts (demo/syncpi.test.mjs, scripts/sync-pi.mjs). The merge lives in the scratch
+worktree — the SHARED tree was never touched and is not mid-merge`. Choosing a side in the shared tree would break
+the invariant the gate exists to protect. (2) Journal entries are not alternatives; they are records. `item-5400` is
+the proof: `#5094`'s pin-ref/drift fields and `#5282`'s read-back measurement are both real features, and picking one
+would have deleted a shipped capability — the composed file passes `demo/syncpi.test.mjs` (PIN OK, LINK SPECS OK,
+MALFORMED PIN OK, INSPECT OK). (3) Branch-carried D-numbers are **not** trustworthy: `item-5208`'s branch heading said
+`D221`, and `main` had already minted `D221` for a different decision; `item-5211` carried `D224`/`D225` while `D224`
+was taken. Minting at land time from the free slots (this pass: **D234, D242–D247**) is the only rule that cannot
+collide, and it is why `item-4846`'s `D-<mint>` placeholder resolves rather than duplicates.
+
+**Consequences.** A pass that stops on a conflict is not a failure of the pass; it is the gate doing its job, and the
+delegate's job becomes composition in a scratch tree, then re-running `land.mjs`. Because landings change `main`, the
+preflight must be re-run **inside** the loop (pitfall 173) and a composition can go stale mid-pass — `item-5740`'s
+merge commit literally reads "re-composed on attempt 1 because main moved while the pass ran". Ancestor branches are
+not merge targets: `item-5824` ⊂ `item-5740`, `item-5758` ⊂ `item-5663`, `item-5615` ⊂ `item-5712`, so landing the
+superset makes the ancestors prunable, not landable.
+
+**Boundary.** This rules on journal and doc conflicts and on code where main already ships the behaviour. It does
+**not** authorise a delegate to close queue rows: the six landed-but-non-terminal rows (#5362, #5491, #5501, #5699
+deferred; #5820 claimed; #5912 held) stay with their owners. And a stale base remains a re-cut job for the author
+seat (`docs/runbooks/land.md` Do 0b) — `wip/seat-prompt-files` is left for its author, not merged by the delegate.
+
+**Probe that falsifies it.** `git log --format='%s' main | grep -c '^merge: main into'` counts composed merges; `grep -c '^<<<<<<<' docs/DECISIONS.md` must be **0** after a pass; and `git merge-tree --write-tree main refs/heads/<branch>` must produce a tree identical to `main` for every branch whose patch is already applied (`git cherry` prints only `-`).

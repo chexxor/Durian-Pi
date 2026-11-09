@@ -3447,3 +3447,35 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     Fix: capture the code on the same statement as the prover (`prover; rc=$?; …; echo "exit=$rc"`) or assert in-line
     (`prover && echo GREEN || echo RED`); for the suite, redirect to a file, capture, then read the file. Full
     procedure with the re-runnable verify: `docs/runbooks/false-green-shell-prover.md`.
+
+## Operational pitfalls (delegate landing pass, 2026-11-09 — numbered 179-181, continuing from 178)
+
+179. **A conflict is a stop, not a failure, and the composition has to be redone when `main` moves.** Measured in the
+    2026-11-09 pass: `scripts/land.mjs` printed `STOPPED: 'item-5400' conflicts (demo/syncpi.test.mjs,
+    scripts/sync-pi.mjs). The merge lives in the scratch worktree — the SHARED tree was never touched and is not
+    mid-merge` — and the fix is to compose both sides in the branch worktree (`merge: main into <branch>`), then
+    re-run `land.mjs`. Six branches needed a second attempt for exactly this reason; `item-5740`'s merge subject says
+    "re-composed on attempt 1 because main moved while the pass ran". Journal conflicts are **unions**: main's landed
+    entry stays, the branch's entry is appended, and a `D-<mint>` placeholder is numbered from the next free slot at
+    land time (D234, D242–D247 this pass) — a branch-carried number is unreliable (`item-5208` carried `D221`, already
+    taken by a different decision). Before composing, dump the hunks:
+    `.spike/delegate/dump-conflicts.sh` writes one file per branch under `.spike/delegate/conflicts/`.
+180. **A landed branch can ship a test that pins a shape `main` no longer has; only the suite catches it.** Two reds
+    survived the pass and neither was a code bug: `demo/clockin-digest.test.mjs` asserted `deferred qa2 (1): #4002`
+    (#5596's per-seat inline list) while `scripts/clockin.mjs` ships #5398's aggregate — `deferred (awaiting the
+    operator): 2 rows across 2 seat(s): lead=1 qa2=1` — and `demo/verifier-arm-probe.test.mjs` asserted exit 1 for an
+    **unpriced** metered endpoint while `durig.config.json` now declares `DURIG_VERIFIER_PRICE_USD_IN/OUT` (asOf
+    2026-11-06), so the probe prices it and exits 0. The fixes: assert the shipped shape (the deferred section is
+    12,857 B → 1,150 B at 177 rows, and the snapshot file greps back each seat's complete id set), and run the probe
+    against an isolated empty `--config=<file>` so the ROADMAP 272 trap is still pinned. `git cherry` before
+    composing tells you whether a branch's patch is already on `main`: `item-5094` (two `-`), `item-5488` and
+    `item-5686` (one `-` each) are zero-build closes, not merges.
+181. **Pruning merged refs is mechanical once you read the rig's own audit, and it is safe with the broker down.**
+    `node cli.mjs worktree audit` (read-only, ~1 s) returns `keepReason` per tree; `"reapable"` = terminal item +
+    unlocked + clean, exactly the set the broker sweep removes. Measured 2026-11-09: 162 registered worktrees, **80
+    reapable**, `git worktree remove` took all 80 with **zero refusals**, then `git worktree prune` + `git branch -d`
+    deleted **80 refs** — 162 → 81 worktrees, 156 → 76 refs, `main` unmoved, nothing forced. The **16 dirty** trees
+    were left alone on purpose (runbook: a refused removal means files that exist nowhere else — name them, never
+    `--force`); `item-5488` and `item-5686` each hold 155 staged paths whose diff against `main` is 22 files / 21
+    insertions. `complete_work` still refuses worktree removal over npm `.bin` symlinks (pitfall 133), so the sweep —
+    not a hand pass — should own this every session.
