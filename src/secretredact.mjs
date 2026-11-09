@@ -21,6 +21,7 @@
 // this redacts BEFORE the entry exists — they are complementary, not alternatives.
 
 import * as config from "./config.mjs";
+import { objectExemptor, objectIdOf, UNCONFIRMED_OBJECT_FAMILY } from "./gitobject.mjs";
 
 // The value classifier. Reused from src/config.mjs (#700) when that export is
 // present; otherwise the identical pattern vocabulary is applied locally, so
@@ -65,15 +66,20 @@ const TOKEN_RE = /[^\s"'`<>()[\]{},;]+/g;
  * value (never the surrounding punctuation). Returns `{start, end, family}` per
  * hit — never the token text.
  */
-export function secretSpans(text) {
+export function secretSpans(text, opts = {}) {
 	const out = [];
 	if (typeof text !== "string" || !text) return out;
+	// THE git-object verdict, shared with the detector (src/gitobject.mjs). A token that resolves as
+	// a git object is not a value: it is the name of a tree, and redacting it destroys the evidence
+	// contract (#3128/#4922). Shape alone never exempts - resolution does.
+	const isObject = objectExemptor(text, opts);
 	const tail = (s) => s.replace(/[.!?]+$/, "");
 	for (const m of text.matchAll(TOKEN_RE)) {
 		const raw = m[0];
 		const start = m.index ?? 0;
 		const push = (value, at) => {
-			const family = familyOf(value);
+			if (isObject(value)) return false;
+			const family = objectIdOf(value) !== null ? UNCONFIRMED_OBJECT_FAMILY : familyOf(value);
 			if (family) out.push({ start: at, end: at + value.length, family });
 			return family !== null;
 		};

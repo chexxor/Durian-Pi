@@ -77,7 +77,7 @@ a terminal (D19). It is non-interactive by decision (D21) and never prompts.
 Five operator-facing behaviours are load-bearing:
 
 - **Wrong-database guard** â€” read commands name the resolved database and warn
-  when it holds no seats, because a missing `DURIAN_PI_DB` otherwise looks exactly
+  when it holds no seats, because a missing or misspelled `DURIG_DB` otherwise looks exactly
   like a healthy quiet rig (D18).
 - **Failure honesty** â€” errors come back as `{ok:false,error}` with a nonzero
   exit instead of a stack trace; a `send` that does not settle as `done` says so
@@ -92,7 +92,7 @@ Five operator-facing behaviours are load-bearing:
   tool layer, `src/confine.mjs` `refusalFor` for the environment â€” one policy,
   so the two cannot drift). Read-only git (`status`/`log`/`diff`/`show`/`rev-parse`)
   passes; **`git commit` is allowed**, scoped and `-C` forms included; `git push`
-  **is refused** unless the operator granted `DURIAN_PI_ALLOW_PUSH=1` in durian-pi's own
+  **is refused** unless the operator granted `DURIG_ALLOW_PUSH=1` in durian-pi's own
   environment (a seat's own inline assignment cannot forge it); and every
   destructive form â€” `reset`, `checkout`, `restore`, `revert`, `clean`, `stash`,
   `branch -D`, and unscoped `add -A`/`add .` â€” is refused with the reason as a
@@ -117,7 +117,7 @@ each value came from (`defaultsSource`).
 
 | Key | Meaning |
 |---|---|
-| `DURIAN_PI_DB` | Storage path (default `./rig.sqlite`) â€” the shipped defaults file sets `./rig.sqlite` explicitly so the floor is visible, not implied |
+| `DURIG_DB` | Storage path (default `./rig.sqlite`; `cli.mjs` reads `DURIG_DB` **only** — `src/config.mjs:112` in `CONFIG_KEYS`, `cli.mjs:151` — and ignores the pre-rebrand `DURIAN_PI_DB`, which then silently resolves to `./rig.sqlite`; measured: `DURIAN_PI_DB=./scratch-x.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` vs `DURIG_DB=./scratch-y.sqlite …` → `"db": "…/scratch-y.sqlite"`, both exit 1 `cause: no_store`. `scripts/clockin.mjs:245` is the exception: `DURIAN_PI_DB` first, then `DURIG_DB`, default `./selfdev.sqlite`) â€” the shipped defaults file sets `./rig.sqlite` explicitly so the floor is visible, not implied |
 | `DURIAN_PI_SEAT_ROOT` | Fallback working directory for seats at `up` time (keeps a rig file portable by naming no host path). Persisted per seat, so a later write-side `send`/`run` with a different value **fails closed** rather than silently using the old tree |
 | `DURIAN_PI_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
 | `DURIAN_PI_MODEL` | Default model for seats without their own |

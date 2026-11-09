@@ -177,3 +177,32 @@ export function selectSeatShell(host = {}) {
 }
 
 export const seatShellSelection = selectSeatShell();
+
+/**
+ * The persona's shell sentence, as DATA (#5739, ruling from lead #5730).
+ *
+ * WHY: the sentence used to be hand-written prose in 12 persona files (scribe's #5701), with no test
+ * pinning it — twelve copies of prose that could each drift, and could each disagree with the tool the
+ * seat actually has. `selectSeatShell()`/`shellPlan()` already decide which shell tool gets registered;
+ * emitting the line from the same plan makes the prompt unable to disagree with the registered tool.
+ *
+ * Injected host, same seam as `shellPlan` (#4977), so a Linux host, a Windows host and a host with no
+ * shell at all can be asserted in one process.
+ */
+export function shellToolLine(host = {}) {
+	const plan = shellPlan(host);
+	const others = SHELL_CANDIDATES.filter((c) => c.name !== plan.name).map((c) => c.name);
+	const where = plan.startedBy ? ` (resolved to ${plan.startedBy})` : "";
+	const absent = others.length
+		? ` No \`${others.join("`, `")}\` tool is registered on this host, so calling one is a refusal, not a fallback.`
+		: "";
+	const degraded = plan.degraded
+		? " WARNING: no shell program resolved on PATH, so this tool is registered but degraded: expect a spawn error rather than a working shell."
+		: "";
+	return (
+		`Run the oracle through the shell tool registered on THIS host: the \`${plan.name}\` tool${where}.` +
+		absent +
+		degraded +
+		" Name the tool you call, not just the command - the tool list you were given is the truth about which shell exists here."
+	);
+}

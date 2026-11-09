@@ -5,6 +5,10 @@ node_modules/
 # committed and never deleted while a database might be open.
 *.sqlite-wal
 *.sqlite-shm
+# The spend ledger is a sidecar of the store, named `<db>.spend.jsonl` by DURIG_SPEND_LEDGER. It is machine
+# state like the database itself: never committed, and until this line it was untracked-but-not-ignored, which is
+# the exact shape that lost the ledger once before (docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md).
+*.spend.jsonl
 durig.config.json
 # Machine-local pi agent state: a local-model endpoint (and its key) can land
 # here, so it is host-specific like durig.config.json and never committed.

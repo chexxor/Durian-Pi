@@ -1,9 +1,9 @@
   durig · 4 seats · TUI
   ────────────────────────────────────────────────────────────────────────────
-  ○ idle       pm       0q       —
-  ○ idle       impl     0q       —
-  ○ idle       qa       0q       —
-  ○ idle       lead     0q       —
+  ○ idle       pm        0q       —
+  ○ idle       impl      0q       —
+  ○ idle       qa        0q       —
+  ○ idle       lead      0q       —
 
   ── transcript ──
   ▶ Please check the queue.

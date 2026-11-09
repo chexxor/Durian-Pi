@@ -62,6 +62,7 @@ against the `id` values returned by `/v1/models`:
 | `/v1/models` 200, configured id listed, `"status"` not `loaded` | state 4 - still loading or the load failed: poll, then read `server.err` |
 | **`BLOCK provider-DURIG_LOCAL_-unauthorized: … ANSWERED /v1/models with HTTP 401`** in `node tools/broker-serve.mjs --status` | **state 5 seen from the preflight, and since #5111 named for what it is: the server ANSWERED, so it is not down.** Read the rest of the line before acting. `/chat/completions COMPLETES … inference WORKS` means only the LISTING refused the credential (a server may protect `/models` and still serve inference) — that is a NOTE, not a block. `/chat/completions also refused (…)` means the block is evidence: supply the key (Do 0). `--no-probe` prints the verdict too and says inference is **unproven**, never a verdict it did not measure. A **404** prints `provider-DURIG_LOCAL_-models-not-found` — reachable, wrong path; only a refused connection or a timeout is still `provider-DURIG_LOCAL_-unreachable`. **If an older transcript says `provider-DURIG_LOCAL_-unreachable: … HTTP 401`, that string is the defect #5111 fixed: re-run `--status`, do not act on it.** Pinned by `demo/broker-serve-provider-auth.test.mjs` (a loopback server that REQUIRES a key: keyed → answers+completes; unkeyed → `unauthorized` naming `DURIG_LOCAL_API_KEY`, never `unreachable`; 404 → path; closed port → still `unreachable`) |
 | **`/v1/models` 401 `{"error":"Invalid API key"}`** | **state 5 - the server DEMANDS a credential and the rig sent the loopback placeholder.** `src/providers/local.mjs` sends `LOOPBACK_PLACEHOLDER_KEY` (`"no-key-required"`) whenever the endpoint is loopback and `DURIG_LOCAL_API_KEY` does not resolve, because a *keyless* llama.cpp accepts anything. A server with a key set rejects it, and the seat's run ends `model_error: 401 "Invalid API key"` with no hint about the credential. Fix: supply the key (see Do 0). Measured 2026-11-04 on Strata `:47831` |
+| "Which credential VARIABLE does this endpoint use, and is it RESOLVED — without printing a value?" | `node tools/keycheck.mjs --level=auth --family=LOCAL` (**#5277**, ROADMAP 338). Free and offline: `--level=auth` opens ZERO sockets (`Models.checkAuth` resolves auth without a request), and it prints the variable NAME as `credentialSource`. `--level=reach` adds one `GET <base>/models` (a round trip, zero completion tokens) for reachable / advertised / `latencyMs`; **only `--level=spend` sends a completion, and it refuses without `--ceiling=USD`.** It redacts credential values out of its own output and refuses (exit 2, empty stdout) rather than quote one, so unlike the preflight its output IS pasteable. Pinned by `demo/keycheck.test.mjs` |
 
 A port probe (`netstat`, `Test-NetConnection`) can only tell states 1 from 2/3/4 - it cannot tell a dead
 provider from an unrelated listener. Use it to find the PID, not to conclude.
@@ -366,10 +367,35 @@ Measured: the rotated rig key (74 chars) was **401 on both boxes**, while pi's o
 (`~/.pi/agent/auth.json`: `strata.key`, `strata-server.key`) each answered **200** on their own box and **401** on the
 other. `cli.mjs status`, `check` and the roster stay green through all of this; the only instrument that caught it is the
 preflight completion probe. And when you diagnose it, **do not paste preflight output into a report** — the open
-**295** prints `DURIG_LOCAL_API_KEY`/`DURIG_VERIFIER_API_KEY` **values**.
+**295** prints `DURIG_LOCAL_API_KEY`/`DURIG_VERIFIER_API_KEY` **values**. Since **#5277** there is a pasteable answer to
+the same question: `node tools/keycheck.mjs --family=LOCAL` prints `credentialSource` = the variable NAME and never its
+value (measured on this box 2026-11-07: `--level=auth --family=LOCAL` **0.24 s · exit 0**, and `demo/keycheck.test.mjs`
+**1.4 s · exit 0**, which plants a value in the env, has the fixture endpoint echo it back in `data[].id`, and asserts
+the value is ABSENT from the tool's whole output). **Run it on each box** — keys are per box, and the tool says so in
+its own header; a green here is a statement about this box only. It does NOT settle state 7 by itself: an endpoint can
+accept the key for `/models` and still refuse inference, which is what the paid completion probe is for
+(`--level=spend --ceiling=0.01`, ≈$0.001).
 
 **The price footgun on this path (323).** A LAN URL is not loopback, so the family becomes `metered` and needs a DECLARED
 price (`0` is legitimate). But `CONFIG_KEYS` has no `DURIG_LOCAL_PRICE_*` keys, so putting them in `durig.config.json`
 makes **every** CLI verb exit `unknown config-file key(s) …`. Declare them in the **environment** (`~/.config/durig/env`,
 loaded with `node --env-file=…`), and remember the consequence: a start **without** `--env-file` then registers no model
 row and the whole author family goes dark with `registration-refused`.
+
+**State 8 — the server was bounced and now serves a different model id (2026-11-08).** Symptoms: every seat turn dies
+in ~1 ms with `Model … is not available` / `reason: no_model`, the broker log looks normal (`woke=impl` on pass after
+pass), and no conversation gains an assistant entry. Diagnose in this order, all measured on this rig:
+1. `curl -s -H "authorization: Bearer $DURIG_LOCAL_API_KEY" http://127.0.0.1:8080/v1/models` — read the **id** the box
+   advertises and its `meta.n_ctx`.
+2. `node --env-file="$HOME/.config/durig/env" tools/broker-serve.mjs --status | grep -E 'completes|BLOCK'` — the
+   preflight prints `BLOCK provider-DURIG_LOCAL_-model-absent: … advertises [<served id>] but the config names
+   '<configured id>'`.
+3. `node -e 'const{DatabaseSync}=require("node:sqlite");const d=new DatabaseSync("./selfdev.sqlite",{readOnly:true});
+   for(const r of d.prepare("SELECT id,conversation_id,record FROM tasks WHERE kind=? ORDER BY id DESC LIMIT 5").all("\"pi.generation\"")){const j=JSON.parse(r.record);console.log(r.id,r.conversation_id,j.state?.outcome?.status,j.state?.outcome?.error?.message)}'`
+   — confirms the failure is at registration, not at the wire.
+Fix: set `DURIG_LOCAL_MODEL` (and `DURIG_LOCAL_CONTEXT` to the advertised `n_ctx`) in `durig.config.json`, re-point
+every `local/<id>` string in `rig.selfdev.json`, re-point the `DURIG_COMPACTION_MODEL_OVERRIDES` key, commit the roster
+(a dirty tracked tree makes `broker-serve --start` refuse: `START REFUSED: live-tree-dirty`), then
+`node --env-file="$HOME/.config/durig/env" cli.mjs up rig.selfdev.json --refresh` with the broker stopped.
+Do **not** rely on llama.cpp's rerouting: a request for an unadvertised id is answered by the served model, so the
+stale id looks fine at the wire while the rig refuses to register it.

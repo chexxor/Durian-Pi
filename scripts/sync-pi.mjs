@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // Track pi's main branch instead of its release channel.
 //
 // Why: @earendil-works/pi-durable ships from a fast-moving monorepo (14 commits
