@@ -347,6 +347,55 @@ export function legacyStatus(item) {
  * It is a property of the block model, NOT a claimability predicate: who may claim an item is #2673's
  * `workable`, and it lives there.
  */
+/**
+ * #5770 — THE BOUNDED PARK VIEW. Born from a measurement, not a wish: `cli.mjs queue --status held`
+ * on the live store dumps 438 held + 384 deferred rows WITH bodies, and devtools' unbounded scratch
+ * export of the same read reached 25 MB. A census of *why* a row is parked cannot be run through that.
+ *
+ * What this returns is a projection of ONE row: no body, no subject, only the fields that answer
+ * "who parked it, on what, and when do we look again". Three states are kept DISTINCT, because
+ * collapsing them is the defect this instrument exists to make visible:
+ *   - `gate: "recorded"` — something WAS written: an authored `block` (reason + resolver, validated on
+ *     the write path), a `blockedBy` gate, a `heldReason`, or a `deferredTo`;
+ *   - `gate: "none"`     — nothing was written: no `blockedBy`, no `block`, no `heldReason`, no
+ *     `deferredTo`. `legacyBlock` would DERIVE a park from the status for such a row; this view refuses
+ *     to present an inference as a gate, and `basis` says where any reported reason/resolver came from.
+ *     THIS is the row a seat cannot tell apart from a released row nobody claimed.
+ * `blockedBy` is reported even when the block is inferred, because a gate and a park are different facts.
+ */
+export const GATE_VIEW_CAP = 200;
+
+export function gateView(item) {
+	const blockedBy = Array.isArray(item?.blockedBy)
+		? item.blockedBy.filter((id) => Number.isInteger(id) && id > 0)
+		: [];
+	const authored = item?.block === undefined ? null : item.block ?? null;
+	const heldReason = typeof item?.heldReason === "string" && item.heldReason.trim() ? item.heldReason.trim() : null;
+	const deferredTo = typeof item?.deferredTo === "string" && item.deferredTo.trim() ? item.deferredTo.trim() : null;
+	// NOTHING written about this row: no gate ids, no block, no reason, no deferral target. That is the row
+	// a seat cannot tell apart from a released row nobody claimed, so it must be reported as such rather
+	// than given the status-derived block that `legacyBlock` would happily invent.
+	const recorded = blockedBy.length > 0 || authored !== null || heldReason !== null || deferredTo !== null;
+	const block = recorded ? (authored ?? legacyBlock(item)) : null;
+	return {
+		id: item?.id,
+		from: item?.from ?? null,
+		to: item?.to ?? null,
+		status: legacyStatus(item),
+		stage: effectiveStage(item),
+		blockedBy: blockedBy.length ? blockedBy : null,
+		reason: block?.reason ?? null,
+		resolver: block?.resolver ?? null,
+		reviewBy: block?.reviewBy ?? null,
+		heldReason,
+		deferredTo,
+		note: block?.payload?.note ?? block?.payload?.question ?? null,
+		recorded,
+		gate: recorded ? "recorded" : "none",
+		basis: authored ? "authored-block" : recorded ? "declared-fields" : "none",
+	};
+}
+
 export function canAutoOpen(block) {
 	if (!block || typeof block !== "object") return false;
 	if (block.source !== "declared") return false;

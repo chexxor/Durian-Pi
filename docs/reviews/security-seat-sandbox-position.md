@@ -217,7 +217,9 @@ become a secret store.
 
 **F6 · LOW · the redactor destroys the identifiers this position needs.** Every 40-hex value in my tool output
 was rewritten as `secret-shaped value (high-entropy-token)` — git shas, patch-ids, pinned shas. That is the
-already-registered checker-based-exclusion class (#2055/#2056, and lead's hazard row **#4922**); this run is a
+already-registered checker-based-exclusion class (#2055/#2056 — #2056 cancelled-as-resolved 2026-11-07: the
+requirement now lives inside its carrier **#3128**, the single writer on that predicate, per lead's #2040
+ruling A; and lead's hazard row **#4922**); this run is a
 second measured instance, in the *security* seat, where the redaction prevented a sha from being transcribed
 into a durable position. Cited to #4922, not re-registered.
 

@@ -1,12 +1,12 @@
 ---
 runbook: verifier-model-server
-symptom: "a seat's model is not what rig.selfdev.json claims; the model server lists an instance no request can use (`Failed to load model`); you must change which model a provider serves, change its context window, or free room for a second model; check reports `single-model-rig` fix-now; or the OS reports an out-of-memory kill involving a model server"
+symptom: "a seat's model is not what rig.selfdev.json claims; the model server lists an instance no request can use (`Failed to load model`); you must change which model a provider serves, change its context window, or free room for a second model; check reports `single-model-rig` fix-now; the OS reports an out-of-memory kill involving a model server; or a family goes dark with `registration-refused … metered-endpoint-unkeyed` / `no_model` after a credential rotation (host config, NOT a roster fault — see §metered-endpoint-unkeyed)"
 writes: true                 # model-server state only — load, unload, context_length, variant activation. It never opens the store, so no broker stop is required
 precondition: "read-only through the Diagnose steps; loading/unloading or re-windowing a model needs the operator's grant AND the affected seats idle — never during a probe or gate run"
 last_verified: 2026-10-29
 verified_by: delegate
 evidence: "every endpoint, schema and number in the Diagnose/Do steps was executed 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1) against LM Studio's v1 REST API at http://127.0.0.1:1234; the memory numbers and the cgroup cap results in §probe discipline were re-measured the same day; commit c34bb232 carries the same evidence"
-evidence_addendum: "the section `Arming a metered verifier provider` was executed end-to-end 2026-11-06 (probe NOT-ARMABLE -> vendor price row -> ARMABLE, maxCallExposureUsd 0.001419; roster flip to verifier/openai/gpt-oss-120b; both pointer instruments green; check no longer reports single-model-rig). The :1234 LM Studio steps were NOT re-verified — that server has been down since 2026-10-29 — so last_verified deliberately stays 2026-10-29."
+evidence_addendum: "(a) the section `Arming a metered verifier provider` was executed end-to-end 2026-11-06 (probe NOT-ARMABLE -> vendor price row -> ARMABLE, maxCallExposureUsd 0.001419; roster flip to verifier/openai/gpt-oss-120b; both pointer instruments green; check no longer reports single-model-rig). (b) the section `A seat suddenly reports metered-endpoint-unkeyed (after a credential rotation)` was executed read-only the same day (Linux Fedora 45, node v24.22.1, #5223): host config `$HOME/.config/durig/env` read BY COUNT (mode 600, 209 B) -> grep exit 0; `tools/verifier-arm-probe.mjs` run twice in the live checkout, key present -> `keyPresentInEnv:true` exit 0, key blanked in the environment -> `keyPresentInEnv:false` but STILL `verdict:ARMABLE` exit 0 (the measured false-green that section names). The :1234 LM Studio steps were NOT re-verified — that server has been down since 2026-10-29 — so last_verified deliberately stays 2026-10-29."
 check_rule: "demo/local-model-pointer.test.mjs is the offline half that fails when rig.selfdev.json and durig.config.json disagree; the live installed-vs-loaded half is docs/ROADMAP.md 261"
 ---
 
@@ -537,3 +537,67 @@ ceiling or a ledger row — so do not paste its output into a report, and do not
 evidence that nothing was spent (ROADMAP **295**, **296**). The `:1234` steps above were **not** re-verified on
 2026-11-06 (that server has been down since 2026-10-29), which is why `last_verified` in the front matter stays
 2026-10-29.
+
+## A seat suddenly reports `metered-endpoint-unkeyed` (after a credential rotation)
+
+**Symptom.** A verb that registers providers prints
+`{"spend":"registration-refused",…,"causes":["metered-endpoint-unkeyed"],…}`, or — further from the cause and far more
+confusing — every seat on the family goes dark with **`no_model`** before any request. The emitter is
+`src/providers/local.mjs:256` (`createLocalProvider`); it fires **only** when the endpoint class is `metered`
+(a non-loopback base URL) and the key variable resolves empty or unset — the variable is
+`spec.apiKeyEnv`, i.e. `DURIG_VERIFIER_API_KEY` / `DURIG_LOCAL_API_KEY` by family prefix. The provider is then
+registered with **no model row** (a refusal, not a throw), so the seat never reaches the wire.
+
+**Cause.** The **host config lost the NEW key** after an operator credential rotation. The host config is gitignored
+and there is more than one copy: `$HOME/.config/durig/env` (the env file verbs must be given with
+`--env-file=`), plus `durig.config.json` in the repo root **and** `<seatroot>/durig.config.json`. Two variants read
+identically from the seat's side and have different fixes:
+
+| what happened | first check | what clears it |
+|---|---|---|
+| the rotated key is **absent/stale in the host config** | presence by COUNT in `$HOME/.config/durig/env` (below) | the operator re-keys the host config; **a seat never re-keys** |
+| the key is present but the **verb did not load the env file** | did the command carry `--env-file="$HOME/.config/durig/env"`? | re-run the verb with `--env-file=` (SELFDEV session-F pitfall 14: the key was present the whole time) |
+
+**IT IS NOT a roster fault, and IT IS NOT a model/capacity fault.** Say it in those words: the mis-diagnosis sends a
+seat at `rig.selfdev.json`, and a roster edit changes nothing here — the provider registers no model row for *every*
+seat naming the family, however the roster is spelled. Nor is it the model being full or the arm being out of
+capacity: no request was ever sent. If the roster genuinely disagrees you get a different message that **names the
+roster** (see step 4 of §"Arming a metered verifier provider", where the failing pointer pair says so outright).
+
+**First check (read-only; presence, never the value).**
+
+```bash
+grep -c -E '^DURIG_VERIFIER_API_KEY=' "$HOME/.config/durig/env"    # exit 0 = the key LINE exists
+grep -oE '^[A-Z_]*API_KEY=' "$HOME/.config/durig/env" | sort       # WHICH variables the host config carries
+node --env-file="$HOME/.config/durig/env" tools/verifier-arm-probe.mjs \
+  --family=VERIFIER --model=openai/gpt-oss-120b --base=https://api.deepinfra.com/v1/openai --ceiling=0.15
+```
+
+Read the **field** `"keyPresentInEnv"` in that JSON, not the verdict. Counting and name-listing are deliberate:
+`grep -c`/`grep -oE` prove presence without ever putting a credential value into a transcript (the same masking rule
+as `store-secret-detected.md`; `tools/broker-serve.mjs --status` prints the values and is the wrong instrument here).
+
+**THE MEASURED TRAP (#5223): the arm probe's verdict does NOT cover the key.** Run twice in the live checkout on
+2026-11-06, the probe offline (it sends no request): with the key present it printed `keyPresentInEnv:true`,
+`verdict:ARMABLE`, **exit 0**; with `DURIG_VERIFIER_API_KEY` **blanked in the environment** it printed
+`keyPresentInEnv:false` and **still `verdict:ARMABLE`, exit 0** — while registration would refuse with
+`metered-endpoint-unkeyed`. So `ARMABLE` is a PRICE verdict; a green exit is not proof the arm is keyed. Do not cite
+"the probe says ARMABLE" as evidence a rotation cleared. (Probe gap routed as its own row.)
+
+Also do not confuse the exit-1 neighbour: in an **item worktree** the probe prints `NOT-ARMABLE,
+cause:metered-endpoint-unpriced` because such a tree carries only the tracked defaults and no price row — that is a
+**price** gap in that tree, not a key gap, and it is the expected state there. And `local-provider-down.md` state 7
+(a rotated key that IS registered but wrong) fails at the **wire** with `401 Invalid API key`; `unkeyed` never reaches
+the wire. `no_model` + a `registration-refused` line on stderr = host config. `model_error: 401` = key present, wrong.
+
+**Verify (ran 2026-11-06; it must be able to fail).** `grep -c -E '^DURIG_VERIFIER_API_KEY=' "$HOME/.config/durig/env"`
+→ exit **0** (1 line; file mode 600, 209 B) and it must flip to exit **1** on a name the file does not carry —
+`grep -c -E '^DURIG_NOPE_API_KEY=' …` is the negative control. Then the probe pair above must print
+`keyPresentInEnv` **true** and **false** respectively (`env DURIG_VERIFIER_API_KEY= node --env-file=…` is the safe
+stand-in for a lost key: no credential is written, rotated or read out). If both runs print the same
+`keyPresentInEnv`, the diagnose is not distinguishing anything and the finding is worse than this section says —
+report that rather than calling this done.
+
+**Do not** re-key from a seat, and do not retry the verb blindly hoping the registration lands: re-keying the host
+config is the operator's, and a blind retry of a `up --refresh`-class verb moves provider values while you are looking
+the wrong way (§"Impact" above).

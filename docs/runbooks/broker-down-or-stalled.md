@@ -6,7 +6,7 @@ precondition: "broker-stopped"
 last_verified: unverified
 verified_by: delegate
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
-evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. Addendum 2026-11-07 (same host, the 05:18Z diagnostic pass, pid 1673276, `--max-duration 120`, 14 passes): the signature recurred, and three instrument facts were measured — `pgrep -a node | grep \"cli.mjs serve\"` returned NOTHING while the broker was ALIVE (do not call a run uncleanly exited off it); the reads that work are `cat <db>.broker.json` then `ps -o pid,etime,args -p <pid>`; and that broker's `EXIT … reason=deadline passes=-` is a hard-coded CLI-side line (`cli.mjs:2105`, on the stop-grace force timer) whose reason and pass count are both untrustworthy — see ROADMAP 328."
+evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. Addendum 2026-11-07 (same host, the 05:18Z diagnostic pass, pid 1673276, `--max-duration 120`, 14 passes): the signature recurred, and three instrument facts were measured — `pgrep -a node | grep \"cli.mjs serve\"` returned NOTHING while the broker was ALIVE (do not call a run uncleanly exited off it); the reads that work are `cat <db>.broker.json` then `ps -o pid,etime,args -p <pid>`; and that broker's `EXIT … reason=deadline passes=-` is a hard-coded CLI-side line (`cli.mjs:2105`, on the stop-grace force timer) whose reason and pass count are both untrustworthy — see ROADMAP 328. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here."
 check_rule: null
 ---
 # Broker down or stalled
@@ -60,6 +60,11 @@ The instrument is delegate-side (`tools/`, ROADMAP 209 asks for the productized 
 same read is the six commands above — what the instrument adds is the two facts a human forgets to ask for: **how long
 each spooled intent has been waiting**, and **whether the provider each seat names actually advertises that model**.
 - `START` with **no** `EXIT` = the broker died abnormally.
+- The preflight's `env:` line reports a credential as `set (N chars, from env)` or `unset`, **never the value**
+  (#5700 / ROADMAP 295, operator ruling: fix the print, do not rotate). Before that fix it spread every
+  `DURIG_LOCAL_*` / `DURIG_VERIFIER_*` variable verbatim into JSON — and a pasted preflight is a credential leak
+  channel. Non-credential config (`*_BASE_URL`, `*_MODEL`, `*_CONTEXT`) still prints its value, because a preflight
+  that reports nothing is not a preflight. Pinned by `demo/broker-serve-env-presence.test.mjs`.
 - A live `genlock` slot means a generation is in flight — do not kill the broker.
 - `serve.err` ending in `Session failed after a storage error` → go to `store-corruption-recovery.md`.
 - `serve.err` with **`Error: database is locked`** (SQLite busy/lock contention) is a SECOND dormant
@@ -102,9 +107,36 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   — this is the alarm. **Automatic recovery IS coming, and is not here yet:** an admission deadline
   exists (`admissionVerdict` / `ADMISSION_DEADLINE_MS`); once the reconciler consults it, a
   never-started submission is withdrawn without an operator. Until that lands, `resume` is the remedy.
+- **A brand-new broker can read `up` before it has done any work (#5698, re-issue of #4819).** `lastPassAt`
+  is the stamp of a COMPLETED pass. When the loop takes over a state file with no numeric `lastPassAt` it
+  used to seed it with `now()` — the ATTEMPT to start counted as progress — so a broker that throws on
+  every pass read `up` for one whole progress bound (default 300 s + 60 s margin) while doing nothing, and
+  `queue`/`watch`/`status` routed to it and hung for the full 120 s inside that window. It now stays `null`
+  until a pass completes, and `brokerHealth` says `degraded` with the reason `no pass has completed yet`.
+  **How to tell them apart:** `PASS-FAILED` lines in `<db>.broker.log` plus `"lastPassAt": null` in
+  `<db>.broker.json` = the broker never progressed, no matter how fresh the heartbeat is. Prove it:
+  `node demo/broker-progress-is-a-completed-pass.test.mjs` (exit 0).
   **Separate clause — the suppression-semantics fix:** a suppression-semantics fix is on a branch with
   its own landing entry and is not on main yet. When it lands it changes how a suppression is READ, not
   the recovery path — `resume` remains the remedy for a never-started submission.
+- **A seat reading its own queue mid-turn (the in-turn read deadlock, #5640 / #5699 interim discipline).**
+  A read spooled by a verb while THAT seat's turn is in flight cannot be answered: the broker answers read
+  intents inside a pass, and `drainIntentInbox` begins with `harness.documentState(...)` — the same session
+  the seat's turn is holding. The read waits on the work it is part of. Measured cost: **155.3 min of broker
+  time against a 75 min per-turn bound (2.07x)** (#5640), and the clock-in digest's own `cli.mjs status` read
+  **timed out twice at the 120 s bound** with `read health: timed out awaiting the broker's result` (#5644),
+  which is why the digest's acceptance command is unrunnable while the fleet is busy.
+  **What a seat does instead, TODAY (this is the discipline, not a workaround to be skipped):**
+  1. do NOT run `cli.mjs queue` / `cli.mjs status` / `scripts/clockin.mjs --db` inside your own turn when a
+     broker is resident; the numbers are handed to you in the item body, or
+  2. use ONE multi-id read (`node cli.mjs queue --id <a> --id <b> --json --no-body`) at a clock-in boundary,
+     when the broker is between passes, or
+  3. read a **snapshot copy** of the store (`cp selfdev.sqlite .snapshot/selfdev.sqlite`) for anything that
+     needs volume, and say which tree/copy the number came from.
+  **Verify (ran on 2026-11-08, read-only, no model spend):** `node demo/broker-read.test.mjs` and
+  `node demo/broker-read-nopass.test.mjs` both exit 0 — they are the demos that pin what a spooled read does
+  when no pass runs. The BUILD half of #5699 (a seam that resolves the read in-turn) is NOT shipped: the
+  bound and the semantics need a ruling, see below.
 - **`WAKE-RETRY` logged but no `PASS` follows** (2026-10-18 recurrence 8): the dormant-revisit fix
   (`991567d`) re-arms the loop after a `wake-failed` and logs `WAKE-RETRY in=<ms>ms seats=<names>`. If
   that line appears and then **no `PASS`** for minutes (fresh heartbeat, no genlock, idle CPU), the retry
@@ -179,6 +211,20 @@ tail -8 selfdev.sqlite.broker.log
 ```
 Expect a fresh `START`, `WAKE <seat>`, and `PASS` lines. `status` shows the previously idle seats
 generating. (The broker also logs `STRANDED settled=N` / `RECONCILE …` when it heals on start.)
+
+### Reading a seat that wakes but never works (#5741)
+If a seat is woken repeatedly while holding nothing claimable, look for `PARKED-WAKE seat=<seat>
+reason=<set-changed|deduped>` lines in the same log. Since #5741 a parked seat is woken only when its
+parked SET changes; `reason=deduped` means the broker saw the same set again and deliberately did not wake
+it, so the silence is recorded rather than inferred. A seat still waking every ~30 s with the same set
+means the dedup is not in effect - check that the broker is the build that carries
+`src/scheduler.mjs::parkedChanged`, and that the queue rows for that seat really are unchanged
+(`node cli.mjs queue --status held --with-gates` is the bounded read; do not dump the whole queue).
+
+Re-run check: `node demo/parked-wake-dedup.test.mjs` (exit 0), and the integration probe from the ruling -
+one held row, `DURIG_PROVIDER=faux node cli.mjs serve --max-duration 120`, then
+`grep -c 'WAKE <seat>' <db>.broker.log`: 4 before the fix, 1 after (measured 2026-11-09 on main
+f5a73c61 and on the fix branch).
 
 ## If it fails
 - Won't start, or dies again with a storage error → `store-corruption-recovery.md`.
@@ -279,3 +325,149 @@ in `rig.selfdev.json` names `C:/Users/Alex/dsh-Projects/pi-opendurig/item-2801` 
 `up --refresh --dry-run` reports `changes:{}` for all 12 seats because the rig file itself carries it — ROADMAP 210),
 and 3 tracked files are modified in the live tree that a woken seat would edit (F12/F23). Full evidence:
 `docs/reviews/delivery-channel-linux-2026-10-28.md`.
+
+2026-11-08T22:12Z (delegate, **Linux Fedora 45**, kernel `7.2.15-300.fc45.x86_64`, `node v24.22.1`): **the silent
+variant — reads hang with 0 bytes and no error text at all.** `node docs/evidence/2026-11-08-context-window/read-path-probe.mjs
+--n=2 --timeout=8` printed `broker: degraded pid=3521203 heartbeat 17s ago last pass 2757s ago`, `spool: 21 pending
+intent(s) … 56 DEAD-LETTER(s)`, then `read 1: 8009 ms, 0 bytes, HUNG (killed at cap)` and `read 2: 8009 ms, 0 bytes,
+HUNG (killed at cap)` — while a direct read-only sqlite query in the same minute answered (128,248 tasks). Eight
+concurrent `cli.mjs queue --json --no-body` at a 25 s cap all exited 124 with 0 bytes. No `read health: timed out`
+message appeared, so this reads as an empty queue.
+
+**Why:** `src/readclient.mjs:106-111` routes every read to the broker when one is alive
+(`if (brokerAliveFor(dbPath)) return await readViaBroker(...)`). The pass loop had not run since 21:26:06.898Z after
+23 `PASS-FAILED SessionFailed: Session failed after a storage error … errcode=5 errstr=database is locked` entries in
+the log — **11** of them dated 2026-11-08; the log is cumulative since store creation, so time-box the count.
+The run loop was still alive — conv 9 (impl) made 58 generations in 10 minutes, last at 22:12:19Z — so the fleet
+looked busy while being unable to read anything.
+
+**Two checks that this runbook did not have before, do them before naming a cause:**
+```bash
+node docs/evidence/2026-11-08-context-window/read-path-probe.mjs --n=2 --timeout=8
+node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 4").all())'
+```
+**And the correction to the `genlock` rule above:** an empty `ls -1 <db>.genlock*` is **not** proof no generation is in
+flight — measured empty at 22:06:57Z while a generation record was created at 22:06:48Z. Require both: no genlock
+slots **and** no `pi.generation` record in the last two minutes. Otherwise a hard stop aborts live seat runs.
+
+### When `serve --stop` cannot be honoured (added 2026-11-08, delegate)
+
+`cli.mjs serve --stop` writes a stop **file**, and `src/broker.mjs:1651` is explicit about what that means:
+"A raised SIGNAL (SIGINT/SIGTERM) stops at once. A `.stop` FILE is deliberately NOT [immediate]" — the file is
+honoured at a **pass boundary**. So if the pass loop is dead, `--stop` deadlocks by design: the stop request can
+never reach a pass. Measured 22:22Z: `serve --stop` twice, both times `pid 3521203 STILL ALIVE — not stopped`,
+while the last pass was 21:26:06Z.
+
+**The ladder, in order, with the safety check the old ladder lacked:**
+```bash
+node --experimental-sqlite -e 'const {DatabaseSync}=require("node:sqlite");const db=new DatabaseSync("./selfdev.sqlite",{readOnly:true});console.log(db.prepare("select conversation_id,max(json_extract(record,\x27$.startedAt\x27)) mx from tasks where kind=\x27\"pi.generation\"\x27 group by 1 order by mx desc limit 3").all())'
+#   proceed only if the newest generation is more than ~2 minutes old. genlock being empty is NOT enough (see above).
+node cli.mjs serve --stop            # will not take effect while the pass loop is dead — expect "STILL ALIVE"
+kill -TERM <pid>; sleep 30; pgrep -af "cli.mjs serve"   # SIGTERM drains at once; prove the pid is gone
+node tools/broker-serve.mjs --resume # clear stranded runs
+set -a; . "$HOME/.config/durig/env"; set +a
+node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes
+grep INTENT selfdev.sqlite.broker.log | tail -1          # the spool drains only after a real pass
+```
+**[judgement]** SIGTERM cuts live seat runs. If seats are mid-run (they were here: conv 9 generating 38 s before the
+check), the honest options are to wait for the runs to settle, or to accept the abort. This delegate chose to wait
+and report, not to kill.
+
+## The ladder, exercised successfully at 2026-11-08 23:30Z
+
+Sequence that worked on Linux/Fedora 45, node v24.22.1, with one seat mid-run:
+
+```bash
+kill -TERM <pid>; sleep 10; pgrep -af "cli.mjs serve" | grep -v "bin/bash"   # expect: nothing
+grep -E "STOP-REQUESTED|EXIT" <db>.broker.log | tail -2                        # expect an EXIT line
+node tools/broker-serve.mjs --status                                            # preflight; "broker: down"
+set -a; . "$HOME/.config/durig/env"; set +a                                    # keys live out of tree
+node tools/broker-serve.mjs --start --max-duration 1800 --yes-pm-wakes
+grep -E "START|INTENT|PASS" <db>.broker.log | tail -6
+```
+
+Evidence from the run: `EXIT pid=3521203 reason=deadline passes=-` (the wedged process exited with **zero** passes
+recorded), then `START pid=3941969`, then **`INTENT delivered=37 dead=0 dup=0`** and `PASS 1 ms=12633 woke=qa,lead,scribe,devtools,auditor,security,architect`
+— seven seats woke on the first pass and the spool went to **0** pending intents. `node cli.mjs status` returned
+`{"ok": true, ...}` in **2.0 s** where it had just spent 120 s timing out.
+
+Two things the ladder does **not** fix, so do not expect them: the **56 dead letters** stay in
+`<db>.broker.inbox.error` (they are history, not a live block), and `--max-duration` still only bites at a pass
+boundary — set it, but do not treat it as a kill switch (pitfall 160).
+
+## Variant: the pass loop is stalled, the store is not, and nobody else holds the store
+
+Symptom: `cli.mjs status` / `cli.mjs queue` print nothing for a long time. Measured exactly, they are **bounded,
+not hung**:
+
+```
+$ time timeout 130 node cli.mjs status
+real    2m0.569s   exit 1
+{"ok": false, "error": "read health: timed out awaiting the broker's result"}
+```
+
+`src/readclient.mjs:35 readViaBroker(..., { timeoutMs = 120_000 })` — the CLI waits **120 s** and then reports the
+timeout. Cut it off earlier (as a seat or a script with an 8 s cap would) and you see 0 bytes and exit 124, which
+reads like a hang but is not. Meanwhile a direct read-only SQLite query on the same store answers in milliseconds.
+
+Measure who holds the store before improvising (Linux; `/proc` is the instrument):
+
+```bash
+for p in $(pgrep -f "cli.mjs|node"); do n=$(ls -l /proc/$p/fd 2>/dev/null | grep -c "selfdev.sqlite");
+  [ "$n" -gt 0 ] && echo "pid $p holds $n handle(s)  $(tr '\0' ' ' < /proc/$p/cmdline | cut -c1-80)"; done
+```
+
+Measured 2026-11-08 23:02Z: **only** the broker (pid 3521203) holds the store, with **5 handles** — two sqlite
+connections (fd 20/21/22 and 28/29) plus `-wal`/`-shm`. That is the shape of the `PASS-FAILED … database is locked
+errcode=5` lines: the broker is contending **with its own second connection**, not with another process. So the
+lock is not caused by a competing reader, and stopping your own CLI invocations will not help.
+
+Why the CLI hangs anyway: `src/readclient.mjs:106-111` — if `brokerAliveFor(dbPath)` is true the read goes through
+`readViaBroker`, which waits for a pass. A stalled pass loop means the read never returns; `readLocal` is only
+reached when the broker is *not* resident. A hung read is therefore evidence about the **read path**, not the data.
+
+Also note `--max-duration` is not a kill switch. `ps -o etime -p <pid>` on a broker started with
+`--max-duration 1800` showed **02:05:25** elapsed — the duration, like the `.stop` file, is honoured only at a pass
+boundary (`src/broker.mjs:1651`), so a stalled pass loop makes the broker unkillable by design. Only SIGTERM/SIGINT
+stops it at once, and that aborts live seat runs.
+
+## Why a hung `cli.mjs status` prints nothing: the read was dead-lettered
+
+The spool's error directory holds one pair of files per failed intent: `<id>.error.json` (the request) and
+`<id>.error.json.reason` (why it failed). Census, read-only:
+
+```bash
+node -e 'const fs=require("node:fs");const d="selfdev.sqlite.broker.inbox.error";
+const r=fs.readdirSync(d).filter(f=>f.endsWith(".reason")).map(f=>fs.readFileSync(d+"/"+f,"utf8").trim());
+const g={};for(const x of r)g[x]=(g[x]||0)+1;console.log(r.length,"dead letters",g);'
+```
+
+Measured 2026-11-08 23:21Z: **56** dead letters, **all** with the same reason, **all** `op: "read"`:
+
+```
+56 × apply failed: SqliteStorage is closed
+```
+
+which is thrown at `node_modules/@earendil-works/pi-durable/dist/storage/sqlite/storage.js:670`. So the CLI is not
+slow — its read intent was rejected, and `src/readclient.mjs:106-111` still waits for a broker result that will never
+arrive. Read the reason files before debugging the store; they name the failure class.
+
+**Since #5822 a closed handle does not consume the intent.** `drainIntentInbox` classifies the error with
+`isClosedStoreError` (src/broker.mjs) and, while the handle is closed, leaves the intent in the spool, records an
+attempt on a sidecar `<spool file>.json.retry`, logs `INTENT-RETRY op=... request=... attempts=N/3 reason=...`, and
+rethrows — so `runWakeLoop` reaches its reopen branch (a closed store is now treated like `SessionFailed there`) and
+the SAME intent is delivered against the fresh handle. Only after `INTENT_RETRY_LIMIT` (3) attempts is it dead-lettered,
+and then the `.error.json` carries a structured `refusal` (`code: "apply-failed"`, `requestId`, `attempts`) that
+`readIntentError(db, requestId)` surfaces to the producer instead of a silent timeout.
+
+Verify (both checks were run in this tree):
+
+```bash
+node demo/broker-closed-store-retry.test.mjs   # exit 0: delayed, bounded, visible, delivered after reopen
+node -e 'const fs=require("node:fs");const d="selfdev.sqlite.broker.inbox.error";const r=fs.existsSync(d)?fs.readdirSync(d).filter(f=>f.endsWith(".reason")).map(f=>fs.readFileSync(d+"/"+f,"utf8").trim()):[];const g={};for(const x of r)g[x]=(g[x]||0)+1;console.log(r.length,"dead letters",g);'
+```
+
+**Do not confuse this with the pass loop being merely slow.** `<db>.broker.json` separates the two legs
+(`src/broker.mjs:1628-1631`): `heartbeatAt` is LIVENESS (the event loop is turning, every 20 s), `lastPassAt` is
+PROGRESS (the last COMPLETED pass). A fresh heartbeat with a frozen `lastPassAt` is the documented wedge signature —
+"alive" is not "healthy".
