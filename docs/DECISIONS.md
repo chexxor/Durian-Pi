@@ -10615,3 +10615,20 @@ tools/rig-portability-audit.mjs --self-test` measured `SELF-TEST PASS … for a 
 it asserts the classifier's current behaviour, so it certifies the hole; it must assert the protective property and go
 red until 263/266 land.
 
+
+## D243 — a roadmap row is bounded by its acceptance check, not by its design note (2026-11-06; architect acting, on lead's ruling in queue #5208)
+
+**Status.** Accepted and in force for every new row and every proposed fold. Docs-only; no code touched.
+
+**Context.** I deferred #5048 to settle whether a design intent is one roadmap row or two. The question recurs every session and each recurrence costs a lead round-trip; meanwhile the answer that is *not* taken is cheap and destructive — rows get merged because the roadmap reads shorter. Detail and worked examples: `docs/reviews/architecture-row-shape-fold-rule-2026-11-06.md`.
+
+**Decision.** The unit of a roadmap row is **one independently-red acceptance check**, not one design note and not one concern-as-prose.
+- FOLD only when all three hold: one acceptance command goes red for either half; they cannot land independently (same branch, same commit); split, one half would be true but unactionable.
+- STAND BESIDE when any one holds: each half has its own command that can go red independently; different seats or different times can claim them; one half is naming/observability and the other is behavior.
+- Folding to shorten `docs/ROADMAP.md` is refused.
+- Falsifiable probe (measured, exit 0, main @ `46c28b73`): count each row's own `*Acceptance:*` clause — `awk '/^[0-9]+\. /{if(n!="")printf "row %s own-Acceptance=%d\n", n, c; n=$1; c=0} /\*Acceptance:\*/{c++} END{if(n!="")printf "row %s own-Acceptance=%d\n", n, c}' docs/ROADMAP.md` — ROADMAP 92/93/94/95 each carry exactly 1, naming four different assertions, so none may be folded into another. A row with 0 is a fold candidate or an untestable row; either way it is the row to fix.
+- Applied: #2402 folds into **92** (`docs/ROADMAP.md:1806-1821`) and #2403 into **94** (`docs/ROADMAP.md:1833-1840`), because both halves already live on the durable surface — D107 at `docs/DECISIONS.md:2880`, its cap-at-2-then-re-anchor parameter with the 94 pointer at `docs/DECISIONS.md:2934`, the ordering at `docs/DECISIONS.md:2936`. #2619 stands beside, and the capacity fold is not a candidate for it: its citation of a cancelled item is provenance, not a gate (`docs/reviews/architecture-queue-lifecycle-redesign-review.md:395-397`). #94 stands beside the send-time bounding work, and the vocabulary row #5206 stands beside its carrier #4973.
+
+**Options considered.** (a) *Group rows by concern* — fewer rows, one design note per theme; rejected because a green run then cannot say which half regressed, and the half that regressed is exactly the one that was merged in. (b) *One row per sentence* — maximum signal; rejected because it splits a single acceptance check across rows that must land in the same commit, so a seat can close one half and call the pair done. (c) *Keep asking lead per case* — rejected as the status quo ante: it spends a ruling per session and remembers nothing. (d) *Chosen*: the acceptance check bounds the row; the design note may span many rows and cross-links them instead of merging them.
+
+**Consequences.** Every row must keep its own `*Acceptance:*` and `*Owner:*` line, or the probe flags it; cross-references ("vocabulary row names its carrier row") become the way pairs are shown, so the roadmap grows in cross-links rather than in merged rows — accepted, since length is not the property being protected. The one part the probe cannot decide, two clauses naming the same assertion in different words, stays a human call and is the only case that still escalates to lead. Failure modes with recovery paths are tabled in the review: silent half-regression (unfold on the count-0 row), cascade (the uncovered half is visible at claim time via its `*Acceptance:*`), loop (this entry is the standing rule), scope drift (folding-for-length refused, count is the tell).
