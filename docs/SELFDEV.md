@@ -3619,3 +3619,36 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     control` because every scenario opened the same store. Idempotence belongs to the store, not to each
     `openRig` call — and a scenario that wipes on open silently discards the earlier scenarios' evidence, which
     is exactly what the gate then cannot see.
+
+## Operational pitfalls (delegate milestone-research pass, 2026-11-09 — numbered 203-207, continuing from 202; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+203. **The spend ledger is not where cache economics live.** `selfdev.sqlite.spend.jsonl` records
+    `cached_tokens: 0` on all 2,030 rows, and the conclusion "cache hits are zero on this rig" is wrong: the
+    ledger only gets a row for a **metered** endpoint (`src/providers/spend.mjs` `isMeteredModel` — money
+    possible only when `endpointClass` is metered), so every local loopback call is invisible to it. The real
+    numbers are in the durable entries: **73,326 assistant entries carry usage**, totalling 695,331,530 fresh
+    input tokens and **9,639,752,590 `cacheRead` tokens — 93.3% of prompt-side tokens are cache reads**. Any
+    instrument built for ROADMAP 175/161 that reads the ledger measures the wrong thing. Probe that prints the
+    truth in under 3 s: `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (criterion C7).
+204. **A milestone sentence is not a milestone.** ROADMAP §Milestones states M5 as two capabilities and an
+    ordering, with no experiment that decides it. That let the same milestone be described as "next" for three
+    sessions without anyone being able to say how far it is. The fix is a gate file whose exit code is the
+    status, and per-criterion probes printed next to each criterion:
+    `docs/evidence/2026-11-09-milestone-m5/gate.mjs`. Measure before decomposing — the baseline (2 PASS, 1
+    PARTIAL, 5 FAIL) changed which package comes first.
+205. **Before asserting an escape exists, run the guard's own function on the command.** "Seat egress is
+    unmediated" was true, but the interesting part was which specific rules *do* fire: `git config --global`,
+    a redirect outside the worktree and `git push` are refused; `nc 127.0.0.1 8080`, `curl` to a LAN address,
+    `cat ~/.ssh/id_rsa` and `rm -rf <sibling worktree>` reach no rule at all — **6 of 9**. Recorded as a
+    re-runnable baseline so "we added egress control" can be diffed against it:
+    `node docs/evidence/2026-11-09-milestone-m5/escape-baseline.mjs`. Note `rm -rf` is not classified as a
+    write by `shellWriteRefusal` at all — that is a rule gap, not a wording gap.
+206. **`toolRemovalsFor` has no claim argument, and no rule data to consult.** `src/seattools.mjs:272` takes a
+    seat and is computed at `up`; a seat's reach is therefore identical for every claim it will ever make. Grepping
+    the policy files for `allowRules` / `policyRev` / `denyByDefault` returns 0 — ROADMAP 173 has no data layer
+    to build on yet. Anyone sequencing 269 (ask → adjudicate → raise → revoke) must know 173 is empty, not thin.
+207. **Roadmap intent without a queue row is not work.** `node tools/roadmap-queue-coverage.mjs` on the live store:
+    146 registered items ≥200, **53** named by at least one queue row, **93** named by none. A milestone
+    decomposition that only names roadmap ids leaves 93 items with no owner, no dependency and no test. Mint the
+    rows (owner, acceptance check, falsifiable evidence) or say the item is parked — do not leave it as prose in
+    ROADMAP and treat it as scheduled.

@@ -10930,3 +10930,48 @@ the **system message** of the next request. Three rulings inside that choice:
 blockers (no broker, no key, extension unlisted) and *advisory* risk signals. Measured 2026-11-09: PASS
 (mechanism) on `./selfdev.sqlite` with 8 operational blockers, and PASS (mechanism) on the armed demo store
 with 1. `node demo/continuity-note.test.mjs` → `CONTINUITY PASS`, 0.630 s, five scenarios.
+
+## D251 — 2026-11-09T10:0xZ: **a milestone is closed by a gate, not by a sentence** (delegate acting on the operator's "research the next milestone and solidify it using proper PM techniques, especially task decomposition and acceptance criteria that define milestone completion"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**What was decided.** Three things.
+
+1. **Milestones get a ledger and a command.** `docs/MILESTONES.md` is now the single place that says which
+   milestone a session is working on, what tasks were documented for it, and what command decides it. M5's
+   definition of done is eight criteria, each with its probe, in
+   `docs/evidence/2026-11-09-milestone-m5/gate.mjs`; exit 0 means the milestone is complete. Baseline measured
+   2026-11-09: **2 PASS, 1 PARTIAL, 5 FAIL**.
+2. **M5's order is enforcement record first, memory second.** Not preference — dependency. `src/seatguard.mjs`
+   has 14 mediation decision points and writes **no** record (`select count(*) from documents where kind like
+   '%audit%' or kind like '%decision%'` → **0**; 1,532 entries contain the prose `refused by durig:`, 0 contain a
+   structured row). Reach is decided per **seat** at `up` — `toolRemovalsFor(seat)`, `src/seattools.mjs:272` —
+   never per claim, and grepping the policy files for `allowRules` / `policyRev` / `denyByDefault` returns 0, so
+   ROADMAP 173 has no data layer to build on. A grant cycle (269) cannot be audited before the record exists
+   (172), and the memory write gate (167) inherits the same substrate.
+3. **The cache-economics premise was measured from the wrong source, and the real number is the opposite of what
+   the record implies.** `selfdev.sqlite.spend.jsonl` shows `cached_tokens: 0` on all 2,030 rows — but the ledger
+   only writes a row for a **metered** endpoint (`src/providers/spend.mjs` `isMeteredModel`), so loopback traffic
+   is invisible to it. The durable entries carry the truth: **73,326 usage-bearing assistant entries, 695,331,530
+   fresh input tokens, 9,639,752,590 `cacheRead` tokens — 93.3% of prompt-side tokens are cache reads.** Per
+   model, the spread is the actual constraint on ROADMAP 175: DeepSeek-V4.1-Flash-1017 99.3% hit over 11,588
+   turns; the seat model `qwen3.8-flash-next-q2_0` 88.6%; **the verifier `openai/gpt-oss-120b` 0.0% over 1,476
+   turns**. So a dynamic prompt section paid for by the verifier is paid in full every call.
+
+**Why this and not "just build the memory layer".** The memory plan's own §7 gates every seat-writable tier on a
+write gate that does not exist, and gates every dynamic prompt section on cache economics that had never been
+measured. Measuring first changed the sequence: the cache numbers say the verifier has no cache to preserve, which
+is a design constraint on 163/164 that prose alone would have missed.
+
+**Consequences.** Two numbers must now be reported together for any milestone claim: the gate result and the date
+it was measured. A doc that declares a milestone complete without naming the command is, by this rule, not a
+completion claim. The escape baseline (`escape-baseline.mjs`) becomes the "before" that ROADMAP 268's acceptance
+requires: 6 of 9 named escapes reach no rule today, including `rm -rf <sibling worktree>` — `shellWriteRefusal`
+does not classify `rm` as a write at all, which is a rule gap, not a wording gap.
+
+**Boundary.** The gate is read-only: no broker verb, no store write, no model, no network. Nothing here schedules
+work; ROADMAP **347–349** are registered, not scheduled, and queue rows remain the PM's to mint. M5 is still
+delegate-proposed and awaits operator ratification (D141).
+
+**Probe that falsifies it.** `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` — if it
+ever prints 8 PASS while `documents` still holds no audit rows, the gate is vacuous. And the cache figure is
+refuted by a single metered call reporting `cached_tokens > 0` in the ledger; that would mean the ledger does see
+cache after all, and the durable-entry number needs reconciling against it rather than replacing it.

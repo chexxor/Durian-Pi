@@ -1,15 +1,20 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T09:0xZ (delegate session **N18** — the continuity-note leg of ROADMAP **331**
-(D240) was built and verified on the extension plane, and the read surfaces it depends on were bounded. **The git
-side is still closed** from N17: `git worktree list` **9**, `git branch` **12**, suite **280/280 in 60 s**
-(`node scripts/suite.mjs --jobs 8`), `git status --short -- .` empty before this session's writes. What is now
-armed and what is not is stated in *Exact next command* below.)
+**Last update:** 2026-11-09T10:0xZ (delegate session **N19** — the continuity mechanism from N18 is committed and
+re-verified; the milestone ledger and the next milestone's definition of done were written; the git verdict is
+unchanged: worktrees **9**, refs **12**, suite **280/280** in 57 s, `git status --short -- .` clean at
+`79c76a73` before this session's doc writes.)
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240), first tranche ROADMAP 331** — a
 seat can now carry a durable continuation note instead of a compaction summary, and the read surfaces that would
 have re-introduced the blowup are bounded. Rows **#5931–#5942** (the team's decomposition of this cluster) are
 still unclaimed; the delegate built and verified the mechanism but asserted no row.
+
+**New this window:** the milestone ledger is now a file — **`docs/MILESTONES.md`** (previous milestone = the
+auto-clean ceiling, D249; current = 331; next = M5) — and **M5 has a runnable definition of done**: `node
+docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite`, baseline **2 PASS, 1 PARTIAL, 5 FAIL**,
+decomposed in `docs/reviews/milestone-m5-solidified-2026-11-09.md`. Roadmap **347–349** registered from this
+measurement.
 
 **N17 still holds the git verdict**: worktrees **58 → 9**, refs **60 → 12**, `main` `6787bd24` → **`ea12fe04`** on
 the code, zero `--force`. Read the live tip with `git rev-parse --short main`. The 9 trees left are the seats'
@@ -134,11 +139,11 @@ symptom; the file is ~50,000 tokens.
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**: a seat can carry a durable
-continuation note through a reset/compaction boundary with **zero summariser model calls**, the read surfaces that
-would re-introduce the blowup are bounded, and the mechanism now also covers the boundary the seat does *not*
-choose. The auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**, intents `delegate-20261109-release-role` and
-`delegate-20261109-auto-clean`) is the *other* open thread and is still spooled, not delivered.
+**Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**, with the *next* milestone
+(M5) defined and gated this window. The ledger of what each milestone is and how it is closed is now
+**`docs/MILESTONES.md`**; the auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**, intents
+`delegate-20261109-release-role` and `delegate-20261109-auto-clean`) is the *other* open thread and is still
+spooled, not delivered.
 
 **Current item:** the mechanism is finished; **arming it on the live rig is the only thing left**, and it is an
 operator grant. `extensions/continuity.mjs` loads only via `DURIG_EXTENSIONS` (`src/extensions.mjs` has no
@@ -149,8 +154,10 @@ The team's rows **#5931–#5942** remain unclaimed; the delegate asserted nothin
 **First thing to run:**
 `node demo/continuity-note.test.mjs && node demo/offline.mjs && node demo/status-view-bound.test.mjs` (expect
 `CONTINUITY PASS`, the offline delegation loop, `STATUS VIEW BOUND OK`; 0.63 s / 0.29 s / 1.8 s, no broker, no key,
-no model). Then the gate — `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite`
-— which now exits **0** and prints *PASS (mechanism)* with the operational blockers listed separately. Then
+no model). Then the two milestone gates — `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db
+./selfdev.sqlite` (exit **0**, *PASS (mechanism)*, 8 operational blockers, 1 advisory) and `node
+docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (exit **1**: **2 PASS, 1 PARTIAL, 5 FAIL** —
+that is M5's honest baseline, not a bug). Then
 `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
 `DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`). If the
 operator has supplied `DURIG_LOCAL_API_KEY` / `DURIG_VERIFIER_API_KEY`, start the broker and let `pm` drain the
@@ -176,10 +183,11 @@ exists: `node tools/model-probes/…` / the compacteval A/B rows #5939–#5940. 
 framing — the intent is spooled, not delivered; delivery, not `intent.mjs`'s `ok:true`, is the evidence (pitfall
 141). Probe: `ls -1 selfdev.sqlite.broker.inbox.out/` after the broker's first pass.
 
-**Traps this window** — `docs/SELFDEV.md` **191–202** (this pass adds: reading a durable document *creates* it, so
-an empty note is not a broken note; `beforeRequest` is request-only and never writes to `entries`; a gate that
-reports one flat FAIL list cannot distinguish "unfinished" from "not running"; a demo that keeps its store must
-wipe it once at start). Grep for the symptom; the file is ~50,000 tokens.
+**Traps this window** — `docs/SELFDEV.md` **191–207** (N19 adds: the spend ledger cannot see cache hits because it
+only meters metered endpoints, while the durable entries carry 9.64 billion `cacheRead` tokens; a milestone
+sentence is not a milestone; before claiming an escape exists, call the guard's own function on the command;
+`toolRemovalsFor` has no claim argument and no rule data to consult; 93 registered roadmap items have no queue
+row). Grep for the symptom; the file is ~50,000 tokens.
 
 **Cheap probe that proves the git pass is closed:** `git worktree list | wc -l` → **9**, `git branch --format='%(refname:short)' | wc -l` → **12**, `git status --short -- .` → empty, `node scripts/suite.mjs --jobs 8` → **278/278**.
 
