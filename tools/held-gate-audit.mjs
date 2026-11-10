@@ -29,17 +29,42 @@ import { auditHeldRows } from "../src/heldgate.mjs";
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const argv = process.argv.slice(2);
 
-function opt(name, dflt) {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
+function parseArgs(argv) {
+  const out = { db: process.env.DURIG_DB || "./selfdev.sqlite", limit: 25, seat: null, json: null, ids: [] };
+  const KNOWN = new Set(["db", "limit", "seat", "json"]);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("--")) {
+      const name = a.slice(2);
+      if (!KNOWN.has(name)) throw new Error(`unknown argument: ${a} (known: --db, --limit, --seat, --json, or bare item ids)`);
+      const value = argv[i + 1];
+      if (value === undefined) throw new Error(`--${name} needs a value`);
+      if (name === "limit") {
+        out.limit = Number(value);
+        if (!Number.isInteger(out.limit) || out.limit < 1) throw new Error("--limit must be a positive integer");
+      } else if (name === "db") out.db = value;
+      else if (name === "seat") out.seat = value;
+      else out.json = value;
+      i += 1;
+      continue;
+    }
+    const id = Number(a);
+    if (!Number.isInteger(id) || id <= 0) throw new Error(`not an item id: ${a}`);
+    out.ids.push(id);
+  }
+  return out;
 }
 
 async function main() {
-  const db = opt("db", process.env.DURIG_DB || "./selfdev.sqlite");
-  const limit = Math.max(1, Number(opt("limit", 25)) || 25);
-  const seat = opt("seat", null);
-  const jsonOut = opt("json", null);
-  const onlyIds = argv.filter((a) => !a.startsWith("--")).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  let parsed;
+  try {
+    parsed = parseArgs(argv);
+  } catch (err) {
+    console.error(`held-gate-audit: ${err.message}`);
+    console.error("usage: node tools/held-gate-audit.mjs [--db <store>] [--limit N] [--seat <name>] [--json <out>] [<id> ...]");
+    return 1;
+  }
+  const { db, limit, seat, json: jsonOut, ids: onlyIds } = parsed;
 
   let items;
   try {

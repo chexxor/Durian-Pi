@@ -170,6 +170,18 @@ try {
   check("the per-seat totals add up to the held count", Object.values(doc.bySeat).reduce((a, s) => a + Object.values(s).reduce((x, y) => x + y, 0), 0) === doc.held, JSON.stringify(doc.bySeat));
   check("the release candidates carry the evidence the class rests on", (byId.get(ids.cleared)?.evidence ?? []).some((e) => /all named gates terminal/.test(e)), JSON.stringify(byId.get(ids.cleared)?.evidence));
 
+  // ─── 3. ARG HYGIENE: the parser must not read a flag's VALUE as an item id ───
+  const badLimit = spawnSync(process.execPath, ["tools/held-gate-audit.mjs", "--db", dbPath, "--limit", "0"], { cwd: ROOT, env: { ...process.env, DURIG_DB: dbPath }, encoding: "utf8", timeout: 120000 });
+  check("--limit 0 is refused, not read as 'show everything'", badLimit.status === 1 && /positive integer/.test(badLimit.stderr), `exit ${badLimit.status}: ${badLimit.stderr.slice(0, 200)}`);
+  const badFlag = spawnSync(process.execPath, ["tools/held-gate-audit.mjs", "--db", dbPath, "--zork", "5"], { cwd: ROOT, env: { ...process.env, DURIG_DB: dbPath }, encoding: "utf8", timeout: 120000 });
+  check("an unknown flag is refused by name instead of silently scoping the audit to item 5", badFlag.status === 1 && /unknown argument/.test(badFlag.stderr), `exit ${badFlag.status}: ${badFlag.stderr.slice(0, 200)}`);
+  const seatRun = spawnSync(process.execPath, ["tools/held-gate-audit.mjs", "--db", dbPath, "--seat", "impl", "--json", join(dir, "seat.json")], { cwd: ROOT, env: { ...process.env, DURIG_DB: dbPath }, encoding: "utf8", timeout: 180000 });
+  const seatDoc = JSON.parse(readFileSync(join(dir, "seat.json"), "utf8"));
+  check("--seat impl scopes the rows to impl while the census still reports every held row", seatDoc.held === 7 && seatDoc.rows.length === 3 && seatDoc.rows.every((r) => r.to === "impl"), `held=${seatDoc.held} rows=${seatDoc.rows.length}`);
+  const idRun = spawnSync(process.execPath, ["tools/held-gate-audit.mjs", "--db", dbPath, "--json", join(dir, "ids.json"), String(ids.cleared)], { cwd: ROOT, env: { ...process.env, DURIG_DB: dbPath }, encoding: "utf8", timeout: 180000 });
+  const idDoc = JSON.parse(readFileSync(join(dir, "ids.json"), "utf8"));
+  check("bare item ids scope the report to those rows only", idDoc.rows.length === 1 && idDoc.rows[0].id === ids.cleared, JSON.stringify(idDoc.rows.map((r) => r.id)));
+
   console.log(`HELD GATE AUDIT TEST PASS (classes ${CLASSES.join("/")}; tool exit ${run.status}; report ${bytes} B; held=${doc.held}; release=${doc.byClass["release-candidate"] ?? 0}, cancel=${doc.byClass["cancel-candidate"] ?? 0}, standing=${doc.byClass["standing-rule"] ?? 0}, gate-open=${doc.byClass["gate-open"] ?? 0}, unattributed=${doc.byClass["unattributed"] ?? 0})`);
 } finally {
   rmSync(dir, { recursive: true, force: true });
