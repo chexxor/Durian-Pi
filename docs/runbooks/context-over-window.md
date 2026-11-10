@@ -100,6 +100,13 @@ state does — fires **7 times out of 12**. That is the false alarm this design 
 - **The notice never fires, on a seat you know is large**: there is probably no window in any denominator state, so
   there is no fraction to score. `node cli.mjs config` shows what is set; declaring `DURIG_<PROVIDER>_CONTEXT` is an
   operator change. The guard is deliberately silent with no window rather than inventing a denominator.
+  **#6066 changed where the `declared` number comes from:** `declaredContextWindow` now reads the family's own
+  `DURIG_<PROVIDER>_CONTEXT` key first and falls back to the global `DURIG_CONTEXT_WINDOW`. Before it, declaring
+  `DURIG_VERIFIER_CONTEXT: "24576"` was inert for the denominator — the resolver read only `DURIG_CONTEXT_WINDOW`,
+  so a rig whose families all declared per-provider windows reported `declared: null` and every fraction printed as
+  "no window". Two things still return null, by design: a provider key set WITHOUT its `BASE_URL` (the family is not
+  registered, so there is no window to declare), and a registered family whose `CONTEXT` key is unset — its
+  65,536 is a built-in DEFAULT, not an operator declaration.
 - **`check` reports the rule as `skipped`**: the context read failed (unreadable store, or a store newer than this
   tree's pi-durable can open). The reason is printed with the skip — a skip is not a pass, and the audit of every
   other rule is unaffected.
