@@ -3,9 +3,9 @@ runbook: degeneration-guard
 symptom: "a seat was auto-reset (a pi.reset naming degenerate-text=...) and you must tell a real loop from a false positive, or add a new degenerate shape"
 writes: false
 precondition: "read-only"        # diagnosis is read-only; adding a pattern is a code change (broker-safe-change.md)
-last_verified: 2026-10-21
+last_verified: 2026-11-10
 verified_by: impl
-evidence: "item #875 (registry + real fixtures); demo/degeneration-text.test.mjs; scripts/degen-scan.mjs"
+evidence: "item #875 (registry + real fixtures); demo/degeneration-text.test.mjs; scripts/degen-scan.mjs; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/degeneration-text.test.mjs exit 0, node scripts/degen-scan.mjs on a scratch store exit 0 (0 turns, so the false-positive half is not exercised there)"
 check_rule: null
 ---
 
@@ -28,7 +28,7 @@ under `broker-safe-change.md` (stop the broker, land, restart).
 ## Diagnose (read-only)
 Read the run the guard fired on and look at the tail of the flagged turn:
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 8
+DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 8
 ```
 A **real** loop ends in a wall of near-identical micro-sentences and stops acting —
 `Emit. OK. Go. Now.` / `Completing:` / `Deferring:` repeated dozens of times. A **healthy** turn may

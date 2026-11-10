@@ -3,9 +3,9 @@ runbook: tool-result-redacted
 symptom: "a tool result shows `[redacted by durian-pi: secret-shaped value (…)]` where a value used to be"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-21
+last_verified: 2026-11-10
 verified_by: impl
-evidence: "item #837; src/secretredact.mjs; demo/secretredact.test.mjs"
+evidence: "item #837; src/secretredact.mjs; demo/secretredact.test.mjs; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/secretredact.test.mjs exit 0"
 check_rule: null
 ---
 
@@ -38,7 +38,7 @@ Read-only. The Diagnose step only reads the store; it opens no writing harness.
    and the value's family (`openai-key`, `github-pat`, …). The value itself is deliberately absent.
 2. Find the call in the transcript to see which file/command it was:
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat>
+   DURIG_DB=./selfdev.sqlite node cli.mjs log <seat>
    ```
 3. Decide whether the value could have left the process by any channel the redaction does not cover
    (the tool's own stderr, a file it wrote, an operator's screen).
