@@ -139,6 +139,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Runbook | Use when | Writes? |
 |---|---|---|
 | [slow-loop.md](slow-loop.md) | a change takes minutes-to-hours to verify; one test or area dominates wall-clock; a test is red **only** because it needs a key/network/a model; you are about to run the whole suite "to be safe"; or you are reviewing a design and need to state what it costs to iterate on it (the operator's fast-iteration policy, D213 — measured here: full suite **257/258 in 57.0 s**, `demo/cli.test.mjs` alone **20.1 s**, `demo/offline.mjs` full delegation loop **0.301 s**, model-call **p50 52 ms / p95 9.0 s**, and **185 generations (0.29%) holding 64.6% of generation busy time**) | no |
+| [suite-red-standalone-green.md](suite-red-standalone-green.md) | a demo exits 0 alone but the suite prints `FAIL` or `TIMEOUT` for it; a red appears only while another suite run or a seat turn is live; the report's 8-line tail shows `signal: null, output: null` and no cause (measured 2026-11-10: one-file fixture reproduces the false TIMEOUT — demo exit 0, runner 60.1 s, exit 1; two concurrent `--all` runs drive `SwapFree` to 0 kB and manufacture one extra red) |
 | [in-turn-read-hangs.md](in-turn-read-hangs.md) | a seat's turn hangs on `cli.mjs queue` / `status` / `scripts/clockin.mjs`; a broker window overruns its `--max-duration` bound while the log stops mid-pass; the read never returns and you cannot tell "the drain is stalled" from "the store is broken" | no |
 | [session-start-cost.md](session-start-cost.md) | a session is spending its first 30–60 minutes re-deriving rig state an instrument already prints; you are about to hand-query `selfdev.sqlite`; or you are deciding how many seats to wake (each wake is the expensive verb, and a failed one deposits rows) | no |
 | [workspace-move.md](workspace-move.md) | the rig's workspace moved machines or operating systems (fresh clone/copy, Linux box for a Windows rig, new user) — worktree registrations, seat cwds, the pin's links, or queue-cited commit shas do not resolve | yes |
@@ -203,6 +204,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 |---|---|
 | Broker / `serve` | broker-down-or-stalled, broker-safe-change |
 | Store / `pi.live` | store-corruption-recovery, store-secret-detected, store-probe-identity |
+| The suite gate reports a TIMEOUT for a demo that exited 0, or the failure report hides the cause | suite-red-standalone-green, slow-loop |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
 | A turn moved more tokens than the seat's window (`context_over_window`, `check` rule `context-over-window`), and whether that fraction is current at all | context-over-window, compact-a-seat, seat-reset, compaction-eval |
