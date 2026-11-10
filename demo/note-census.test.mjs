@@ -89,7 +89,7 @@ try {
     queue.items.push({ id: queue.nextId, from: "pm", to: "worker", subject: "Close the census", body: "report it per seat", status: "queued" });
     queue.nextId += 1;
   }, ctx);
-  const itemId = (await worker.harness.documentState(RigQueue, undefined, ctx)).value.items[0].id;
+  const itemId = (await worker.harness.snapshot(RigQueue, undefined, ctx)).items[0].id;
 
   worker.faux.setResponses([
     fauxAssistantMessage([fauxToolCall("write_note", {
