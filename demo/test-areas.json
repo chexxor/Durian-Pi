@@ -1,5 +1,5 @@
 {
-  "note": "Functional-area partition of demo/*.test.mjs (#1558). Areas roughly follow docs/FEATURES.md sections; `toolchain` is the devtools-owned upstream-pin/format surface. demo/test-areas.test.mjs is the check rule: every test file on disk must appear under exactly one area, and every listed file must exist. Run one area with `node scripts/test.mjs --area <name>`; the FULL suite (`node scripts/test.mjs`) is the pre-landing/QA gate \u2014 an area subset is NEVER sufficient evidence to land.",
+  "note": "Functional-area partition of demo/*.test.mjs (#1558). Areas roughly follow docs/FEATURES.md sections; `toolchain` is the devtools-owned upstream-pin/format surface. demo/test-areas.test.mjs is the check rule: every test file on disk must appear under exactly one area, and every listed file must exist. Run one area with `node scripts/test.mjs --area <name>`; the FULL suite (`node scripts/test.mjs`) is the pre-landing/QA gate — an area subset is NEVER sufficient evidence to land.",
   "areas": {
     "rig": [
       "demo/admission-deadline.test.mjs",
@@ -275,6 +275,7 @@
       "demo/commit-model.test.mjs",
       "demo/deepinfra-catalog.test.mjs",
       "demo/next-pointer.test.mjs",
+      "demo/runbook-diagnose.test.mjs",
       "demo/runbook-rules.test.mjs",
       "demo/seat-commit-instructions.test.mjs"
     ],
