@@ -64,7 +64,7 @@ async function addSeat(harness, name) {
 
 /** Read the Seats doc for one harness and fill its roster. */
 async function fillSeatRoster(roster, harness) {
-	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+	const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 	fillRoster(roster, seats);
 }
 
@@ -117,7 +117,7 @@ try {
 	assert.match(resultA, /the stuck job/, "the stalled claim's subject is surfaced to act on it");
 
 	// (c) The revealed stalled claim is NOT re-queued: status stays `claimed`.
-	const qAfter = (await a.harness.documentState(RigQueue, undefined, ctx)).value.items;
+	const qAfter = (await a.harness.snapshot(RigQueue, undefined, ctx)).items;
 	const stuck = qAfter.find((i) => i.id === stuckId);
 	assert.equal(stuck.status, "claimed", "a revealed stalled claim stays claimed (not re-queued)");
 
@@ -170,7 +170,7 @@ try {
 		new RegExp(`ITEM #${newerId}`),
 		`claim_work({itemId}) must claim the NAMED item (got: ${resultD.slice(0, 120)})`,
 	);
-	const qD = (await c.harness.documentState(RigQueue, undefined, ctx)).value.items;
+	const qD = (await c.harness.snapshot(RigQueue, undefined, ctx)).items;
 	const newer = qD.find((i) => i.id === newerId);
 	assert.equal(newer.status, "claimed", "the named item became claimed");
 	assert.ok(

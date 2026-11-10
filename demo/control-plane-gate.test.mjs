@@ -138,7 +138,7 @@ try {
   assert.equal(refused.deadLettered, 1, "a seat-sent pause is dead-lettered");
   assert.equal(refused.delivered, 0, "a seat-sent pause is NOT applied");
   assert.equal(resultOf("g-pause-refused"), null, "no success result is recorded for a refusal");
-  const pausedAfterRefusal = (await harness.documentState(RigControl, undefined, ctx))?.value?.paused ?? false;
+  const pausedAfterRefusal = (await harness.snapshot(RigControl, undefined, ctx))?.paused ?? false;
   assert.equal(pausedAfterRefusal, false, "the rig was NOT paused by the refused request");
   const refusalRow = auditRows().find((r) => r.requestId === "g-pause-refused");
   assert.ok(refusalRow, "the refusal is AUDITED");
@@ -151,12 +151,12 @@ try {
   const applied = await drainOne({ op: "pause", to: null, from: OPERATOR, reason: "gate demo", requestId: "g-pause-ok" });
   assert.equal(applied.delivered, 1, "the operator's pause is applied");
   assert.equal(resultOf("g-pause-ok").result.paused, true, "the pause result reports it applied");
-  assert.equal((await harness.documentState(RigControl, undefined, ctx))?.value?.paused, true, "the rig is paused");
+  assert.equal((await harness.snapshot(RigControl, undefined, ctx))?.paused, true, "the rig is paused");
   const allowedRow = auditRows().find((r) => r.requestId === "g-pause-ok");
   assert.equal(allowedRow.decision, "allowed");
   assert.equal(allowedRow.code, "operator-control-plane");
   await drainOne({ op: "unpause", to: null, from: OPERATOR, requestId: "g-unpause-ok" });
-  assert.equal((await harness.documentState(RigControl, undefined, ctx))?.value?.paused, false, "the operator's unpause is applied");
+  assert.equal((await harness.snapshot(RigControl, undefined, ctx))?.paused, false, "the operator's unpause is applied");
 
   // (a) a seat-sent `configure` of another seat's model is REFUSED (the escalation).
   const cfgRefused = await drainOne({ op: "configure", to: "worker", from: "impl", model: { provider: "evil", modelId: "evil-1" }, requestId: "g-cfg-refused" });

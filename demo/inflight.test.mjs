@@ -5,7 +5,7 @@
 //   (1) PURE  — assessInflightTurn trips on the reused causes (wall-clock #874, model-aware
 //       streamed volume #1705, named prose patterns #875) and stays quiet on a healthy turn;
 //   (2) LIVE  — on a REAL harness driven by a streaming faux model, a watch folded from
-//       pi-durable's agent event stream (`watchEvents`) trips a SINGLE runaway turn WHILE it is
+//       pi-durable's live document through src/livewatch.mjs (`watchLive`, a translation of `pi.live`) trips a SINGLE runaway turn WHILE it is
 //       still streaming — BEFORE `turn_end` — which is exactly what the post-settlement guard
 //       (src/degeneration.mjs `assessRun`) cannot do.
 //
@@ -14,10 +14,11 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai/providers/faux";
-import { configure, createRegistry, Harness, MemoryStorage, watchEvents } from "@earendil-works/pi-durable";
+import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 
 import { DEGEN_DEFAULTS } from "../src/degeneration.mjs";
 import { assessInflightTurn, createInflightWatch, inflightWindow, INFLIGHT_DEFAULTS } from "../src/inflight.mjs";
+import { watchLive } from "../src/livewatch.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 let failures = 0;
@@ -101,7 +102,7 @@ try {
 		},
 	});
 
-	const stream = await watchEvents(harness, convId, ctx);
+	const stream = await watchLive(harness, convId, ctx);
 	stream.start(async (events) => {
 		for (const event of events) {
 			if (event.type === "message_update") {

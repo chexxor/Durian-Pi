@@ -45,8 +45,8 @@ export async function resetSeatContext(
   dbPath,
   { dryRun = false, maxSeats = Infinity, context = BACKGROUND_CONTEXT } = {},
 ) {
-  const seatsDoc = await harness.documentState(Seats, undefined, context);
-  const seatsVal = seatsDoc?.value?.seats ?? {};
+  const seatsDoc = await harness.snapshot(Seats, undefined, context);
+  const seatsVal = seatsDoc?.seats ?? {};
   const seat = seatsVal[seatName];
   if (!seat) {
     return { refused: true, reason: "unknown-seat", seatCount: Object.keys(seatsVal).length };

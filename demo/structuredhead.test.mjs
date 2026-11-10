@@ -55,7 +55,7 @@ try {
 		ids.coordinator = await mk("coordinator", "program manager", []);
 	}, ctx);
 
-	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+	const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 	fillRoster(roster, seats);
 
 	const driveClaim = async (conversationId) => {

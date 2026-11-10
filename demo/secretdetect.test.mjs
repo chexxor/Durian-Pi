@@ -153,7 +153,7 @@ try {
 	await harness.commit(async (tx) => {
 		await enqueueItem(tx, "pm", "alpha", "task for alpha", "details A");
 	}, ctx);
-	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+	const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 	fillRoster(new Map(Object.entries(seats)), seats);
 
 	// alpha's conversation gets a committed secret two ways: the input entry (a

@@ -10,7 +10,7 @@
 //   completing an item enqueues a DONE notice back to the sender, so both
 //   directions flow through one durable queue.
 import { configure, defineDoc, defineExtension, defineTool, section } from "@earendil-works/pi-durable";
-import { Type } from "@earendil-works/pi-ai";
+import { arr, bool, int, lit, nul, num, obj, opt, str, union } from "@earendil-works/pi-schema";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -25,6 +25,10 @@ export const Seats = defineDoc({
 	version: 1,
 	scope: "session",
 	initial: () => ({ seats: {} }), // name -> {conversationId, role, goal, capabilities}
+	// REQUIRED in pi-durable 1.5.1 (defineDoc has no default for it). `() => false` keeps every change a
+	// delta: no base is written, reads replay the deltas. PROVISIONAL — the real checkpoint policy for the
+	// rig docs is a seat decision (ROADMAP 355); see docs/reviews/pi-1.5.1-delta-review-2026-11-10.md §5.
+	checkpointWhen: () => false,
 });
 
 /** Organizational links: from -> allowed recipients. Absent/empty = open. */
@@ -33,6 +37,7 @@ export const Edges = defineDoc({
 	version: 1,
 	scope: "session",
 	initial: () => ({ edges: [] }), // [{from, maySendTo:[names]}]
+	checkpointWhen: () => false, // provisional, see Seats above and ROADMAP 355
 });
 
 /** Constitution file text, injected into every seat's system prompt. */
@@ -41,6 +46,7 @@ export const Constitution = defineDoc({
 	version: 1,
 	scope: "session",
 	initial: () => ({ text: "" }),
+	checkpointWhen: () => false, // provisional, see Seats above and ROADMAP 355
 });
 
 /**
@@ -56,6 +62,7 @@ export const RigControl = defineDoc({
 	version: 1,
 	scope: "session",
 	initial: () => ({ paused: false, pausedAt: null, pausedBy: null, reason: null }),
+	checkpointWhen: () => false, // provisional, see Seats above and ROADMAP 355
 });
 
 /**
@@ -105,6 +112,7 @@ export const RigQueue = defineDoc({
 	version: 1,
 	scope: "session",
 	initial: () => ({ nextId: 1, items: [] }),
+	checkpointWhen: () => false, // provisional, see Seats above and ROADMAP 355
 });
 
 /**
@@ -638,65 +646,65 @@ const Router = defineExtension({
 				"omit it when there is no gate. Gates are ids, never prose. " +
 				"Pass `block` to record WHY a parked item is parked (reason + a mandatory resolver + reviewBy); " +
 				"omit it when the item is not parked. Pass `requires` for a capability the claimant must advertise.",
-			parameters: Type.Object({
-				to: Type.String({ description: "recipient seat name" }),
-				subject: Type.String(),
-				body: Type.String(),
-				requires: Type.Optional(Type.String({
+			parameters: obj({
+				to: str({ description: "recipient seat name" }),
+				subject: str(),
+				body: str(),
+				requires: opt(str({
 					description:
 						"capability the recipient must advertise; it is checked now AND persisted on the item so claimability can read it",
 				})),
-				blockedBy: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), {
+				blockedBy: opt(arr(int({ minimum: 1 }), {
 					description:
 						"structured gate: the queue-item ids this work is blocked on (must resolve to terminal `done` before the item is workable). Omit when ungated.",
 				})),
-				block: Type.Optional(
-					Type.Object({
-						source: Type.Optional(
-							Type.Union([Type.Literal("declared"), Type.Literal("legacy")]),
+				block: opt(
+					obj({
+						source: opt(
+							union([lit("declared"), lit("legacy")]),
 						),
-						reason: Type.String({
+						reason: str({
 							description:
 								"why the item is parked: dependency|question|operator|schedule|resource|manual|backlog|roadmap-gate",
 						}),
-						resolver: Type.String({
+						resolver: str({
 							description:
 								"who or what clears the park (mandatory): a seat name, operator|human|automatic, #<id> or RM-<n>",
 						}),
-						constraints: Type.Optional(
-							Type.Array(
-								Type.Object({
-									kind: Type.String({ description: "queue|roadmap|window" }),
-									ref: Type.Optional(Type.Union([Type.String(), Type.Number()])),
-									note: Type.Optional(Type.String()),
+						constraints: opt(
+							arr(
+								obj({
+									kind: str({ description: "queue|roadmap|window" }),
+									ref: opt(union([str(), num()])),
+									note: opt(str()),
 								}),
 							),
 						),
-						payload: Type.Optional(Type.Object({}, { additionalProperties: true })),
-						reviewBy: Type.Optional(
-							Type.Union([Type.String(), Type.Null()], {
+						payload: opt(obj({}, { open: true })),
+						reviewBy: opt(
+							union([str(), nul()], {
 								description:
 									"when to look again (ISO date); omit for the per-reason default, null only for backlog/question",
 							}),
 						),
 					}),
 				),
-				held: Type.Optional(Type.Boolean({
+				held: opt(bool({
 					description:
 						"Create the item PARKED (status held): unclaimable and no wake, so a 'registered, do not start' backlog row cannot starve a working seat. Release it later with release_work.",
 				})),
-				optimize: Type.Optional(Type.Boolean({
+				optimize: opt(bool({
 					description: "Rewrite body through the instruction optimizer before enqueueing (costs one model call).",
 				})),
-				tier: Type.Optional(Type.Union([
-					Type.Literal("trivial"),
-					Type.Literal("small"),
-					Type.Literal("feature"),
-					Type.Literal("project"),
+				tier: opt(union([
+					lit("trivial"),
+					lit("small"),
+					lit("feature"),
+					lit("project"),
 				], {
 					description: "Ratchet tier for this task (trivial/small/feature/project); assigned at intake and latched onto the chain. Raising above an existing tier needs a `reason`.",
 				})),
-				reason: Type.Optional(Type.String({
+				reason: opt(str({
 					description: "Required when RAISING the tier for an existing task; lowering is free so a reason is optional then.",
 				})),
 			}),
@@ -768,7 +776,7 @@ const Router = defineExtension({
 			name: "claim_work",
 			description:
 				"Claim a work item addressed to you. With no `itemId`, claims the oldest QUEUED item; pass `itemId` to claim that specific item (must be queued and addressed to you). Returns its subject and body.",
-			parameters: Type.Object({ itemId: Type.Optional(Type.Number()) }),
+			parameters: obj({ itemId: opt(num()) }),
 			replay: "safe",
 			execute: async (args, api, context) => {
 				const { name: me, hasReadTool } = await mySeatReadability(api, context);
@@ -942,17 +950,17 @@ const Router = defineExtension({
 				"PROCESSED\", not \"this artifact arrived\", and a reader holding a gate on it reads plain " +
 				"`done` as landed: write `LANDED at <sha>` or `ROUTED to <seat> as <id>, NOT YET LANDED` " +
 				"(#4073).",
-			parameters: Type.Object({
-				itemId: Type.Number(),
-				resultSummary: Type.String(),
-				evidence: Type.Optional(
-					Type.Object({
-						command: Type.String({
+			parameters: obj({
+				itemId: num(),
+				resultSummary: str(),
+				evidence: opt(
+					obj({
+						command: str({
 							description: "the exact command you ran to re-check the artifact",
 						}),
-						exitCode: Type.Number({ description: "its exit code (0 = pass)" }),
-						artifact: Type.Optional(
-							Type.String({
+						exitCode: num({ description: "its exit code (0 = pass)" }),
+						artifact: opt(
+							str({
 								description: "THE TREE the command ran against: a sha, a branch, or `main` (a DERIVED artifact as MERGED)",
 							}),
 						),
@@ -1064,12 +1072,12 @@ const Router = defineExtension({
 			name: "defer_work",
 			description:
 				"Stop and ask instead of guessing, or instead of silently stopping. Parks one of your claimed items on a question. Omit `to` to defer to the human operator, who sees it in `status`; pass `to` to also ask another seat. The item stays yours - call resume_work once you have the answer.",
-			parameters: Type.Object({
-				itemId: Type.Number(),
-				question: Type.String({
+			parameters: obj({
+				itemId: num(),
+				question: str({
 					description: "the specific question that blocks the item",
 				}),
-				to: Type.Optional(Type.String({
+				to: opt(str({
 					description:
 						"seat to ask as well as deferring; omit to defer to the human operator",
 				})),
@@ -1163,7 +1171,7 @@ const Router = defineExtension({
 			name: "resume_work",
 			description:
 				"Take back one of your deferred items once the answer has arrived, so complete_work can finish it.",
-			parameters: Type.Object({ itemId: Type.Number() }),
+			parameters: obj({ itemId: num() }),
 			replay: "safe",
 			execute: async (args, api, context) => {
 				const me = await mySeatName(api, context);
@@ -1191,9 +1199,9 @@ const Router = defineExtension({
 			description:
 				"Park a row without deferring: one you have claimed, or a QUEUED row addressed to you " +
 				"(no claim needed, #5724). The item becomes unclaimable and stops waking the seat until released.",
-			parameters: Type.Object({
-				itemId: Type.Number(),
-				reason: Type.Optional(Type.String({
+			parameters: obj({
+				itemId: num(),
+				reason: opt(str({
 					description: "brief explanation for why the item is being held",
 				})),
 			}),
@@ -1230,7 +1238,7 @@ const Router = defineExtension({
 			name: "release_work",
 			description:
 				"Restore a held item to queued, so the driver can re-wake the seat. The recipient may release an item addressed to it; the SENDER may release a held item it created (e.g. a parked backlog registration).",
-			parameters: Type.Object({ itemId: Type.Number() }),
+			parameters: obj({ itemId: num() }),
 			replay: "safe",
 			execute: async (args, api, context) => {
 				const me = await mySeatName(api, context);
@@ -1265,10 +1273,10 @@ const Router = defineExtension({
 			name: "revise_work",
 			description:
 				"Update the subject and/or body of a QUEUED item you sent or were sent, before it is claimed. A claimed item is being acted on and is not revised.",
-			parameters: Type.Object({
-				itemId: Type.Number(),
-				subject: Type.Optional(Type.String()),
-				body: Type.Optional(Type.String()),
+			parameters: obj({
+				itemId: num(),
+				subject: opt(str()),
+				body: opt(str()),
 			}),
 			replay: "safe",
 			execute: async (args, api, context) => {
@@ -1315,9 +1323,9 @@ const Router = defineExtension({
 			name: "cancel_work",
 			description:
 				"Cancel one of your items (sent by you or addressed to you) that is no longer worth doing. Terminal: it can never be claimed and the broker will never wake anyone for it. The reason is NOTIFIED to the other party as a CANCELLED notice, the same way a completion notifies them with a DONE notice.",
-			parameters: Type.Object({
-				itemId: Type.Number(),
-				reason: Type.String({
+			parameters: obj({
+				itemId: num(),
+				reason: str({
 					description: "why it is cancelled; recorded on the item for the other party and the queue view",
 				}),
 			}),
@@ -1342,7 +1350,7 @@ const Router = defineExtension({
 			name: "peek_queue",
 			description:
 				"List your queue work: non-terminal items addressed to or sent by you. Pass all=true for every item (any status, any seat) — oversight and debugging.",
-			parameters: Type.Object({ all: Type.Optional(Type.Boolean()) }),
+			parameters: obj({ all: opt(bool()) }),
 			replay: "safe",
 			execute: async (args, api, context) => {
 				const { name: me } = await mySeatReadability(api, context);

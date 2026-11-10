@@ -129,7 +129,7 @@ const itemId = await harness.commit(async (tx) => {
 	return id;
 }, ctx);
 
-const queueItems = (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const queueItems = (await harness.snapshot(RigQueue, undefined, ctx)).items;
 const plans = planEscalations({
 	seats: [{ name: "worker", conversationId }],
 	queueItems,
@@ -139,7 +139,7 @@ const plans = planEscalations({
 const applied = await applyEscalations(harness, plans, ctx);
 assert.equal(applied.length, 1, "the escalation was applied");
 
-const after = (await harness.documentState(RigQueue, undefined, ctx)).value.items.find((it) => it.id === itemId);
+const after = (await harness.snapshot(RigQueue, undefined, ctx)).items.find((it) => it.id === itemId);
 assert.equal(after.status, "deferred", "the stuck item is parked, not silently dropped");
 assert.equal(after.deferredTo, "human", "parked ON THE HUMAN");
 assert.equal(after.transitions.at(-1).by, "supervisor", "the deferral is attributed to the supervisor");

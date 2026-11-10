@@ -65,12 +65,12 @@ faux.appendResponses([
 	fauxAssistantMessage(fauxText("CONTINUATION")),
 ]);
 
-const roster = ((await harness.documentState(Seats, undefined, ctx))?.value?.seats ?? {});
+const roster = ((await harness.snapshot(Seats, undefined, ctx))?.seats ?? {});
 const conv = await harness.conversation(roster.worker.conversationId, ctx);
 const run = await conv.submit({ type: "input", content: "send optimized work" }, ctx);
 await run.wait(ctx);
 
-const q = ((await harness.documentState(RigQueue, undefined, ctx))?.value ?? {});
+const q = ((await harness.snapshot(RigQueue, undefined, ctx)) ?? {});
 const items = q.items ?? [];
 assert.equal(items.length, 1, `expected 1 queued item, got ${items.length}`);
 assert.equal(items[0].body, "OPTIMIZED BODY", `stored body=${items[0].body}`);
@@ -88,7 +88,7 @@ faux.setResponses([
 ]);
 const run2 = await conv.submit({ type: "input", content: "send raw work" }, ctx);
 await run2.wait(ctx);
-const q2 = ((await harness.documentState(RigQueue, undefined, ctx))?.value ?? {});
+const q2 = ((await harness.snapshot(RigQueue, undefined, ctx)) ?? {});
 const rawItem = (q2.items ?? []).find((it) => it.subject === "Raw");
 assert.ok(rawItem, "raw item enqueued");
 assert.equal(rawItem.body, "as written", "raw body must pass through untouched");

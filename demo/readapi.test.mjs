@@ -74,7 +74,7 @@ await harness.commit(async (tx) => {
 	await enqueueItem(tx, "alpha", "pm", "work report", "details C");
 }, ctx);
 
-const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 fillRoster(new Map(Object.entries(seats)), seats);
 
 try {

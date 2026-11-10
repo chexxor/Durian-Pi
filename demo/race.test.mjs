@@ -48,7 +48,7 @@ faux.setResponses([
 	fauxAssistantMessage(fauxText("ok")),
 ]);
 
-const roster = ((await harness.documentState(Seats, undefined, ctx))?.value?.seats ?? {});
+const roster = ((await harness.snapshot(Seats, undefined, ctx))?.seats ?? {});
 assert.ok(roster.worker?.conversationId, "worker seat registered");
 const conv = await harness.conversation(roster.worker.conversationId, ctx);
 
@@ -88,7 +88,7 @@ assert.equal(losers.length, 1, `exactly one friendly loser expected, got ${loser
 assert.equal(losers[0].isError, false, "the losing claim must not be an error");
 
 // The queue itself must show exactly one claimed event — no double-assignment.
-const q = ((await harness.documentState(RigQueue, undefined, ctx))?.value ?? {});
+const q = ((await harness.snapshot(RigQueue, undefined, ctx)) ?? {});
 const items = q.items ?? [];
 assert.equal(items.filter((it) => it.subject === "Only item").length, 1,
 	"the contended item must exist exactly once");

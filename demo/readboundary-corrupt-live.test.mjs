@@ -106,18 +106,25 @@ try {
 			ctx,
 		);
 		const liveId = page.items[0].id;
+		// The delta must declare the version the document actually carries (pi.live is version 3 at v1.5.1).
+		const LIVE_VERSION = (await s2.document(liveId, "current", ctx))?.version ?? 1;
+		// pi-durable 1.5.1's Storage.commit takes BATCHES of writes plus a receipt callback:
+		// commit(batches, receive, context) — group commit, the reason our store write count drops.
 		await s2.commit(
 			[
-				{
-					type: "document.change",
-					id: liveId,
-					content: {
-						kind: "delta",
-						version: 1,
-						ops: [["a", ["generation", "message", "content", 0, "text"], "orphan"]],
+				[
+					{
+						type: "document.change",
+						id: liveId,
+						content: {
+							kind: "delta",
+							version: LIVE_VERSION,
+							ops: [["a", ["generation", "message", "content", 0, "text"], "orphan"]],
+						},
 					},
-				},
+				],
 			],
+			() => {},
 			ctx,
 		);
 		await s2.close(ctx);

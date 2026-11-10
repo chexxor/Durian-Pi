@@ -56,7 +56,7 @@ try {
 		(await tx.doc(Seats)).seats.worker.capabilities = ["implement"];
 	}, ctx);
 
-	const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+	const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 	fillRoster(roster, seats);
 	const conv = await harness.conversation(workerId, ctx);
 

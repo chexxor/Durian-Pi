@@ -51,15 +51,15 @@ faux.setResponses([
 	fauxAssistantMessage(fauxText("done looking")),
 ]);
 
-const seatsDoc = await harness.documentState((await import("../src/rig.mjs")).Seats, undefined, ctx);
-const roster = seatsDoc?.value?.seats ?? {};
+const seatsDoc = await harness.snapshot((await import("../src/rig.mjs")).Seats, undefined, ctx);
+const roster = seatsDoc?.seats ?? {};
 const workerConv = await harness.conversation(roster.worker.conversationId, ctx);
 
 const run = await workerConv.submit({ type: "input", content: "Check your queue." }, ctx);
 await run.wait(ctx);
 
-const qDoc = await harness.documentState(RigQueue, undefined, ctx);
-const q = qDoc?.value ?? {};
+const qDoc = await harness.snapshot(RigQueue, undefined, ctx);
+const q = qDoc ?? {};
 for (const it of q.items ?? []) {
 	console.log(`QUEUE #${it.id} [${it.status}] ${it.from}->${it.to} :: ${it.subject}`);
 }

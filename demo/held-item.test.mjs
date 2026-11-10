@@ -59,8 +59,8 @@ try {
 		await mk("worker", "implementation engineer");
 	}, ctx);
 
-	const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-	const queueState = async () => (await harness.documentState(RigQueue, undefined, ctx)).value;
+	const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+	const queueState = async () => (await harness.snapshot(RigQueue, undefined, ctx));
 	const item = async (id) => (await queueState()).items.find((it) => it.id === id);
 	let first = true;
 	const call = async (name, toolName, toolArgs) => {

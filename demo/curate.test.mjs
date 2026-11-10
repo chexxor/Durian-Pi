@@ -83,8 +83,8 @@ await harness.commit(async (tx) => {
 	await enqueueItem(tx, "pm", "intruder", "Sneaky task", "details"); // #3
 }, ctx);
 
-const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-const queueState = async () => (await harness.documentState(RigQueue, undefined, ctx)).value;
+const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+const queueState = async () => (await harness.snapshot(RigQueue, undefined, ctx));
 const item = async (id) => (await queueState()).items.find((it) => it.id === id);
 
 async function transcript(name) {

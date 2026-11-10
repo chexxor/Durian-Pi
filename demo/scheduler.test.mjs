@@ -10,6 +10,7 @@
 // Failing-first: before src/scheduler.mjs exists this dies with
 // ERR_MODULE_NOT_FOUND. Run: node demo/scheduler.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
+import { followCommits } from "../src/commitstream.mjs";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -121,7 +122,7 @@ const harness = await Harness.open(new MemoryStorage(), { models, registry }, ct
 let passClock = 10_000;
 const broker = new WakeScheduler({ minIntervalMs: 0, seatCooldownMs: 5_000, now: () => passClock });
 const commits = [];
-const unsubscribe = harness.subscribeCommits((publication) => {
+const unsubscribe = followCommits(harness, (publication) => {
 	commits.push(publication);
 	broker.notify(publication);
 });
@@ -143,8 +144,8 @@ assert.ok(
 );
 assert.equal(broker.dirty, true, "and it marked the scheduler dirty");
 
-const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-const items = async () => (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
+const items = async () => (await harness.snapshot(RigQueue, undefined, ctx)).items;
 const pass = async () => {
 	const current = await items();
 	const candidates = selectWakes({ seats, items: current });

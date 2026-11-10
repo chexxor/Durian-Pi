@@ -61,21 +61,39 @@ const livePage = await storage.scanDocuments(
 	undefined,
 	ctx,
 );
-await storage.commit(
+// At v1.5.1 `pi.live` carries version 3. A delta declaring a different version is REFUSED
+// (commit returns {stored:0, refused:{}}), which silently un-corrupts the fixture — so the
+// version is read from the document rather than hard-coded.
+const LIVE_VERSION = (await storage.document(livePage.items[0].id, "current", ctx))?.version ?? 1;
+// pi-durable 1.5.1: Storage.commit(batches, receive, context) — group commit.
+const corruptResult = await storage.commit(
 	[
-		{
-			type: "document.change",
-			id: livePage.items[0].id,
-			content: { kind: "delta", version: 1, ops: [["a", ["generation", "message", "content", 0, "text"], "orphan"]] },
-		},
+		[
+			{
+				type: "document.change",
+				id: livePage.items[0].id,
+				content: {
+					kind: "delta",
+					version: LIVE_VERSION,
+					ops: [["a", ["generation", "message", "content", 0, "text"], "orphan"]],
+				},
+			},
+		],
 	],
+	() => {},
 	ctx,
 );
 
 // A fresh driver process: the corrupt document is read for the first time here.
 const pre = await openHarness(storage);
-const seats = (await pre.documentState(Seats, undefined, ctx)).value.seats;
-const items = (await pre.documentState(RigQueue, undefined, ctx)).value.items;
+assert.equal(
+	corruptResult.stored,
+	1,
+	"the F14 fixture landed — a refused delta (version mismatch) would silently un-corrupt the document",
+);
+
+const seats = (await pre.snapshot(Seats, undefined, ctx)).seats;
+const items = (await pre.snapshot(RigQueue, undefined, ctx)).items;
 
 await assert.rejects(
 	preFixDriveOnce(pre, { seats, items, pendingConvIds: new Set(), busySeats: new Set(), context: ctx }),

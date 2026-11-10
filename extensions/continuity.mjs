@@ -35,7 +35,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { CompactionTask, GenerationTask, defineDoc, defineExtension, defineTool, hook, section } from "@earendil-works/pi-durable";
-import { Type } from "@earendil-works/pi-ai";
+import { arr, bool, lit, nul, num, obj, opt, str, union } from "@earendil-works/pi-schema";
 import { loadConfig } from "../src/config.mjs";
 import { RigQueue, Seats } from "../src/rig.mjs";
 
@@ -60,6 +60,7 @@ export const ContinuityNotes = defineDoc({
 		filesTouched: [],
 		updatedAt: null,
 	}),
+	checkpointWhen: () => false, // required in pi-durable 1.5.1; provisional (ROADMAP 355)
 });
 
 /**
@@ -260,7 +261,7 @@ export const continuityExtension = defineExtension({
 			// `parameters` is REQUIRED, not optional: pi-ai's `toToolDeclaration` (utils/transcript.js:107-112) does
 			// `JSON.parse(JSON.stringify(tool.parameters))`, so a tool with no declared parameters faults the whole
 			// run with `"undefined" is not valid JSON` before the tool ever executes.
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			execute: async (_args, api, context) => {
 				const note = await readNotePlain(api, context);
 				const text = renderNote(note);
@@ -280,46 +281,46 @@ export const continuityExtension = defineExtension({
 				"(a path, a row id, a command you ran) - a claim without evidence belongs in `hypotheses`. Write " +
 				"it BEFORE you reach the boundary: a compaction uses this note as its summary instead of asking a " +
 				"model to summarise the transcript.",
-			parameters: Type.Object({
-				itemId: Type.Optional(Type.Number({ description: "the queue item this note belongs to" })),
-				goal: Type.Optional(Type.String({ description: "the item's objective, copied, not paraphrased" })),
-				verified: Type.Optional(
-					Type.Array(
-						Type.Object({
-							claim: Type.String(),
-							evidence: Type.Optional(Type.String({ description: "path, row id, command output - what shows it is true" })),
+			parameters: obj({
+				itemId: opt(num({ description: "the queue item this note belongs to" })),
+				goal: opt(str({ description: "the item's objective, copied, not paraphrased" })),
+				verified: opt(
+					arr(
+						obj({
+							claim: str(),
+							evidence: opt(str({ description: "path, row id, command output - what shows it is true" })),
 						}),
 						{ description: "facts you have established, each with its evidence" },
 					),
 				),
-				hypotheses: Type.Optional(Type.Array(Type.String(), { description: "believed but not proven" })),
-				constraints: Type.Optional(Type.Array(Type.String(), { description: "rulings and gates that bind this item" })),
-				done: Type.Optional(
-					Type.Array(
-						Type.Object({
-							what: Type.String(),
-							evidence: Type.Optional(Type.String({ description: "sha, branch, test name" })),
+				hypotheses: opt(arr(str(), { description: "believed but not proven" })),
+				constraints: opt(arr(str(), { description: "rulings and gates that bind this item" })),
+				done: opt(
+					arr(
+						obj({
+							what: str(),
+							evidence: opt(str({ description: "sha, branch, test name" })),
 						}),
 						{ description: "what is committed" },
 					),
 				),
-				next: Type.Optional(
-					Type.Union([
-						Type.String({ description: "the single next action" }),
-						Type.Object({ action: Type.String(), where: Type.Optional(Type.String()) }),
+				next: opt(
+					union([
+						str({ description: "the single next action" }),
+						obj({ action: str(), where: opt(str()) }),
 					]),
 				),
-				blockers: Type.Optional(
-					Type.Array(
-						Type.Object({
-							what: Type.String(),
-							owner: Type.Optional(Type.String({ description: "who must unblock it - often the operator" })),
+				blockers: opt(
+					arr(
+						obj({
+							what: str(),
+							owner: opt(str({ description: "who must unblock it - often the operator" })),
 						}),
 						{ description: "what cannot proceed, and who owns it" },
 					),
 				),
-				worktree: Type.Optional(Type.String({ description: "the worktree you are standing in" })),
-				filesTouched: Type.Optional(Type.Array(Type.String(), { description: "files this item has changed" })),
+				worktree: opt(str({ description: "the worktree you are standing in" })),
+				filesTouched: opt(arr(str(), { description: "files this item has changed" })),
 			}),
 			// Writing the note is idempotent (fields are replaced, not appended), so a replay is harmless.
 			execute: async (args, api, context) => {
@@ -360,7 +361,7 @@ export const continuityExtension = defineExtension({
 				"compacted. The prior turns leave the model context; the durable transcript keeps them.",
 			// A replay would draw a second boundary, so it must not be replayed automatically.
 			replay: "unsafe",
-			parameters: Type.Object({}),
+			parameters: obj({}),
 			execute: async (_args, api, context) => {
 				const note = await readNotePlain(api, context);
 				const text = renderNote(note);

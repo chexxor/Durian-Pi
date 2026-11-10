@@ -60,13 +60,13 @@ try {
 		const storage = await openNodeJsonlStorage(dir, ctx);
 		const harness = await Harness.open(storage, { models, registry }, ctx);
 
-		const seatsDoc = await harness.documentState(Seats, undefined, ctx);
-		assert.ok(seatsDoc?.value?.seats?.worker, "seat roster must survive restart");
-		assert.equal(seatsDoc.value.seats.worker.role, "implementation", "seat role intact");
-		workerConvId = seatsDoc.value.seats.worker.conversationId;
+		const seatsDoc = await harness.snapshot(Seats, undefined, ctx);
+		assert.ok(seatsDoc?.seats?.worker, "seat roster must survive restart");
+		assert.equal(seatsDoc.seats.worker.role, "implementation", "seat role intact");
+		workerConvId = seatsDoc.seats.worker.conversationId;
 
-		const qDoc = await harness.documentState(RigQueue, undefined, ctx);
-		const items = qDoc?.value?.items ?? [];
+		const qDoc = await harness.snapshot(RigQueue, undefined, ctx);
+		const items = qDoc?.items ?? [];
 		assert.equal(items.length, 1, `expected 1 surviving item, got ${items.length}`);
 		assert.equal(items[0].status, "queued", `surviving item status=${items[0].status}`);
 		assert.equal(items[0].subject, "Ship the module", "subject intact");
@@ -92,7 +92,7 @@ try {
 		const run = await workerConv.submit({ type: "input", content: "Check your queue." }, ctx);
 		await run.wait(ctx);
 
-		const qAfter = (await harness.documentState(RigQueue, undefined, ctx))?.value ?? {};
+		const qAfter = (await harness.snapshot(RigQueue, undefined, ctx)) ?? {};
 		const it = (qAfter.items ?? []).find((x) => x.id === items[0].id);
 		assert.ok(it, "surviving item still present after workflow");
 		assert.equal(it.status, "done", `item should reach done after claim+complete, got ${it.status}`);

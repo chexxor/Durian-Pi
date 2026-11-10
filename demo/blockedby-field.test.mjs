@@ -121,9 +121,9 @@ try {
 		await mk("worker", "implementation engineer");
 	}, ctx);
 
-	const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+	const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
 	const queueItems = async () =>
-		(await harness.documentState(RigQueue, undefined, ctx)).value.items;
+		(await harness.snapshot(RigQueue, undefined, ctx)).items;
 	const item = async (id) => (await queueItems()).find((it) => it.id === id);
 	let first = true;
 	const call = async (name, toolName, toolArgs) => {

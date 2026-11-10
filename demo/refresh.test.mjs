@@ -60,15 +60,15 @@ async function withHarness(fn) {
  * patch revisions on top of a base revision are applied correctly. */
 function readPrompts() {
 	return withHarness(async (harness) => {
-		const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+		const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
 		const out = new Map();
-		for (const [name, seat] of Object.entries(seatsDoc.value.seats)) {
-			const agent = await harness.documentState(
+		for (const [name, seat] of Object.entries(seatsDoc.seats)) {
+			const agent = await harness.snapshot(
 				AgentDoc,
 				seat.conversationId,
 				BACKGROUND_CONTEXT,
 			);
-			out.set(name, agent?.value?.instructions ?? "");
+			out.set(name, agent?.instructions ?? "");
 		}
 		return out;
 	});
@@ -93,9 +93,9 @@ try {
 
 	// Simulate a seat stored by an earlier durian-pi version: strip its primer.
 	await withHarness(async (harness) => {
-		const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+		const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
 		await harness.commit(async (tx) => {
-			await configure(tx, seatsDoc.value.seats.pm.conversationId, {
+			await configure(tx, seatsDoc.seats.pm.conversationId, {
 				model: { provider: "faux", modelId: "faux-seat" },
 				instructions: "STALE PERSONA WITH NO PRIMER",
 			});

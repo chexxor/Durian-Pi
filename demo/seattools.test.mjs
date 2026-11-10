@@ -177,7 +177,7 @@ try {
 		["the guard is installed", "registry.install(SeatGuard);"],
 		["the seat tools are installed", "registry.install(SeatTools);"],
 		["the harness is given the confining environment", "env: makeSeatEnv(seatRoster),"],
-		["the roster is filled from the store", "fillRoster(seatRoster, rosterDoc?.value?.seats);"],
+		["the roster is filled from the store", "fillRoster(seatRoster, rosterDoc?.seats);"],
 		["seat tools are scoped at `up`", "scopeSeatTools(configure, tx, seatsDoc.seats);"],
 	]) {
 		check(label, cli.includes(needle), `cli.mjs does not contain ${JSON.stringify(needle)}`);

@@ -28,11 +28,12 @@ async function enqueueQueuedItem(to = "impl") {
   const { BACKGROUND_CONTEXT } = await import("@earendil-works/chord/context");
   const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
   const { Harness, createRegistry } = await import("@earendil-works/pi-durable");
+  const { createModels } = await import("@earendil-works/pi-ai");
   const { RigQueue, Router, enqueueItem } = await import("../src/rig.mjs");
   const registry = createRegistry();
   registry.install(Router);
   const storage = await openNodeSqliteStorage(dbPath);
-  const harness = await Harness.open(storage, { registry }, BACKGROUND_CONTEXT);
+  const harness = await Harness.open(storage, { models: createModels(), registry }, BACKGROUND_CONTEXT);
   await harness.commit(async (tx) => {
     await tx.doc(RigQueue);
     await enqueueItem(tx, "operator", to, "wake-path probe item", "body — queued so the broker must wake the seat");

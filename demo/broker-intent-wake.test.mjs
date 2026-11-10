@@ -9,6 +9,7 @@
 //
 // Run: node demo/broker-intent-wake.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
+import { followCommits } from "../src/commitstream.mjs";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,7 +52,7 @@ await harness.commit(async (tx) => {
 
 const scheduler = new WakeScheduler({ minIntervalMs: 10, seatCooldownMs: 0 });
 const signal = createWakeSignal();
-const unsubscribe = harness.subscribeCommits((publication) => {
+const unsubscribe = followCommits(harness, (publication) => {
 	scheduler.notify(publication);
 	if (scheduler.dirty) signal.raise();
 });

@@ -37,6 +37,7 @@ import { tmpdir } from "node:os";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
+import { createModels } from "@earendil-works/pi-ai";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 
 // The live leg must know whether another owner is writing the store it is hashing (#6057).
@@ -228,7 +229,7 @@ const asstToolCall = () => ({
 {
 	const fixtureDb = join(tmp, "fixture.sqlite");
 	const storage = await openNodeSqliteStorage(fixtureDb);
-	const harness = await Harness.open(storage, { registry: createRegistry() }, BACKGROUND_CONTEXT);
+	const harness = await Harness.open(storage, { models: createModels(), registry: createRegistry() }, BACKGROUND_CONTEXT);
 	harness.resume();
 	try {
 		await harness.commit(async (tx) => {
@@ -271,7 +272,7 @@ const asstToolCall = () => ({
 		let movingConv = null;
 		{
 			const s1 = await openNodeSqliteStorage(movingDb);
-			const d1 = await Harness.open(s1, { registry: createRegistry() }, BACKGROUND_CONTEXT);
+			const d1 = await Harness.open(s1, { models: createModels(), registry: createRegistry() }, BACKGROUND_CONTEXT);
 			await d1.commit(async (tx) => {
 				const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
 				await registerSeat(tx, "moving-driver", conv.id, "implementation");
@@ -283,7 +284,7 @@ const asstToolCall = () => ({
 		const settled = sha256(movingDb);
 		{
 			const s2 = await openNodeSqliteStorage(movingDb);
-			const d2 = await Harness.open(s2, { registry: createRegistry() }, BACKGROUND_CONTEXT);
+			const d2 = await Harness.open(s2, { models: createModels(), registry: createRegistry() }, BACKGROUND_CONTEXT);
 			await d2.commit(async (tx) => {
 				for (let i = 0; i < 40; i++) await tx.appendEntry(movingConv, { kind: "pi.assistant", model: [{ role: "assistant" }] });
 			}, BACKGROUND_CONTEXT);

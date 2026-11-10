@@ -71,6 +71,7 @@ import {
 	wrapProviderWithSlots,
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
+import { followCommits } from "./src/commitstream.mjs";
 import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
@@ -524,8 +525,8 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
   // Viewers skip it: enabling scheduling is a write-side act and would let
   // a passive `watch` kick the very queue it is observing.
   if (resume) harness.resume();
-  const rosterDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-  fillRoster(seatRoster, rosterDoc?.value?.seats);
+  const rosterDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
+  fillRoster(seatRoster, rosterDoc?.seats);
   // DOGFOOD F12: a write-side run must never silently proceed against a tree the
   // operator did not name. Each seat's working directory is resolved ONCE at `up`
   // time (seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT) and persisted onto the
@@ -537,7 +538,7 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
   // makeSeatEnv (which runs per tool call and must stay cheap).
   if (enforceSeatRoot && CFG.DURIG_SEAT_ROOT) {
     const root = normalizePath(CFG.DURIG_SEAT_ROOT);
-    const seatsVal = rosterDoc?.value?.seats ?? {};
+    const seatsVal = rosterDoc?.seats ?? {};
     let mismatched = null;
     for (const [name, s] of Object.entries(seatsVal)) {
       let persistedCwd;
@@ -878,11 +879,11 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
 async function previewUp(harness, spec, resolvedPromptBySeat, constitutionText, refresh) {
   const context = BACKGROUND_CONTEXT;
   const [seatsDoc, edgesDoc, constitutionDoc] = await Promise.all([
-    harness.documentState(Seats, undefined, context),
-    harness.documentState(Edges, undefined, context),
-    harness.documentState(Constitution, undefined, context),
+    harness.snapshot(Seats, undefined, context),
+    harness.snapshot(Edges, undefined, context),
+    harness.snapshot(Constitution, undefined, context),
   ]);
-  const seatsVal = seatsDoc?.value?.seats ?? {};
+  const seatsVal = seatsDoc?.seats ?? {};
   const wouldCreate = [];
   const wouldRefresh = [];
   const unchanged = [];
@@ -901,7 +902,7 @@ async function previewUp(harness, spec, resolvedPromptBySeat, constitutionText, 
     const seatCwd = seat.cwd ?? spec.cwd ?? CFG.DURIG_SEAT_ROOT;
     let agent;
     try {
-      agent = (await harness.documentState(AgentDoc, registered.conversationId, context))?.value ?? {};
+      agent = (await harness.snapshot(AgentDoc, registered.conversationId, context)) ?? {};
     } catch (err) {
       // Cannot know what would change: report the seat and the cause, never guess.
       wouldRefresh.push({ seat: seat.name, changes: { unreadable: String(err?.message ?? err) } });
@@ -927,9 +928,9 @@ async function previewUp(harness, spec, resolvedPromptBySeat, constitutionText, 
   }
   const edgesChanged =
     spec.edges !== undefined &&
-    JSON.stringify(edgesDoc?.value?.edges ?? null) !== JSON.stringify(spec.edges);
-  const constitutionChanged =
-    constitutionText !== undefined && constitutionDoc?.value?.text !== constitutionText;
+    JSON.stringify(edgesDoc?.edges ?? null) !== JSON.stringify(spec.edges);
+  // harness.snapshot returns the VALUE, not the StoredDocument wrapper (v1.5.1).
+  const constitutionChanged = constitutionText !== undefined && constitutionDoc?.text !== constitutionText;
   return {
     wouldCreate,
     ...(refresh ? { wouldRefresh } : { existing: unchanged }),
@@ -1382,8 +1383,8 @@ async function cmdResume() {
   );
   const { harness } = await openHarness();
   try {
-    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.seats ?? {};
     const seats = Object.entries(seatsVal);
     const convToSeat = new Map(seats.map(([name, s]) => [s.conversationId, name]));
     noteEmptyRig(seats.length);
@@ -1459,19 +1460,19 @@ async function cmdResume() {
 // (The newer-pi.assistant ran-under read stays as a comment-level note: ran-under LAGS
 // config between refresh and next generation, so it can never provide the idempotent
 // reference the ruling demands.)
-// Read-only: documentState for Seats + RigQueue in ONE pass (carried claimed ids for
+// Read-only: snapshot for Seats + RigQueue in ONE pass (carried claimed ids for
 // the handoff, per #154) + one AgentDoc read per existing seat.
 // @returns {Array<{seat:string, from:string, to:string, convId:number|string, claimedIds:number[]}>}
 import { AgentDoc } from "@earendil-works/pi-durable";
 async function detectModelMismatch(harness, spec, resolvedPromptBySeat) {
   const context = BACKGROUND_CONTEXT;
   const [seatsDoc, queueDoc] = await Promise.all([
-    harness.documentState(Seats, undefined, context),
-    harness.documentState(RigQueue, undefined, context),
+    harness.snapshot(Seats, undefined, context),
+    harness.snapshot(RigQueue, undefined, context),
   ]);
-  const seatsVal = seatsDoc?.value?.seats ?? {};
+  const seatsVal = seatsDoc?.seats ?? {};
   const claimedIds = new Map(); // seat -> claimed item ids it holds
-  for (const it of queueDoc?.value?.items ?? []) {
+  for (const it of queueDoc?.items ?? []) {
     if (it?.status === "claimed" && typeof it?.to === "string") {
       claimedIds.set(it.to, [...(claimedIds.get(it.to) ?? []), it.id]);
     }
@@ -1486,8 +1487,8 @@ async function detectModelMismatch(harness, spec, resolvedPromptBySeat) {
     // The conversation's configured model: what `configure` last wrote (AgentDoc.model).
     let from = null;
     try {
-      const agentDoc = await harness.documentState(AgentDoc, registered.conversationId, context);
-      const ref = agentDoc?.value?.model;
+      const agentDoc = await harness.snapshot(AgentDoc, registered.conversationId, context);
+      const ref = agentDoc?.model;
       if (ref && typeof ref.provider === "string" && typeof ref.modelId === "string") {
         from = `${ref.provider}/${ref.modelId}`;
       }
@@ -1620,8 +1621,8 @@ async function cmdCompact(seatName, instructions) {
   // compact writes a context boundary, so it must not race a running generation's writer.
   const { harness } = await openHarness();
   try {
-    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.seats ?? {};
     const seat = seatsVal[seatName];
     if (!seat) {
       noteEmptyRig(Object.keys(seatsVal).length);
@@ -1721,9 +1722,9 @@ async function cmdCompact(seatName, instructions) {
  * channel. Bounded and idempotent, so `run --watch` can call it every pass.
  */
 async function superviseOnce(harness, probeStorage, context) {
-  const seatsDoc = await harness.documentState(Seats, undefined, context);
-  const queueDoc = await harness.documentState(RigQueue, undefined, context);
-  const seatList = Object.entries(seatsDoc?.value?.seats ?? {}).map(([name, seat]) => ({ name, ...seat }));
+  const seatsDoc = await harness.snapshot(Seats, undefined, context);
+  const queueDoc = await harness.snapshot(RigQueue, undefined, context);
+  const seatList = Object.entries(seatsDoc?.seats ?? {}).map(([name, seat]) => ({ name, ...seat }));
   const failureStreakByConv = new Map();
   for (const seat of seatList) {
     const page = await probeStorage.scanSubmissions(
@@ -1749,7 +1750,7 @@ async function superviseOnce(harness, probeStorage, context) {
       }
     }
   }
-  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.value?.items, failureStreakByConv, errorByConv });
+  const plans = planEscalations({ seats: seatList, queueItems: queueDoc?.items, failureStreakByConv, errorByConv });
   const escalations = await applyEscalations(harness, plans, context);
 
   // Degeneration guard (mitigations 1+2 for the F29 class): reset a seat whose CURRENT run
@@ -2122,7 +2123,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
     const probeStorage = await openStore();
     // Subscribe BEFORE the first pass so a commit that lands during startup is not missed. The
     // listener must not throw, block, or call Session APIs: it only classifies and signals.
-    const unsubscribe = harness.subscribeCommits((publication) => {
+    const unsubscribe = followCommits(harness, (publication) => {
       scheduler.notify(publication);
       if (scheduler.dirty) signal.raise();
     });
@@ -2295,8 +2296,8 @@ async function cmdStop(seatName, reason) {
     reason !== undefined && reason.trim() !== "" ? reason.trim() : "operator stop";
   const { harness } = await openHarness({ resume: false });
   try {
-    const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-    const seatsVal = seatsDoc?.value?.seats ?? {};
+    const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
+    const seatsVal = seatsDoc?.seats ?? {};
     const seat = seatsVal[seatName];
     if (!seat) {
       noteEmptyRig(Object.keys(seatsVal).length);
@@ -2445,8 +2446,8 @@ async function cmdSend(seatName, text, { stream = false, requestId = null } = {}
     async () => {
       const { harness, providerId } = await openHarness({ live, enforceSeatRoot: true });
       {
-        const doc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-        const seatsVal = doc?.value?.seats ?? {};
+        const doc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
+        const seatsVal = doc?.seats ?? {};
         const seat = seatsVal[seatName];
         if (!seat) {
           // "unknown seat: pm" on the wrong database reads as a typo; the real
@@ -2754,7 +2755,7 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
 // (1) pi-durable's DocumentWatch is fed by in-process replication only
 // (session/observation.js CommittedWatch) and sqlite storage has no
 // cross-process change notification, so a separate watcher process never
-// receives pushes; (2) even documentState on an already-materialized doc
+// receives pushes; (2) even snapshot on an already-materialized doc
 // keeps serving the session's stale replicated value. Reading through
 // openNodeSqliteStorage bypasses both; 750 ms keeps operator latency
 // imperceptible at negligible cost.

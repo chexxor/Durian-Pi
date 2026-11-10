@@ -81,8 +81,8 @@ await harness.commit(async (tx) => {
 	if (legacyItem) delete legacyItem.notice;
 }, ctx);
 
-const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-const queueState = async () => (await harness.documentState(RigQueue, undefined, ctx)).value;
+const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+const queueState = async () => (await harness.snapshot(RigQueue, undefined, ctx));
 const items = async () => (await queueState()).items;
 const item = async (id) => (await items()).find((it) => it.id === id);
 

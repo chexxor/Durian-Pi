@@ -142,7 +142,7 @@ try {
     writeFileSync(stopRequestPath(db2), String(Date.now() - 60_000));
     let passRan = false;
     const fakeHarness = {
-      documentState: async () => ({ value: {} }),
+      snapshot: async () => ({}),
       inspect: async () => {
         passRan = true;
         return { submissions: [], tasks: [] };

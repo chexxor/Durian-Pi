@@ -50,9 +50,9 @@ let attempts = 0;
 const drive = (opts) =>
 	runWakeLoop({
 		harness: {
-			// drivePass's first act is `harness.documentState(...)`; throwing there is a WHOLE-PASS
+			// drivePass's first act is `harness.snapshot(...)`; throwing there is a WHOLE-PASS
 			// throw — the exact shape the ruling is about (not a per-seat wake-failure).
-			documentState: async () => {
+			snapshot: async () => {
 				throw new Error("stub: SqliteStorage is closed");
 			},
 			// The exit path drains the harness before clearing state (#2574/F1); a stub drains instantly.

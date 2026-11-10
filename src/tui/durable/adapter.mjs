@@ -7,7 +7,8 @@
 // durable side:
 //
 //   - the transcript, live partial, model, thinking level, queue, and usage come
-//     from the durable conversation (`viewState` + `watchEvents`);
+//     from the durable conversation (`Conversation.watch()` + src/livewatch.mjs, the 1.5.1
+//     replacements for `viewState` and `watchEvents`, both removed upstream at v1.5.1);
 //   - rendering-only host services (settings, model catalog, resource loader,
 //     extensions, the pi-agent-core Agent) come from a real AgentSession used as
 //     a shell, reached through a Proxy fallback. The shell's own generation loop
@@ -18,8 +19,29 @@
 // that have no durable analogue (bash, export, /tree, labels) are served by the
 // delegated host shell, not reimplemented.
 import { loadCodingAgent, loadDurable } from "./imports.mjs";
+import { watchLive } from "../../livewatch.mjs";
 import { DurableEventBridge } from "./bridge.mjs";
 import { isCompactionSummaryMessage, messageOfEntry, sessionEntryFromDurable } from "./translate.mjs";
+
+/**
+ * pi-durable 1.5.1 replaced `Conversation.viewState()` with `Conversation.watch(context, window)`,
+ * which returns a `WatchHandle<ConversationView>` (`value`, `start`, `stop`). This adapts that handle
+ * to the shape this adapter already speaks: an initial value, a subscribe returning a disposer, a dispose.
+ */
+async function attachConversationView(conversation, context) {
+	const handle = await conversation.watch(context);
+	const dispose = () => void handle.stop();
+	return {
+		value: handle.value,
+		subscribe(listener) {
+			handle.start(async (call) => {
+				if (call?.kind === "value") listener(call.value);
+			});
+			return dispose;
+		},
+		dispose,
+	};
+}
 
 /** Thrown when an operation needs a durable mapping the adapter does not define. */
 export class DurableAdapterError extends Error {
@@ -155,6 +177,10 @@ class DurableSessionCore {
 	#sequence = 0;
 	#baseTime = Date.now();
 	#disposers = [];
+	// Entry ids already turned into TUI events. pi-durable 1.5.1 removed the agent event
+	// stream (`watchEvents`), so committed transcript entries are now the only source of
+	// message events; this set keeps a re-rendered window from re-emitting them.
+	#seenEntryIds = new Set();
 
 	constructor(parts) {
 		this.#parts = parts;
@@ -385,11 +411,11 @@ class DurableSessionCore {
 	async #start() {
 		if (this.#started) return;
 		this.#started = true;
-		const view = await this.#parts.conversation.viewState(this.#context);
+		const view = await attachConversationView(this.#parts.conversation, this.#context);
 		this.#disposers.push(() => view.dispose());
 		this.#applyView(view.value);
 		this.#disposers.push(view.subscribe((value) => this.#applyView(value)));
-		const stream = await this.#parts.watchEvents(this.#parts.harness, this.#parts.conversation.id, this.#context);
+		const stream = await watchLive(this.#parts.harness, this.#parts.conversation.id, this.#context);
 		this.#disposers.push(() => void stream.stop());
 		stream.start(async (events) => {
 			this.#trackRunState(events);
@@ -398,23 +424,103 @@ class DurableSessionCore {
 	}
 
 	#applyView(view) {
-		const entries = [];
+		const raw = [];
+		const fresh = [];
 		for (const entry of view.entries) {
 			if (entry.conversationId !== this.#parts.conversation.id) continue;
 			const mapped = sessionEntryFromDurable(entry, this.#timestampFor(entry.id), this.#tokensBefore ?? 0);
-			if (mapped !== undefined) entries.push(mapped);
+			if (mapped !== undefined) raw.push(mapped);
+			if (!this.#seenEntryIds.has(entry.id)) {
+				this.#seenEntryIds.add(entry.id);
+				fresh.push({ entry, mapped });
+			}
 		}
+		const entries = this.#activeTranscript(raw);
 		// Durable's active transcript is already flat and ordered; coding-agent's
 		// path walk needs parent links, so chain them into one branch.
 		for (let i = 0; i < entries.length; i += 1) entries[i].parentId = i === 0 ? null : entries[i - 1].id;
 		this.#entries = entries;
 		this.#messages = entries.filter((entry) => entry.type === "message").map((entry) => entry.message);
 		this.#sessionManager.replace(entries);
+		// Events are emitted AFTER the replace: InteractiveMode's compaction handler reads
+		// `sessionManager.buildContextEntries()` to decide whether the boundary is renderable,
+		// so the boundary entry must already be in the transcript it sees.
 		this.#inbox = (view.docs["pi.inbox"]?.items ?? [])
 			.filter((item) => item.mode === "steer" || item.mode === "followUp")
 			.map((item) => ({ mode: item.mode, text: inboxText(item) }));
 		const agent = view.docs["pi.agent"];
 		if (agent?.thinkingLevel !== undefined) this.#thinkingLevel = agent.thinkingLevel;
+		for (const item of fresh) this.#emitEntryEvents(item.entry, item.mapped);
+	}
+
+	/**
+	 * Put the newest head marker (a compaction summary) at the head of the transcript.
+	 *
+	 * WHY: the view this adapter replaced (`Conversation.viewState`) handed back the ACTIVE
+	 * transcript — the head marker first, then the entries it keeps. v1.5.1 hands the whole
+	 * window in entry-id order with head markers "where they were written" (vendor/pi-main/
+	 * packages/durable/src/harness/view.ts:40-41). Without this, a compacted seat's TUI shows
+	 * the messages the compaction summarized, and coding-agent's own context builder — which
+	 * prepends the boundary — disagrees with the rendered transcript.
+	 */
+	#activeTranscript(entries) {
+		let boundary = -1;
+		for (let i = entries.length - 1; i >= 0; i -= 1) {
+			if (entries[i].type === "compaction") {
+				boundary = i;
+				break;
+			}
+		}
+		if (boundary < 0) return entries;
+		const compaction = entries[boundary];
+		const keptStart = entries.findIndex((entry) => entry.id === compaction.firstKeptEntryId);
+		const kept = keptStart < 0 || keptStart > boundary ? [] : entries.slice(keptStart, boundary);
+		return [compaction, ...kept, ...entries.slice(boundary + 1)];
+	}
+
+	/**
+	 * Turn one newly committed durable entry into the coding-agent events the TUI renders.
+	 *
+	 * WHY THIS EXISTS. At the previous pin, `watchEvents` delivered `message_start` /
+	 * `message_end` / `entry_appended` directly; v1.5.1 has no agent event stream, so the
+	 * only signal that a message or a compaction boundary exists is the entry appearing in
+	 * the conversation view. `src/livewatch.mjs` covers the IN-FLIGHT partial; this covers
+	 * what was committed. Without it the transcript never reaches the chat area — the four
+	 * TUI demos (boot, compaction, compaction-tui, round-trip-terminal) render an empty frame.
+	 *
+	 * No double render: an assistant message already streamed from pi.live has a live
+	 * streaming component in InteractiveMode, so it is closed with `message_end`; one that
+	 * never streamed (an attached conversation, a restored transcript) is opened and closed.
+	 */
+	#emitEntryEvents(entry, mapped) {
+		if (mapped === undefined) return;
+		if (mapped.type === "compaction") {
+			for (const event of this.#bridge.translate([{ type: "entry_appended", entry }])) this.#notify(event);
+			return;
+		}
+		if (mapped.type !== "message") return;
+		const message = mapped.message;
+		if (message.role === "toolResult") {
+			for (const event of this.#bridge.translate([
+				{
+					type: "tool_execution_end",
+					toolCallId: message.toolCallId,
+					toolName: message.name,
+					entry,
+				},
+			])) this.#notify(event);
+			return;
+		}
+		const batch = [];
+		if (message.role === "user") {
+			batch.push({ type: "message_start", message });
+		} else {
+			// An assistant message that streamed from pi.live already has a streaming component;
+			// one that never streamed is opened and closed here so it still renders.
+			if (this.#bridge.streamingMessage === undefined) batch.push({ type: "message_start", message });
+			batch.push({ type: "message_end", entry });
+		}
+		for (const event of this.#bridge.translate(batch)) this.#notify(event);
 	}
 
 	#timestampFor(id) {
@@ -538,7 +644,7 @@ export async function createDurableTuiRuntime(options) {
 	const conversation =
 		options.conversation ?? (await harness.root(context, { agent: { model: agentModel, cwd: options.cwd } }));
 
-	const view = await conversation.viewState(context);
+	const view = await attachConversationView(conversation, context);
 	const core = new DurableSessionCore({
 		ca,
 		cwd: options.cwd,
@@ -547,7 +653,6 @@ export async function createDurableTuiRuntime(options) {
 		harness,
 		conversation,
 		context,
-		watchEvents: durable.watchEvents,
 		modelRuntime,
 		initialView: view.value,
 	});

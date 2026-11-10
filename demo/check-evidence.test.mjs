@@ -223,8 +223,8 @@ try {
 		await enqueueItem(tx, "pm", "qa", "VERIFY #2: author's fix", "body two"); // id 2
 	}, ctx);
 
-	const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-	const queueState = async () => (await harness.documentState(RigQueue, undefined, ctx)).value;
+	const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+	const queueState = async () => (await harness.snapshot(RigQueue, undefined, ctx));
 	const item = async (id) => (await queueState()).items.find((it) => it.id === id);
 	const transcript = async (name) => {
 		const c = await harness.conversation(roster[name].conversationId, ctx);

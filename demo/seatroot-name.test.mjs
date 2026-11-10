@@ -74,7 +74,7 @@ try {
 		await registerSeat(tx, "verifier", conv.id, "independent verifier");
 		conversationId = conv.id;
 	}, ctx);
-	fillRoster(roster, (await harness.documentState(Seats, undefined, ctx)).value.seats);
+	fillRoster(roster, (await harness.snapshot(Seats, undefined, ctx)).seats);
 
 	const conv = await harness.conversation(conversationId, ctx);
 	const before = await conv.submit({ type: "input", content: "where am i" }, ctx);

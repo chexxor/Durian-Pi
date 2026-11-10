@@ -65,8 +65,8 @@ await harness.commit(async (tx) => {
 	];
 }, ctx);
 
-const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-const queueItems = async () => (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+const queueItems = async () => (await harness.snapshot(RigQueue, undefined, ctx)).items;
 
 /** Drive one tool call on a seat's conversation; return the tool-result text. */
 async function driveTool(seatName, toolName, toolArgs) {

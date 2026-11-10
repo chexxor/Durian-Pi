@@ -72,8 +72,8 @@ await harness.commit(async (tx) => {
 	await enqueueItem(tx, "pm", "other", "not yours to park", "body B");
 	await enqueueItem(tx, "pm", "impl", "claim then finish", "body C");
 }, ctx);
-const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-const queue = async () => (await harness.documentState(RigQueue, undefined, ctx)).value;
+const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+const queue = async () => (await harness.snapshot(RigQueue, undefined, ctx));
 const item = async (id) => (await queue()).items.find((it) => it.id === id);
 const transcriptOf = async (name) => {
 	const c = await harness.conversation(roster[name].conversationId, ctx);

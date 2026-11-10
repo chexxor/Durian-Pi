@@ -13,7 +13,7 @@ import {
 	createReadTool,
 	createWriteTool,
 } from "@earendil-works/pi-durable/tools";
-import { Type } from "@earendil-works/pi-ai";
+import { arr, bool, lit, nul, num, obj, opt, str, union } from "@earendil-works/pi-schema";
 import { seatShellSelection } from "./shellregistry.mjs";
 import { seatsAreVerifier } from "./verifierrole.mjs";
 import { authorEnv, verifierEnv, NON_INTERACTIVE_GIT } from "./confine.mjs";
@@ -100,15 +100,15 @@ const prepareWorkspace = defineTool({
 	name: "prepare_workspace",
 	description:
 		"Prepare the isolated git worktree for an item you have claimed, and point your file/shell tools at it. Call this AFTER claim_work and BEFORE any filesystem work. Returns the worktree path.",
-	parameters: Type.Object({
-		itemId: Type.Optional(
-			Type.Number({
+	parameters: obj({
+		itemId: opt(
+			num({
 				description:
 					"the claimed item to prepare the worktree for; defaults to your most recently claimed item",
 			}),
 		),
-		base: Type.Optional(
-			Type.String({
+		base: opt(
+			str({
 				description:
 					"the ref/branch/commit to fork the worktree FROM (default: HEAD). Use it to stack on an unlanded tip; it must be a ref you can read.",
 			}),
@@ -197,7 +197,7 @@ const seatRoot = defineTool({
 	name: "seat_root",
 	description:
 		"Report the seat's ACTUAL resolved root — the tree this seat's file and shell tools operate in — so an isolated item worktree is never mistaken for the live tree. Read-only; available to every seat.",
-	parameters: Type.Object({}),
+	parameters: obj({}),
 	execute: async (_args, api, context) => {
 		try {
 			const persistedCwd = await api.commit(async (tx) => {

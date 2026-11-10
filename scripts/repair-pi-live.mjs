@@ -46,8 +46,9 @@ try {
 		console.log(JSON.stringify({ ok: true, conversationId, note: "no unreadable pi.live; nothing retired" }));
 	} else {
 		const writes = corrupt.map(({ id }) => ({ type: "document.retire", id }));
-		const seq = await storage.commit(writes, BACKGROUND_CONTEXT);
-		console.log(JSON.stringify({ ok: true, conversationId, retired: corrupt, seq }));
+		// pi-durable 1.5.1: Storage.commit takes BATCHES plus a receipt callback (group commit).
+		const result = await storage.commit([writes], () => {}, BACKGROUND_CONTEXT);
+		console.log(JSON.stringify({ ok: true, conversationId, retired: corrupt, stored: result.stored, refused: result.refused }));
 	}
 } finally {
 	await storage.close(BACKGROUND_CONTEXT);

@@ -10,7 +10,7 @@
 // Run: node demo/secretredact.test.mjs  (exit 0 = pass)
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { Type } from "@earendil-works/pi-ai";
+import { arr, bool, lit, nul, num, obj, opt, str, union } from "@earendil-works/pi-schema";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
 	fauxAssistantMessage,
@@ -175,7 +175,7 @@ const LeakTool = defineExtension({
 		defineTool({
 			name: "read_env",
 			description: "read a file's contents",
-			parameters: Type.Object({ path: Type.String() }),
+			parameters: obj({ path: str() }),
 			replay: "safe",
 			execute: async () => {
 				const content = [{ type: "text", text: `DEEPINFRA_API_KEY=${SECRET}\nnote=ok\n` }];

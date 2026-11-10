@@ -62,15 +62,15 @@ function readThinkingLevels() {
       BACKGROUND_CONTEXT,
     );
     try {
-      const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
+      const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
       const out = new Map();
-      for (const [name, seat] of Object.entries(seatsDoc.value.seats)) {
-        const agent = await harness.documentState(
+      for (const [name, seat] of Object.entries(seatsDoc.seats)) {
+        const agent = await harness.snapshot(
           AgentDoc,
           seat.conversationId,
           BACKGROUND_CONTEXT,
         );
-        out.set(name, agent?.value?.thinkingLevel);
+        out.set(name, agent?.thinkingLevel);
       }
       return out;
     } finally {

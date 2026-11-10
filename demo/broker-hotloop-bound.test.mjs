@@ -50,7 +50,7 @@ async function makeHarness() {
   return { harness, storage };
 }
 
-/** The real harness with `documentState` throwing PERSISTENTLY — the observed shape: every
+/** The real harness with `snapshot` throwing PERSISTENTLY — the observed shape: every
  * pass throws BEFORE `drainIntentInbox` completes, so the spooled intent stays pending. */
 function throwingHarness(harness) {
   const makeErr = () => {
@@ -63,7 +63,7 @@ function throwingHarness(harness) {
   };
   return new Proxy(harness, {
     get(target, prop) {
-      if (prop === "documentState") return () => {
+      if (prop === "snapshot") return () => {
         throw makeErr();
       };
       const value = Reflect.get(target, prop, target);

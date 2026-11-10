@@ -142,7 +142,7 @@ try {
 			});
 			queue.nextId += 1;
 		}, ctx);
-		const itemId = (await rig.harness.documentState(RigQueue, undefined, ctx)).value.items[0].id;
+		const itemId = (await rig.harness.snapshot(RigQueue, undefined, ctx)).items[0].id;
 
 		rig.faux.setResponses([
 			fauxAssistantMessage([fauxToolCall("write_note", {
@@ -166,7 +166,7 @@ try {
 		check("the static section reaches the model",
 			String(sections["durig-continuity"] ?? "").includes("continuation note"), Object.keys(sections).join(","));
 
-		const note = (await rig.harness.documentState(ContinuityNotes, rig.conversationId, ctx))?.value;
+		const note = (await rig.harness.snapshot(ContinuityNotes, rig.conversationId, ctx));
 		check("the note is in the durable store", !!note?.goal?.startsWith("Repair the compaction fallback"));
 		check("the seat is identified from the roster", note?.seat === "worker", String(note?.seat));
 		check("evidence travels with the claim", note?.verified?.[0]?.evidence === "src/config.mjs:532");
@@ -281,7 +281,7 @@ try {
 		check("the fresh run's context is the note plus this turn only",
 			freshText.includes("CONTINUITY NOTE") && freshText.includes("pick up where you left off")
 			&& !freshText.includes("the first thing I did"), freshText.slice(0, 240));
-		const note = (await handoffRig.harness.documentState(ContinuityNotes, handoffRig.conversationId, ctx)).value;
+		const note = (await handoffRig.harness.snapshot(ContinuityNotes, handoffRig.conversationId, ctx));
 		check("the note survived the boundary", renderNote(note).includes("Verify the handoff seeds a fresh context"));
 	} finally {
 		await handoffRig.harness.close(ctx);

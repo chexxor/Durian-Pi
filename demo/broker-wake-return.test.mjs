@@ -13,6 +13,7 @@
 // Failing-first: HEAD ignores the unknown `waitForWakes` option and awaits the 4s run,
 // so the return-time bound below fails. Run: node demo/broker-wake-return.test.mjs
 import assert from "node:assert/strict";
+import { followCommits } from "../src/commitstream.mjs";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,7 +63,7 @@ await harness.commit(async (tx) => {
 	}
 	await enqueueItem(tx, "operator", "slow", "a long task", "body");
 }, ctx);
-const slowConvId = (await harness.documentState(Seats, undefined, ctx)).value.seats.slow.conversationId;
+const slowConvId = (await harness.snapshot(Seats, undefined, ctx)).seats.slow.conversationId;
 
 // Part 1 (failing-first): a pass wakes the slow seat but must not park on its 4s run.
 {
@@ -84,7 +85,7 @@ const slowConvId = (await harness.documentState(Seats, undefined, ctx)).value.se
 await harness.commit((tx) => enqueueItem(tx, "operator", "slow", "another long task", "body"), ctx);
 const scheduler = new WakeScheduler({ minIntervalMs: 200, seatCooldownMs: 0 });
 const signal = createWakeSignal();
-const unsubscribe = harness.subscribeCommits((publication) => {
+const unsubscribe = followCommits(harness, (publication) => {
 	scheduler.notify(publication);
 	if (scheduler.dirty) signal.raise();
 });

@@ -4,7 +4,8 @@
 // wake pass runs, and it is the piece a resident broker subscribes to. `durig
 // run` is itself a clock: it polls and a human must invoke it. A broker that
 // owns the harness (the single long-lived writer) can instead react to the
-// store's own commit stream through `Session.subscribeCommits` — an in-process
+// store's own commit stream through `Session.observeCommits` (the 1.5.1 name for
+// `subscribeCommits`; the attach is wrapped in src/commitstream.mjs) — an in-process
 // trigger with none of the cross-process gap D11 documented, precisely because
 // the process reacting is the one writing.
 //

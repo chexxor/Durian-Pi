@@ -762,8 +762,8 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
   if (!dbPath) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const files = readIntentFiles(dbPath);
   if (files.length === 0) return { delivered: 0, deadLettered: 0, duplicates: 0 };
-  const seatsDoc = await harness.documentState(Seats, undefined, context);
-  const seats = seatsDoc?.value?.seats ?? {};
+  const seatsDoc = await harness.snapshot(Seats, undefined, context);
+  const seats = seatsDoc?.seats ?? {};
   let delivered = 0;
   let deadLettered = 0;
   let duplicates = 0;
@@ -1255,9 +1255,9 @@ export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagn
   const repoPath = dbPath ? dirname(resolve(dbPath)) : null;
   let worktrees = [];
   if (repoPath) {
-    const queueDoc = await harness.documentState(RigQueue, undefined, context);
+    const queueDoc = await harness.snapshot(RigQueue, undefined, context);
     const LIVE_STATUSES = ["queued", "claimed", "deferred", "held"];
-    const items = queueDoc?.value?.items ?? [];
+    const items = queueDoc?.items ?? [];
     const liveItemIds = new Set(items.filter((it) => LIVE_STATUSES.includes(it.status)).map((it) => it.id));
     // #1244: the complement of the live set is the TERMINAL set (done/cancelled). An id that is
     // in NEITHER set does not exist in the store, so its worktree is KEPT (safe default).
@@ -1279,8 +1279,8 @@ async function readSeatRootsFromStorage(probeStorage, harness, context) {
   const roots = [];
   if (!probeStorage?.findDocument) return roots;
   try {
-    const seatsDoc = await harness.documentState(Seats, undefined, context);
-    for (const seat of Object.values(seatsDoc?.value?.seats ?? {})) {
+    const seatsDoc = await harness.snapshot(Seats, undefined, context);
+    for (const seat of Object.values(seatsDoc?.seats ?? {})) {
       try {
         const rec = await probeStorage.findDocument(
           { kind: "pi.agent", scope: { kind: "conversation", conversationId: seat.conversationId } },
@@ -1335,12 +1335,12 @@ export async function drivePass(
       onDiagnostic?.({ kind: "intent-gc-failed", error: String(err?.message ?? err) });
     }
   }
-  const seatsDoc = await harness.documentState(Seats, undefined, context);
-  const queueDoc = await harness.documentState(RigQueue, undefined, context);
+  const seatsDoc = await harness.snapshot(Seats, undefined, context);
+  const queueDoc = await harness.snapshot(RigQueue, undefined, context);
   // ROADMAP 131: the rig-level paused flag. While set, the driver does not wake a seat
   // to CLAIM new work (in-flight runs settle untouched).
-  const controlDoc = await harness.documentState(RigControl, undefined, context);
-  const paused = controlDoc?.value?.paused === true;
+  const controlDoc = await harness.snapshot(RigControl, undefined, context);
+  const paused = controlDoc?.paused === true;
   const inspection = await harness.inspect(context);
   // Orphans first: a `placed` submission with no live task would otherwise read as
   // in-flight and hold its seat out of every wake. Settle them before building the
@@ -1352,7 +1352,7 @@ export async function drivePass(
   const settledStrandedIds = new Set(settledStranded);
   // #4170: `pendingConvIds` MUST MEAN "ADVANCING", NOT "HAS A SUBMISSION ROW" — see advancingConvIds.
   const pendingConvIds = advancingConvIds(inspection.submissions, { settled: settledStrandedIds });
-  const seats = seatsDoc?.value?.seats;
+  const seats = seatsDoc?.seats;
   const stoppedConvIds = await readStoppedConvIds(probeStorage, seats, context);
   const busySeats = readBusySeats ? await readBusySeats() : new Set();
   // D105: a LOCAL-provider seat draws a fresh context boundary BEFORE it works each NEW
@@ -1360,7 +1360,7 @@ export async function drivePass(
   // first and the seat claims its item from a clean context. A no-op for every other rig.
   const boundaryPlans = planLocalContextBoundaries({
     seats,
-    items: queueDoc?.value?.items,
+    items: queueDoc?.items,
     pendingConvIds,
     busySeats,
     stoppedConvIds,
@@ -1397,7 +1397,7 @@ export async function drivePass(
   };
   const actioned = await driveOnce(harness, {
     seats,
-    items: queueDoc?.value?.items,
+    items: queueDoc?.items,
     pendingConvIds,
     busySeats,
     stoppedConvIds,
@@ -1863,7 +1863,7 @@ export async function runWakeLoop({
     // which reports the whole run). Drives the retry schedule below.
     const failedThisPass = new Set();
     // A whole-pass throw (a store read OUTSIDE the per-seat wake path, e.g.
-    // `documentState`/`inspect`/`readStoppedConvIds`) is real work the pass did not action
+    // `snapshot`/`inspect`/`readStoppedConvIds`) is real work the pass did not action
     // and emits no `wake-failed`, so the retry below must key on it too — otherwise a retry
     // pass that throws goes dormant again (recurrence 8, 2026-10-18).
     let passThrew = false;

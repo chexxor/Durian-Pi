@@ -166,8 +166,8 @@ try {
 		await enqueueItem(tx, "pm", "worker", "Held", "body");
 		await enqueueItem(tx, "pm", "fresh", "Unclaimed", "body");
 	}, ctx);
-	const roster = (await harness2.documentState(Seats, undefined, ctx)).value.seats;
-	const queueState = async () => (await harness2.documentState(RigQueue, undefined, ctx)).value;
+	const roster = (await harness2.snapshot(Seats, undefined, ctx)).seats;
+	const queueState = async () => (await harness2.snapshot(RigQueue, undefined, ctx));
 	let first = true;
 	const call = async (name, toolName, toolArgs) => {
 		const batch = [

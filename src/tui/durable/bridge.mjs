@@ -38,6 +38,11 @@ export class DurableEventBridge {
 		return [...this.#ignored];
 	}
 
+	/** The assistant message currently being streamed from pi.live, or undefined if none. */
+	get streamingMessage() {
+		return this.#current;
+	}
+
 	/**
 	 * Translate one durable event batch into coding-agent events.
 	 *

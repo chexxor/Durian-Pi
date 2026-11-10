@@ -92,7 +92,7 @@ await harness.commit(async (tx) => {
 	await registerSeat(tx, "worker", worker.id, "implementation");
 }, ctx);
 
-const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
 console.log(`seats up; model ${MODEL_ID}`);
 
 const pmConv = await harness.conversation(roster.pm.conversationId, ctx);
@@ -119,9 +119,9 @@ for (const [nm, cv] of [["pm", pmConv], ["worker", workerConv]]) {
 		console.log(nm, e.kind, JSON.stringify(m?.content ?? e.content ?? "").slice(0,150), errMsg);
 	}
 }
-const qState = await harness.documentState(RigQueue, undefined, ctx);
+const qState = await harness.snapshot(RigQueue, undefined, ctx);
 console.log("queue state raw:", JSON.stringify(qState)?.slice(0,200));
-const q = qState?.value ?? { items: [] };
+const q = qState ?? { items: [] };
 for (const it of q.items) {
 	console.log(`QUEUE #${it.id} [${it.status}] ${it.from}->${it.to} :: ${it.subject}${it.resultSummary ? ` :: result=${it.resultSummary}` : ""}`);
 }

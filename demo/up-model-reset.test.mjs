@@ -59,13 +59,14 @@ async function scanEntries() {
   const { BACKGROUND_CONTEXT } = await import("@earendil-works/chord/context");
   const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
   const { Harness, createRegistry } = await import("@earendil-works/pi-durable");
+  const { createModels } = await import("@earendil-works/pi-ai");
   const { Router, Seats } = await import("../src/rig.mjs");
   const registry = createRegistry();
   registry.install(Router);
   const storage = await openNodeSqliteStorage(dbPath);
-  const harness = await Harness.open(storage, { registry }, BACKGROUND_CONTEXT);
-  const seatsDoc = await harness.documentState(Seats, undefined, BACKGROUND_CONTEXT);
-  const convId = seatsDoc?.value?.seats?.impl?.conversationId;
+  const harness = await Harness.open(storage, { models: createModels(), registry }, BACKGROUND_CONTEXT);
+  const seatsDoc = await harness.snapshot(Seats, undefined, BACKGROUND_CONTEXT);
+  const convId = seatsDoc?.seats?.impl?.conversationId;
   const conv = await harness.conversation(convId, BACKGROUND_CONTEXT);
   const page = await conv.entries({ order: "descending" }, 60, undefined, BACKGROUND_CONTEXT);
   const resets = page.items.filter((e) => e.kind === "pi.reset");

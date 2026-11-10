@@ -94,7 +94,7 @@ try {
 		writeFileSync(stopRequestPath(db), String(Date.now() - 60_000));
 		let waited = false;
 		const harness = {
-			documentState: async () => ({ value: {} }),
+			snapshot: async () => ({}),
 			inspect: async () => ({ submissions: [], tasks: [] }),
 			// NEVER resolves: the drain must be abandoned, not awaited.
 			waitForIdle: () => {

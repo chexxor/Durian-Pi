@@ -89,7 +89,7 @@ await harness.commit(async (tx) => {
 	byId(IDS.done).status = "done";
 }, ctx);
 
-const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 fillRoster(new Map(Object.entries(seats)), seats);
 
 try {

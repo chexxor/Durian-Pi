@@ -58,14 +58,14 @@ const call = async (name, toolName, toolArgs) => {
     faux.setResponses(batch);
     first = false;
   } else faux.appendResponses(batch);
-  const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+  const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
   const c = await harness.conversation(roster[name].conversationId, ctx);
   await (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
 };
 
 // The tool's own reply text, read out of the transcript — never by stringifying a doc proxy (#4740).
 const toolReply = async (name, toolName) => {
-  const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+  const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
   const c = await harness.conversation(roster[name].conversationId, ctx);
   const pg = await c.entries({}, 200, undefined, ctx);
   for (const e of pg.items) {
@@ -79,7 +79,7 @@ const toolReply = async (name, toolName) => {
   return { text: "", isError: false };
 };
 
-const item = async (id) => (await harness.documentState(RigQueue, undefined, ctx)).value.items.find((it) => it.id === id);
+const item = async (id) => (await harness.snapshot(RigQueue, undefined, ctx)).items.find((it) => it.id === id);
 
 try {
   await harness.commit(

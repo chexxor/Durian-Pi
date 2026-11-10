@@ -16,6 +16,7 @@
 //
 // Run: node demo/broker-cooldown-revisit.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
+import { followCommits } from "../src/commitstream.mjs";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,7 +67,7 @@ await harness.commit(async (tx) => {
 
 const scheduler = new WakeScheduler({ minIntervalMs: 10, seatCooldownMs: COOLDOWN_MS });
 const signal = createWakeSignal();
-const unsubscribe = harness.subscribeCommits((publication) => {
+const unsubscribe = followCommits(harness, (publication) => {
 	scheduler.notify(publication);
 	if (scheduler.dirty) signal.raise();
 });

@@ -90,9 +90,12 @@ async function setLive(conversationId, value) {
 			"current",
 			BACKGROUND_CONTEXT,
 		);
-		await storage.commit([
-			{ type: "document.change", id: rec.id, content: { version: 1, kind: "base", value } },
-		]);
+		// pi-durable 1.5.1: Storage.commit(batches, receive, context) — group commit.
+		await storage.commit(
+			[[{ type: "document.change", id: rec.id, content: { version: 1, kind: "base", value } }]],
+			() => {},
+			BACKGROUND_CONTEXT,
+		);
 	} finally {
 		await storage.close(BACKGROUND_CONTEXT);
 	}

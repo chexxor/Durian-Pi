@@ -11,6 +11,7 @@
 // Failing-first: before src/broker.mjs exists this dies with ERR_MODULE_NOT_FOUND.
 // Run: node demo/broker.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
+import { followCommits } from "../src/commitstream.mjs";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -44,7 +45,7 @@ await harness.commit(async (tx) => {
 	await enqueueItem(tx, "pm", "worker", "the first task", "details");
 }, ctx);
 
-const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 const wakeCount = async () => {
 	const conv = await harness.conversation(seats.worker.conversationId, ctx);
 	const page = await conv.entries({}, 500, undefined, ctx);
@@ -66,7 +67,7 @@ assert.equal(await wakeCount(), 1, "the fixed wake text is what the seat receive
 
 const scheduler = new WakeScheduler({ minIntervalMs: 0, seatCooldownMs: 0 });
 const signal = createWakeSignal();
-const unsubscribe = harness.subscribeCommits((publication) => {
+const unsubscribe = followCommits(harness, (publication) => {
 	scheduler.notify(publication);
 	if (scheduler.dirty) signal.raise();
 });

@@ -7,9 +7,11 @@
 // exactly the qa incident (docs/incidents/2026-10-17-qa-context-degeneration.md). This module
 // is the TRIGGER that fires WHILE the agent is running, from the live observation seam.
 //
-// THE SEAM. `harness.subscribeCommits` fires on COMMITS — post-settlement, so it cannot see a
-// turn that never settles. The in-flight seam is pi-durable's agent event stream,
-// `watchEvents(harness, conversationId, ctx)` (dist/harness/events.d.ts): a `snapshot` plus a
+// THE SEAM. The commit stream (`Session.observeCommits`, wrapped in src/commitstream.mjs) fires on
+// COMMITS — post-settlement, so it cannot see a
+// turn that never settles. The in-flight seam is the live document: pi-durable removed
+// `watchEvents` at 1.5.1, and src/livewatch.mjs now translates `pi.live` (`LiveDoc`) into the
+// same event shapes: a snapshot plus one batch per live commit carrying
 // serialized batch per commit carrying `run_start`/`turn_start`, `message_update` (streamed
 // text deltas + partial `usage`), `tool_execution_*`, `turn_end`/`run_end`. `message_update`
 // fires many times DURING one turn (measured: 116 updates over a ~12.6s faux turn), so a bound

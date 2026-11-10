@@ -207,8 +207,8 @@ try {
 		(await tx.doc(Seats)).seats.worker.capabilities = ["verify"];
 	}, ctx);
 
-	const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-	const items = async () => (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+	const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
+	const items = async () => (await harness.snapshot(RigQueue, undefined, ctx)).items;
 	const item = async (id) => (await items()).find((it) => it.id === id);
 	let first = true;
 	const call = async (name, toolName, toolArgs) => {

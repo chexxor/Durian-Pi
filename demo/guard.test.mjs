@@ -16,10 +16,11 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai/providers/faux";
-import { configure, createRegistry, Harness, MemoryStorage, watchEvents } from "@earendil-works/pi-durable";
+import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 
 import { haltIdleResolve, planGuard, resolveDegeneration, waitForIdle } from "../src/guard.mjs";
 import { createInflightWatch } from "../src/inflight.mjs";
+import { watchLive } from "../src/livewatch.mjs";
 import { enqueueItem, registerSeat, RigQueue } from "../src/rig.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
@@ -93,7 +94,7 @@ try {
 	});
 
 	// Subscribe BEFORE the run starts, so no `turn_start`/`message_update` batch is missed.
-	const stream = await watchEvents(harness, convId, ctx);
+	const stream = await watchLive(harness, convId, ctx);
 	stream.start(async (events) => {
 		watch.observeBatch(events);
 		if (events.some((e) => e.type === "turn_end" || e.type === "run_end")) settled = true;
@@ -128,8 +129,8 @@ try {
 	check("the wake and the partial turn are still in the transcript", kinds.includes("pi.user") && kinds.includes("pi.assistant"), JSON.stringify(kinds));
 
 	// The CLAIMED ITEM is untouched: the guard halted the RUN, it did not touch the QUEUE.
-	const q = await harness.documentState(RigQueue, undefined, ctx);
-	const item = q?.value?.items?.find((i) => i.id === itemId);
+	const q = await harness.snapshot(RigQueue, undefined, ctx);
+	const item = q?.items?.find((i) => i.id === itemId);
 	check("the claimed item is still CLAIMED (recoverable, not lost)", item?.status === "claimed", JSON.stringify(item));
 	check("the item's claim transition survived", item?.transitions?.some((t) => t.event === "claimed"), JSON.stringify(item?.transitions));
 

@@ -37,7 +37,7 @@ function throwingHarness(onAttempt) {
 	const inner = Object.assign(new Error("database is locked"), { errcode: 5, errstr: "database is locked" });
 	const outer = Object.assign(new Error("session failed while reading a document"), { cause: inner });
 	return {
-		documentState: async () => ({ value: {} }),
+		snapshot: async () => ({}),
 		inspect: async () => {
 			onAttempt();
 			throw outer;

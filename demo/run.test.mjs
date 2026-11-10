@@ -102,8 +102,8 @@ await harness.commit(async (tx) => {
 	await enqueueItem(tx, "pm", "worker", "Build the widget", "details");
 }, ctx);
 
-const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
-const queueItems = async () => (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
+const queueItems = async () => (await harness.snapshot(RigQueue, undefined, ctx)).items;
 const item = async (id) => (await queueItems()).find((it) => it.id === id);
 
 // worker: claim #1, complete it. pm: claim the DONE #2, acknowledge it.

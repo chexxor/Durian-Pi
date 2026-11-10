@@ -62,7 +62,7 @@ await harness.commit(async (tx) => {
 	console.log("BOOTSTRAP ids:", pmId, wkId);
 }, ctx);
 
-const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
 const intruderConv = await harness.conversation(roster.intruder.conversationId, ctx);
 const pmConv = await harness.conversation(roster.pm.conversationId, ctx);
 
@@ -91,7 +91,7 @@ faux.appendResponses([
 ]);
 await (await pmConv.submit({ type: "input", content: "route it" }, ctx)).wait(ctx);
 
-const q = (await harness.documentState(RigQueue, undefined, ctx)).value;
+const q = (await harness.snapshot(RigQueue, undefined, ctx));
 console.log("--- evidence ---");
 for (const it of q.items) {
 	console.log(`QUEUE #${it.id} [${it.status}] ${it.from}->${it.to} :: ${it.subject}`);

@@ -72,8 +72,8 @@ await harness.commit(async (tx) => {
 	await registerSeat(tx, "worker", worker.id, "implementation");
 }, ctx);
 
-const seatsDoc = await harness.documentState((await import("../src/rig.mjs")).Seats, undefined, ctx);
-console.log("seats registered:", JSON.stringify(seatsDoc?.value?.seats ?? seatsDoc));
+const seatsDoc = await harness.snapshot((await import("../src/rig.mjs")).Seats, undefined, ctx);
+console.log("seats registered:", JSON.stringify(seatsDoc?.seats ?? seatsDoc));
 
 // Scripted responses in global call order (see header).
 faux.setResponses([
@@ -126,8 +126,8 @@ faux.setResponses([
 ]);
 
 const { Seats } = await import("../src/rig.mjs");
-const seatsVal = await harness.documentState(Seats, undefined, ctx);
-const roster = seatsVal?.value?.seats ?? {};
+const seatsVal = await harness.snapshot(Seats, undefined, ctx);
+const roster = seatsVal?.seats ?? {};
 const pmConv = await harness.conversation(roster.pm.conversationId, ctx);
 const workerConv = await harness.conversation(roster.worker.conversationId, ctx);
 
@@ -145,15 +145,15 @@ console.log("-- worker run settled (claimed, noted, handed off)");
 // note as its first user message and none of the earlier turns.
 const freshContext = (await workerConv.context(ctx)).messages;
 const freshText = JSON.stringify(freshContext);
-const noteText = JSON.stringify((await harness.documentState(ContinuityNotes, roster.worker.conversationId, ctx))?.value ?? {});
+const noteText = JSON.stringify((await harness.snapshot(ContinuityNotes, roster.worker.conversationId, ctx)) ?? {});
 
 const resumed = await workerConv.submit({ type: "input", content: "Continue the item in a fresh context." }, ctx);
 await resumed.wait(ctx);
 console.log("-- worker resumed run settled");
 
 // Dump final queue state as evidence.
-const qDoc = await harness.documentState(RigQueue, undefined, ctx);
-const q = qDoc?.value ?? {};
+const qDoc = await harness.snapshot(RigQueue, undefined, ctx);
+const q = qDoc ?? {};
 for (const it of q.items ?? []) {
 	console.log(`QUEUE #${it.id} [${it.status}] ${it.from}->${it.to} :: ${it.subject}${it.resultSummary ? ` :: result=${it.resultSummary}` : ""}`);
 }

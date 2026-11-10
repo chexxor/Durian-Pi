@@ -140,7 +140,7 @@ await harness.commit(async (tx) => {
   await enqueueItem(tx, "boss", "paidw", "paid item", "body");
 }, ctx);
 
-const seats = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 const localConv = seats.localw.conversationId;
 const paidConv = seats.paidw.conversationId;
 
@@ -156,7 +156,7 @@ const headKind = async (convId) => {
 };
 
 // (1) apply the boundary for the local seat's first item; the non-local seat is untouched.
-const plans1 = planLocalContextBoundaries({ seats, items: (await harness.documentState(RigQueue, undefined, ctx)).value.items });
+const plans1 = planLocalContextBoundaries({ seats, items: (await harness.snapshot(RigQueue, undefined, ctx)).items });
 assert.equal(plans1.length, 1, "the local seat is planned; the non-local seat is not");
 const applied1 = await applyLocalContextBoundaries(harness, plans1, ctx);
 assert.equal(applied1.length, 1, "the boundary was applied");
@@ -165,9 +165,9 @@ assert.equal(await resetCount(localConv), 1, "exactly one boundary written");
 assert.equal(await resetCount(paidConv), 0, "the non-local seat is UNCHANGED (no boundary)");
 
 // (2) idempotent: the marker records the anchored item, so a re-plan draws nothing.
-const seatsAfter1 = (await harness.documentState(Seats, undefined, ctx)).value.seats;
+const seatsAfter1 = (await harness.snapshot(Seats, undefined, ctx)).seats;
 assert.equal(seatsAfter1.localw.contextItemId, firstId, "the boundary records the item it anchored");
-const itemsAfter1 = (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const itemsAfter1 = (await harness.snapshot(RigQueue, undefined, ctx)).items;
 assert.equal(
   planLocalContextBoundaries({ seats: seatsAfter1, items: itemsAfter1 }).length,
   0,
@@ -180,7 +180,7 @@ await harness.commit(async (tx) => {
   it.status = "claimed";
   it.transitions.push({ at: new Date().toISOString(), event: "claimed", by: "localw" });
 }, ctx);
-const itemsClaimed = (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const itemsClaimed = (await harness.snapshot(RigQueue, undefined, ctx)).items;
 assert.equal(
   planLocalContextBoundaries({ seats: seatsAfter1, items: itemsClaimed }).length,
   0,
@@ -192,7 +192,7 @@ await harness.commit(async (tx) => {
   const it = (await tx.doc(RigQueue)).items.find((i) => i.id === firstId);
   it.status = "done";
 }, ctx);
-const items2 = (await harness.documentState(RigQueue, undefined, ctx)).value.items;
+const items2 = (await harness.snapshot(RigQueue, undefined, ctx)).items;
 const plans2 = planLocalContextBoundaries({ seats: seatsAfter1, items: items2 });
 assert.equal(plans2.length, 1, "the NEW item draws a new boundary");
 assert.equal(plans2[0].itemId, secondId, "the boundary targets the new item");
@@ -221,7 +221,7 @@ await harness2.commit(async (tx) => {
   soloId = await enqueueItem(tx, "boss", "solo", "the only job", "body");
 }, ctx);
 
-const seats2 = (await harness2.documentState(Seats, undefined, ctx)).value.seats;
+const seats2 = (await harness2.snapshot(Seats, undefined, ctx)).seats;
 fillRoster(roster2, seats2);
 const soloConv = seats2.solo.conversationId;
 
@@ -240,7 +240,7 @@ assert.equal(
   1,
   "drivePass drew the boundary before the wake",
 );
-const soloItem = (await harness2.documentState(RigQueue, undefined, ctx)).value.items.find((i) => i.id === soloId);
+const soloItem = (await harness2.snapshot(RigQueue, undefined, ctx)).items.find((i) => i.id === soloId);
 assert.equal(soloItem.status, "done", "the seat STILL claims and completes the item after the boundary");
 // The boundary precedes the work: the oldest pi.reset is older than the newest tool result.
 const resets = soloPage.items.filter((e) => e.kind === "pi.reset");
