@@ -1,0 +1,61 @@
+probe header: pi-durable 1.3.0, node v24.22.1, 5000 items, 10000 verbs in separate commits, 240B bodies
+{
+  policy: 'never  () => false',
+  basesWritten: 0,
+  deltasSinceBase: 4375,
+  valueBytes: 2005311,
+  readMsMedian: 12.29,
+  readMsMax: 16.57,
+  verbsMsTotal: 608.1,
+  storeBytes: 2629632
+}
+{
+  policy: 'every verb (semantic key)',
+  basesWritten: 4375,
+  deltasSinceBase: 0,
+  valueBytes: 2005311,
+  readMsMedian: 5.15,
+  readMsMax: 9.56,
+  verbsMsTotal: 30703.7,
+  storeBytes: 2125824
+}
+{
+  policy: 'bound 50',
+  basesWritten: 85,
+  deltasSinceBase: 40,
+  valueBytes: 2005311,
+  readMsMedian: 5.16,
+  readMsMax: 8.99,
+  verbsMsTotal: 1101.5,
+  storeBytes: 2129920
+}
+{
+  policy: 'bound 200',
+  basesWritten: 21,
+  deltasSinceBase: 154,
+  valueBytes: 2005311,
+  readMsMedian: 5.38,
+  readMsMax: 10.24,
+  verbsMsTotal: 756.1,
+  storeBytes: 2142208
+}
+{
+  policy: 'bound 1000',
+  basesWritten: 4,
+  deltasSinceBase: 371,
+  valueBytes: 2005311,
+  readMsMedian: 5.65,
+  readMsMax: 7.72,
+  verbsMsTotal: 526.9,
+  storeBytes: 2232320
+}
+{
+  policy: 'semantic + bound 200',
+  basesWritten: 21,
+  deltasSinceBase: 154,
+  valueBytes: 2005311,
+  readMsMedian: 5.32,
+  readMsMax: 8.12,
+  verbsMsTotal: 706.3,
+  storeBytes: 2142208
+}
