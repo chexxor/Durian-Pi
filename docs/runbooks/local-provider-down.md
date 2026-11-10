@@ -3,9 +3,9 @@ runbook: local-provider-down
 symptom: "a local seat fails to run: `model_error: 401 \"Invalid API key\"`, `model_error: Connection error.`, or `No API key for provider: local`; `/v1/models` on the configured port 401s or does not list the model the seat's `local/<id>` names. NOTE the port may be OPEN and answering while the provider is unusable — see Diagnose state 3 and the 2026-11-04 state 5"
 writes: false
 precondition: "none"
-last_verified: 2026-11-06
-verified_by: delegate
-evidence: "2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. 2026-11-06: state 6 (a LAN strata box passes /models and /health yet misses the preflight's 20s completion bound -> `START REFUSED`) and state 7 (per-box keys after a rotation: one 74-char `DURIG_LOCAL_API_KEY` 401s on BOTH boxes) found; ROADMAP 325/326. PARTIAL re-verification 2026-11-06T08:0xZ (host signature in docs/NEXT.md): the PORT pointers re-measured — `curl` to `127.0.0.1:47831` and `127.0.0.1:47832` both exit **7** (ECONNREFUSED, `HTTP 000`); `ps -eo pid,args` shows the live launch `-m serve.server … --host 0.0.0.0 --port 8080` and `ss -ltnp` shows **`0.0.0.0:8080`** owned by that serve.server pid; `curl http://127.0.0.1:8080/v1/models` answers `authentication_error: missing or wrong API key`. The firewall section is **NOT** re-verified: `firewall-cmd --state` returns a D-Bus `Did not receive a reply` error with exit **254**, so a delegate cannot answer those questions today. `last_verified: 2026-11-06` records the state-6/state-7 legs only — the Do/Verify legs of this runbook were NOT re-run. 2026-11-07 (#5387, expectation-semantics edit only): the `47832` query's `expect` now names its condition — `yes` (exit 0) only after the two OPERATOR (root) lines, `no` (exit 1) is the default/pre-enable state, exit 254 is the instrument not answering; re-ran the two READ-ONLY queries in an item worktree and both exit 254, so the OPERATOR leg and the `yes` it produces remain unverified by any delegate."
+last_verified: 2026-11-10
+verified_by: impl
+evidence: "2026-11-10 (#6081), the CLASSIFICATION leg only: `node demo/provider-auth-cause.test.mjs` exits 0 in the item-6081 worktree, and the same input at the main tip f192f543 before the change produced `planEscalations -> 1 plan, reason repeated_failure` and `computeAttention -> repeated_failure, last_run_failed`. The port, firewall and PolyStrata legs below were NOT re-run here (they need this host's live servers). 2026-11-04 (Linux Fedora 44 7.2.14-200.fc44.x86_64 node v24.22.1): state 5 found and fixed — Strata on 127.0.0.1:47831 returns 401 `Invalid API key` without a credential, so every `local/iq3_s` seat died `model_error: 401`; with `DURIG_LOCAL_API_KEY` supplied the provider's own registration path answered `stopReason:stop` (59 in / 36 out, cost 0 by locality). Earlier: 2026-10-20 reverse move (local DOWN) verified. 2026-11-06: state 6 (a LAN strata box passes /models and /health yet misses the preflight's 20s completion bound -> `START REFUSED`) and state 7 (per-box keys after a rotation: one 74-char `DURIG_LOCAL_API_KEY` 401s on BOTH boxes) found; ROADMAP 325/326. PARTIAL re-verification 2026-11-06T08:0xZ (host signature in docs/NEXT.md): the PORT pointers re-measured — `curl` to `127.0.0.1:47831` and `127.0.0.1:47832` both exit **7** (ECONNREFUSED, `HTTP 000`); `ps -eo pid,args` shows the live launch `-m serve.server … --host 0.0.0.0 --port 8080` and `ss -ltnp` shows **`0.0.0.0:8080`** owned by that serve.server pid; `curl http://127.0.0.1:8080/v1/models` answers `authentication_error: missing or wrong API key`. The firewall section is **NOT** re-verified: `firewall-cmd --state` returns a D-Bus `Did not receive a reply` error with exit **254**, so a delegate cannot answer those questions today. `last_verified: 2026-11-06` records the state-6/state-7 legs only — the Do/Verify legs of this runbook were NOT re-run. 2026-11-07 (#5387, expectation-semantics edit only): the `47832` query's `expect` now names its condition — `yes` (exit 0) only after the two OPERATOR (root) lines, `no` (exit 1) is the default/pre-enable state, exit 254 is the instrument not answering; re-ran the two READ-ONLY queries in an item worktree and both exit 254, so the OPERATOR leg and the `yes` it produces remain unverified by any delegate."
 check_rule: null
 ---
 
@@ -422,3 +422,41 @@ every `local/<id>` string in `rig.selfdev.json`, re-point the `DURIG_COMPACTION_
 `node --env-file="$HOME/.config/durig/env" cli.mjs up rig.selfdev.json --refresh` with the broker stopped.
 Do **not** rely on llama.cpp's rerouting: a request for an unadvertised id is answered by the served model, so the
 stale id looks fine at the wire while the rig refuses to register it.
+
+## 2026-11-10: state 9 — a missing key was reported as a seat that cannot work (#6081)
+
+**Symptom, measured:** the broker process was started without `DURIG_LOCAL_API_KEY` (read from `/proc/<pid>/environ`:
+no `DURIG_*` variables at all). Every seat generation answered `401: {"error":{"message":"missing or wrong API key",
+"type":"authentication_error"}}`, each run settled as the bare category `model_error`, and the supervisor's repeated-
+failure guard escalated **171 queue rows** to the human - an entire roadmap batch parked on a person because one
+variable was absent. `status` then showed `SKIP <seat> reason=parked-deduped` with nothing to claim.
+
+**What the rig does now.** A credential refusal is its own class, `provider_auth`, named in `src/causes.mjs` and read
+by `src/attention.mjs` and `src/supervisor.mjs` - the same layering `SPEND_CAUSE` uses, so the raiser and the actor
+cannot drift apart:
+- `status`/`watch` show one notice per seat, kind `provider_auth`, whose detail says ENVIRONMENTAL and names the
+  credential variables the rig reads (`DURIG_LOCAL_API_KEY`, `DURIG_VERIFIER_API_KEY`, `DURIG_LOCAL2_API_KEY`, derived
+  from the prefixes that actually register a provider in `src/providers/local.mjs`);
+- the supervisor **escalates nothing** and writes nothing to the queue: the item stays claimed, no `deferredTo:
+  "human"`, no reset. A human has no decision to make about a variable the process never had;
+- the two real paths are untouched: an ordinary seat that fails three runs in a row still escalates as
+  `repeated_failure`, and a spend-cap stop still parks on the FIRST stop.
+
+**What the operator does.** Set the variable in the process that runs the broker - not in a seat's own shell. The
+broker inherits the environment of whatever verb started it (`ensureBroker` spawns `serve` with `env: process.env`),
+so `node --env-file="$HOME/.config/durig/env" cli.mjs serve` is the fix, and every later verb must load it too.
+Confirm which variable is resolved without printing its value: `node tools/keycheck.mjs --level=auth --family=LOCAL`.
+
+**Verify (this step ran, 2026-11-10, item-6081 worktree at main tip f192f543):**
+```bash
+node demo/provider-auth-cause.test.mjs                      # exit 0
+node scripts/test.mjs --area broker                         # the area that carries it
+```
+Observed: `PROVIDER-AUTH CAUSE TEST PASS (provider_auth is a named, environmental class: it surfaces in attention with
+the credential variable it wants, and it escalates NOTHING to the human, while a genuine repeated failure still
+escalates at the streak and a spend stop still parks on the first failure)`.
+Against the same tip WITHOUT the change the identical input gave `plans = 1, reason = repeated_failure` and attention
+kinds `repeated_failure, last_run_failed` - that is the defect this row closes.
+
+**The tell to look for in a store:** rows escalated with reason `repeated_failure` whose seat's newest error message is
+a 401/403. Before #6081 there was no way to distinguish them from a seat that genuinely cannot progress; there is now.
