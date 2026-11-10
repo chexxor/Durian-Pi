@@ -1,11 +1,11 @@
 ---
 runbook: continuation-notes
-symptom: "a seat cannot finish its item inside one context window; compaction summaries come back truncated ('Summarization hit the token limit'); a seat woken into a fresh context has no idea what it already established; `status`/`queue` return tens of megabytes"
+symptom: "a seat cannot finish its item inside one context window; compaction summaries come back truncated ('Summarization hit the token limit'); a seat woken into a fresh context has no idea what it already established; `status`/`queue` return tens of megabytes; nobody can say WHICH seat the note mechanism has actually reached"
 writes: true                       # arming the extension writes config; the diagnosis below is read-only
 precondition: "read-only"          # Diagnose is read-only; the Do steps that edit config need the broker stopped
-last_verified: 2026-11-09
-verified_by: delegate
-evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt"
+last_verified: 2026-11-10
+verified_by: devtools
+evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (0.464 s, exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0)"
 check_rule: null
 ---
 
@@ -54,6 +54,54 @@ node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.
 node cli.mjs status --json | wc -c
 node -e 'const j=JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));console.log(j.queueView, j.queueCensus, j.queueDeferred.length)'
 ```
+
+### Per seat: does the note exist, was it read, did compaction use it? (#6082)
+
+`status` carries a **note census** — one row per seat, three facts each. It is a direct read-only open of the
+store (`src/fleethealth.mjs`'s precedent: no harness, no ownership), so it answers even when the broker is
+wedged. `--no-notes` skips the scan; it is one pass over `entries` and costs **1.4 s** on this rig's
+424,583-entry store.
+
+```bash
+node cli.mjs status --json | node -e 'const j=JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));console.log(j.noteCensus.lines.join("\n"))'
+# or straight from the module, no broker at all:
+node -e 'import("./src/notecensus.mjs").then(m=>console.log(m.renderCensus(m.readNoteCensus("./selfdev.sqlite"))))'
+```
+
+Measured 2026-11-10 on this rig's `selfdev.sqlite` (exit 0):
+
+```
+continuity notes: 4/12 seats have a written note; 6 read_note calls across 21 turns that offered the tools; 1905 compactions -> note 12, digest 0, summariser 1893
+  pm           conv 3       note=written  read_note 0x (offered 2x)  compactions 4 (note 1, digest 0, summariser 3)   latest: note
+  impl         conv 9       note=written  read_note 5x (offered 5x)  compactions 20 (note 1, digest 0, summariser 19)  latest: note
+  qa           conv 15      note=empty doc read_note 0x (offered 3x)  compactions 563 (note 2, digest 0, summariser 561) latest: note
+  lead         conv 21      note=none     read_note 0x (offered 1x)  compactions 2 (note 0, digest 0, summariser 2)   latest: summariser
+  advocate     conv 4918    note=none     read_note 0x (offered 0x)  compactions 0 (note 0, digest 0, summariser 0)   latest: no compaction
+  scribe       conv 4924    note=empty doc read_note 0x (offered 2x)  compactions 2 (note 1, digest 0, summariser 1)  latest: note
+  devtools     conv 4930    note=written  read_note 0x (offered 3x)  compactions 841 (note 2, digest 0, summariser 839) latest: note
+  auditor      conv 4936    note=empty doc read_note 0x (offered 1x)  compactions 345 (note 4, digest 0, summariser 341) latest: digest
+  designer     conv 4942    note=written  read_note 1x (offered 1x)  compactions 0 (note 0, digest 0, summariser 0)   latest: no compaction
+  security     conv 55605   note=none     read_note 0x (offered 1x)  compactions 0 (note 0, digest 0, summariser 0)   latest: no compaction
+  qa2          conv 86607   note=none     read_note 0x (offered 0x)  compactions 125 (note 0, digest 0, summariser 125) latest: summariser
+  architect    conv 107595  note=empty doc read_note 0x (offered 2x)  compactions 3 (note 1, digest 0, summariser 2)   latest: note
+```
+
+Three readings that the numbers do **not** support, and are easy to take from them:
+
+- **`note=empty doc` is not a defect.** A `durig.notes` document is created by the first `read_note`; a doc with
+  only its `base` revision has never been written. That is why the census reports `noteDoc` and `noteWritten`
+  separately (pitfall 199).
+- **`offered` is not `used`.** Every `pi.system` entry names the tools the request declared, so a naive
+  `record like '%"name":"read_note"%'` scan counted 25 "calls" on a fleet that had actually made **6** — the
+  same false green a `check` rule would ship. `readNoteCalls` counts entries with a `toolCall` block; the demo
+  pins the difference (`demo/note-census.test.mjs` §4).
+- **`digest 0` is expected, not missing.** `beforeCompact` always renders a note — the seat's own note, or a
+  seed from its claimed/queued item — so the bare-digest bucket only fires when neither exists.
+
+**The fleet-wide fact the census is for:** 1,893 of 1,905 compactions on this store still went to the
+summariser. The note path is real (12 compactions, zero model calls, proven by the demo's unchanged
+`callCount`) but it has only been in the running recently; a seat whose `latest:` is `summariser` is a seat the
+mechanism has not reached yet.
 
 Expected shape of step 2 (from the 2026-11-09 run):
 
@@ -160,6 +208,9 @@ the messages list and the durable transcript never sees it, so the note is not d
 
 ```bash
 node demo/continuity-note.test.mjs          # expect "CONTINUITY PASS", exit 0, ~0.40 s
+node demo/note-census.test.mjs              # expect "PASS: 0 failed check(s)", exit 0, ~0.46 s: the exercised seat
+                                            # reads note=written / read_note 1x / compaction via note; the control
+                                            # seat with no extension reads summariser - the census distinguishes them
 node demo/offline.mjs                        # pm -> worker -> done with a mid-item handoff, ~0.29 s
 node demo/status-view-bound.test.mjs        # expect "STATUS VIEW BOUND OK ...", exit 0, ~1.8 s
 node scripts/test.mjs --area rig            # the continuity demo is in the rig area
@@ -187,6 +238,8 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
 | `--full-queue` exits 1 | that is the guard working: an unbounded read is refused with its row count and size | ask for a slice (`--status claimed --to <seat>`, `--queue-limit N`) |
 | clock-in prints `## QUEUE 200 rows` for a 6,021-row store, or a deferred backlog of 0 | the digest read the *view* instead of the census | it now reads `queueCensus`/`queueDeferred`; if those fields are missing the status call predates them — check `git log --oneline -- src/readapi.mjs | head` |
 | the note is in the store but no file appears | the mirror write failed (permissions, a path outside the cwd) — the note is still authoritative | the tool result names the mirror failure; the store doc is the truth |
+| the census says a seat has a note but every compaction is `summariser` | the boundaries happened before the extension was armed, or the seat has not been compacted since | `latest: summariser` with `noteToolsOffered 0` means the tools were never in the request; `noteToolsOffered > 0` means the mechanism is loaded but the note path has not been reached |
+| `status --json` is 1.4 s slower than you expect | the note census scans `entries` in one pass | pass `--no-notes` for a fast read |
 | a seat woken by `reset` knows nothing | the extension is not armed — an unlisted extension is an absent one (§Do 2), and a plain reset carries no handoff | arm it; `beforeRequest` then supplies the note in the system message |
 | the gate prints `pi.system entries carrying the durig-continuity section: 0` and `requests offering the note tools: 0` | the extension was armed and **no seat has run a request since** — the transcript only shows what ran. Compare the newest entry timestamp with the config write (`ls -l durig.config.json`); on this rig they were 07:54:09Z and 20:59:08Z on the same day | run the mechanism's own proof, `node demo/continuity-note.test.mjs` (0.43 s, no key/network/broker): `CONTINUITY PASS` means the code is sound and the fleet simply has not exercised it. Getting a number on a live fleet needs a provider that registers a model (pitfall 219) |
 | a seat has a note but a compaction still paid for a summariser | the note was written after that boundary, or the seat's conversation has no `durig.notes` document yet | the gate's before/after block is anchored on the first real `write_note` tool call; anything before it is history, not the mechanism |
@@ -218,6 +271,12 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
   naming the count.
 - `node cli.mjs status --json` → 28,543,835 B before, 587,109 B after (2026-11-09, this rig); of that,
   `queueItems` 389,829 B, `peerGraph` 49,315 B, `queueDeferred` 51,353 B, `queueCensus` 133 B.
+- `node demo/note-census.test.mjs` → `PASS: 0 failed check(s)`, exit 0, 0.464 s: the exercised seat reads
+  `note=written`, `read_note 1x`, `compactions 1 (note 1, digest 0, summariser 0)`, and the compaction made zero
+  model calls (`callCount` 24 → 24); the control seat without the extension reads `summariser 1`.
+- `node cli.mjs status --json` on the live store, 2026-11-10 → exit 0, 539,395 B, per-seat census at
+  `docs/evidence/2026-11-08-context-window/note-census-2026-11-10.txt` (4/12 seats with a written note, 6 real
+  `read_note` calls out of 21 turns that offered the tools, 1,905 compactions: 12 note-path, 1,893 summariser).
 - `node docs/evidence/2026-11-08-context-window/milestone-check.mjs` → exit 1 with the per-seat list; output
   captured at `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt`.
 - Same gate after the mechanism was finished, 2026-11-09: **PASS (mechanism)** on both `./selfdev.sqlite`
