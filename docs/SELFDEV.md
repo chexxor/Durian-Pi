@@ -3756,3 +3756,23 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     (`cli.mjs:494-495`) → the conversation's `pi.agent` document (a stored `extensions` array **overrides** the host
     default — here 0 of 13 `pi.agent` docs store one, so the default applies) → an actual request in the transcript
     (`select count(*) from entries where record like '%"name":"read_note"%'`). Only the last one is proof.
+
+## Operational pitfalls (delegate N18-close pass, 2026-11-10 — numbered 221-224, continuing from 220; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+221. **A fleet that looks idle is often a broker with no credentials.** `cli.mjs status` shows
+    `idle_with_queued_work` and the supervisor prints `escalated … reason=repeated_failure`, which reads as a
+    routing failure. Read the process, not the queue: `tr '\0' '\n' < /proc/<pid>/environ | grep -i durig`.
+    Measured 2026-11-10: a resident broker with **zero** `DURIG_*` variables → every seat generation 401s on
+    127.0.0.1:8080 → **171** escalations in 24 h, including the milestone's own rows. Restart it with the key
+    exported (`set -a && . ~/.config/durig/env && set +a`) before asking pm to release anything.
+222. **`--check` exit codes are per-tree.** `node tools/compaction-guard-install.mjs --check` exits **0** in the
+    repo root (`UP TO DATE`) and **1** inside a seat worktree (`NOT INSTALLED`) — `tools/compaction-guard-install.mjs:37`.
+    Reporting "the guard is installed" without naming the tree is a false green; state which tree the check ran in.
+223. **A snapshot with in-flight tasks makes a mocked driver hang.** `Harness.waitForTask`/`run.wait` on a store
+    copy that still carries running seat tasks never settles, and node exits **13** (unsettled top-level await).
+    Bound every wait (`Promise.race` with a timeout) rather than stopping the broker to make the snapshot quiet;
+    `.spike/compaction-acceptance.mjs` now does this and runs clean with a live broker resident.
+224. **`serve --stop` on a past-deadline broker returns `stopped: false` — that is not a store fault.** The CLI
+    refuses a forced kill; `kill -INT <pid>` ends it cleanly and logs `EXIT … reason=deadline passes=-`, which is
+    the CLI-side literal (ROADMAP 328), not the run's pass count. `cli.mjs status`/`queue` timing out while a direct
+    read-only open answers in milliseconds is the same signature (`docs/runbooks/broker-down-or-stalled.md`).
