@@ -3658,3 +3658,14 @@ try {
 } catch (err) {
   fail(err);
 }
+
+// #314: an interrupted verb reports the interruption in its EXIT CODE, whatever it managed to
+// print before the signal. A shell or a seat can branch on 130 (128 + SIGINT); a verb that
+// swallows Ctrl-C and returns 0 is indistinguishable from one that finished the work, and that
+// is precisely how a wedged rig hides: the caller sees "success" and keeps waiting.
+if (isStopping()) {
+  console.error(
+    JSON.stringify({ ok: false, command: cmd, interruptedBy: stopSignalName(), stoppedBy: "signal" }),
+  );
+  process.exit(130);
+}
