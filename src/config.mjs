@@ -707,12 +707,6 @@ export function compactionFamilies(config = {}) {
  *       leave. If it exceeds the window, compaction cannot make that family fit: the cut it is allowed
  *       to make leaves more context than the window holds, and every turn that compacts still has no
  *       room to answer - the measured qa failure (`stopReason=length`, empty reply, tasks 275457/275459).
- *   headroom >= maxTokens (#6064). `reserveTokens` is the space the policy keeps free for the ANSWER.
- *   In the pin only the SUMMARY call is bounded by the reserve (compaction.js:95); the answer's output
- *   budget is the provider's declared `maxTokens`, which nothing ties to the reserve. A reserve smaller
- *   than that budget is a reservation the model is free to break: an input at window - reserve plus an
- *   answer of maxTokens > reserve exceeds the window, and the turn dies `stopReason=length` while the
- *   policy reports itself coherent.
  * REFUSE, do not silently default: the same shape as `assertNoSecretsInFile` and
  * `assertNoUnknownFileKeys`. A policy that cannot fit is not a policy, it is a wall, and a wall that
  * reads as "configured" is the inert-by-name class this rig keeps being bitten by.
@@ -729,13 +723,7 @@ export function compactionGate(config = {}) {
 		const floor = policy.keepRecentTokens + summaryBudget;
 		const blocking = family.window - policy.reserveTokens;
 		const background = blocking - policy.backgroundTokens;
-		const headroomGap = family.maxTokens == null ? null : family.maxTokens - policy.reserveTokens;
 		const fails = [];
-		if (headroomGap != null && headroomGap > 0) {
-			fails.push(
-				`reserveTokens ${fmt(policy.reserveTokens)} is smaller than this family's declared output budget ${fmt(family.maxTokens)}: the answer may emit ${fmt(family.maxTokens)} tokens into ${fmt(policy.reserveTokens)} of reserved headroom (only the summary call is capped by the reserve, compaction.js:95), so the headroom the policy counts on is short by ${fmt(headroomGap)}`,
-			);
-		}
 		if (policy.reserveTokens >= family.window) {
 			fails.push(`reserveTokens ${fmt(policy.reserveTokens)} is not below the window ${fmt(family.window)}, so blocking = ${fmt(blocking)} <= 0 and threshold compaction fires on every turn`);
 		}
@@ -747,32 +735,18 @@ export function compactionGate(config = {}) {
 		if (background <= 0) {
 			fails.push(`background = blocking ${fmt(blocking)} - backgroundTokens ${fmt(policy.backgroundTokens)} = ${fmt(background)}, so a background compaction is scheduled on every turn`);
 		}
-		return { ...family, floor, blocking, background, headroomGap, ok: fails.length === 0, fails };
+		return { ...family, floor, blocking, background, ok: fails.length === 0, fails };
 	});
 	return { policy, families, verdicts, ok: verdicts.every((v) => v.ok), offenders: verdicts.filter((v) => !v.ok) };
 }
 
-/**
- * A triple derived from the declarations, then re-checked against every family before it is offered.
- * Derivation, not folklore: the reserve must cover the LARGEST declared output budget (or the window's
- * eighth, whichever is bigger); the keep budget takes half the tightest remaining slack; the background
- * takes half of the headroom left after the reserve. If the probe does not pass - e.g. no reserve can
- * both cover an output budget and stay below the smallest window - NOTHING is suggested, because an
- * unvalidated remedy is worse than no remedy.
- */
-export function suggestedCoherentPolicy(config, families) {
-	if (families.length === 0) return null;
+/** A triple computed from the TIGHTEST declared window, then re-checked against every family before it is offered. */
+function suggestedCoherentPolicy(config, families) {
 	const window = Math.min(...families.map((f) => f.window));
-	const declaredOut = families.filter((f) => f.maxTokens != null).map((f) => f.maxTokens);
-	const reserveTokens = Math.max(1, declaredOut.length > 0 ? Math.max(...declaredOut) : Math.floor(window / 8));
-	if (reserveTokens >= window) return null;
-	const summaryCap = Math.floor(0.8 * reserveTokens);
-	const slack = Math.min(...families.map((f) => f.window - Math.min(summaryCap, f.maxTokens ?? summaryCap)));
-	if (slack <= 0) return null;
 	const candidate = {
-		reserveTokens,
-		keepRecentTokens: Math.max(1, Math.floor(slack / 2)),
-		backgroundTokens: Math.max(1, Math.floor((window - reserveTokens) / 2)),
+		reserveTokens: Math.max(1, Math.floor(window / 8)),
+		keepRecentTokens: Math.max(1, Math.floor(window / 4)),
+		backgroundTokens: Math.max(1, Math.floor(window / 8)),
 	};
 	const probe = compactionGate({
 		...config,

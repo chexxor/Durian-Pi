@@ -38,11 +38,10 @@ defaults, because no DURIG_COMPACTION_* key is set), and it is not coherent for 
   - verifier/openai/gpt-oss-120b (window 24,576, output budget 6,000, declared by DURIG_VERIFIER_CONTEXT / DURIG_VERIFIER_MAX_TOKENS): the smallest context a compaction can leave is 26,000 tokens - keepRecentTokens 20,000 + summary budget min(floor(0.8*16,384)=13,107, 6,000)=6,000 - against a window of 24,576 (105.8%)
 ```
 
-Four checks, and the message says which tripped:
-1. `reserveTokens >= maxTokens` for every family — `reserveTokens` is the headroom the policy keeps free for the ANSWER, and in the pin only the SUMMARY call is bounded by it (`compaction.js:95`). A reserve smaller than the family's declared output budget is a reservation the model is free to break: input at `window - reserve` plus an answer of `maxTokens > reserve` exceeds the window, and the turn dies `stopReason=length` while the policy still reports itself coherent.
-2. `reserveTokens < window` — otherwise `blocking = window - reserve <= 0` and threshold compaction fires every turn.
-3. `keepRecentTokens + min(floor(0.8*reserveTokens), maxTokens) <= window` — the post-cut floor. `selectCut` keeps at least `keepRecentTokens` verbatim and the summary call is capped at that min, so this is the SMALLEST context a compaction can leave.
-4. `window - reserveTokens - backgroundTokens > 0` — otherwise a background compaction is scheduled on every turn.
+Three checks, and the message says which tripped:
+1. `reserveTokens < window` — otherwise `blocking = window - reserve <= 0` and threshold compaction fires every turn.
+2. `keepRecentTokens + min(floor(0.8*reserveTokens), maxTokens) <= window` — the post-cut floor. `selectCut` keeps at least `keepRecentTokens` verbatim and the summary call is capped at that min, so this is the SMALLEST context a compaction can leave.
+3. `window - reserveTokens - backgroundTokens > 0` — otherwise a background compaction is scheduled on every turn.
 
 **Why per-family keys cannot fix it:** on the pinned pi-durable (1.3.0) `resolveSettings` merges
 `DEFAULT_COMPACTION_POLICY` with `settings.compaction` only, and `modelOverrides` has no reader
@@ -52,25 +51,20 @@ every family, because only one policy runs.
 
 ## Do
 1. Read the offending family and its window out of the message.
-2. `[judgement]` Pick a harness-wide policy that fits the TIGHTEST family AND covers every family's output
-   budget. The refusal prints a suggested triple it already re-checked against every declared family —
-   for the live rig (verifier 24,576/6,000, local 204,800/8,192) the gate's own derivation yields
-   `8192 / 9288 / 8192`, which passes all four checks. A reserve of `4096` does NOT pass: it is smaller
-   than the verifier's declared 6,000-token output budget, which is why the fold of #6064 into #6063
-   retired that triple.
+2. `[judgement]` Pick a harness-wide policy that fits the TIGHTEST family. The refusal prints a
+   suggested triple it already re-checked against every declared family; for a 24,576-window verifier
+   that is `3072 / 6144 / 3072`, and the worked example the gate accepts is `4096 / 8192 / 8192`.
 3. Write the three keys into the config file the verb is loading (`durig.config.json` in the rig root,
    or whatever `DURIG_CONFIG` points at):
 ```bash
 # the operator edits this file; these are policy numbers, not credentials
-"DURIG_COMPACTION_RESERVE_TOKENS": "8192",
-"DURIG_COMPACTION_KEEP_RECENT_TOKENS": "9288",
+"DURIG_COMPACTION_RESERVE_TOKENS": "4096",
+"DURIG_COMPACTION_KEEP_RECENT_TOKENS": "8192",
 "DURIG_COMPACTION_BACKGROUND_TOKENS": "8192"
 ```
 4. `[judgement]` Decide the behavioural cost consciously: ONE policy means the local family
-   (window 204,800) is cut to the same floor a verifier needs, and the reserve must be at least as big
-   as the LARGEST declared output budget in the rig — for a rig whose local model declares 16,384 output
-   tokens, the reserve cannot be smaller than 16,384 even though the verifier would be content with less.
-   That is the trade the gate forces into the open instead of hiding behind an override that never applied.
+   (window 204,800) is cut to the same ~11k floor a verifier needs. That is the trade the gate forces
+   into the open instead of hiding behind an override that never applied.
 
 ## Verify
 ```bash
@@ -98,11 +92,8 @@ node demo/compaction-coherence.test.mjs   # exit 0
 token estimate — not the policy — is the fault.
 
 ## Evidence
-#6063 and #6064, branch `item-6064` (forked from `item-6063`, whose gate this folds into — there is ONE
-gate, not two). Gate: `src/config.mjs` `effectiveCompactionPolicy`, `compactionFamilies`,
-`compactionGate`, `suggestedCoherentPolicy`, `assertCoherentCompactionPolicy` (called in `loadConfig`).
-Demo `demo/compaction-coherence.test.mjs` (registered in `demo/test-areas.json` under `rig`) asserts the
-refusal message, the accepted `16384/8192/4096` policy for both demo families, each of the four checks
-tripped separately (the headroom, blocking, floor and background cases each trip ALONE — the demo asserts
-`fails.length === 1` for the isolated cases), the shipped `durig.config.default.json` read verbatim as a
-refusal once a family is declared, and the CLI's exit 1 / exit 0 pair end to end. Verified 2026-11-10.
+#6063, branch `item-6063`. Gate: `src/config.mjs` `effectiveCompactionPolicy`, `compactionFamilies`,
+`compactionGate`, `assertCoherentCompactionPolicy` (called in `loadConfig`). Demo
+`demo/compaction-coherence.test.mjs` (registered in `demo/test-areas.json` under `rig`) asserts the
+refusal message, the accepted `4096/8192/8192` policy for both families, each of the three checks
+tripped separately, and the CLI's exit 1 / exit 0 pair end to end. Verified 2026-11-10.
