@@ -142,15 +142,23 @@ optional:
 A number with neither tag is not evidence: the reader cannot tell a measured fact from a wish, and a docs refresh carries
 it forward unexamined.
 
-**Worked instance (#6077, 2026-11-09).** `docs/ROADMAP.md` row 331 asserted compaction thresholds `159,040 / 126,272 /
-24,000` as if they were the policy in force. qa could not reproduce them on `main 09a94b4c` by either route (flat
+**Worked instance (#6077, 2026-11-09).** `docs/ROADMAP.md` row 331 asserted the compaction thresholds
+`159,040 / 126,272 / 24,000` — **INTENDED**, not the policy in force; qa's measured set is on `main 09a94b4c` — as if
+they were what a seat gets. qa could not reproduce them on `main 09a94b4c` by either route (flat
 defaults, window 204,800 → `188,416 / 155,648 / 20,000`; nested map honoured → `184,320 / 151,552 / 20,000`). Those
 figures are **INTENDED** and live in `docs/DECISIONS.md` (rulings 4-7) and
 `docs/reviews/task-completion-milestone-intake-2026-11-07.md:150` — not in the row that quoted them. Find them read-only:
 
 ```bash
-grep -rnE "159,040|126,272" docs/ src/ demo/     # 3 surfaces: DECISIONS.md, NEXT-ARCHIVE.md, the review table — exit 0
+grep -rnE "159,040|126,272" docs/ src/ demo/     # every hit now carries an INTENDED/RESOLVED tag (#6105, 2026-11-10); the measured set is qa's on `main 09a94b4c` — exit 0
 ```
+
+**The tag must name the dependency set, not only the tree (#6105, measured 2026-11-10).** The carrying probe,
+`docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs`, exits **1** on the lockfile pin **1.3.0**
+(`TypeError: compactionPolicy is not a function` — that release's `dist/harness/compaction.js` exports
+`CompactionTask, selectCut, summarizedMessages, estimateContext, serializeConversation` and no `compactionPolicy`);
+run where **1.5.1** is installed it exits 0 and prints `reserve=16384 keepRecent=20000 background=32768` for every
+family. A RESOLVED figure is only re-checkable if it names the tree *and* the dependency set it was read from.
 
 The same row carried a **dead dependency citation**: `dist/harness/compaction.js:195-196`, attributed to
 `compactionPolicy`. On the resolved 1.3.0 package line 196 is `export function selectCut(view, keepRecentTokens)`, and

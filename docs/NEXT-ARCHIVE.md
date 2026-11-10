@@ -12461,8 +12461,8 @@ that calls pi-durable's `compactionPolicy()` and asserts the configured numbers 
 area **`rig`** and **passes with the bug in place** — `node --test demo/config.test.mjs` → 1/1, 3.4 s — it pins only the call site
 (`:250-251`) and the one-spread count (`:303-305`), so it is not the gate;
 `node tools/what-to-test.mjs --paths=src/config.mjs,cli.mjs` derives **73 direct guards**) → then the values
-`local/qwen3.8-flash-next-iq3_s 40960/24000` (threshold `200000 − 40960 = 159,040`) and `verifier/openai/gpt-oss-120b
-4096/8192/8192` (threshold `24576 − 4096 = 20,480`). **Do not set harness-wide `DURIG_COMPACTION_RESERVE_TOKENS` before the nesting
+`local/qwen3.8-flash-next-iq3_s 40960/24000` (threshold `200000 − 40960 = 159,040` — **INTENDED**; the measured set is qa's on `main 09a94b4c`, label #6105) and `verifier/openai/gpt-oss-120b
+4096/8192/8192` (threshold `24576 − 4096 = 20,480`). *(#6105, 2026-11-10: **RESOLVED** on `main 09a94b4c` is `188,416 / 155,648 / 20,000` with flat pi-durable defaults (window 204,800) and `184,320 / 151,552 / 20,000` with the nested map honoured. The archive is not rewritten; the corrected row is `docs/DECISIONS.md`, rulings 4-7.)* **Do not set harness-wide `DURIG_COMPACTION_RESERVE_TOKENS` before the nesting
 fix** — it would apply 40960 to a 24,576-window family (`contextWindow − reserve < 0`). Carriers: `lead` has not minted them; the
 brief is **spooled undelivered** as `delegate-20261106c-lead11` / `…-lead11b` in `selfdev.sqlite.broker.inbox/` and delivers on the
 next drain.
