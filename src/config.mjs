@@ -400,65 +400,21 @@ export function strandedMsSetting(config) {
 }
 
 /**
- * Which provider FAMILY a model key names, taken from the specs this config actually REGISTERS -
- * the same objects the harness builds the provider from. "verifier/openai/gpt-oss-120b" -> the
- * verifier spec. A bare model id, a provider this config never armed with a BASE_URL, or no config
- * at all yields null: an unregistered family has no window, and inventing one is the inert-key class
- * this rig keeps being bitten by.
- *
- * @param {Record<string, unknown>} [config]
- * @param {string|null} [modelKey] the seat's resolved `provider/modelId`
- * @returns {object|null} the registered spec, or null
- */
-function familyForModelKey(config, modelKey) {
-	if (typeof modelKey !== "string" || modelKey.trim() === "") return null;
-	const key = modelKey.trim();
-	for (const spec of localProviderSpecs(config)) {
-		if (key === spec.id || key.startsWith(`${spec.id}/`)) return spec;
-	}
-	return null;
-}
-
-/** A positive number from a config value, or null when it cannot be read. */
-function positiveNumber(value) {
-	if (value === undefined || value === null || value === "") return null;
-	const n = typeof value === "number" ? value : Number(String(value).trim());
-	return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/**
  * The operator's DECLARED usable context window (ROADMAP 27's three-state denominator).
  * This is the middle state: more trustworthy than a vendor's advertised figure, less than
  * item 97's measured effective window (#1087). It is deliberately NOT the advertised
  * number, so an operator can state the window their model actually gives them.
  *
- * TWO SOURCES, in order (#6066):
- *   1. the FAMILY's own key - `DURIG_VERIFIER_CONTEXT`, `DURIG_LOCAL_CONTEXT`, `DURIG_LOCAL2_CONTEXT`
- *      - for a seat whose model names a family this config registered. This is the window the
- *      harness opens that family's conversation with, so it is the only denominator that can be
- *      honoured; measured before the fix, a rig that declares 24,576 for its verifier and 204,800
- *      for its local seats reported `declaredWindow=null` for both (docs/evidence/2026-11-08-context-window).
- *   2. `DURIG_CONTEXT_WINDOW`, the global fallback: either a bare positive number (one window for
- *      every model) or a JSON object keyed by model (`"zai-org/GLM-5.3-Flash": 200000` or
- *      `"GLM-5.3-Flash": 200000`) for the per-model case. It still governs every family that has no
- *      plane key of its own - a remote seat, or a registered family whose `CONTEXT` key is unset.
- * Unset/blank/malformed at BOTH levels returns null: a declaration that cannot be read is not a
- * declaration, and the resolver then falls through to `advertised`. A registered family with no
- * `CONTEXT` key runs on pi-durable's built-in 65,536 - a DEFAULT, not an operator declaration - so
- * it is not returned here as a `declared` value.
+ * `DURIG_CONTEXT_WINDOW` is either a bare positive number (one window for every model) or
+ * a JSON object keyed by model (`"zai-org/GLM-5.3-Flash": 200000` or `"GLM-5.3-Flash":
+ * 200000`) for the per-model case. Unset/blank/malformed returns null — a declaration that
+ * cannot be read is not a declaration, and the resolver then falls through to `advertised`.
  *
  * @param {Record<string, unknown>} [config]
  * @param {string|null} [modelKey] the seat's resolved `provider/modelId` (from `modelsBySeat`)
  * @returns {number|null}
  */
 export function declaredContextWindow(config, modelKey = null) {
-	const family = familyForModelKey(config, modelKey);
-	if (family) {
-		const declared = positiveNumber(config?.[`${family.prefix}CONTEXT`]);
-		if (declared != null) return declared;
-		// The family is registered but its CONTEXT key is absent or unreadable: fall through to the
-		// global declaration rather than launder the spec's built-in 65,536 into a `declared` number.
-	}
 	const raw = config?.DURIG_CONTEXT_WINDOW;
 	if (raw === undefined || raw === null || raw === "") return null;
 	if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw : null;
