@@ -6,7 +6,7 @@ writes: false
 precondition: "read-only probes; the ruling routes adoption to pm/impl"
 last_verified: 2026-11-09
 verified_by: security
-evidence: "item #5976 probe, item-5976 worktree @429f2b5a: 2581 shas from `git rev-list --all`, 2581 detected, 2581 redacted; `node demo/secretdetect.test.mjs` exit 0, `node demo/secretredact.test.mjs` exit 0"
+evidence: "#5976: 2581 shas, 2581 detected, 2581 redacted (pre-fix). #6014, on main in worktree item-6014 @09a94b4c: 2721 confirmed ids over the 64 cap -> 2721 detect + 2721 redact; 10 ids -> 0 + 0; 40-hex non-object -> 0 detect / 1 redact; pi pin id does not resolve (cat-file exit 128) and renders as `unconfirmed-object`."
 check_rule: null
 ---
 
@@ -91,6 +91,48 @@ Residual, stated plainly: a credential whose value happens to equal an object ha
 - **G4** A demo asserting parity between detect and redact on the sha corpus, with the `sk-` canary still redacted and the 40-hex non-object still detected.
 - **G5** `evidence.artifact` names the object type, and a non-commit object cannot satisfy a tree pin (#5379).
 - **G6** The demo suite runs on the **merged** tree, not the branch tip — a parity test that passes only on a tip proves nothing about main.
+
+## Addendum (#6014) — the read-back surface, the probe budget, and foreign-repo ids
+
+`src/gitobject.mjs` is now on main and is consumed by both secret surfaces (`src/secretdetect.mjs:86`, `src/secretredact.mjs:75`). The verdict is correct where it is wired; the open questions are *where else it must be wired* and *what it does when it cannot probe*.
+
+### Measured on main in this worktree (counts only)
+
+| Input | detect | redact | reading |
+|---|---|---|---|
+| 2721 real commit ids in one text (over the 64-candidate cap) | 2721 | 2721 | every confirmed object is still flagged/destroyed |
+| 10 real commit ids | 0 | 0 | parity achieved |
+| 40-hex that is not an object | 0 | 1 | surfaces disagree on the non-object class |
+| the pi pin id in `pi-main.pin.json` | — | redacted as `unconfirmed-object` | foreign-repo ids do not resolve here (`git cat-file -e <id>^{object}` exit 128) |
+
+### Ruling 1 — the item-body read path is the same verdict, a different wiring site
+
+The verdict classifies **text**, so every surface that emits text to a seat must call `objectExemptor`: `cli.mjs show <id>`, `queue`, `status`, the chat/TUI view, and the trace sink (`src/providers/trace.mjs` calls `secretSpans` and inherits the verdict transitively). It must not invent a rule, and it must not be reduced to "the afterTool hook already covers it": the hook covers *tool results*, not the row the store holds.
+
+Two facts must be separated, and qa's `#5978` should assert both rather than one:
+
+- **Stored**: the queue row's body, as written at enqueue, contains the id.
+- **Rendered**: `cli.mjs show <id>` still shows it.
+
+A body that is stored intact and rendered redacted is a display bug. A body mangled *at enqueue* is a store-integrity bug and the worse of the two, because the verifier can never recover the id from any view. Probe that can fail: enqueue an item whose body names a commit id from `git rev-list --all`, then read the raw row and the rendered row and compare. If the raw row lacks the id, the wiring belongs at the enqueue path, not the render path.
+
+### Ruling 2 — the 64-candidate budget is the real bite, and it is exploitable
+
+`MAX_OBJECT_PROBES_PER_PASS = 64` counts distinct candidates and, over the cap, exempts nothing. That is fail-closed in the credential direction, but measured above it destroys **2721 confirmed objects at once**, which is the same evidence-integrity failure the verdict exists to remove, just via a different door. A `git log` of 65 lines, a landing report of 70 patch ids, or `git rev-list --all` all lose every id.
+
+It is also a concealment path with a named exploit: a seat that wants its tool output to lose a specific commit reference pads it with 63 other ids and the whole set redacts. Severity: medium — no credential is exposed, but the history a claim rests on is unrecoverable from the transcript.
+
+Fix, concrete and falsifiable: replace one spawn per id with **one** `git cat-file --batch-check` fed all candidate ids on stdin. Cost is then bounded by a single subprocess, so the cap can rise (256+) without a pathological spawn count. Probe that fails today and passes after: a 200-id corpus of confirmed objects must exempt all 200, and the number of git spawns must be 1.
+
+### Ruling 3 — do not key the exemption on repo provenance
+
+"Which repository may exempt an id" is a new trust boundary, and the probe's answer already depends on `cwd`, which the seat controls. A provenance-keyed exemption would make the exemption attacker-widenable. Keep the classifier narrow: **this repo only**.
+
+Foreign ids belong to the *evidence semantics*, not the classifier: an upstream pi pin is not a tree the rig can verify, so it should be declared, not probed — a checked-in, reviewable set of expected ids (the pin file's own value), exempted as a literal allowlist of exactly those ids. Falsifiable pair: the declared pin id survives rendering; an arbitrary foreign 40-hex not in that set still redacts. Interim, low-cost and safe: the marker already names the class `unconfirmed-object`; make it name the *source* (the file or field the id came from) so a reader can recover it from the ref instead of the transcript.
+
+### Residual blind spot to state, not fix here
+
+The read-side detector's shape table requires letters **and** digits (`(?=.*[A-Za-z])(?=.*\d)`), so a pure-hex credential is invisible to detection (measured: 0 findings for a 40-hex non-object) while the redactor would have destroyed it before commit. That is coherent for content written after #3128 — redaction happens before the entry exists — but content already in the store from before it is unscanned for that class. Any claim of "the store has no credential-shaped content" must therefore name the class it can actually see.
 
 ## Citations
 
