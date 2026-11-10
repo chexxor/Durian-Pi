@@ -197,7 +197,7 @@ A runbook is done only when this ran. The read-only half ran on **#5089, 2026-11
 | pin identity | `node -e … pi-main.pin.json` | `2ec55d80`, `pinnedAt 2026-10-19T07:20:20Z`, **9 packages**; `package.json` at that sha: `"version": "1.3.0"` |
 | drift verdict | `node scripts/sync-pi.mjs --check` | **exit 0**, `ok=true drift=true reason="upstream has moved"`, pin `2ec55d80` → tip **`707888ec`** |
 | fetch | `git -C vendor/pi-main fetch --tags origin` | **exit 0**; tags `v1.2.0 v1.3.0 v1.4.0 v1.5.0` resolve |
-| behind/ahead | `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` | **`0 515`** — the delta doc's `508` was measured at tip `fcebc099` and went stale in days |
+| behind/ahead | `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` | **`0 515`** — the delta doc's `508` was measured at tip `fcebc099` and went stale in days. Since #6061 `sync-pi` does this count itself: a shallow vendored clone is deepened (`git fetch --unshallow origin`) and recounted, reported as `gap: "measured", deepened: true`; a failed fetch reports `gap: "unknown"` naming every command tried |
 | migration parity | `show <ref>:…/migrations.ts \| grep -o 'version: [0-9]'` | pin: `1 2` · tip: `1 2` → **no new migration for this pair** |
 | store schema | read-only `SELECT * FROM durable_schema` | `[{singleton:1, version:2}]` |
 | scratch gate | 4 verbs at an absent `/tmp` DB | all **exit 1**, `cause: no_store`, `db` absolute, `.sqlite`/`-wal`/`-shm` **ABSENT** |
