@@ -18,7 +18,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 
-import { deadGateId, registerSeat, RigQueue, Router, Seats, workable } from "../src/rig.mjs";
+import { deadGateId, isTerminalItem, registerSeat, RigQueue, Router, Seats, workable } from "../src/rig.mjs";
 import { seatHasReadTool, seatIsCoordinator } from "../src/seattools.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
@@ -123,6 +123,10 @@ try {
 	const seen = await toolReply("qa", "peek_queue");
 	check("the queue VIEW shows who un-parked the row and why", /releasedBy=pm reason=the base landed, qa can start/.test(seen), seen.slice(0, 300));
 
+	// A release that does not make the row claimable is not a release.
+	await call("qa", "claim_work", {});
+	check("the coordinator-released row is claimable by its recipient", (await item(1)).status === "claimed", JSON.stringify(await item(1)));
+
 	/* B. a seat that is neither a party nor a coordinator is refused. */
 	await call("impl", "send_work", { to: "impl", subject: "Self-parked row", body: "hold", held: true });
 	await call("qa", "release_work", { itemId: 2, reason: "just trying" });
@@ -134,7 +138,7 @@ try {
 	await call("pm", "cancel_work", { itemId: 1, reason: "pm trying to close it" });
 	const cancelSay = await toolReply("pm", "cancel_work");
 	check("pm cannot cancel a row it did not send", /not yours to cancel/.test(cancelSay), cancelSay.slice(0, 160));
-	check("...and the row is not terminal", (await item(1)).status === "queued", JSON.stringify(await item(1)));
+	check("...and the row is not terminal (cancel did not close it)", !isTerminalItem(await item(1)), JSON.stringify({ status: (await item(1)).status }));
 
 	await call("pm", "revise_work", { itemId: 1, body: "pm rewriting the request" });
 	const reviseSay = await toolReply("pm", "revise_work");
