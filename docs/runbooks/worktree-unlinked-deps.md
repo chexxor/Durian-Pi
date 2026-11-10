@@ -1,9 +1,9 @@
 ---
 runbook: worktree-unlinked-deps
-symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root, or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
+symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-06
+last_verified: 2026-11-10
 verified_by: devtools
 evidence: "#3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
 check_rule: null
@@ -31,6 +31,18 @@ dependency set produced it, nobody can use your verdict.
 
 Work itself is not blocked: the worktree runs, and code that does not touch pi-durable behaves
 identically.
+
+**What the artefact actually looks like, measured 2026-11-10** (item worktree `item-6089` at main tip
+`e3685a8f`, state A - `vendor/pi-main` absent, `node_modules/@earendil-works/pi-durable` a real directory
+resolving the lockfile's released **1.3.0**, while the seat root resolves the built **1.5.1**):
+`node scripts/test.mjs` -> **261/282 passed, exit 1**, 21 reds all in the broker/cli/tui-durable families,
+`demo/broker.test.mjs` killed at the 120 s per-test timeout. The signature is nameable, not mysterious:
+`src/broker.mjs:2097 runWakeLoop` calls into the released 1.3.0 `dist/session/session.js:575 #publish`, which
+answers `TypeError: listener is not a function`, surfacing as `SessionFailed: Session failed after a storage
+error; close and reopen it`. Demos that do not take the broker wake path pass in the SAME tree
+(`demo/clockin-digest.test.mjs` exit 0 in 28.5 s; `demo/provenance.test.mjs` and `demo/seat-turn-shape.test.mjs`
+both exit 0). So a red set of that shape is a graph artefact - and the citation must say so: quote
+`dependencySet` from `node scripts/sync-pi.mjs` (#5400) next to the count.
 
 ## Preconditions
 
