@@ -11121,3 +11121,34 @@ blamed for a failure measured in a different tree at a different pin.
 **shallow**, so every "N commits behind" ever written from it is depth-bounded, not upstream truth — this session
 measured `1 1` before `fetch --unshallow` (6,994 commits) and `0 729` after, and `sync-pi --check` reports
 `behind: 743`. A doc that quotes a count without the depth is a claim nobody can falsify (D211's class).
+
+## D-<mint> — checkpointing is per-doc and bounded by cadence, not by the verb that caused the change (architect, item #6171, ROADMAP 355 A, 2026-11-10)
+
+**Status.** Proposed ruling; number minted at land time (the mint-at-land rule, #3075). No code changed in this
+row — `impl` implements it under its own row. Measurements and failure enumeration:
+`docs/reviews/architecture-checkpoint-policy-2026-11-10.md`, probe
+`docs/evidence/2026-11-10-checkpoint-policy/probe.mjs` (pi-durable **1.3.0** as resolved by the lockfile, node
+v24.22.1, branch `item-6171`; run: `node docs/evidence/2026-11-10-checkpoint-policy/probe.mjs 5000 10000`, exit 0).
+
+**Context.** `defineDoc`'s `checkpointWhen(value, ops, info)` decides whether a change is stored as a full base
+or a delta; reads replay every delta since the nearest base (`dist/storage/sqlite/storage.js:426-450`), and for
+session-scoped (current-only) docs writing a base **deletes** the prior revisions (`storage.js:652,655`). The rig
+put `() => false` on all six docs as a provisional stop for the pin move. The intake asked for the predicate to be
+keyed on the transitions a reader acts on (claim, complete, defer, hold, release) — for the queue doc that set is
+*every mutation*, so taken literally it is `() => true`, which measured 50× worse: 10,000 queue verbs cost
+30,703 ms checkpointing every verb against 608 ms checkpointing none.
+
+**Decision.** Four policies, by doc shape and read cadence:
+- `RigQueue` (5,077 rows, ~2 MB, read by `watch` every ~750 ms and twice per broker pass, `src/broker.mjs:214,1258,1339`): `info.deltasSinceBase >= 200` — cadence, not verb class. Measured at 10,000 verbs: read 5.38 ms vs 12.29 ms with no checkpoints, for 21 base writes (+148 ms). A tighter bound (50) costs 46% more write time for no measured read gain.
+- `Seats`, `Edges`, `Constitution`, `RigControl` (session singletons, tiny, read on every wake/send/prompt build, changed rarely): `() => true`. Small-doc probe: 200 writes cost 36.6 ms with a base each time vs 42.3 ms with none.
+- `ContinuityNotes` (conversation-scoped, `history: "rewindable"`, `fork: "asOf"`): `info.deltasSinceBase >= 20`. History is retained for conversation docs, so a base is an add, not a replacement; the bound bounds replay depth and history growth at once.
+- Every rig doc must declare a predicate. `() => false` is not neutral: at the pin it is silently skipped, at `v1.5.1` a missing predicate throws (`session/transaction.ts:1058`, the 3 demo failures in the delta review).
+
+**Consequences.** Reads become predictable rather than merely usually fast; a decision-gating doc (queue →
+landing readiness via `LANDING_QUEUE_STATUSES`, `src/readapi.mjs:673`; control → wake; seats → claim) no longer
+invites a cache, because its read is bounded. Nobody can read an old queue state out of a session doc — that
+history never existed (`isCurrentOnly`, `storage.js:57`), and the audit trail is each item's `transitions` array.
+The live-store size delta against the backup baseline (`617,492,480 bytes`, sha256 `0996cd61…`) is NOT measured
+here, because that needs the live store and the read seam forbids a second opener; it belongs to the build row.
+Failure modes with their probes are enumerated in the review (§5); the predicate contract (pure, total, O(1) over
+`info`, no I/O) is §6.
