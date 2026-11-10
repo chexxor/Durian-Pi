@@ -14,7 +14,7 @@
 // The provider families are owned by src/providers/local.mjs; the compaction override map needs them so a
 // "family/*" key resolves against the SAME prefix set that builds the provider ids, instead of a second,
 // hand-written list that can drift (see `overrideKeysForFamily`).
-import { LOCAL_ENV_PREFIXES, providerIdForPrefix } from "./providers/local.mjs";
+import { LOCAL_ENV_PREFIXES, localProviderSpecs, providerIdForPrefix } from "./providers/local.mjs";
 
 export const DEFAULT_CONFIG_PATHS = ["durig.config.json", ".durig/config.json"];
 
