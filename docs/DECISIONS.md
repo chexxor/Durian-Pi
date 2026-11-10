@@ -11638,3 +11638,67 @@ is broken" is visible rather than looking like an empty queue.
 
 **Residual:** this ruling fixes the shape and the read states. It does not decide which causes qualify,
 nor whether a faulted seat should be re-tested before its expiry — that is a scope question for `lead`.
+
+## D262 — 2026-11-10T23:0xZ: **a signal must abort the await, not set a flag; a read is bounded by the broker's PROGRESS, not its LIVENESS; and an interrupted verb exits 130** (delegate acting on the operator's goal "make every CLI verb answer or fail fast — no 120 s silence — and make Ctrl-C actually terminate the running command"; host measured with the measurement: **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**Status:** landed on `main` as `41000315` + `c32557cb` + `src/cli-seam.mjs`; nothing pushed.
+
+**Context.** Every read verb ends in `awaitIntentResult(...)`, a poll that could run the full
+120 s spool bound. The verbs that "handled" SIGINT (`watch`, `log`, `events`, `run --watch`,
+`serve`) set `stopping = true` on a loop that was already inside an await — the handler fired, the
+flag flipped, and the process kept sitting on the await it was already in. Measured on the
+baseline `e06626af` with a forged resident-but-unanswered broker and a 139 KB store:
+`cli.mjs watch --once --json` took **120,547 ms** and exited **1**, with the Ctrl-C landing
+**119,043 ms** before the process gave up. `status` and `queue` had no handler at all and died by
+node's default: 0 bytes, no exit code a caller can branch on. Evidence:
+`docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`.
+
+**Decision.**
+- **One seam, not per-verb flags.** `src/signals.mjs` holds one process-wide `AbortController`.
+  Every poll loop uses `stoppableSleep`; `awaitIntentResult` (`src/broker.mjs:363`) takes the
+  signal and returns in one 200 ms poll. A repeat `installSignalHandlers` call can only RAISE the
+  grace (verbs with a longer shutdown get it), never remove the handler.
+- **The seam is installed by the first import.** `src/cli-seam.mjs` is `cli.mjs`'s first import,
+  because in ESM a module body cannot run before its own imports resolve; measured registration at
+  **271 ms** instead of ~500 ms. The remaining window is stated in the evidence doc rather than
+  hidden: ESM cannot beat it without a separate entry file.
+- **Exit code 130.** A verb interrupted while it was still working exits **130 (128 + SIGINT)**
+  and prints `{ok:false, command, interruptedBy, stoppedBy:"signal"}`, even if it printed a full
+  payload first. If the verb had already finished, 0 is the honest code — measured: `ps`
+  SIGINT@400 ms on the baseline exited 0 because the verb was done.
+- **The read bound is derived from PROGRESS, not LIVENESS.** `BROKER_READ_TIMEOUT_MS = 120_000`
+  while the broker is advancing (`src/readclient.mjs:40`); `DEGRADED_READ_TIMEOUT_MS = 10_000`
+  when the heartbeat is fresh but `lastPassAt` is frozen (`:43`). A resident broker that does not
+  answer falls back to the store **only if no seat holds a live generation lease**
+  (`liveGenerationLeases`, `:68`); otherwise it fails with a named cause
+  (`broker_degraded` / `broker_read_timeout`) and the runbook remedy.
+- **The safe direct read is read-only.** pi-durable cannot open a store read-only and takes
+  `BEGIN IMMEDIATE` for reads, so `src/readonlystore.mjs` (node:sqlite `readOnly`) is the only
+  direct read that is safe next to a resident broker. `demo/readonly-store-parity.test.mjs` pins
+  **15 views** byte-identical between pi-durable and the shim — including the ascending order
+  `log --follow` polls, which the shim initially returned newest-first, silently dropping every
+  entry between polls.
+- **Reads are drained out of band.** `runWakeLoop` runs a read drain on the heartbeat cadence
+  (`readDrainMs = 1_000`, `readDrainBoundMs = 10_000`, `src/broker.mjs:1670-1671`, timer at
+  `:1799`), guarded three ways: only when every pending intent is a read, one drain at a time,
+  and bounded so a wedged drain is logged (`READ-DRAIN-STUCK`) rather than held. Reads are served
+  from the broker's second connection (`probeStorage`), never the harness handle that is stuck.
+
+**Options considered:** (a) a timeout flag per verb — rejected, it is the bug being fixed;
+(b) let any verb open the store directly when the broker is slow — rejected: a second owner
+contending with a mid-generation seat is the corruption class the broker exists to prevent;
+(c) one abort-aware seam plus a read-only shim — **chosen**.
+
+**Consequences.** `Ctrl-C` latency is bounded by the blocking call in flight, not by a hard wall:
+the force-exit timer can only fire when the event loop is free, and a multi-MB result read can
+block it for seconds (measured ~2.5 s worst case). The result-channel GC
+(`gcIntentResults`, `src/broker.mjs:417`, called per pass at `:1361`) is not on the read-drain
+path, so a wedged pass can leave multi-MB answers in `<db>.broker.inbox.out/` past the TTL. That
+is exactly the gap the architect's design position in `docs/reviews/architecture-exit-drain-6391.md`
+(branch `item-6381`, rows **#6391/#6390**) asks the exit path to close: account for the spool
+without touching the store.
+
+**Residual.** `ui.mjs` has its own `quit` (`ui.mjs:315-316`) and headless `ui.mjs` exits 2 (needs a
+TTY); `tui.mjs` registers no handler and is unmapped beyond `--help`. Whether `run --watch`'s own
+clean drain should report 130 or 0 when it stops on a signal is a naming question the team can
+close; today it reports 130 because the signal arrived while it was working.

@@ -15,6 +15,10 @@
 // Every setting can also live in durig.config.json (env still wins); run
 // `node cli.mjs config` to see the values actually in effect and their
 // source.
+// FIRST import on purpose: it installs the SIGINT/SIGTERM seam before the rest of the
+// import graph resolves, so a Ctrl-C during load is reported (exit 130) instead of dying
+// by node's default. See src/cli-seam.mjs.
+import "./src/cli-seam.mjs";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels, createProvider } from "@earendil-works/pi-ai";
 import * as ocApi from "@earendil-works/pi-ai/api/openai-completions";
@@ -2111,9 +2115,9 @@ function resolveStopGraceMs() {
   return Number.isFinite(n) && n >= 0 ? n : STOP_GRACE_DEFAULT_MS;
 }
 
-// Install the signal seam here (not at the top of the file) because its grace is derived from
-// `resolveStopGraceMs`, and dispatch of every verb happens further down this file — so this is
-// still "before any verb runs". See src/signals.mjs.
+// The seam itself is installed by the FIRST import (src/cli-seam.mjs). This second call only
+// RAISES the grace for the resident verbs, using `resolveStopGraceMs` which is not available
+// at import time. src/signals.mjs treats a repeat call as an upgrade, never a removal.
 const FIRST_VERB = process.argv[2] ?? "";
 installSignalHandlers({
   gracefulMs:

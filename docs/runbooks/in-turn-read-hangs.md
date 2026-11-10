@@ -3,8 +3,8 @@ runbook: in-turn-read-hangs
 symptom: "my turn hung asking about the queue; `cli.mjs queue` / `status` / `scripts/clockin.mjs` never returns; a window blows its --max-duration bound and the broker log just stops mid-pass"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-08
-verified_by: scribe
+last_verified: 2026-11-10
+verified_by: delegate
 evidence: "#5656 (this commit); mechanism from docs/DECISIONS.md D235 'A STRUCTURAL HAZARD' + docs/SELFDEV.md pitfall 116 + ROADMAP 329; diagnose block timed on this box 2026-11-08T07:5xZ (Linux, Fedora 45, node v24.22.1): 0.068 s real time, and a spooled read answered in 2.22 s with exit 0 in the same breath"
 check_rule: null
 ---
@@ -15,9 +15,17 @@ check_rule: null
 A seat asks "what is in my queue?" and the turn dies on a timeout; or a broker window overruns
 its bound while the log stops mid-pass. The read is a **spooled request to the broker**, not a
 local file read: `src/readclient.mjs` `readViaBroker()` writes a `read` op into
-`<db>.broker.inbox/` and then awaits the result with `timeoutMs = 120_000`. Only the broker can
-answer, and the broker answers when it drains the inbox - which it does between passes, not
-while it is waiting for the very turn that issued the read.
+`<db>.broker.inbox/` and then awaits the result. Only the broker can answer, and the broker used to
+answer only **between** passes - never while it was waiting for the very turn that issued the read.
+**Corrected 2026-11-10 (D262, `41000315`):** the bound is no longer a flat `120_000`. It is
+`BROKER_READ_TIMEOUT_MS = 120_000` while the broker is ADVANCING and `DEGRADED_READ_TIMEOUT_MS = 10_000`
+when the heartbeat is fresh but `lastPassAt` is frozen (`src/readclient.mjs:40`, `:43`), and
+`runWakeLoop` now drains read intents on the heartbeat cadence (`src/broker.mjs:1670-1671`, timer
+`:1799`) from the broker's second connection, so a stuck pass does not starve a read. Measured on this
+rig with the broker resident and seats mid-turn: `status --json` 4.758 s, `queue --json --no-body`
+2.587 s, `watch --once --human` 2.212 s, `ps` 0.878 s, `log pm 5` 1.950 s — all exit 0, all under 10 s.
+The **in-turn read is still the wrong read**: the drain removes the 120 s silence, it does not make a
+read inside a turn cheap.
 
 ## Impact
 One hung read burns a whole turn (and a metered call). Repeated across a fleet it is the
@@ -58,10 +66,13 @@ read answering quickly is proof the drain is running and the hang is not this de
    seats do not run `cli.mjs queue`, `cli.mjs status` or `scripts/clockin.mjs` from within a turn.
    Take one multi-id `show` if a read is genuinely required, and otherwise use the numbers already
    recorded in the item or in `docs/NEXT.md`.
-2. **Do not open the store directly as a workaround.** pi-durable takes one owner per process and
+2. **Do not open the store directly with a writing harness as a workaround.** pi-durable takes one owner per process and
    `SqliteStorage.document()` wraps a read in `BEGIN IMMEDIATE` (`src/readclient.mjs` header,
    `src/brokerread.mjs` header): a second opener contends with the broker's write lock and can
-   poison its session (`SessionFailed`). That is why the read verbs are clients at all.
+   poison its session (`SessionFailed`). That is why the read verbs are clients at all. The one direct read that IS safe next to a resident
+broker is the read-only open, `src/readonlystore.mjs` (node:sqlite `readOnly`, no migration, no
+`BEGIN IMMEDIATE`), which `--local` uses and which `demo/readonly-store-parity.test.mjs` pins
+byte-identical to pi-durable across 15 views.
 3. **If the window must be ended:** `kill <pid from broker.json>` (never `pkill -f`, pitfall 49) ->
    `node cli.mjs resume` (settles `placed`/`queued` submissions) -> confirm `broker.json` is gone.
 

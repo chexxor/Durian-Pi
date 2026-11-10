@@ -20,11 +20,21 @@ const controller = new AbortController();
 let installed = false;
 let stopping = false;
 let signalName = null;
+let graceful = 1500;
 
-/** Install the process-wide signal seam. Idempotent: safe to call from every entry point. */
+/**
+ * Install the process-wide signal seam. Idempotent: safe to call from every entry point.
+ * A LATER call can only RAISE the grace, never remove the handler - the CLI installs early
+ * (src/cli-seam.mjs, before its heavy imports resolve) and upgrades the grace once it knows
+ * which verb it is running.
+ */
 export function installSignalHandlers({ gracefulMs = 1500, onSignal = null } = {}) {
-  if (installed) return;
+  if (installed) {
+    if (gracefulMs > graceful) graceful = gracefulMs;
+    return;
+  }
   installed = true;
+  graceful = gracefulMs;
   const handle = (sig) => {
     if (stopping) return;
     stopping = true;
@@ -35,8 +45,8 @@ export function installSignalHandlers({ gracefulMs = 1500, onSignal = null } = {
     } catch {
       /* a diagnostic hook must never be the reason a signal is lost */
     }
-    if (gracefulMs > 0) {
-      const hard = setTimeout(() => process.exit(130), gracefulMs);
+    if (graceful > 0) {
+      const hard = setTimeout(() => process.exit(130), graceful);
       if (typeof hard.unref === "function") hard.unref();
     }
   };

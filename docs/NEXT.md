@@ -1,18 +1,19 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-10T19:0xZ (delegate session **N26** — the **branch-landing + cleanup pass**: **56 refs
-pruned**, **57 worktrees released**, refs **82 → 26**, worktrees **75 → 18**, `main` proven green. The three
-compaction-gate landings are **reverted** because they took the whole CLI down. Measured with `git branch --format='%(refname:short)' | wc -l` and `git worktree list | wc -l`);
-**count it live, do not trust this number** — the fleet mints refs while you measure. Nothing was pushed; the
-delegate claimed, completed or deferred no row.)
+**Last update:** 2026-11-10T23:1xZ (delegate session **N27** — the **Ctrl-C + read-bound pass**: every CLI verb
+now answers or fails fast, and Ctrl-C ends the verb with exit **130**. Commits `41000315`, `c32557cb` and
+`src/cli-seam.mjs` on `main`; suite **294/294** (`--jobs 4`, 117.6 s) and **293/294** at `--jobs 8` (the red is
+contention, green standalone — see `docs/runbooks/suite-red-standalone-green.md`). Refs and worktrees: **count
+it live, do not trust any number here** — the fleet mints refs while you measure (29 worktrees at 22:4xZ).
+Nothing was pushed; the delegate claimed, completed or deferred no row.)
 
-**Milestone this window worked** — **landing the pinned pi (D255 → D256, ROADMAP 353–357)**. D255 staged the move;
-this window executed it: pin → tag `v1.5.1`, `pi-schema` first in `packages`, the symbol migration in our source,
-the two seams (`src/commitstream.mjs`, `src/livewatch.mjs`), the per-demo attribution in
-`docs/reviews/pi-1.5.1-delta-review-2026-11-10.md` §8, and the landing pass. What is **not** closed: the three
-policy calls (rows **#6171/#6172/#6173**), the item-5301 rework (**#6174**), the superseded WIP disposition
-(**#6178**), and the 13 held worktrees. The other open thread, the auto-clean ceiling (D249, ROADMAP **311** cut 2 /
-**344**), is still spooled and now has a named defect row, **#6174**.
+**Milestone this window worked** — **no 120 s silence, and Ctrl-C actually stops the verb (ROADMAP **314**,
+row **#6160**, decision **D262**)**. Baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
+`watch --once --json` went from **120,547 ms / exit 1** (signal ignored for 119 s) to **1,518 ms / exit 130, 15 ms
+after the signal** — table in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`. Still open under it:
+the pinned-pi thread (D255 → D256, ROADMAP 353–357: pin `v1.5.1`, `pi-schema` first, the symbol migration, the
+`commitstream`/`livewatch` seams) with the three policy calls **#6171/#6172/#6173**, the item-5301 rework
+(**#6174**), the superseded WIP disposition (**#6178**), and the auto-clean ceiling (D249, ROADMAP **311** / **344**).
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -65,11 +66,14 @@ node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/wt.json","utf8"))
 git worktree prune
 ```
 
-**Paused goal (the operator resumes it with `/goal-resume`):** "every CLI verb answers or fails fast against a team
-that is running or stopped, no 120 s silence, and Ctrl-C actually terminates the running command." Its WIP is in
-`stash@{0}` (a copy at `.spike/goal-wip/wip-tracked.patch`, 640 lines) and was deliberately NOT restored — half-written
-code breaks the green suite. The cheapest probe that shows where it stands now: `time node cli.mjs status --json`
-with the broker down (**2.46 s**) versus with a broker resident but not passing (120 s, exit 1).
+**Goal in flight (not paused):** "every CLI verb answers or fails fast against a team that is running or
+stopped, no 120 s silence, and Ctrl-C actually terminates the running command." Implementation and gates are on
+`main`; the record (D262, pitfalls **249–254**, both runbooks) is what this session finished. Cheap probes:
+`node demo/cli-sigint-exits.test.mjs` (4.99 s) and `time DURIG_DB=./selfdev.sqlite node cli.mjs status --json`
+(4.758 s, broker resident and degraded). Open edges stated in the evidence doc: the first ~270 ms of a run is
+still node's default disposition; the force-exit timer cannot fire while a synchronous read blocks the loop
+(~2.5 s measured); `tui.mjs` signal behaviour is unmapped; `gcIntentResults` is per-pass, not per read drain —
+that is the architect's exit-drain row **#6391/#6390** (branch `item-6381`, merges clean).
 
 **Operator decision owed, not a git one:** `.spike/` is **13 GB** of gitignored scratch — 4.2 GB `fix-20261101`,
 1.1 GB `fix-20261031`, 1.1 GB `backups`, 814 MB `delegate`, plus four store backups (435 MB, 419 MB, 419 MB, and
@@ -126,11 +130,11 @@ synthesised from committed `pi.tool-result` entries, not streamed.
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/test.mjs --all --jobs 8                  # 289 demos (290 on disk, 1 declared exclusion); exit 0
+node demo/cli-sigint-exits.test.mjs                   # the Ctrl-C proof: 130 within ~130 ms of the signal (4.99 s)
+node scripts/test.mjs --all --jobs 4                  # 294/294 in 117.6 s; at --jobs 8 one demo reddens on contention
 node demo/next-pointer.test.mjs                       # the pointer cap: NEXT.md must stay <= 200 counted lines
-node tools/broker-serve.mjs --dry-run                 # "A start would be allowed" with ~/.config/durig/env sourced
-set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800
-node cli.mjs status
+node tools/broker-serve.mjs --status                  # broker state; if down: source ~/.config/durig/env then --start
+DURIG_DB=./selfdev.sqlite node cli.mjs status         # must answer in under 10 s, or name the cause and remedy
 ```
 
 ## Current item (priority order)
@@ -154,8 +158,9 @@ node cli.mjs status
 5. **Promote the pin probes out of `.spike/`** (**#6176**): `.spike/pin-update/migrate-symbols.mjs` and
    `.spike/pin-update/signature-classify.mjs` are the instruments that made this window fast; an unpromoted probe
    is lost (ROADMAP 312).
-6. **Broker alive-but-dead** (**#6160**): heartbeat advances, pass clock freezes, every broker-routed read times out
-   while a direct read-only open answers. Observed twice this window; recovery is `kill -INT` → `resume` → restart.
+6. **Broker alive-but-dead** (**#6160**): heartbeat advances, pass clock freezes, every broker-routed read times
+   out. The bound is now health-derived (120 s advancing / 10 s degraded, `src/readclient.mjs:40`, `:43`) and reads
+   drain on the heartbeat cadence — the follow-up is the exit-path spool accounting, rows **#6391/#6390**.
 7. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5, gate baseline
    **3 PASS, 1 PARTIAL, 4 FAIL** (`docs/evidence/2026-11-09-milestone-m5/gate.mjs`, 1.6 s).
 
@@ -184,9 +189,9 @@ Wall clock: the full suite is **47.8 s** (was 61.8 s at the old pin); a merged-t
 branch with `node --check cli.mjs` + `git merge-tree --write-tree` before spending a 47 s suite (pitfall **232**),
 and never run three full suites concurrently — contention produced two false reds this window (pitfall **235**).
 
-**Traps this window** — `docs/SELFDEV.md` **245–248** (a broker that exits on `--max-duration` cures the dark reads
-by disappearing; an ancestor ref can still hide sole-copy work in a dirty worktree; `queue --json`'s `rows` is the
-census, not the match; the 57-tree worktree release is 75 s and needs no broker, no store write, no model). The
-previous window's traps are **241–244** and **232–240**.
+**Traps this window** — `docs/SELFDEV.md` **249–254** (a SIGINT handler that only sets a flag is not a stop —
+measure it; an interrupted verb exiting 0 reads as success; `stoppableSleep` must not `unref`; a read-only shim
+must implement both vendor orders; the Ctrl-C bound is only as good as the event loop; a red at `--jobs 8` that is
+green standalone is the box, not the code). Prior windows: **245–248**, **241–244**, **232–240**.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)

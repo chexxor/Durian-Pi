@@ -100,6 +100,17 @@ try {
     console.log(`SIGINT ${verb.join(" ")}: exit ${r.code} ${r.afterSignalMs} ms after the signal, ${r.bytes} bytes`);
   }
 
+  // The EARLY window. cli.mjs is 3.6k lines and its import graph takes ~270 ms to resolve,
+  // so a signal raised before the seam exists used to be node's default disposition: silent
+  // death, no report line, no code to branch on. src/cli-seam.mjs installs the seam as the
+  // FIRST import, so a signal at 320 ms is reported as 130. (A signal inside the first ~270 ms
+  // is still node's default - it exits in under 320 ms, which is fast, and that limit is
+  // stated in docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md rather than hidden.)
+  const early = await verbWithSignal(["ps"], 320);
+  assert.equal(early.code, 130, `Ctrl-C during a fast verb must exit 130, got ${early.code} (signal ${early.signal})`);
+  assert.ok(early.wallMs <= 2000, `the early-window exit must be bounded; took ${early.wallMs} ms`);
+  console.log(`EARLY-WINDOW: SIGINT at 320 ms -> exit ${early.code} in ${early.wallMs} ms`);
+
   // The control: with NO broker state, the same verbs answer through the store and exit 0.
   rmSync(brokerStatePath(dbPath), { force: true });
   const local = await verbWithSignal(["status", "--local", "--json"], 19_000);
