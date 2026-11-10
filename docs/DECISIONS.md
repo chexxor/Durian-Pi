@@ -11493,3 +11493,148 @@ The live-store size delta against the backup baseline (`617,492,480 bytes`, sha2
 here, because that needs the live store and the read seam forbids a second opener; it belongs to the build row.
 Failure modes with their probes are enumerated in the review (§5); the predicate contract (pure, total, O(1) over
 `info`, no I/O) is §6.
+
+## D261 — 2026-11-10T13:2xZ: **a row's authority is per-field: intent belongs to the two parties, gates belong to whoever mints them, and a constraint with no field is not a constraint** (architect ruling on pm's row #6225, "the coordinator has routing authority but not edit authority"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**)
+
+**The why.** pm tried to attach a sequencing constraint to a row lead had minted, and had nowhere to
+put it. The tempting fix — let the coordinator edit a routed row's body — answers the symptom and
+leaves the cause standing. The cause is structural: `workable()` reads `item.blockedBy`
+(`src/rig.mjs:310`) and never reads a sentence, so a constraint that cannot reach a field is not a
+constraint at all. Measured with `tools/probes/revise-authority-boundary.mjs` (exit 0, worktree
+`item-6185` @ `f192f543`, faux provider, `MemoryStorage`): the coordinator's `revise_work` is
+refused; the *sender's* `revise_work` carrying `blockedBy` is dropped at schema validation, and the
+body edit riding in the same call is dropped with it; `workable()` on a gate naming a nonexistent id
+returns `{workable: true}`. `blockedBy` is assigned in exactly one place, `enqueueItem`
+(`src/rig.mjs:441`, reached only from `send_work` at `:737`) — there is no post-mint gate write path
+for anyone.
+
+**Decision.** Four boundaries, each falsifiable:
+
+1. **Intent (`subject`, `body`): the two parties only, `queued` only.** Unchanged, and not widened.
+   "The coordinator" is not a field on a row; `from` and `to` are. Authority the guard cannot derive
+   from the record is authority it cannot enforce.
+2. **Constraint (`blockedBy`, `requires`, `tier`, `block`): mint-scoped.** If you hold the gate, mint
+   the row that carries it. `hold_work`'s recipient-only rule (`src/rig.mjs:1212`) is the one
+   asymmetry worth removing: a minting seat can release and cancel its own row but cannot park it, so
+   its only legal lever for a premature row is the terminal one. Parking must not be harder than
+   cancelling.
+3. **A future `gate_work` verb is additive-only for a non-minting party, authority = parties plus a
+   *recorded* coordinator, `queued` only, and gated on validation first.** Adding a gate is
+   reversible and conservative; removing one loosens a contract another seat authored, which is a
+   scope ruling, not a verb. Validation precedes authority: `normalizeBlockedBy` (`src/rig.mjs:355-380`)
+   checks shape only — it does not check that the id exists, is non-terminal, or is acyclic, and a
+   dangling gate is inert while a cancelled one starves forever. Handing out gate-writing power before
+   those checks turns a well-meaning coordinator into a starvation engine.
+4. **Terminality is checked before authority in every control verb.** `release_work` learned this as
+   #5778 (`src/rig.mjs:1254`); `revise_work` and `cancel_work` still answer "not yours to revise" for
+   a row that is already `done`, which is how a fleet reports a closed row as open work.
+
+**Consequences.** Coordinators gain a real path (mint with the gate, or ask a party to) instead of a
+prose channel the claim predicate cannot see. Two defects are registered for repair: the `hold_work`
+asymmetry, and the authority-before-terminality ordering in `revise_work`/`cancel_work`. The cost is
+one extra hop per discovered constraint, plus a schema requirement — coordinator standing must be a
+recorded field on the row before any verb can grant it. That schema decision is `lead`'s and is not
+made here.
+
+**Alternatives considered.** (a) widen `revise_work` to the routing seat — rejected: routing is not
+recorded, so the guard would have to infer authority from role or the org graph. (b) keep the status
+quo and let late constraints live in bodies — rejected: measured failure, 42 held rows in
+`demo/queue-held-gates.test.mjs` carrying no recorded gate at all, and #6218 is the live specimen.
+**Status:** adopted as a ruling on the boundary; the verb, the asymmetry fix and the ordering fix are
+routed, not implemented here.
+
+## D258 — 2026-11-10T13:5xZ: **enforcement at the receive path is structural admission; the audit sink is broker-written evidence, never a decision input; and a deny whose record cannot be written is a STUCK payload, not a dead-letter** (architect ruling on pm's row #6185, "what may enforce on the broker receive path, and who may write the audit sink"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**)
+
+**The why.** The receive path is the one place a payload arrives from outside the broker, and every
+control decision made there has to be both enforceable and legible. `authorizeSpoolRequest`
+(`src/broker.mjs:505`) is the right shape: **pure**, no store, no harness, no model — so the rule is
+testable with no broker (`demo/control-plane-gate.test.mjs`, exit 0). But three measured things show
+the seam is not yet sealed.
+
+**1. Admission runs on a defaulted discriminator.** `requestOp` returns `"message"` when `op` is
+absent (`src/broker.mjs:469-471`). So a payload with no op is ALLOWED by the gate and only fails later
+at seat lookup. A typo'd op is allowed by the gate and dead-lettered by the drain's `SPOOL_OPS` check
+— opposite verdicts, two code paths, same payload. Enforcement on a value the parser invented is not
+enforcement. **Decision:** an absent or unknown `op` is refused at the gate.
+
+**2. A content-classifier deny at ingest would deny the rig's own evidence.** Measured with
+`docs/evidence/2026-11-10-broker-receive-path/probe.mjs` (exit 0): 5 of 6 routine payloads — an
+evidence sha, an ADR sha256, a worktree branch name, an npm lockfile hash, a real key — FIRE the
+existing secret classifier as `high-entropy-token`. The only exemption that exists
+(`src/gitobject.mjs`) is confirmation-based (`git cat-file -e`) and is a subprocess with a probe
+budget. **Decision:** enforce on **structure** — op, actor, target, capability — never on content
+shape. A gate that fires on shas is a gate you cannot turn on.
+
+**3. The recovery leg lies about itself.** When `<db>.broker.inbox.error` exists as a *file*,
+`deadLetterIntent` swallows the EEXIST (`src/broker.mjs:305-307`) and the caller still does
+`deadLettered += 1` (`:791`, `:812`, `:856`). Measured: `pass1 deadLettered=1 … payload still in the
+inbox after two passes: 1`, re-drained every pass with no cap — `INTENT_RETRY_LIMIT` bounds only the
+closed-handle branch. An unparseable payload is dead-lettered with **no** diagnostic at all.
+**Decision:** split the counters (`deadLettered` vs `stuck`), emit a diagnostic on every refusal
+branch, and bound the stuck branch with the same attempt sidecar the retry path already uses.
+
+**Who may write the audit sink.** Only the broker writes it today, and that is an accident of how a
+command is spelled, not an authority: `src/confine.mjs` has zero hits for `audit`, `inbox` or `spool`;
+`echo x >> <db>.broker.audit.log` is refused by the lexical guard, while the same write inside a
+`node -e` program succeeds (measured; the probe line was removed immediately after the measurement).
+**Options considered:** (a) name the sink paths in the guard — helps against shell redirection, nothing
+against an interpreter; kept as a **layer**, not a boundary. (b) make authority come from the record's
+provenance: the broker writes the decision it made against the spool file it decided on, and the
+enforceable artifact is the structured `refusal` object on the dead-lettered record
+(`src/broker.mjs:295-303`), cross-checkable against the `.reason` files and the recorded result.
+**Adopted: (b), with (a) as a layer.** The trade-off named out loud: nothing may *act* on the audit log
+— it is evidence only — which costs a cross-check at read time, in exchange for the decision being a
+function of broker-held state rather than of a file any seat process can append to. This is the same
+doctrine `authorizeSpoolRequest` already carries: `from` is producer-stamped, all seats share one OS
+user, so same-user forgeability is a KNOWN RESIDUAL and must never be described as prevented.
+
+## D259 — The fault signal is ONE seat-scoped marker written by the code that RAISES the cause, read as four states, and UNKNOWN never means "no fault" (2026-11-10)
+
+**Status:** ruling issued (schema, not code); implementation routed and gated on this row.
+
+**Context:** `workable()`'s contract has four clauses; three are implemented. Clause 4 — "not marked
+blocked by a recorded PROVIDER/SEAT FAULT" — has no field, and D24 forbids inventing one. Measured by
+`node tools/probes/fault-signal-states.mjs` (exit 0): **1 distinct verdict out of 6 fault situations** —
+active, expired, unreadable and absent faults all read as "clean" — and an undeclared option passed to
+the predicate is silently dropped, no error, no effect. Today the rig's only durable expression of a
+fault is the supervisor's park on an item (`src/supervisor.mjs:75-92`), derived each pass from the
+transcript: observation time, not fault time, no provenance, no expiry. That is why the gap has sat
+parked since #2673.
+
+**Decision:**
+- **The marker is on the seat** (`Seats.seats[name].fault`), not the item. The live store measures 2,961
+  queue items and 12 seats (`node cli.mjs config`); a fault is a property of the actor, and per-item
+  marking would write and unwrite ~3k rows per outage.
+- **Shape mirrors the park shape** (`normalizeBlock`, `src/queue-lifecycle.mjs:146`): `cause` from the
+  `src/causes.mjs` allow-list, `scope`, `at` (fault time), `by` (the raiser), `evidence`, `resolver`
+  (mandatory), `reviewBy` (mandatory — a fault with no expiry is permanent starvation). The write path
+  refuses a marker missing any of them.
+- **Only the raiser writes it, at fault time** — `src/providers/spend.mjs` for `SPEND_CAUSE`, the
+  run-settle path for `model_error`, in the commit that settles the failing submission. `attention`,
+  `checkup` and the supervisor are READERS; the supervisor stops deriving the fault in order to decide.
+- **The read is four states:** `none`, `active`, `expired`, `unknown`. `workable()` gains a *named*
+  `fault` parameter — naming is load-bearing, because an undeclared key is silently dropped today — and
+  returns `reason: "fault:<cause>"` when active, keeping `reason: null` while carrying `caveats:
+  ["fault-unknown" | "fault-expired:<cause>"]` otherwise, so the invariant "a non-null reason means not
+  workable" survives.
+- **UNKNOWN is claimable but never reported as clean.** #2673's conservative default is kept: a false
+  negative starves invisibly, a false positive is legible. A broken fault read does not stop the claim;
+  it names the state, prints it in the claim response, and is counted by `check`.
+- **Clause 4 gates claim and wake through the same predicate** (`src/queue-lifecycle.mjs:348` already
+  assigns claimability to `workable`), and gates nothing else — a seat mid-run must still be able to
+  complete, defer, hold, release or resume.
+
+**Options considered:** (a) `fault` on the item — cheapest to write, impossible to clear; (b) derive it
+at claim time from the transcript — rejected: not persisted (D24), makes a provably pure predicate
+impure, and uses observation time when the decision needs fault time; (c) one seat-scoped marker written
+by the raiser — **chosen**.
+
+**Consequences:** a write lands on the provider seam, the rig's hottest path; a bug there blocks claims
+fleet-wide. Accepted because the decision is reversible both ways — clause 4 can be switched off without
+touching the data, and the marker is independently auditable. Expiry is mandatory, so a fault cannot
+become permanent starvation; a faulted seat that is never woken would never clear, so the wake selector
+must wake a seat whose `reviewBy` has passed. `fault-unknown` is a countable finding, so "the fault check
+is broken" is visible rather than looking like an empty queue.
+
+**Residual:** this ruling fixes the shape and the read states. It does not decide which causes qualify,
+nor whether a faulted seat should be re-tested before its expiry — that is a scope question for `lead`.
