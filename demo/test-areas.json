@@ -36,6 +36,7 @@
       "demo/extensions.test.mjs",
       "demo/feature-row.test.mjs",
       "demo/features-drift.test.mjs",
+      "demo/held-gate-audit.test.mjs",
       "demo/hold-queued-row.test.mjs",
       "demo/init.test.mjs",
       "demo/instruction-files.test.mjs",
