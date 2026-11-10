@@ -1,0 +1,32 @@
+# Note census, live rig - 2026-11-10T04:5xZ (devtools, #6082)
+
+Host: Linux Fedora 45, node v24.22.1. Store: /home/chexxor/Git/Durian-Pi/selfdev.sqlite
+(6,098 queue rows, 424,583 entries). Broker UP; the census itself is a direct read-only open, so it does
+not depend on the broker's read path.
+
+Command:
+    DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status --json
+Exit: 0. Payload: 539,395 bytes.
+
+noteCensus.totals:
+    {"seats":12,"notes":4,"noteDocs":8,"readNoteCalls":6,"noteToolsOffered":21,
+     "compactions":1905,"note":12,"digest":0,"summariser":1893}
+
+Per seat (noteCensus.lines):
+    continuity notes: 4/12 seats have a written note; 6 read_note calls across 21 turns that offered the tools; 1905 compactions -> note 12, digest 0, summariser 1893
+      pm           conv 3       note=written  read_note 0x (offered 2x)  compactions 4 (note 1, digest 0, summariser 3)   latest: note
+      impl         conv 9       note=written  read_note 5x (offered 5x)  compactions 20 (note 1, digest 0, summariser 19)  latest: note
+      qa           conv 15      note=empty doc read_note 0x (offered 3x)  compactions 563 (note 2, digest 0, summariser 561) latest: note
+      lead         conv 21      note=none     read_note 0x (offered 1x)  compactions 2 (note 0, digest 0, summariser 2)   latest: summariser
+      advocate     conv 4918    note=none     read_note 0x (offered 0x)  compactions 0 (note 0, digest 0, summariser 0)   latest: no compaction
+      scribe       conv 4924    note=empty doc read_note 0x (offered 2x)  compactions 2 (note 1, digest 0, summariser 1)  latest: note
+      devtools     conv 4930    note=written  read_note 0x (offered 3x)  compactions 841 (note 2, digest 0, summariser 839) latest: note
+      auditor      conv 4936    note=empty doc read_note 0x (offered 1x)  compactions 345 (note 4, digest 0, summariser 341) latest: digest
+      designer     conv 4942    note=written  read_note 1x (offered 1x)  compactions 0 (note 0, digest 0, summariser 0)   latest: no compaction
+      security     conv 55605   note=none     read_note 0x (offered 1x)  compactions 0 (note 0, digest 0, summariser 0)   latest: no compaction
+      qa2          conv 86607   note=none     read_note 0x (offered 0x)  compactions 125 (note 0, digest 0, summariser 125) latest: summariser
+      architect    conv 107595  note=empty doc read_note 0x (offered 2x)  compactions 3 (note 1, digest 0, summariser 2)   latest: note
+
+The counting trap this census is built around: a naive `record like '%"name":"read_note"%'` scan on the same
+store returns 25 matches, because every pi.system entry carries the request's tool DECLARATIONS. Actual
+read_note tool calls: 6.

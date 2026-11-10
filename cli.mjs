@@ -88,6 +88,7 @@ import { extensionNames, loadExtensions, parseExtensionList } from "./src/extens
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
+import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
 import { readData } from "./src/readclient.mjs";
 import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -2966,6 +2967,12 @@ async function cmdStatus(args = []) {
   const broker = brokerHealth(readBrokerState(DB_PATH), {
     streamTimeoutMs: streamSettings(CFG).stream?.timeoutMs ?? null,
   });
+  // #6082: the note census rides in the same view, so "is the mechanism working for THIS seat" is one read
+  // away rather than a script against the store. It is a direct read-only open (src/fleethealth.mjs's
+  // precedent), so it answers even when the broker is wedged and every broker-routed read times out.
+  const noteCensus = args.includes("--no-notes")
+    ? { skipped: true, why: "--no-notes; run without it for the per-seat continuity-note census" }
+    : safeNoteCensus(DB_PATH, health.seats);
   // #4403: the note is CARRIED IN THE JSON, not written to stderr. `status` IS the machine-readable
   // queue view (stdout is JSON by default, and `--json` is accepted), but a consumer that merges
   // streams (`2>&1`) parses the note as a JSON value and fails with "Invalid JSON primitive: note" —
@@ -3031,7 +3038,26 @@ async function cmdStatus(args = []) {
     queueTerminalIndex: args.includes("--with-terminal-index") ? terminalStatusIndex(health.queueItems) : null,
     broker,
     notes,
+    noteCensus,
   });
+}
+
+/**
+ * #6082 (N18 row 9): the per-seat continuity-note census, folded into `status`. A note mechanism that is
+ * "armed" store-wide is not the same as a seat that has a note, read it, and was compacted ON it - so the
+ * census reports the three facts per seat and NEVER fails the read: a store that cannot be opened reports
+ * the reason in the section rather than taking `status` down with it. `--no-notes` skips the scan for a
+ * faster read (one pass over `entries`, ~1.4 s on this rig's 424k-entry store).
+ */
+function safeNoteCensus(dbPath, seats) {
+  try {
+    const census = readNoteCensus(dbPath, {
+      seats: (seats ?? []).map((seat) => ({ name: seat.name, conversationId: seat.conversationId })),
+    });
+    return { ...census, lines: renderCensus(census).split("\n") };
+  } catch (error) {
+    return { error: String(error?.message ?? error), seats: [], totals: null, skipped: true };
+  }
 }
 
 /** Every seat's resolved model, from the spec. One definition so `check`'s
