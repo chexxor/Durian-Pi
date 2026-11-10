@@ -3835,3 +3835,53 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
 237. **A broker past its `--max-duration` is not dead — it is draining, and every broker-routed read is dark while it drains.** Measured 09:05Z: `selfdev.sqlite.broker.json` `heartbeatAt` 1794301552096 (seconds old) with `lastPassAt` 1794299666491 (**31 minutes frozen**), the log's last line `PASS 273 ms=12 woke=-` at `08:34:26.491Z` = exactly the 1,800 s deadline of the run started `08:04:30.660Z`, and `selfdev.sqlite.genlock.0..3` all naming pid 2585214 seat `devtools` — a generation in flight. Under that state `node cli.mjs queue --id … --json` **exits 124** (killed before the 120 s spool bound) and `node tools/rig-portability-audit.mjs` also **exits 124**. The discriminator is the genlock files: `for f in selfdev.sqlite.genlock.*; do cat "$f"; done` — a held slot naming a pid means **do not terminate it and do not open the store from a second process**; record the measurement as **BLOCKED — broker draining**, quoting the exit code, never as unmet. (`docs/runbooks/broker-down-or-stalled.md` §"Reads when the broker is gone or dark".)
 238. **A ref count is point-in-time: the rig mints refs while you are measuring.** In the two minutes between `git branch --format=… | wc -l` → 23 and the prune, the fleet minted `item-6089` and `item-3570`. Re-run Diagnose at the moment of the verb, and gate every delete on the live question `git merge-base --is-ancestor <ref> main && git branch -d <ref>` — never on a remembered `ahead=0` list (`docs/runbooks/branch-cleanup.md` Step 1).
 239. **After the free merged refs are gone, git has nothing left to do — the pin is queue state.** At clock-out the only merged+free ref was `item-6082-mig` (tip `6b21e36b`, ancestor of `main`, `-d`'d); every other merged ref is held by a worktree, and every worktree is either a seat root or an in-flight row. Terminality lives in the store, not in git, so a delegate with dark reads cannot prune further — that is the ceiling `docs/runbooks/branch-cleanup.md` names, and it is a `pm` disposition act, not a git act.
+
+## The eleven seat-attention states (S1–S11) — the contract about what the rig does with a seat (D244, queue #5211 / ROADMAP 313)
+
+Appended at the END of this runbook on purpose: nine documents cite `docs/SELFDEV.md:<line>` pins (measured
+`grep -roE "SELFDEV\.md:[0-9]+" docs/ | wc -l` → 9, spanning lines 80 to 3758), and inserting a section near
+the top would shift every one of them.
+
+**Where the table lives, and how to check it is there.** The decision is **D244** (`docs/DECISIONS.md:10642`);
+the deliverable table is `docs/reviews/architecture-idle-attention-2026-11-06.md` §1 (eleven rows; the `S11`
+row is line 43). Both are on `main`: `git show main:docs/DECISIONS.md` printed `S11` at line 10642 and
+`git show main:docs/reviews/architecture-idle-attention-2026-11-06.md` printed it at line 43 (each grep exits
+0), and `git merge-base --is-ancestor 455dfd03 main` exits 0 — `455dfd03` is the "merge: land item-5211 onto
+main" commit, `756ee161` the DECISIONS commit inside it.
+
+**The names**, so a seat can say which one it is in. The owning transition is the code **as it reads on main
+`f192f543`**, re-measured here rather than copied from the review note (whose pins have aged — see the warning
+at the end):
+
+| # | State | The transition that owns it, measured on main `f192f543` |
+|---|---|---|
+| S1 | working — a run in flight | a submission is admitted and the harness starts the run |
+| S2 | settled-and-empty (idle) — nothing claimable, nothing parked | the driver reports `SKIP reason=no-work` (`src/driver.mjs:143`) |
+| S3 | queued-unseen — work addressed to a sleeping seat | `send_work` commits a row; the `idle_with_queued_work` notice fires only when the last run settled and nothing is in flight (`src/attention.mjs:507`) |
+| S4 | admitted-not-started — input committed, no run ever began | the stranded-admitted bound `STRANDED_ADMITTED_MS = 30_000` (`src/attention.mjs:38`) |
+| S5 | parked by the seat (held) | `hold_work` makes the row unclaimable until `release_work` |
+| S6 | waiting-on-gate — `blockedBy` unmet | the gate view keeps a recorded gate distinct from no gate (`src/queue-lifecycle.mjs:358-362`) |
+| S7 | deferred-awaiting-answer | `defer_work` parks the row on a question |
+| S8 | wedged (stalled turn) | `turn-duration-ms>=maxTurnDurationMs`, post-settlement (`src/degeneration.mjs:226`) and live (`src/inflight.mjs:90`) |
+| S9 | degenerate — repetition, pseudo-tool-call, language drift, prose wall | the per-run reasons built in `src/degeneration.mjs:205-226` |
+| S10 | failed-run streak | `REPEATED_FAILURE_STREAK = 3` (`src/attention.mjs:45`), applied in `src/supervisor.mjs:69` |
+| S11 | operator-paused | `pause`/`unpause` are spool ops (`src/broker.mjs:597`, handled at `:743`) |
+
+**The invariant (INV-1):** a `pi.reset` record may exist only when a named per-run cause from S8 or S9 is
+attached to it; an idle seat (S2, S5, S6) must produce **zero** reset records. That is the rule the 1,406-reset
+pass at `docs/SELFDEV.md:2234-2241` broke, and it is why a seat that has nothing to do should never be reset.
+
+**Contract versus behaviour — do not read the table as shipped naming.** The rig does **not** name these states
+in code: `grep -rn "\bS[0-9]\b" src/*.mjs` returns exactly one line, `src/heldgate.mjs:57`, where "the S1-S11
+state table" is an example string inside the parked-row auditor. The sensors exist; the names do not. D244's
+defect (2) is **still open** at main `f192f543`: `justReset` is computed and returned (`src/degeneration.mjs:131-135`,
+returned at `:231`) and asserted by `demo/degeneration.test.mjs:260` and `:386`, but nothing in `src/`, `tools/`
+or `scripts/` consumes it — `grep -rn justReset src/ tools/ scripts/` returns 5 hits, all in
+`src/degeneration.mjs`. What IS built is the cause-naming of a boundary's handoff (`src/broker.mjs:69-74`,
+applied at `src/reset.mjs:70`). Whether an idle seat still reaches the reset actuator was **not** re-measured
+for this entry; that measurement is `tools/latency-budget.mjs` plus the spend ledger, and until it is run the
+invariant stands as a contract, not as an observed fact.
+
+**Warning when quoting this table:** the review note's own `path:line` pins are stale against current `main` —
+it cites `src/driver.mjs:55` (the no-work skip is at `:143` today) and `src/broker.mjs:548` (pause is handled
+at `:743`). Re-measure every `path:line` before repeating it.
