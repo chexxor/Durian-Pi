@@ -3,9 +3,9 @@ runbook: verifier-independence
 symptom: "a verifier edited the artefact it was asked to verify (or is tempted to); a verifier's only write is a report; a verify leg must say which kind of independence it actually has when author and verifier run the same model"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-08
-verified_by: verifier
-evidence: "demo/runbook-frontmatter.test.mjs; 2026-10-21 incident: a non-author verifier EDITED the demo to make it pass, then reported exit 0 with `artifact: main` while the fix was UNLANDED (isolation held — the edit was in its own worktree — independence broke). Step-zero gate demonstrated live 2026-10-21: `git merge-base --is-ancestor bbc8e42 main` exit 1 (scribe-item-4447, unlanded) vs main tip exit 0. Re-verified 2026-10-31 in the item-4958 worktree: step-zero gate exit 1 against the unlanded `8fa8f3a2` (item-4931 tip) and exit 0 against the main tip; the re-point instruments measured directly — `demo/deepinfra-catalog.test.mjs` exit 1 (`seat \"qa\" names verifier/mistralai/ministral-3-14b-reasoning, which is not in the fallback catalog`), `demo/local-model-pointer.test.mjs` exit 1 in a checkout with no machine config, `demo/runbook-frontmatter.test.mjs` exit 0"
+last_verified: 2026-11-10
+verified_by: scribe
+evidence: "demo/runbook-frontmatter.test.mjs; 2026-10-21 incident: a non-author verifier EDITED the demo to make it pass, then reported exit 0 with `artifact: main` while the fix was UNLANDED (isolation held — the edit was in its own worktree — independence broke). Step-zero gate demonstrated live 2026-10-21: `git merge-base --is-ancestor bbc8e42 main` exit 1 (scribe-item-4447, unlanded) vs main tip exit 0. Re-verified 2026-10-31 in the item-4958 worktree: step-zero gate exit 1 against the unlanded `8fa8f3a2` (item-4931 tip) and exit 0 against the main tip; the re-point instruments measured directly — `demo/deepinfra-catalog.test.mjs` exit 1 (`seat \"qa\" names verifier/mistralai/ministral-3-14b-reasoning, which is not in the fallback catalog`), `demo/local-model-pointer.test.mjs` exit 1 in a checkout with no machine config, `demo/runbook-frontmatter.test.mjs` exit 0; roster re-read 2026-11-10 in the `item-5565` worktree (exit 0): `rig.selfdev.json` names 11 seats on `local/qwen3.8-flash-next-q2_0` and exactly 1 on `verifier/openai/gpt-oss-120b` (`auditor`, line 139), and `demo/deepinfra-catalog.test.mjs` now exits **0** — 12 seat models resolve, `local=11, verifier=1`"
 check_rule: null
 ---
 
@@ -62,15 +62,22 @@ the reader can price the verdict instead of assuming the strongest kind:
   the author's worktree could not read).
 
 ### The verifier-provider question: reading rules, so nobody re-litigates it
-- **The config re-point is NOT taken.** `qa`, `qa2`, `advocate`, `auditor` and `designer` stay pinned to
-  `verifier/mistralai/ministral-3-14b-reasoning` in `rig.selfdev.json` (verified at that file, lines 50, 65,
-  95, 139, 153). Tonight's legs went to **local non-authors** instead — three axes bought with the loss of one.
+- **The roster, re-read from the file (2026-11-10, the `item-5565` worktree, exit 0): 11 seats on
+  `local/qwen3.8-flash-next-q2_0` and exactly ONE on the metered family — `auditor` =
+  `verifier/openai/gpt-oss-120b`.** The line numbers this runbook recorded on 2026-10-31 are still the right
+  lines and the wrong values: `rig.selfdev.json:50` (qa), `:65` (qa2), `:95` (advocate), `:153` (designer) now
+  read `local/qwen3.8-flash-next-q2_0`; only `:139` (auditor) names the metered id. The file wins. Legs still
+  go to **local non-authors** — three axes bought with the loss of one.
 - If a re-point is ever taken, two instruments must move in the **same** change or they start lying:
-  - `demo/deepinfra-catalog.test.mjs` — **red as it stands (measured exit 1**, quoted in `evidence:` above).
-    Its `resolvable()` (`:75-76`) returns true for **ANY** `local/` id, so a `local/` re-point turns it GREEN
-    while the catalog learns nothing. Making it green by re-pointing is tuning the instrument to agree
-    (#4923/#4955's law). Keep it RED, and keep the CAUSE — a seat pin missing from the curated fallback
-    catalog — in whatever report closes it.
+  - `demo/deepinfra-catalog.test.mjs` — **green as of 2026-11-10** (measured exit **0** in the `item-5565`
+    worktree: `12 rig seat models resolve across providers local=11, verifier=1; 15 entries; 1 row(s) refused by
+    the validation layer`). It was red for a cause the roster change removed — a seat pin missing from the
+    curated fallback catalog — so the old "keep it RED" instruction is spent, not standing. What IS load-bearing
+    is `:142`, `real seats exercise BOTH exemptions`, and `auditor` is the seat that keeps it non-vacuous. The
+    shortcut to watch: the exemption is read from the registry (`isLocalProviderId`, `demo/deepinfra-catalog.test.mjs:92-96`),
+    so it returns true for **any** id whose provider is registered as a local-family provider — `local/` AND
+    `verifier/` — which means a re-point of either kind turns this guard green while the catalog learns nothing
+    about that seat (#5013's own lesson: a guard that cannot be satisfied protects nothing).
   - `demo/local-model-pointer.test.mjs` does **not** name a model, so do not describe it as a `mistralai`
     assertion: it pins every seat naming a locally served provider (`LOCAL_PROVIDER_IDS = [local, verifier]`,
     `src/providers/local.mjs:42`) to the model id the **machine** config exposes (`DURIG_VERIFIER_MODEL` /
@@ -83,6 +90,33 @@ the reader can price the verdict instead of assuming the strongest kind:
   turns run qa p50 9,734 / qa2 p50 17,302 / auditor p50 16,518 — over half exceed the slot (**#4948** the
   measurement, **#4959** the instrument that surfaces the gap). A saturated verifier family reads healthy.
   Before anyone re-points a model to fix a timeout, the row must say whether the slot was the cause.
+
+### Routing rule: the metered canary is not a work queue (lead's #5390 clause E, applied by pm from 2026-11-07)
+
+**The rule.** `auditor` is the rig's ONE metered seat (`verifier/openai/gpt-oss-120b`), kept deliberately so the
+exemption gate stays non-vacuous — its job is to keep `demo/deepinfra-catalog.test.mjs:142` asserting with a real
+seat on each provider family, **not to be busy**. Do not route routine verification to it.
+
+| What the row is | Route to | Why |
+|---|---|---|
+| routine verification of a fix | `qa`, `qa2`, `advocate`, `designer` | all four are local seats (`rig.selfdev.json:50, 65, 95, 153`), so the leg costs nothing |
+| a check whose POINT is the metered path — proving the paid provider still registers, resolves and answers | `auditor` | the canary is the subject of the test; minting such a row is a deliberate spend |
+
+**The mint condition:** an `auditor` verify row is minted only when the canary is the point of the check, and
+the row says so in its own body, so the spend is intentional rather than incidental.
+
+**This SHARPENS the #5194/#5268 gate; it does not loosen it.** A verifier-slot raise still carries ROADMAP **297**
+and the **$4.00** store cap **together**: the caps that actually enforce are per-call $0.05, per-run $0.10, per-store
+$4.00 (`durig.config.default.json:20-22`, enforced by `src/supervisor.mjs` through `SPEND_CAUSE` in
+`src/causes.mjs:19`, which stops the seat and PARKS the row). At the vendor's declared **131,072** context one
+maximal call is **$4.85** (ROADMAP 297), so the exposure rule refuses the row at registration and the roster goes
+dark before the first request — raising the slot without the cap moves the failure from "expensive" to
+"unregisterable".
+
+**Attribution, so nobody mistakes a carried number for a fresh one.** The cost figures are lead's measurement, relayed
+by pm and **not re-checked here**: ~$0.03 per pass observed; a 120 s diagnostic pass woke the canary 3 times at
+**$0.00415**; cumulative verifier-family ledger **$0.456203**. What this pass measured itself is only the roster
+(11 local / 1 metered, exit 0) and the two demo exits quoted in the section above.
 
 ## Diagnose (read-only)
 Before verifying a fix, run the step-zero gate — it is the check that would have caught today's wrong
@@ -121,18 +155,29 @@ git merge-base --is-ancestor <fix-sha> main; echo "exit=$?"
    cannot express the failure it is meant to detect has not checked anything.
 
 ## Verify
-The step-zero gate discriminates: against an UNLANDED sha it exits 1 (report and stop), against a LANDED
-sha it exits 0:
+**Gate 1 — the step-zero gate.** The step-zero gate discriminates: against an UNLANDED sha it exits 1 (report
+and stop), against a LANDED sha it exits 0:
 ```bash
 git merge-base --is-ancestor <unlanded-sha> main; echo "exit=$?"   # expect exit=1
 git merge-base --is-ancestor <landed-sha> main; echo "exit=$?"     # expect exit=0
 ```
 Ran 2026-10-31: exit **1** against `8fa8f3a2` (the unlanded `item-4931` tip) and exit **0** against the `main`
-tip of the day. The front-matter guard that keeps this file retrievable: `node demo/runbook-frontmatter.test.mjs`
-exit **0**. The re-point instruments discriminate the same way — `node demo/deepinfra-catalog.test.mjs` exits
-**1** for the NAMED reason (a seat pin absent from the fallback catalog) and would exit **0** for the WRONG
-reason under a `local/` re-point, because `resolvable()` returns true for any `local/` id; the reading that
-matters is the message, not the code.
+tip of the day.
+
+**Gate 2 — the canary count.** The routing rule above depends on there being exactly ONE metered seat:
+```bash
+node -e 'const r=JSON.parse(require("fs").readFileSync("rig.selfdev.json","utf8"));const m=r.seats.map(s=>s.model);console.log("local="+m.filter(x=>x.startsWith("local")).length,"verifier="+m.filter(x=>x.startsWith("verifier")).length)'
+# expect: local=11 verifier=1
+```
+Ran 2026-11-10 in the `item-5565` worktree: `local=11 verifier=1`, exit **0** — one command, and it is the fact
+the routing rule is built on.
+
+The front-matter guard that keeps this file retrievable: `node demo/runbook-frontmatter.test.mjs` exit **0**
+(re-run 2026-11-10, exit **0**). The re-point instruments read differently now: `node demo/deepinfra-catalog.test.mjs`
+exits **0** as of 2026-11-10 (it was red for a seat pin absent from the fallback catalog; the roster change removed
+that cause), so do not treat its exit code as the verdict — read the provider counts it prints (`local=11,
+verifier=1`). The exit code alone is not the finding, because the exemption is registry-driven and a `local/` or
+`verifier/` re-point can satisfy it while the catalog learns nothing.
 
 ## If it fails
 You have edited the artefact you were verifying, or you reported an `artifact` you did not run. Stop, and
