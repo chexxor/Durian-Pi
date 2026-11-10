@@ -11360,3 +11360,56 @@ against a broker that is alive, and `SqliteStorage.document()` takes `BEGIN IMME
 "unavailable-and-LOUD" is the ruling. (c) Route on signal-0 liveness for simplicity — rejected: a recycled
 pid or a broker mid-pass is misclassified, and a false-dead report admits the second writer that corrupted
 run-control docs twice on 2026-10-16.
+
+## D258 — a push-batch boundary is MEASURED AT GRANT TIME by the executor; an intake count nobody can re-check is labelled UNVERIFIED and never sets the boundary (lead #5626; recorded by scribe, item #5668, 2026-11-10)
+
+**Mint note (#3075/#3186 discipline).** Minted at land time as **D258**: the landing pass derived the next FREE
+number by scanning this file at merge (`grep -oE '^## D[0-9]+' docs/DECISIONS.md | sort -n | tail -1` → D257 on
+main at merge). The branch hardcodes no number and reserves none.
+
+**Decision.** A push grant's batch boundary is read off the tree **at grant time, by whoever executes the grant**:
+`git rev-list --count <last-granted-tip>..HEAD`, cross-checked against `git log --oneline`, and the grant names
+the ending tip sha. Three consequences follow:
+1. A count quoted at intake by a seat with no shell or file surface is **UNVERIFIED**, must be labelled as such,
+   and may never set the boundary.
+2. The boundary is **not** pre-measured by another seat earlier in the session. It goes stale at the next land,
+   and a stale boundary is precisely how a later push attempt meets a refusal nobody predicted.
+3. Landed-but-unpushed history is un-counted debt in the shared checkout. The measurement is not bookkeeping —
+   it is the prediction.
+
+**Measured 2026-11-10 in this item's worktree off `f192f543` (every command exit 0):**
+- `git rev-parse --verify origin/main` → `1b985538`.
+- `git rev-list --count origin/main..main` → **23**: main is 23 commits ahead of the pushed tip. That is the debt
+  the rule is about, in a number anyone can re-run.
+- `git rev-list --count f192f543..HEAD` → **1**: this branch's own batch, measured by the seat that produced it,
+  with the ending tip named in the commit.
+No push was attempted or implied: push capability is held by the operator (no `DURIAN_PI_ALLOW_PUSH` grant in
+this session), and an entry is a rule, not a grant.
+
+**What this is an instance of.** The rig's own rule — a cheap signal may ACCEPT but must never DECIDE — applied
+to operator-side grants. The principle is carried in `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:228` and
+`docs/reviews/worktree-seat-state-resolution-2026-11-06.md:145`. Say plainly what is missing: **#3575 has no
+DECISIONS entry**, so a reader following a "#3575" cross-reference lands on a queue row, not a ruling. Cite the
+doc; keep the row id as provenance only.
+
+**Disposition of the two rows this came out of, because the next seat will ask.**
+- The fresh **D218** push grant IS an operator-level digest row: it postdates the operator's nine-row cut
+  (D234 §2(iii)) and needs the operator's ack to be in scope. pm did not silently override ruling (iii); the
+  row says so in its own heading.
+- **`cap=3 gated on #5488` is NOT a digest row.** Its premise went false when the operator ruled the standing
+capacity option **approved-gated**: land #5488 first, then raise to the 3 measured slots (`total_slots: 3`,
+`n_ctx 204800`, `qwen3.8-flash-next-iq3_s`, re-measured at 00:26Z) — D234 §3(i). **Update, measured here: that
+condition is now satisfied.** `git merge-base --is-ancestor f4554164 main` and `git merge-base --is-ancestor
+cfef4d07 main` both exit 0 (`f4554164 fix(cli, #5488): DURIG_MAX_CONCURRENT_SEATS gates the local/* providers
+too`; `cfef4d07 test(demo, #5488 #5736): prove the cap BITES at 4`), and the gate is live in the code at
+`src/config.mjs:120,631` and `src/reset.mjs:21`. The D233 gate must therefore not be reopened on the grounds
+that #5488 is unlanded — it is landed. There is no gap between the two rows: one is in scope pending an ack, the
+other is out of scope because its premise died.
+
+**This entry does not depend on the digest carrier.** The carrier for the operator digest is **#5598** (scribe,
+gated on **#5594**), still deferred as of this recording, and D234 §2(iii) says its body must be re-pointed at
+the FOUR standing asks before anything is printed. Nothing here cites a digest section that does not exist yet.
+
+**Verify (ran; exit codes named).** `node tools/doc-integrity-guard.mjs` → 0 hard, 0 soft, exit 0.
+`docs/NEXT.md` was NOT touched by this entry and stands at **143 lines / 11,671 bytes** — inside the 200-line /
+~17 KB carrier bound the verify step asks about. `docs/DECISIONS.md` is **11,161 lines** at the fork point.
