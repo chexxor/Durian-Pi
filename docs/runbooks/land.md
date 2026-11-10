@@ -3,7 +3,7 @@ runbook: land
 symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
-last_verified: 2026-11-08
+last_verified: 2026-11-10
 verified_by: devtools
 evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0"
 check_rule: null
@@ -168,6 +168,36 @@ conflicted branch left `.git/MERGE_HEAD` and `<<<<<<<` markers in `src/checkup.m
 `node cli.mjs` verb died. The helper removes the class of harm — the merges happen in a **scratch
 detached worktree**, and `main` advances only by a **clean fast-forward**. The shared tree is never
 mid-merge, whatever a branch does.
+
+## The regression gate is REQUIRED — no flag, no landing (#6090)
+
+Before #6090 the gate was **opt-in**: `scripts/land.mjs` with neither `--suite` nor `--changed-suite`
+merged, advanced `main`, and reported `ok: true`. The landing at `1f6f26c5` did exactly that (reported
+under #6079) — the only thing between an unproven landing and `main` was whether someone remembered a
+flag. An optional gate is a SIGNAL; the landing is the DECISION (#3575). The helper now refuses BEFORE it
+touches git, and the refusal NAMES the missing flag.
+
+```bash
+node scripts/land.mjs item-1234                        # exit 1: "no regression gate: main does not advance without one. Missing: --suite or --changed-suite"
+node scripts/land.mjs item-1234 --suite=false           # exit 1: "unrecognized gate flag(s)" — a value on a flag that takes none is NO gate
+```
+
+The one lighter path is **documentation only**, and it is an attestation the tool CHECKS, not a claim it
+accepts: `--changed-suite --docs-only` is accepted only when EVERY changed path in the diff is prose (a
+root `.md`/`.txt` or something under `docs/`). If it holds, the landing runs the `docs` area and the
+report says which areas did NOT run; if the diff contains a single code path, the landing is refused and
+the refusal names that path. A flag you cannot use to skip a check is not a hole.
+
+Read the report's `gate` field before calling a landing proven: `{kind: "full" | "derived" | "docs-area …",
+statement: …}`. `derived` and `docs-area` are NOT the full gate — they name the areas they did not cover.
+
+Verify (this section is pinned by a demo, and the demo can fail):
+```bash
+node demo/landing-gate.test.mjs; echo "exit=$?"   # 31 checks, exit 0
+```
+Against the PRE-fix helper the first check fails — measured 2026-11-10 by running the same demo against
+`git show HEAD:scripts/land.mjs` in a throwaway copy: exit 0, main advanced, no gate ran. That is the
+defect, shown.
 
 ## Stacked (unlanded) base — every entry NAMES its base
 
