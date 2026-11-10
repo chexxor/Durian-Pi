@@ -217,6 +217,45 @@ PY
 gated on the *operator* (e.g. `#994` quiet window) or on a roadmap intent may cite a terminal item
 incidentally. Confirm each candidate against its body before releasing.
 
+### 7a. The RECORDED park class (#6150) - filter on structure, never on wording
+
+The scan above reads prose. That is the defect #6140 names: a metric built on trigger text can be moved by
+wording, so it may ACCEPT a classification but must not DECIDE one. Every row parked through the one write
+path (`send_work(..., held: true)` or `hold_work`) now carries a field:
+
+```jsonc
+"park": { "class": "open-gate", "basis": "queue gate(s) #3 still live", "gateIds": [3], "recordedAt": "..." }
+```
+
+`class` is one of four, decided from stored structure - `blockedBy` ids and an authored `block` - and never
+from text:
+
+| class | what it means |
+|---|---|
+| `rule` | an authored event park with no queue gate: reason + resolver (a schedule, an operator window, a roadmap gate). This is the shape that should eventually live in a doc, not the queue (#6140 destination). |
+| `gated-work` | it names queue gates; all of them were terminal when the park was written. |
+| `open-gate` | it names queue gates; at least one was still live. Real work, still waiting. |
+| `unattributed` | nothing was recorded: no gate ids, no authored block. `legacyBlock` would GUESS a reason from the held status - the record says the guess is a guess. |
+
+Read it with the audit, which prints the counts per class and lists every row where structure and prose
+disagree:
+
+```bash
+node tools/held-gate-audit.mjs --json .spike/delegate/held-audit.json   # exit 0
+```
+
+Measured on a copy of this rig's store on 2026-11-10 (434 held rows): audit classes 23 release-candidate /
+8 cancel-candidate / 184 standing-rule / 105 gate-open / 114 unattributed; park classes 43 rule /
+64 gated-work / 83 open-gate / 244 unattributed; **239 rows disagree**. Zero rows carry the field yet - no
+row is migrated in this change - so every class above is derived from stored structure and labelled
+`parkSource: "derived-structure"`. The disagreement is the finding: 184 rows read as standing rules from
+wording while 43 have an event park in their structure.
+
+**Migration is a separate project, and it has a hard constraint** (#6140, lead's ruling): a rule moved out
+of the queue must land in a doc that names a retrievable source, migrated by cluster where the rule is
+actually used, never in one pass - dumping 192 rows into `DECISIONS.md` creates exactly the duplicate-entry
+problem #5568 exists to prevent.
+
 ## 8. Unsticking decision tree
 
 1. **Is the row `held`?**

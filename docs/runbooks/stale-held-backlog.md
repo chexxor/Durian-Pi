@@ -66,6 +66,22 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
    result`), audit a COPY: `cp selfdev.sqlite .spike/delegate/audit.sqlite` - a copy has no broker state,
    so the read falls back to a local read-only harness open. Never open a second Harness on the live store.
 
+   **The recorded park class (#6150) - read this, not the prose.** Every row parked through the ONE enqueue
+   path or `hold_work` now carries `park: {class, basis, gateIds, recordedAt}` written at the moment it is
+   parked, with `class` in the closed set `rule | gated-work | open-gate | unattributed` derived from STORED
+   STRUCTURE (`blockedBy`, an authored `block`) and never from wording. The audit prints the counts by park
+   class and lists every row where structure and prose disagree.
+   - `rule` - an authored event park with no queue gate (reason + resolver, e.g. `schedule`/`operator`);
+   - `gated-work` - it names queue gates and all of them were terminal when the park was written;
+   - `open-gate` - it names queue gates and at least one was still live;
+   - `unattributed` - nothing was recorded: no gate ids, no authored block. `legacyBlock` would GUESS a
+     reason from the held status; the record says the guess is a guess.
+   Rows parked before the field existed are NOT migrated (that is a project, not a fix), so their class is
+   derived on the spot and labelled `parkSource: "derived-structure"`. A metric that counts "standing rules"
+   must filter on the field: on the snapshot below 184 rows read as standing rules from trigger text while
+   only 43 have an event park in their structure, and 239 rows disagree. The disagreement is the finding -
+   do not resolve it by editing wording.
+
 3. **For an effort you know by name, ask the pointed question** (the durable-TUI case):
 
    ```bash
@@ -124,6 +140,14 @@ to `pm`; `pm` issues the transition. For each candidate:
   gate, a standing rule with no recorded gate, a branch-landing gate, a satisfied artifact and a
   file-exists-but-content-missing row are each classified differently. A classifier that flagged all of
   them the same way would pass nothing here.
+- The park RECORD is pinned by the same file: a row whose prose says `DO NOT START` but whose only gate is a
+  LIVE queue row is recorded `open-gate` and its `parkDisagreement` is reported, not swallowed; a row with
+  nothing recorded derives `unattributed` and names what the status mapping would have guessed; an authored
+  `schedule` park records `rule`. `node demo/hold-queued-row.test.mjs` (exit 0) pins the WRITE path: `hold_work`
+  writes the class, `release_work` clears it, so a running row cannot be counted as parked.
+  Falsifier, actually run (2026-11-10): commenting out `item.park = parkRecord(queue, item);` in the
+  `hold_work` handler of `src/rig.mjs` makes `node demo/hold-queued-row.test.mjs` exit 1 on "the park class is
+  recorded on the row"; restoring the line returns it to exit 0.
 - The intent result file has `"delivered":true`.
 - After `pm` acts, the targeted rows are no longer `held` (re-run Diagnose step 2 and watch the candidate
   count fall), and the dependent work is `queued`/`claimed`.
@@ -136,6 +160,9 @@ to `pm`; `pm` issues the transition. For each candidate:
   is acting; re-read its `status` and `to`/`from`.
 - **The gate id does not resolve** → the row's gate is prose referring to an item that never existed under
   that number; treat it as `manual` and hand it to `pm`.
+- **Structure and prose disagree on most rows** → expected while the population is unmigrated: prose-only
+  parks record nothing, so `unattributed` is the honest class. Ask the owning seat to re-park with a
+  `block` (reason + resolver) or `blockedBy` ids; never reword the subject to make the count look clean.
 - **The intent is dead-lettered** (`<db>.broker.inbox.error/`) → the broker rejected the body; read the
   `.reason` file, fix the body, re-spool with the same `--request-id` is **not** safe after a dead-letter
   (the broker may have partially applied it) — use a fresh id and note the original.
