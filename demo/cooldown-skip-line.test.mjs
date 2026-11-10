@@ -99,7 +99,16 @@ async function run({ seatCooldownMs, passes, label }) {
 	const seats = { impl: { conversationId: 1 }, idle: { conversationId: 2 } };
 	const items = [{ id: 1, to: "impl", status: "queued" }];
 	const harness = stubHarness({ seats, items });
-	const scheduler = new WakeScheduler({ minIntervalMs: 0, seatCooldownMs });
+	// A VIRTUAL CLOCK, not a real sleep. With wall-clock waits the re-wake pass lands exactly on
+	// the cooldown boundary (wake at t, pass at t+2000 ms), and `now - last >= cooldown` is decided
+	// by sub-millisecond jitter: measured on main, this demo reddened 4 runs in 12 while a
+	// neighbouring change that only added a 1 s timer shifted the phase. Anything whose verdict
+	// depends on the phase of the scheduler's own timers is a broken test, so the scheduler and the
+	// loop are both driven by `clock` and `wait(ms)` advances it instead of sleeping (deterministic
+	// AND under a second — D213).
+	let virtual = 0;
+	const clock = () => virtual;
+	const scheduler = new WakeScheduler({ minIntervalMs: 0, seatCooldownMs, now: clock });
 	const diagnostics = [];
 	await runWakeLoop({
 		harness,
@@ -107,15 +116,15 @@ async function run({ seatCooldownMs, passes, label }) {
 		scheduler,
 		context: {},
 		dbPath,
+		now: clock,
 		maxPasses: passes,
 		maxDurationMs: 15_000,
 		// The loop rests on a condition variable; normally a store commit sets the scheduler's
 		// dirty bit. A stub store has no commits, so each wait stands for one arriving event.
-		// The sleep is real, which is what lets the cooldown elapse before the third pass.
 		signal: {
 			raise: () => {},
 			wait: async (ms) => {
-				await new Promise((resolve) => setTimeout(resolve, ms));
+				virtual += Math.max(0, ms);
 				scheduler.markDirty();
 			},
 		},

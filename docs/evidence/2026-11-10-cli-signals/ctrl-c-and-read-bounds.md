@@ -145,3 +145,27 @@ node demo/read-intent-interrupt.test.mjs    # 3.9 s
 node demo/readonly-store-parity.test.mjs    # 222 ms, 15 views byte-identical
 node scripts/test.mjs --area broker --jobs 8  # 73/73 in 23.1 s
 ```
+
+## F. The regression the read drain caused, found and closed (2026-11-10T23:5xZ)
+
+The out-of-band drain adds a `setInterval(readDrainMs)` to `runWakeLoop`. That timer is `unref()`'d
+so it cannot keep a process alive, but it **did** change the wake loop's timing, and one demo noticed:
+
+```bash
+for i in $(seq 1 12); do node demo/cooldown-skip-line.test.mjs >/dev/null 2>&1 || f=$((f+1)); done
+# HEAD (fd09f919)              -> 4/12 red
+# src/broker.mjs from e06626af -> 0/12 red
+# HEAD with readDrainMs = 0    -> 0/12 red   (isolates the new timer as the trigger)
+```
+
+The mechanism, read off the raw `<db>.broker.log` stamps: the seat is woken at `t`, the loop parks in
+`signal.wait(1000)` twice, and pass 3 arrives at `t + 2000 ms` — exactly the cooldown boundary.
+`seatReady` is `now - last >= seatCooldownMs` (`src/scheduler.mjs:160-164`), so the verdict is decided
+by sub-millisecond jitter, and adding a timer is enough to move it. The fix is **not** to loosen the
+assertion: `WakeScheduler` and `runWakeLoop` already take an injected `now` (`src/scheduler.mjs:77`,
+`src/broker.mjs:1641`), so the demo now drives a virtual clock whose `signal.wait(ms)` advances `now`
+instead of sleeping. Result: **0/15 red, 0.193 s** (was ~2.2 s and flaky). The assertion still checks
+the real thing — one `SKIP impl reason=cooldown remaining=1s` line between two wakes.
+
+Lesson for the next pass: a demo that passes once is not evidence. Run the demos a change can shift
+**10+ times** before calling a suite green, and bisect a new timing knob by setting it to 0.
