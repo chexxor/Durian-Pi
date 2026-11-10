@@ -128,8 +128,10 @@ explicitly), so stale figures there are the historical record, not a live claim;
 ## A number in a roadmap or spec row must say INTENDED or RESOLVED, and name the tree it was measured on
 
 Standing intake rule, from lead's ruling on #6080 (folded out of #6077): the decision itself already lives in
-#6062/#6065/#6068, so minting a DECISIONS entry to relay it would duplicate a recorded ruling (lead cites #5568 for that
-prohibition — I did not find it as text in `docs/DECISIONS.md`, so treat it as lead's ruling, not a doc I checked). A
+#6062/#6065/#6068, so minting a DECISIONS entry to relay it would duplicate a recorded ruling. The prohibition is
+#5568 — a DONE queue row with no read path (#3486), so the id alone is a dead pin; its text now lives in
+`docs/runbooks/branch-cleanup.md` **Step 0e** (added 2026-11-10, #6111), and it is deliberately absent from
+`docs/DECISIONS.md`: `git grep -niE 'relays|relay a ruling' -- docs/DECISIONS.md` → no matches, exit 1. A
 runbook is the retrievable home for an operating procedure. Every number a row carries gets one of two tags, and the tag is not
 optional:
 
