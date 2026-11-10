@@ -11056,3 +11056,39 @@ guard. The tracked place a fleet-wide default would live is `durig.config.defaul
 (mechanism)`, **8 operational blockers**, 1 advisory, exit **0**, **3.7 s** (Linux, Fedora 45, kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1). `node demo/continuity-note.test.mjs` → `CONTINUITY PASS`, 0.43 s.
 `node demo/offline.mjs` → `DEMO PASS`. `node scripts/test.mjs --area docs` → 6/6, 1.0 s. Pitfalls **219–220**.
+
+## D254 — 2026-11-10T03:2xZ: **a dead fleet is diagnosed from the process environment before it is diagnosed from the queue** (delegate acting on the operator's "Finish this milestone ensuring llm task completion for members of the rig"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The what.** The fleet was restarted on the key it was missing, and the N18 acceptance was measured on a snapshot
+copy of the live store with a negative control, rather than waited for 100 natural seat compactions.
+
+**The why, which is the part worth keeping.** Seats looked idle with queued work, which reads as a routing problem,
+and routing is the team's job — so the tempting move was to ask pm to release rows. The store said otherwise:
+`tr '\0' '\n' < /proc/<pid>/environ | grep -i durig` returned **no matches** for the resident broker: every seat
+generation returned HTTP 401 "missing or wrong API key", and the supervisor escalated **171** rows in 24 h with
+reason `repeated_failure`, including the N18 rows **#5931–#5942**. Nothing was wrong with the queue; the process
+simply had no credential. Restarting the broker with `DURIG_LOCAL_API_KEY` exported (already present in
+`~/.config/durig/env`) made the progress leg read `HEALTHY — passes are advancing`, seats minted their own rows
+(#6062–#6080), and compactions began taking the note path. **Rule: before routing, read the broker's own
+environment and the spool; a 401-shaped fleet is an ops fault, and routing requests on top of it deposit rows
+nobody can service.**
+
+**The measurement is driven, and says so.** 100 natural seat compactions cannot happen in one session. So
+`.spike/compaction-acceptance.mjs` snapshots the live store through SQLite's own backup API (the live store is never
+opened for write), drives 100 compactions on the copy through the mocked `fauxProvider` with the continuity extension
+installed, and counts what the store recorded: **exit 0 — 100 compaction tasks, 0 truncated summaries, 100 provider
+calls = 100 growth turns + 0 summariser requests** (25.4–28.5 s). The negative control, `--mode control
+--stopReason length`, reproduces the harness's own truncation branch and reports **11 truncated** — the counter is
+provably not vacuous. In parallel, the live fleet gives the honest natural number: **9 compactions since arming, 0
+truncated, 9 note-backed**. A driven 100/0 is not a fleet outcome; both numbers are reported, never merged.
+
+**A trap this window measured.** `node tools/compaction-guard-install.mjs --check` exits **0** in the repo root
+(`UP TO DATE`) and **1** in a seat worktree (`item-6057`: `NOT INSTALLED`, `tools/compaction-guard-install.mjs:37`).
+The harness guard covers the delegate session, not seat worktrees — that is exactly the **ROADMAP 352** install gap,
+and it is now measurable with one command. Also: `serve --stop` returns `stopped: false` for a broker past its
+`--max-duration` bound whose pass leg is frozen; `kill -INT <pid>` produces a clean `EXIT` line, and that line's
+`reason=deadline passes=-` is the CLI-side literal (ROADMAP 328), not the run's record.
+
+**What this does NOT decide.** N18 is not closed by this window. Coverage is not there: **9 of 12 seats still have no
+continuity note**, because they hold no claimed work to note, and releasing rows is pm's call. ROADMAP 352 is
+unlanded (**#6036/#6037** `deferred` to human). The delegate asserted no row.
