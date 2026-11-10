@@ -17,8 +17,9 @@
 //
 // Exit: 0 all selected tests pass; 1 at least one failed; 2 usage/selection error.
 import { spawn } from "node:child_process";
-import { availableParallelism, cpus } from "node:os";
-import { dirname, resolve } from "node:path";
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
+import { availableParallelism, cpus, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { areaNames, discoverTests, filesForArea, readManifest, selectTests, validateManifest } from "../src/testareas.mjs";
 
@@ -93,11 +94,32 @@ function runOne(file, timeoutMs) {
 		// Windows reaping a tree as a unit needs a Job Object (src/job-object.mjs does that for the rig) and the
 		// runner owns none, so the direct kill is the best available — stated, not assumed away.
 		const detached = process.platform !== "win32";
-		const child = spawn(process.execPath, [file], { cwd: ROOT, detached });
-		let out = "";
+		// WHY THE OUTPUT GOES TO A FILE AND NOT TO THE RUNNER'S PIPE (measured, item 6104): a demo that
+		// spawns a child and does not reap it keeps the pipe's write end open, so `close` never fires and a
+		// demo that exited 0 is reported as a 120s TIMEOUT - a green test made red by the runner's own
+		// bookkeeping. A file also keeps the FULL output of a failing test, which the 8-line tail used to
+		// cut away from the cause.
+		const scratch = mkdtempSync(join(tmpdir(), "durig-suite-"));
+		const outPath = join(scratch, "output.txt");
+		const fd = openSync(outPath, "w");
+		const child = spawn(process.execPath, [file], { cwd: ROOT, detached, stdio: ["ignore", fd, fd] });
 		let timedOut = false;
-		child.stdout.on("data", (d) => (out += d));
-		child.stderr.on("data", (d) => (out += d));
+		const readOutput = () => {
+			try {
+				return readFileSync(outPath, "utf8");
+			} catch (err) {
+				return `(could not read the captured output: ${err?.message ?? err})`;
+			}
+		};
+		const finish = (result) => {
+			try {
+				closeSync(fd);
+			} catch {
+				/* the child may already have closed it */
+			}
+			if (result.ok) rmSync(scratch, { recursive: true, force: true });
+			res(result);
+		};
 		const timer = setTimeout(() => {
 			timedOut = true;
 			try {
@@ -113,13 +135,16 @@ function runOne(file, timeoutMs) {
 		}, timeoutMs);
 		child.on("error", (e) => {
 			clearTimeout(timer);
-			res({ file, ok: false, code: null, ms: Date.now() - t0, output: String(e) });
+			finish({ file, ok: false, code: null, ms: Date.now() - t0, output: String(e) });
 		});
-		child.on("close", (code) => {
+		// `exit`, not `close`: the exit code IS the verdict. `close` waits for every writer of the
+		// child's stdio to go away - the pipe-hold the file capture removes.
+		child.on("exit", (code) => {
 			clearTimeout(timer);
 			const ms = Date.now() - t0;
-			if (timedOut) res({ file, ok: false, code, ms, timedOut: true, output: `${out}\nTIMED OUT after ${timeoutMs}ms (killed)` });
-			else res({ file, ok: code === 0, code, ms, output: out });
+			const out = readOutput();
+			if (timedOut) finish({ file, ok: false, code, ms, timedOut: true, output: `${out}\nTIMED OUT after ${timeoutMs}ms (killed)` });
+			else finish({ file, ok: code === 0, code, ms, output: out, outPath });
 		});
 	});
 }
@@ -136,8 +161,12 @@ async function runAll(files, jobs, timeoutMs) {
 			results[i] = r;
 			process.stdout.write(`${r.ok ? "PASS" : r.timedOut ? "TIMEOUT" : "FAIL"} ${files[i]} (${(r.ms / 1000).toFixed(1)}s)\n`);
 			if (!r.ok) {
-				const tail = r.output.trim().split("\n").slice(-8).join("\n");
-				if (tail) process.stderr.write(`--- ${files[i]} (exit ${r.code}) ---\n${tail}\n`);
+				// HEAD AND TAIL. A stack trace's cause is its first lines; the 8-line tail hid it
+				// (item 6104), which is why a red gate could not be pinned to a failing command.
+				const lines = r.output.trim().split("\n");
+				const shown = lines.length <= 30 ? lines : [...lines.slice(0, 15), "...", ...lines.slice(-10)];
+				process.stderr.write(`--- ${files[i]} (exit ${r.code}) ---\n${shown.join("\n")}\n`);
+				if (r.outPath) process.stderr.write(`full output: ${r.outPath}\n`);
 			}
 		}
 	}

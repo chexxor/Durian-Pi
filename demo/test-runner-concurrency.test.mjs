@@ -45,6 +45,15 @@ try {
 	writeFileSync(join(root, "demo", "hang.test.mjs"), "await new Promise(() => {});\n");
 	// A test that FAILS, so concurrency is proven not to swallow failures.
 	writeFileSync(join(root, "demo", "bad.test.mjs"), 'throw new Error("seeded failure");\n');
+	// A test that PASSES but LEAVES A CHILD ALIVE. `runOne` used to wait for `close`, which waits for
+	// every writer of the child's stdio to go away, so a demo that spawned a broker and never reaped it
+	// was reported as a 120s TIMEOUT although it exited 0 - green standalone, red in the gate, with no
+	// way to tell the two apart (item 6104, measured 2026-11-10: a demo that exits 0 while a detached
+	// grandchild holds the pipe never fired `close`). The verdict must come from the EXIT CODE.
+	writeFileSync(
+		join(root, "demo", "linger.test.mjs"),
+		'import { spawn } from "node:child_process";\nspawn(process.execPath, ["-e", "setTimeout(() => process.exit(0), 60000)"], { stdio: "inherit", detached: true });\nconsole.log("linger PASS");\nprocess.exit(0);\n',
+	);
 	// The manifest must name every fixture, because the runner's own coverage rule reads it. TWO AREAS on
 	// purpose: the timing assertions need a set that is expected to PASS, while the timeout and failure
 	// assertions need the seeded bad ones. Mixing them means every "this run should be clean" assertion is
@@ -57,6 +66,7 @@ try {
 				areas: {
 					green: ["demo/slow-a.test.mjs", "demo/slow-b.test.mjs", "demo/slow-c.test.mjs"],
 					mixed: ["demo/hang.test.mjs", "demo/bad.test.mjs"],
+					leak: ["demo/linger.test.mjs"],
 				},
 			},
 			null,
@@ -124,6 +134,18 @@ try {
 		const r = run("green", ["--jobs", bad, "--timeout", "2000"]);
 		assert.equal(r.status, 2, `--jobs ${JSON.stringify(bad)} must be a usage error, got exit ${r.status}`);
 	}
+	// 8. A LEAKED CHILD MUST NOT MAKE A PASSING TEST RED. The verdict is the demo's EXIT CODE, not
+	//    whether its whole process tree has finished. Under the old `close`-based bookkeeping this
+	//    fixture - exit 0, one detached grandchild still alive - was reported as a TIMEOUT, which is
+	//    the "green standalone, red in the gate" signature the operator was chasing.
+	const leak = timed("leak", ["--jobs", "1", "--timeout", "10000"]);
+	assert.equal(leak.status, 0, `a passing test that left a child alive was reported as a failure: ${(leak.stdout ?? "") + (leak.stderr ?? "")}`);
+	assert.match(leak.stdout ?? "", /linger\.test\.mjs/, "the leak fixture must appear in the report");
+	assert.ok(
+		leak.wallMs < 3000,
+		`the leak run took ${leak.wallMs}ms; the gate waited for the 6000ms grandchild instead of reading the exit code`,
+	);
+
 } finally {
 	rmSync(root, { recursive: true, force: true });
 }
