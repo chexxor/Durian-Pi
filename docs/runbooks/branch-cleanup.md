@@ -3,9 +3,9 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-09
+last_verified: 2026-11-10
 verified_by: scribe
-evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders)."
+evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders). #6149 (2026-11-10, `main` f192f543): the Verify probe below was run on the re-cut `dd2583b` — `git merge-base --is-ancestor dd2583b main` exit 1, `git cherry -v main dd2583b` exit 0 printing `+ dd2583b12…`, per-file blob comparison against the landed re-cut `bc51ba5b` exit 0 with 4 of 5 files BLOB-IDENTICAL, `node demo/compacteval.test.mjs` exit 0, `node demo/worktree-prune-branch.test.mjs` exit 0."
 check_rule: null
 ---
 
@@ -185,8 +185,47 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
 git branch | wc -l            # decreased by exactly the pruned count; not below held+unlanded+1
 git log --oneline -1 main     # HEAD sha UNCHANGED from Diagnose
 git status --short -- .       # still clean
-# for any sha you deleted, prove it was landed BEFORE deleting: git merge-base --is-ancestor <sha> main
 ```
+
+**Proving a sha you deleted was landed: ancestry is the FAST PATH, never the verdict (#3337, decided at
+#3724).** A rebase or re-cut lands the SAME content as a NEW object, so `--is-ancestor` returns **1** for a
+commit whose content is demonstrably on `main`. Two steps, in this order:
+
+```bash
+# 1. PER-FILE BLOB IDENTITY (the verdict — docs/DISPOSITIONS.md §"The probe method").
+#    Compare against `main`, and against the sha of the landed re-cut if one is known.
+git show --name-only --format='' <sha> | while read -r f; do
+  a=$(git rev-parse <sha>:"$f"); b=$(git rev-parse main:"$f")
+  if [ "$a" = "$b" ]; then echo "BLOB-IDENTICAL  $f"; else echo "DIFFERS  $f  ($(git diff <sha> main -- "$f" | wc -l) diff lines)"; fi
+done
+# 2. RUN THE DEMO that sha shipped, on the MERGED tree — the capability exists and passes.
+node demo/<the test that sha shipped>
+```
+
+A `DIFFERS` line is **not** a dropped commit: it says "look at WHY". Read the diff — if it is `main`'s own
+later edits to the same path, the content landed and then moved on. `git cherry` is not the verdict either:
+it compares **patch-ids**, i.e. diffs, not results, so an add/add re-cut with different surrounding hunks
+reports `+` (unique) even when every resulting blob is byte-identical.
+
+**Worked re-cut case, measured 2026-11-10 in `item-6149` off `main f192f543`** — qa's compacteval tip `dd2583b`:
+
+| probe | result |
+|---|---|
+| `git merge-base --is-ancestor dd2583b main` | **exit 1** — ancestry says "not landed" |
+| `git cherry -v main dd2583b` | **exit 0**, prints `+ dd2583b12…` — patch-id says UNIQUE (same 5 files, patches 1474 vs 1416 diff lines) |
+| `git rev-parse dd2583b:<file>` vs `git rev-parse bc51ba5b:<file>` | **identical** for `src/compacteval.mjs` (`8757e860`), `demo/compacteval.test.mjs` (`64399270`), `scripts/compact-eval.mjs` (`d8a6cca1`), `docs/runbooks/compaction-eval.md` (`780d181b`) |
+| vs current `main` | the same blobs differ by 10/10/37/29 diff lines — main's later edits, including the UTF-8 BOM stripped by #1604 (`git diff dd2583b main -- src/compacteval.mjs` = 1 changed line) |
+| `node demo/compacteval.test.mjs` on the merged tree | **exit 0** |
+
+Verdict: **LANDED** (SUPERSEDED as a ref), decided at #3724 and recorded in git at `20597f99`. No ledger row
+is owed — step 0: "a missing ref is not a missing row", and no `refs/heads` ref carries it.
+
+**Landed ≠ deletable.** `git branch -d` accepts only ancestors, and the sanctioned seat verb
+`cli.mjs worktree prune-branch` (#3491) is **patch-id** gated — `src/worktree.mjs:710` requires `git cherry`
+to print at least one line and every line to start with `-` — so it REFUSES exactly the `dd2583b` shape even
+though four of its five blobs are identical. Proving content landed tells you the branch carries nothing;
+it does not license a delete. Leave the ref (rule R-B, #3270). The gate itself is proved by
+`node demo/worktree-prune-branch.test.mjs` (exit 0 here).
 **The ledger rule (runs every pass, not only a prune):** every branch whose
 disposition is already recorded in `docs/DISPOSITIONS.md` is **re-listed from the
 ledger, never re-derived**:
