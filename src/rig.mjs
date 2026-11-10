@@ -16,7 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool } from "./seattools.mjs";
-import { normalizeBlock } from "./queue-lifecycle.mjs";
+import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
@@ -420,7 +420,7 @@ export async function enqueueItem(
 	const gateRequires =
 		typeof requires === "string" && requires.trim().length > 0 ? requires.trim() : null;
 	const gateBlock = block ? normalizeBlock(block) : null;
-	queue.items.push({
+	const item = {
 		id,
 		from,
 		to,
@@ -451,8 +451,26 @@ export async function enqueueItem(
 		// `release_work` restores it to queued when it should become claimable.
 		status: held ? "held" : "queued",
 		transitions: [{ at: new Date().toISOString(), event: held ? "held" : "queued", by: from }],
-	});
+	};
+	// #6150: a parked row RECORDS what its park is, from structure (gate ids, an authored block), so a
+	// fleet metric filters on the field instead of reading prose. It is written BEFORE the push because
+	// the doc proxy re-keys the element on push - mutating the plain object afterwards is lost. Only a
+	// row that is actually parked gets one; an ungated row is never silently labelled.
+	if (held) item.park = parkRecord(queue, item);
+	queue.items.push(item);
 	return id;
+}
+
+/** #6150: the structured park record for a row this commit is parking. */
+function parkRecord(queue, item) {
+	const statusOf = (id) => queue.items.find((it) => it.id === id)?.status ?? "absent";
+	const park = derivePark(item, { statusOf });
+	return {
+		class: park.class,
+		basis: park.basis,
+		gateIds: park.gateIds,
+		recordedAt: new Date().toISOString(),
+	};
 }
 
 /**
@@ -1224,6 +1242,8 @@ const Router = defineExtension({
 						return `item #${item.id} is ${item.status}; hold_work parks a row you hold (claimed) or a queued row addressed to you`;
 					item.status = "held";
 					if (args.reason) item.heldReason = args.reason;
+					// #6150: the park is recorded as structure, not as prose, at the moment it happens.
+					item.park = parkRecord(queue, item);
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "held",
@@ -1259,6 +1279,9 @@ const Router = defineExtension({
 					if (item.status !== "held")
 						return `item #${args.itemId} is not held (status=${item.status})`;
 					item.status = "queued";
+					// #6150: a released row is no longer parked, so its park record goes — leaving a stale
+					// `park` behind would make a metric count a running row as parked.
+					item.park = null;
 					item.transitions.push({
 						at: new Date().toISOString(),
 						event: "released",
