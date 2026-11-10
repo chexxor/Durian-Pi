@@ -36,6 +36,7 @@ import { VERIFIER_TERMS, seatsAreVerifier } from "./verifierrole.mjs";
 import { contextOverWindow } from "./context.mjs";
 import { describeFaults } from "./textintegrity.mjs";
 import { messageDefects } from "./commitmsg.mjs";
+import { MEASURES } from "./metrics.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -151,7 +152,19 @@ export const RULES = [
     severity: "fix-now",
     what: "a seat's newest reported turn MOVED more tokens than its OWN window allows, on a head nothing has reset since — the fraction `status` prints was consumed by nothing (#5049)",
   },
+  {
+    id: "doc-count-drift",
+    severity: "fix-now",
+    what: "a doc states a count of a set the code declares, and the declaration does not match it (#6155)",
+  },
 ];
+
+/** #6155: the sets whose SIZE is declared in code, so a doc may cite a number a machine can re-check.
+ * A doc that states a count of anything else is not checkable, and the rule says so. */
+export const DECLARED_COUNTS = {
+  rules: RULES.length,
+  measures: Object.keys(MEASURES).length,
+};
 
 const SEVERITY_OF = new Map(RULES.map((r) => [r.id, r.severity]));
 
@@ -428,9 +441,13 @@ export function runbookFrontMatterProblems(runbook) {
  *   the `feat` commits the CALLER read from git history (src/featuredocs.mjs) and whether each
  *   touched docs/FEATURES.md; null when the history was not read. Omit it to leave the
  *   FEATURES-row rule unrun (it is then reported skipped, never as a false pass).
+ * @param {Array<{file:string,line:number,set:string,noun:string,claimed:number|null,claimedText:string}>|null} [input.docCounts]
+ *   the count claims the CALLER read from docs/*.md (src/doccounts.mjs). An EMPTY array is a real
+ *   "these docs state no declared-set counts"; null / absent means the docs were never read, so the
+ *   rule reports UNKNOWN, never a false pass (#6155).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null }) {
   const findings = [];
   const skipped = [];
   const add = (id, subject, detail, fix) =>
@@ -990,6 +1007,49 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     }
   }
 
+  // 12. #6155: a doc may state a COUNT only of a set the code DECLARES, and the declaration wins.
+  //    "check (eight rules)" is authority without a source: it reads as fact, drifts as rules are
+  //    added, and nothing can catch it - the same failure mode as a threshold nobody can reproduce.
+  //    `docCounts` is plain data read by the caller (src/doccounts.mjs); auditRig still touches no fs.
+  if (!Array.isArray(docCounts)) {
+    skipped.push({
+      id: "doc-count-drift",
+      why: "no doc text was read by the caller, so no stated count can be judged",
+      unknown: true,
+    });
+  } else {
+    for (const claim of docCounts) {
+      const declared = DECLARED_COUNTS[claim?.noun];
+      const where = `${claim?.file ?? "(unnamed doc)"}:${claim?.line ?? "?"}`;
+      if (declared === undefined) {
+        add(
+          "doc-count-drift",
+          where,
+          `${where} states ${claim?.claimedText ?? "a count"} for a set nothing declares, so the number cannot be re-checked`,
+          "name the declaring file and export, or drop the number",
+        );
+        continue;
+      }
+      if (claim.claimed === null) {
+        add(
+          "doc-count-drift",
+          where,
+          `${where} states ${claim.claimedText} - a count that is not a number, so no tool can verify it against the ${claim.noun} declared in code (${declared})`,
+          `write the number, or drop it and point at the declaration`,
+        );
+        continue;
+      }
+      if (claim.claimed !== declared) {
+        add(
+          "doc-count-drift",
+          where,
+          `${where} claims ${claim.set} has ${claim.claimed} ${claim.noun}; the code declares ${declared} (src/checkup.mjs RULES / src/metrics.mjs MEASURES)`,
+          `set the number to ${declared} (the size of src/checkup.mjs RULES / src/metrics.mjs MEASURES), or drop the count and name the declaring export instead`,
+        );
+      }
+    }
+  }
+
   const summary = { error: 0, "fix-now": 0, total: findings.length };
   for (const f of findings) summary[f.severity] += 1;
   const checks = RULES.map((r) => {
@@ -1018,6 +1078,9 @@ export function formatCheck(result, { rigDisplay = "rig", color = false, width =
   lines.push(paint("dim", rule));
   lines.push(`rig check — ${rigDisplay}  (${seats} seat(s), store: ${storeReason})`);
   lines.push(paint("dim", rule));
+  lines.push(
+    paint("dim", `declared sets: ${DECLARED_COUNTS.rules} rules (src/checkup.mjs RULES) · ${DECLARED_COUNTS.measures} measures (src/metrics.mjs MEASURES)`),
+  );
   if (result.findings.length === 0) {
     lines.push("");
     lines.push(`${paint("green", "✓")} no findings — every check the rig can answer passes`);

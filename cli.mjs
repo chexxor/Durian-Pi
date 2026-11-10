@@ -83,6 +83,7 @@ import { isLinkedWorktree, readSharedTreeBranch } from "./src/featuredocs.mjs";
 import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs";
 import { readCommitMessages } from "./src/commitmsg.mjs";
 import { readCitations } from "./src/citation.mjs";
+import { readDocCountClaims } from "./src/doccounts.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
@@ -3365,6 +3366,10 @@ async function cmdCheck(rigFile, human, rest = []) {
   // for all of them (a spawn per sha would stall `check`), and null when git/the repo is
   // unavailable, so the rule is SKIPPED with its reason rather than silently passing.
   const citations = readCitations({ root: process.cwd(), queueItems });
+  // #6155: the counts the docs state about sets the code declares. Bounded read (docs/*.md only,
+  // claims only - not the file bodies), and null when docs/ cannot be read, which the rule reports
+  // as UNKNOWN rather than as a pass.
+  const docCounts = readDocCountClaims({ root: process.cwd() });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -3379,6 +3384,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     sharedTreeBranch,
     sharedTreeLinked,
     contextBySeat,
+    docCounts,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
