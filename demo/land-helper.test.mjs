@@ -144,7 +144,7 @@ try {
   console.log("1. a clean landing advances main by FAST-FORWARD (the branch is in the shared tree)");
   const featA = feature("feat-a", "b.txt", "from feat-a\n");
   const before = mainSha(repo);
-  const ok = land(repo, ["feat-a"]);
+  const ok = land(repo, ["feat-a", "--suite"]);
   check("the helper exits 0", ok.code === 0, ok.raw.slice(0, 300));
   check("...and reports ok", ok.report?.ok === true, JSON.stringify(ok.report)?.slice(0, 200));
   check("main ADVANCED", mainSha(repo) !== before, `${before} -> ${mainSha(repo)}`);
@@ -161,7 +161,7 @@ try {
   const featB = feature("feat-b", "c.txt", "from feat-b\n");
   writeFileSync(join(repo, "a.txt"), "line one\nuncommitted edit\n");
   const beforeDirty = mainSha(repo);
-  const dirty = land(repo, ["feat-b"]);
+  const dirty = land(repo, ["feat-b", "--suite"]);
   check("the helper refuses (nonzero)", dirty.code !== 0, dirty.raw.slice(0, 200));
   check("...and states the `.`-suite invalidity", /measures the SHARED TREE, not main/.test(dirty.report?.error ?? ""), dirty.report?.error);
   check("...and names the dirty path", (dirty.report?.dirtyPaths ?? []).some((p) => p.includes("a.txt")), JSON.stringify(dirty.report?.dirtyPaths));
@@ -177,7 +177,7 @@ try {
   mkdirSync(stray, { recursive: true });
   writeFileSync(join(stray, "probe.mjs"), "// left by a write to a reaped worktree\n");
   const beforeStray = mainSha(repo);
-  const strayRun = land(repo, ["feat-b"]);
+  const strayRun = land(repo, ["feat-b", "--suite"]);
   check("the helper refuses (nonzero)", strayRun.code !== 0, strayRun.raw.slice(0, 200));
   check("...naming the stray directory", /item-9999/.test(strayRun.report?.error ?? ""), strayRun.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeStray);
@@ -190,7 +190,7 @@ try {
   git(repo, ["worktree", "add", "-b", "wt-live", live]);
   const stray2 = join(repo, "item-9999");
   mkdirSync(stray2, { recursive: true });
-  const mixed = land(repo, ["feat-b"]);
+  const mixed = land(repo, ["feat-b", "--suite"]);
   check("the refusal names the STRAY one", /item-9999/.test(mixed.report?.error ?? ""), mixed.report?.error);
   check("...and NOT the registered one", !/item-8888/.test(mixed.report?.error ?? ""), mixed.report?.error);
   rmSync(stray2, { recursive: true, force: true });
@@ -205,7 +205,7 @@ try {
   const linked = join(repo, "item-7777");
   git(repo, ["worktree", "add", "-b", "wt-land", linked]);
   const beforeLinked = mainSha(repo);
-  const wrongRepo = land(linked, ["feat-b"]);
+  const wrongRepo = land(linked, ["feat-b", "--suite"]);
   check("landing INTO a linked worktree is REFUSED", wrongRepo.code !== 0, wrongRepo.raw.slice(0, 200));
   check("...naming the linked path", /item-7777/.test(wrongRepo.report?.error ?? ""), wrongRepo.report?.error);
   const norm = (p) => String(p ?? "").replace(/[\\/]+$/, "").replace(/\\/g, "/").toLowerCase();
@@ -228,7 +228,7 @@ try {
   // yet a suite run in `.` would measure a tree that exists on no branch.
   writeFileSync(join(repo, "attach.mjs"), "export const attach = 1;\n");
   const beforeUntracked = mainSha(repo);
-  const untrackedOnly = land(repo, ["feat-b"]);
+  const untrackedOnly = land(repo, ["feat-b", "--suite"]);
   check("an untracked-only dirty tree REFUSES", untrackedOnly.code !== 0, untrackedOnly.raw.slice(0, 200));
   check("...and names the untracked path", (untrackedOnly.report?.dirtyPaths ?? []).some((p) => p.includes("attach.mjs")), JSON.stringify(untrackedOnly.report?.dirtyPaths));
   check("...and main did NOT advance", mainSha(repo) === beforeUntracked);
@@ -241,7 +241,7 @@ try {
   const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { stdio: "ignore" });
   writeFileSync(slot, JSON.stringify({ pid: holder.pid, seat: "impl", since: new Date().toISOString() }));
   const beforeLock = mainSha(repo);
-  const lockedRun = landAsync(["feat-b"]);
+  const lockedRun = landAsync(["feat-b", "--suite"]);
   const sawPriority = await waitFor(() => existsSync(join(repo, "rig.sqlite.genlock.priority")), 8000);
   check("the lander PUBLISHES a priority reservation and WAITS (it does not refuse)", sawPriority, lockedRun.out.slice(0, 200));
   check("...and it has NOT REPORTED yet (it is waiting on the live holder)", lockedRun.stdoutText.trim() === "", lockedRun.out.slice(0, 200));
@@ -256,7 +256,7 @@ try {
   // A slot file that is NOT a live holder must not block a landing: the broker reconciles
   // stale slots, and a partial write parses as no holder at all (the code says so).
   writeFileSync(slot, '{"pid": 123, "seat"');
-  const staleOk = land(repo, ["feat-b"]);
+  const staleOk = land(repo, ["feat-b", "--suite"]);
   check("a partial/unreadable slot (no live holder) does not block", staleOk.code === 0, staleOk.raw.slice(0, 200));
   rmSync(slot, { force: true });
 
@@ -277,10 +277,10 @@ try {
   // first (main advances); feat-d is then a STALE tip — it contains preC, not current main. The
   // pre-flight does NOT refuse it (#3929): ancestry is a fast path and CONTENT proves landability,
   // so feat-d reaches the merge and CONFLICTS there.
-  const landedC = land(repo, ["feat-c"]);
+  const landedC = land(repo, ["feat-c", "--suite"]);
   check("feat-c lands cleanly first", landedC.code === 0, landedC.raw.slice(0, 200));
   const beforeConflict = mainSha(repo);
-  const conflicted = land(repo, ["feat-d"]);
+  const conflicted = land(repo, ["feat-d", "--suite"]);
   check("a STALE branch is NOT refused on ancestry — it reaches the merge", conflicted.code !== 0, conflicted.raw.slice(0, 200));
   check("...and it STOPS on a CONFLICT, not a stale refusal",
     (conflicted.report?.conflicted ?? []).includes("a.txt") && !/stale/.test(conflicted.report?.error ?? ""),
@@ -291,7 +291,7 @@ try {
   check("...and the shared tree has NO conflict markers", markers.stdout.trim() === "", markers.stdout);
   check("the scratch is removed by default", !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
   // --keep holds the scratch so a conflict can be resolved in it.
-  const kept = land(repo, ["feat-d", "--keep"]);
+  const kept = land(repo, ["feat-d", "--keep", "--suite"]);
   check("--keep stops and NAMES the scratch", kept.code !== 0 && typeof kept.report?.scratch === "string", kept.raw.slice(0, 200));
   check("...and the scratch worktree really exists", existsSync(kept.report?.scratch ?? ""));
   if (kept.report?.scratch) {
@@ -311,7 +311,7 @@ try {
   git(repo, ["commit", "-m", "feat: a branch with a committed conflict marker"]);
   git(repo, ["switch", "main"]);
   const beforeMarker = mainSha(repo);
-  const markerRefused = land(repo, [markerBranch]);
+  const markerRefused = land(repo, [markerBranch, "--suite"]);
   check("the helper REFUSES a branch with committed conflict markers", markerRefused.code !== 0, markerRefused.raw.slice(0, 200));
   check("...and names the marker file", (markerRefused.report?.conflictMarkerFiles ?? []).includes("m.txt"), JSON.stringify(markerRefused.report?.conflictMarkerFiles));
   check("...and main did NOT advance", mainSha(repo) === beforeMarker);
@@ -363,25 +363,31 @@ try {
   check("--suite REFUSES to advance main on a failing demo", suiteBad.code !== 0, suiteBad.raw.slice(0, 200));
   check("...and names the failing test", /bad\.test\.mjs/.test(suiteBad.report?.error ?? ""), suiteBad.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeSuite);
-  // #4436: WITHOUT --suite the landing still succeeds, but the ABSENCE of the gate is NAMED rather
-  // than reported as `null`. Three landings today read `"suite": null` and each seat correctly
-  // refused to claim a baseline it did not have, with no way to tell WHY.
+  // #6090: the gate is no longer opt-in. A landing with NO gate flag is REFUSED before it touches
+  // git, and the refusal NAMES the missing flag. (#4436 named the absence instead of reporting
+  // `null` — that half informed; this half prevents.)
   const featE2 = feature("feat-e2", "e2.txt", "from feat-e2\n");
-  const noSuite = land(repo, ["feat-e2"]);
-  check("a landing WITHOUT --suite still succeeds (the gate is opt-in)", noSuite.code === 0, noSuite.raw.slice(0, 200));
-  check(
-    "...and the ABSENCE of the gate is NAMED, not `null` (#4436)",
-    typeof noSuite.report?.suite === "string" && /not run/.test(noSuite.report.suite),
-    JSON.stringify(noSuite.report?.suite),
-  );
-  check("...and the report says the landing was NOT regression-checked", /NOT regression-checked/.test(noSuite.report?.suite ?? ""), noSuite.report?.suite);
+  const beforeNoGate = mainSha(repo);
+  const noGate = land(repo, ["feat-e2"]);
+  check("a landing with NO gate flag is REFUSED (#6090)", noGate.code !== 0, noGate.raw.slice(0, 200));
+  check("...and the refusal names BOTH missing flags", /--suite/.test(noGate.raw) && /--changed-suite/.test(noGate.raw), noGate.report?.error);
+  check("...and main did NOT advance", mainSha(repo) === beforeNoGate, `${beforeNoGate} -> ${mainSha(repo)}`);
+  const bogus = land(repo, ["feat-e2", "--suite=false"]);
+  check("...and a gate flag carrying a bogus value is not a bypass", bogus.code !== 0 && /unrecognized gate flag/i.test(bogus.raw), bogus.raw.slice(0, 200));
+  const liarBranch = feature("feat-liar", "probe.mjs", "export const probe = 1;\n");
+  const docOnlyLie = land(repo, [liarBranch, "--changed-suite", "--docs-only"]);
+  check("...and --docs-only asserted on a CODE change is refused", docOnlyLie.code !== 0 && /diff contradicts it/.test(docOnlyLie.raw), docOnlyLie.raw.slice(0, 250));
+  check("...and the refusal names the offending path", /probe\.mjs/.test(docOnlyLie.raw), docOnlyLie.report?.error);
   rmSync(join(repo, "demo", "bad.test.mjs"));
   git(repo, ["add", "-A"]);
   git(repo, ["commit", "-m", "test: drop the failing demo"]);
+  const gatedE2 = land(repo, ["feat-e2", "--suite"]);
+  check("...and the SAME branch lands once the gate is passed", gatedE2.code === 0 && mainSha(repo) !== beforeNoGate, gatedE2.raw.slice(0, 200));
+  check("...and the report says WHICH gate ran", gatedE2.report?.gate?.kind === "full", JSON.stringify(gatedE2.report?.gate));
 
   console.log("\n6. the guard refuses when the shared tree is ALREADY mid-merge");
   writeFileSync(join(repo, ".git", "MERGE_HEAD"), `${mainSha(repo)}\n`);
-  const midMerge = land(repo, ["feat-e"]);
+  const midMerge = land(repo, ["feat-e", "--suite"]);
   check("a mid-merge tree refuses to land", midMerge.code !== 0 && /mid-merge/.test(midMerge.report?.error ?? ""), midMerge.report?.error);
   rmSync(join(repo, ".git", "MERGE_HEAD"));
 
@@ -393,7 +399,7 @@ try {
   const beforeResolve = mainSha(repo);
   // (a) NO --db: the helper must RESOLVE selfdev.sqlite — and WAIT on it, not pass silently.
   const resolvedPriority = join(repo, "selfdev.sqlite.genlock.priority");
-  const resolvedRun = landAsync(["feat-g"], {}, null);
+  const resolvedRun = landAsync(["feat-g", "--suite"], {}, null);
   const sawResolve = await waitFor(() => existsSync(resolvedPriority), 8000);
   check("with NO --db the helper RESOLVES the live store (its reservation lands beside selfdev.sqlite)", sawResolve, resolvedRun.out.slice(0, 200));
   // #4432: the wait is now LEGIBLE. Before, the lander produced NO output while blocked, so a seat
@@ -408,7 +414,7 @@ try {
   );
   check("...and main did NOT advance", mainSha(repo) === beforeResolve);
   // (b) an explicit --db rig.sqlite is NOT a silent pass while ANOTHER store holds the live lock.
-  const wrongDb = land(repo, ["feat-g"]);
+  const wrongDb = land(repo, ["feat-g", "--suite"]);
   check("an explicit --db rig.sqlite is NOT a silent pass while the live store is locked", wrongDb.code !== 0, wrongDb.raw.slice(0, 200));
   check("...and the refusal NAMES the store holding the live lock", /selfdev\.sqlite/.test(wrongDb.report?.error ?? ""), wrongDb.report?.error);
   check("...and main did NOT advance", mainSha(repo) === beforeResolve);
@@ -433,7 +439,7 @@ try {
 
   console.log("8a. the lock is HELD across the FF, cannot be interleaved, and is released on success");
   const featG2 = feature("feat-g-lock", "g2.txt", "from feat-g-lock\n");
-  const heldRun = landAsync(["feat-g-lock"], { DURIG_LAND_HOLD_FF_MS: "1200" });
+  const heldRun = landAsync(["feat-g-lock", "--suite"], { DURIG_LAND_HOLD_FF_MS: "1200" });
   const heldSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === heldRun.pid), 8000);
   check("the lander HOLDS all N slots across the FF", heldSeen, slotPaths.map((p) => JSON.stringify(readSlot(p))).join(" "));
   let claimErr = null;
@@ -452,7 +458,7 @@ try {
 
   console.log("8b. the lock is RELEASED on the failure path (the FF cannot apply)");
   const featH = feature("feat-h", "h.txt", "from feat-h\n");
-  const failRun = landAsync(["feat-h"], { DURIG_LAND_HOLD_FF_MS: "1500" });
+  const failRun = landAsync(["feat-h", "--suite"], { DURIG_LAND_HOLD_FF_MS: "1500" });
   const failSeen = await waitFor(() => slotPaths.every((p) => readSlot(p)?.pid === failRun.pid), 8000);
   check("the lock is held again for the second run", failSeen);
   git(repo, ["commit", "--allow-empty", "-m", "concurrent commit while the lander holds the lock"]);
@@ -504,7 +510,7 @@ try {
   const landClean = (branch) => {
     const env = { ...process.env };
     delete env.DURIG_MAX_CONCURRENT_SEATS;
-    const r = spawnSync(process.execPath, [LAND, branch, "--repo", repo, "--db", join(repo, "rig.sqlite")], {
+    const r = spawnSync(process.execPath, [LAND, branch, "--suite", "--repo", repo, "--db", join(repo, "rig.sqlite")], {
       cwd: repo,
       encoding: "utf8",
       timeout: TIMEOUT_MS,
