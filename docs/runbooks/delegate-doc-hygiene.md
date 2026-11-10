@@ -3,9 +3,9 @@ runbook: delegate-doc-hygiene
 symptom: "an edit reported success but the text is not in the file; the NEXT pointer went red on its line cap; a citation check flags findings you did not make; a commit sha you quoted turns out not to exist; a `cat >> file <<'EOF'` executed part of its own body as shell; you added a runbook and nothing noticed"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-29
-verified_by: delegate
-evidence: "PARTIAL re-run 2026-11-06: `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
+last_verified: 2026-11-09
+verified_by: scribe
+evidence: "PARTIAL re-run 2026-11-09 by scribe (item #6080): the INTENDED-vs-RESOLVED section added under #6077/#6080 was checked with `node tools/doc-integrity-guard.mjs`, `node demo/next-pointer.test.mjs` and `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md` in the item-6080 worktree at main `503ff096` (each exit code recorded in the completion); the corpus scan `awk '/^\| *[0-9]+ *\|/ {rows++; if (/[0-9]{3}/ && !/INTENDED|RESOLVED/) bad++} END{print rows, bad}' docs/ROADMAP.md` → `49 48`, exit 0. Earlier legs (2026-11-06, delegate): `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
 check_rule: "not yet — see docs/ROADMAP.md **262**: `check` reports `runbook-front-matter` as SKIPPED, and `scripts/clockin.mjs:123` skips any runbook with no front matter, so a header-less runbook is currently invisible to both"
 ---
 
@@ -124,6 +124,52 @@ git grep -nE '(127\.0\.0\.1|0\.0\.0\.0|localhost):[0-9]{4,5}' -- docs README.md 
 **Archives are exempt by design.** `docs/NEXT-ARCHIVE.md` keeps superseded session text **verbatim** (the pointer says so
 explicitly), so stale figures there are the historical record, not a live claim; the live surfaces are `docs/NEXT.md`,
 `docs/STATUS.md`, `docs/FEATURES.md`, `docs/runbooks/*` and the README, and those are where a figure owes its measurement.
+
+## A number in a roadmap or spec row must say INTENDED or RESOLVED, and name the tree it was measured on
+
+Standing intake rule, from lead's ruling on #6080 (folded out of #6077): the decision itself already lives in
+#6062/#6065/#6068, so minting a DECISIONS entry to relay it would duplicate a recorded ruling (lead cites #5568 for that
+prohibition — I did not find it as text in `docs/DECISIONS.md`, so treat it as lead's ruling, not a doc I checked). A
+runbook is the retrievable home for an operating procedure. Every number a row carries gets one of two tags, and the tag is not
+optional:
+
+- **RESOLVED** — what the code or the shipped dependency actually returns. Must name the **tree sha** and the
+  **dependency set** it was read from, e.g. "`main 503ff096`, `@earendil-works/pi-durable` 1.3.0 as resolved by
+  `package.json` + `package-lock.json`".
+- **INTENDED** — a schedule, a proposal, a value someone wants to arm. Must say so in those words, and must not be
+  written as if it is already in force.
+
+A number with neither tag is not evidence: the reader cannot tell a measured fact from a wish, and a docs refresh carries
+it forward unexamined.
+
+**Worked instance (#6077, 2026-11-09).** `docs/ROADMAP.md` row 331 asserted compaction thresholds `159,040 / 126,272 /
+24,000` as if they were the policy in force. qa could not reproduce them on `main 09a94b4c` by either route (flat
+defaults, window 204,800 → `188,416 / 155,648 / 20,000`; nested map honoured → `184,320 / 151,552 / 20,000`). Those
+figures are **INTENDED** and live in `docs/DECISIONS.md` (rulings 4-7) and
+`docs/reviews/task-completion-milestone-intake-2026-11-07.md:150` — not in the row that quoted them. Find them read-only:
+
+```bash
+grep -rnE "159,040|126,272" docs/ src/ demo/     # 3 surfaces: DECISIONS.md, NEXT-ARCHIVE.md, the review table — exit 0
+```
+
+The same row carried a **dead dependency citation**: `dist/harness/compaction.js:195-196`, attributed to
+`compactionPolicy`. On the resolved 1.3.0 package line 196 is `export function selectCut(view, keepRecentTokens)`, and
+`grep -rn "modelOverrides" node_modules/@earendil-works/pi-durable/dist` returns **0 hits (exit 1)** — the package ships
+no `src/` at all, so a `src/harness/*.ts:NN` pointer in a doc cannot be checked against what the rig resolves. Strike the
+citation, or replace it with the function that exists: `dist/harness/agent.js:10-15` holds `DEFAULT_COMPACTION_POLICY`,
+`dist/harness/generation.js:223-229` computes the thresholds.
+
+**Do NOT turn this into a `check` rule without a scan.** The precedent is #3539: a dangling-citation rule would have
+started **498-red** across 97 docs and got disabled. A rule nobody can pass is not a rule. Re-measured on `main
+503ff096` (exit 0):
+
+```bash
+awk '/^\| *[0-9]+ *\|/ {rows++; if (/[0-9]{3}/ && !/INTENDED|RESOLVED/) bad++} END{print rows, bad}' docs/ROADMAP.md
+```
+
+→ `49 48`: of 49 roadmap **table** rows, **48 carry a 3+ digit number with no tag**. Scope warning: `node tools/doc-integrity-guard.mjs` counts **352 registered items** in `docs/ROADMAP.md` (exit 0, run on this tree 2026-11-09) because items are also registered as `**NN.**` and `NN.` list lines — so 48 covers the table only, and any rule must be scoped per item, not per row. The corpus cannot start green, so the
+rule stays prose. If a check is ever wanted it must apply to new or edited rows only, and this count must be re-measured
+on the day it is enabled.
 
 ## If it fails
 
