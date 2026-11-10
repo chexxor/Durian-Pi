@@ -62,6 +62,10 @@ const RUNBOOKS = join(ROOT, "docs", "runbooks");
 const NOTHING_EXECUTED = [
   "block-shape-refused.md",
   "broker-safe-change.md",
+  // Added when this runbook landed: its four Diagnose lines name live-state files the
+  // throwaway fixture cannot contain (.spike/acceptance-seed/acceptance-snapshot.sqlite) and
+  // start with `cd`, which the read-only allowlist refuses. Measured DIAG_DEBUG output, 2026-11-10.
+  "compaction-acceptance-measure.md",
   "compaction-eval.md",
   "constitution-amendment.md",
   "docs-encoding-mojibake.md",
@@ -77,6 +81,10 @@ const NOTHING_EXECUTED = [
   "spend-cap-tripped.md",
   "store-corruption-recovery.md",
   "store-probe-identity.md",
+  // Added when this runbook landed: its probe takes a live network endpoint
+  // (--base=https://api.deepinfra.com/v1/openai), which the allowlist refuses, and its second
+  // line needs the live store. Measured DIAG_DEBUG output, 2026-11-10.
+  "verifier-leg-unfunded.md",
   "verifier-model-server.md",
   "verifier-serving-headroom.md",
   "workspace-move.md",
