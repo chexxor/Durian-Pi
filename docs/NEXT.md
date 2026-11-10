@@ -1,22 +1,23 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-09T21:3xZ (delegate session **N22** — the seat plane is **armed**
-(`durig.config.json` → `"DURIG_EXTENSIONS": "extensions/continuity.mjs"`, `cli.mjs config` confirms it), and the one
-FAIL on the N18 gate turned out to be a **gate bug, not a mechanism bug**: `milestone-check.mjs` now runs the mocked-plane
-proof before blaming the code and exits **0** — `PASS (mechanism)`, 8 operational blockers, 3.7 s. **N18 is not closed**:
-its acceptance (ROADMAP 331, "truncated summaries drop to zero over 100 compactions") needs real seat runs, and no
-provider on this box registers a model. **M5 is ready to start**, not started — its gate re-ran in **1.6 s** at
-**3 PASS, 1 PARTIAL, 4 FAIL**. Earlier in this thread, session **N21** — the harness compaction guard is built, gated,
-end-to-end verified and documented; this window **re-ran the whole verification chain from a cold resume and it is
-still green** — install `UP TO DATE`, gate 28/28 in 0.46 s, manual e2e 6/6 in 3.25 s, auto e2e 6/6 in 85.5 s.
-This window also **registered ROADMAP 352** (nothing at session start guarantees the guard is installed). Nothing
-was claimed in the queue.
+**Last update:** 2026-11-10T03:1xZ (delegate session **N23** — the fleet is **running**: the broker was restarted with
+`DURIG_LOCAL_API_KEY` in its own process env, the spool drained to 0, passes are advancing, and seats are minting
+their own rows. The fleet-silence root cause was **not** routing: it was a broker with **no** `DURIG_*` env at all,
+so every seat generation 401'd and the supervisor escalated 171 rows as `repeated_failure`.
+Measured this window: **8 natural seat compactions since the mechanism armed, 0 truncated, 8 note-backed**; the
+100-compaction / 0-truncated acceptance ran clean on a snapshot copy (exit 0, 7.0 s) with a negative control that
+reproduces 11 truncations. `milestone-check.mjs` exits **0** with **6** blockers (was 8). **9 branches landed** to
+main across this thread (7 earlier + item-6077 + item-5745); worktrees 22 → **11**, refs 14. **N18 is still not
+closed**: 10 of 12 seats have no note because they have no claimed work, and ROADMAP 352 (the install gap) is
+unlanded — both are team routing decisions the delegate cannot make. **M5** gate unchanged: 3 PASS, 1 PARTIAL,
+4 FAIL. Nothing was claimed in the queue by the delegate.
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240, first tranche ROADMAP 331)**.
-This pass closed the **harness-plane** half of it: auto-compaction in the interactive/delegate session can no
-longer fail. Registered as **ROADMAP 351**, decided as **D252**, runbook
-**`docs/runbooks/harness-compaction-guard.md`**, pitfalls **211–216**. The team's rows for this cluster,
-**#5931–#5942**, are still unclaimed; the delegate asserted nothing.
+The harness plane is closed (ROADMAP 351, D252, runbook `docs/runbooks/harness-compaction-guard.md`, pitfalls
+211–216). This window closed the **seat plane's mechanism** too: the continuity extension is armed, real seats write
+and read notes, and every natural compaction since arming took the note path with **zero** truncations. What is NOT
+closed is coverage (10/12 seats have no note — they have no claimed work) and the install gap (ROADMAP 352, rows
+**#6036/#6037** `deferred` to human). The team's rows **#5931–#5942** are still unclaimed; the delegate asserted nothing.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -24,19 +25,25 @@ longer fail. Registered as **ROADMAP 351**, decided as **D252**, runbook
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**; this pass armed the seat
-plane and corrected the gate that said the mechanism was broken when the real state was "armed, never exercised".
-The *other* open thread is the auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**), still spooled, not delivered.
+**Milestone this window worked** — **ensuring LLM task completion (D240, ROADMAP 331)**; this pass got the fleet
+running (the 401 root cause), exercised the seat plane on real seats, and measured the 100/0 acceptance on a store
+snapshot. The *other* open thread is the auto-clean ceiling (D249, ROADMAP **311** cut 2 / **344**), still spooled,
+not delivered.
 
-**Current item:** N18 cannot be closed, and the reason is now measured rather than assumed. `node
+**Current item:** N18's mechanism is proven, its coverage is not. `node
 docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` → **exit 0**, `PASS (mechanism)`,
-**8 operational blockers**: the extension is armed but 0 transcript entries declare `read_note` (newest entry
-2026-11-09T07:54:09Z, before the arming), 0 `durig.notes` documents exist, 12/12 seats have no note, and 219 truncated
-summaries / 209 run-cap refusals are still on the record. The only thing between this rig and a measurable N18 is a
-**provider that registers a model** — an operator grant. **Next milestone M5** is ready: 171 → 172 → 173 → 175 → 176
+**6 operational blockers**: 219 lifetime truncated summaries, 209 run-cap refusals, 212 truncations on seats with no
+cap refusals, **10 of 12 seats have no continuity note** (they hold no claimed work to note), scribe at 111% of its
+declared window, impl claimed 1 item and completed none. Live evidence since arming (2026-11-09T23:47:45Z): **8
+compactions, 0 truncated, 8 note-backed**. The 100/0 number is a **driven measurement on a snapshot copy**, not 100
+natural fleet compactions — say that, do not round it. `node
+.spike/compaction-acceptance.mjs --target 100 --mode armed` → exit 0 in **7.0 s**: 100 compaction tasks, 0 truncated,
+100 provider calls = 100 growth turns + **0 summariser requests**; control `--mode control --stopReason length` → 11
+truncated (the counter is not vacuous). **Next milestone M5** is ready: 171 → 172 → 173 → 175 → 176
 (`docs/reviews/milestone-m5-solidified-2026-11-09.md`), gate re-runnable in 1.6 s, four criteria open (C1, C3, C4, C6).
-Nothing can be routed while the broker is down. The team's rows **#5931–#5942** (N18) and the M5 decomposition remain
-unclaimed; the delegate asserted nothing.
+The broker is healthy (pid in `<db>.broker.json`, passes advancing); the team's rows **#5931–#5942** (N18) and
+**#6036/#6037** (ROADMAP 352) are still `deferred` to human; the delegate asserted nothing and sent pm an intent
+(requestId `fef4cf53-996d-450b-863e-26f8549dbd47`) asking it to release them.
 `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (1.6 s, no model, no broker — expect
 `3 PASS, 1 PARTIAL, 4 FAIL`) then
 `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` (3.7 s, expect `PASS
