@@ -129,6 +129,9 @@ const runbooks = readdirSync(RUNBOOKS)
 const extraRefs = [...new Set(runbooks.flatMap((rb) => collectItemRefs(extractDiagnoseSection(rb.body))))];
 
 const fixture = buildFixture(extraRefs);
+// The fixture is removed on every exit path, including a failing assertion, so a red run
+// never leaks a throwaway rig.
+process.on("exit", () => { try { rmSync(fixture.dir, { recursive: true, force: true }); } catch {} });
 const headSha = fixture.git(["rev-parse", "main"]).stdout.trim();
 const placeholderValues = {
   branch: "item-1234",
@@ -313,8 +316,6 @@ assert.ok(
 );
 
 if (process.env.DIAG_DEBUG) gaps.forEach((g) => console.log(`GAP ${g.file} :: ${g.line.slice(0,80)} :: ${g.reason}`));
-rmSync(fixture.dir, { recursive: true, force: true });
-
 console.log(
   `RUNBOOK DIAGNOSE TEST PASS: ${runbooks.length} runbooks, ${commandLines} Diagnose command lines, ` +
   `${executed} executed (exit 0, --json parseable), ${gaps.length} reported gaps, ` +
