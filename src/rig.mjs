@@ -795,10 +795,22 @@ const Router = defineExtension({
 								.find((it) => tierIndex(it.tier) >= 0 && baseTaskSubject(it.subject) === base);
 							const newIdx = tierIndex(tier);
 							const oldIdx = existing ? tierIndex(existing.tier) : -1;
-							if (oldIdx >= 0 && newIdx > oldIdx && !(args.reason && args.reason.trim())) {
-								throw new Error(
-									`raising tier ${existing.tier}->${tier} for this task needs a stated reason`,
-								);
+							if (oldIdx >= 0 && newIdx > oldIdx) {
+								// #6112 (ruling #6097): RAISING a tier is a decision about the WORK, not about
+								// its parking, so it belongs to the row's parties. A coordinating seat may un-park
+								// a chain it did not mint (reversible) but may not resize it - the seat that would
+								// have to do the larger work is not the seat that minted the request.
+								// Lowering stays free, as before.
+								if (existing.from !== me && existing.to !== me) {
+									throw new Error(
+										`raising tier ${existing.tier}->${tier} for this task is refused: the chain was minted by ${existing.from} for ${existing.to}, and only a party of a task may re-tier it`,
+									);
+								}
+								if (!(args.reason && args.reason.trim())) {
+									throw new Error(
+										`raising tier ${existing.tier}->${tier} for this task needs a stated reason`,
+									);
+								}
 							}
 						}
 						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate, args.requires ?? null, park);

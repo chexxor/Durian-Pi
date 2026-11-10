@@ -140,6 +140,18 @@ try {
 	const reviseSay = await toolReply("pm", "revise_work");
 	check("pm cannot revise a row it did not send", /not yours to revise/.test(reviseSay), reviseSay.slice(0, 160));
 
+	await call("impl", "send_work", { to: "impl", subject: "Ship the widget", body: "small task", tier: "small" });
+	const mintedId = (await queueState()).items.length;
+	check("the minting party tiered it at intake", (await item(mintedId)).tier === "small", JSON.stringify((await item(mintedId)).tier));
+	await call("pm", "send_work", { to: "impl", subject: "Ship the widget", body: "follow-up", tier: "feature", reason: "bigger than it looked" });
+	const tierSay = await toolReply("pm", "send_work");
+	check("pm cannot RAISE the tier of a chain it did not mint", /only a party of a task may re-tier it/.test(tierSay), tierSay.slice(0, 200));
+	check("...and no item was created by the refused raise", (await queueState()).items.length === mintedId, JSON.stringify((await queueState()).items.map((it) => it.id)));
+	await call("impl", "send_work", { to: "impl", subject: "Ship the widget", body: "follow-up", tier: "feature", reason: "bigger than it looked" });
+	const raisedId = (await queueState()).items.length;
+	check("the party still may raise it, with a reason (control)", /queued item #\d+ for impl/.test(await toolReply("impl", "send_work")), (await toolReply("impl", "send_work")).slice(0, 200));
+	check("a party's raise carries the higher tier", (await item(raisedId)).tier === "feature", JSON.stringify((await item(raisedId)).tier));
+
 
 	/* D. release is refused when the gate names a CANCELLED row. */
 	await call("pm", "send_work", { to: "impl", subject: "Prerequisite that gets dropped", body: "gate" });
