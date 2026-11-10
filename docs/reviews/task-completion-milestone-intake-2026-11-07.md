@@ -143,14 +143,24 @@ carried onto our windows, which is what §4.6 demands):
 
 Where each policy's **blocking** and **background** thresholds land:
 
-| policy in force | family | blocking threshold | band | background threshold | band | post-cut floor (`keep + summary`) |
-|---|---|---|---|---|---|---|
-| today — pi-durable defaults win (331 unfixed) | local | 183,616 (91.8 %) | **emergency** | 150,848 (75.4 %) | wrap-up | 24,000→20,000 + 13,107 = 33,107 (16.6 %) |
-| today — pi-durable defaults win (331 unfixed) | verifier | 8,192 (33.3 %) | **working** | **−24,576** | (always above) | **20,000 + 6,000 = 26,000 = 105.8 % of the window** |
-| #5309 accepted values | local | 159,040 (79.5 %) | wrap-up | 126,272 (63.1 %) | checkpoint | 24,000 + 16,384 = 40,384 (20.2 %) |
-| #5309 accepted values | verifier | 20,480 (83.3 %) | wrap-up | 12,288 (50.0 %) | economy | 8,192 + 3,276 = 11,468 (46.7 %) |
-| the operator's pi schedule harness-wide (`32000/16000`) | local | 168,000 (84.0 %) | wrap-up | 135,232 (67.6 %) | checkpoint | 16,000 + 16,384 = 32,384 (16.2 %) |
-| the operator's pi schedule harness-wide (`32000/16000`) | verifier | **−7,424** | **never fires** | **−40,192** | (always above) | 16,000 + 6,000 = 22,000 (89.5 %) |
+| policy in force | family | blocking threshold | band | background threshold | band | post-cut floor (`keep + summary`) | label (#6105) |
+|---|---|---|---|---|---|---|---|
+| today — pi-durable defaults win (331 unfixed) | local | 183,616 (91.8 %) | **emergency** | 150,848 (75.4 %) | wrap-up | 24,000→20,000 + 13,107 = 33,107 (16.6 %) | **RESOLVED** (pi-durable defaults arithmetic on the declared 200,000 window; the measured run qa took on `main 09a94b4c`, window 204,800, gives 188,416 / 155,648 / 20,000) |
+| today — pi-durable defaults win (331 unfixed) | verifier | 8,192 (33.3 %) | **working** | **−24,576** | (always above) | **20,000 + 6,000 = 26,000 = 105.8 % of the window** | **RESOLVED** (defaults, 24,576 window) |
+| #5309 accepted values | local | 159,040 (79.5 %) | wrap-up | 126,272 (63.1 %) | checkpoint | 24,000 + 16,384 = 40,384 (20.2 %) | **INTENDED** (derived arithmetic on a proposed schedule; no tree reproduces it — the measured set is qa's on `main 09a94b4c`) |
+| #5309 accepted values | verifier | 20,480 (83.3 %) | wrap-up | 12,288 (50.0 %) | economy | 8,192 + 3,276 = 11,468 (46.7 %) | **INTENDED** (derived arithmetic; no tree reproduces it — the measured set is qa's on `main 09a94b4c`) |
+| the operator's pi schedule harness-wide (`32000/16000`) | local | 168,000 (84.0 %) | wrap-up | 135,232 (67.6 %) | checkpoint | 16,000 + 16,384 = 32,384 (16.2 %) | **INTENDED** (the operator's pi-plane schedule, transcribed; not measured on any tree) |
+| the operator's pi schedule harness-wide (`32000/16000`) | verifier | **−7,424** | **never fires** | **−40,192** | (always above) | 16,000 + 6,000 = 22,000 (89.5 %) | **INTENDED** (arithmetic on a transcribed schedule; the harm it predicts is why the label matters) |
+
+**Why every row now carries a label (#6105, 2026-11-10).** A percentage in a milestone-intake table reads as a
+measured fact. Only the two "today" rows come from the policy a seat actually gets; the four others are schedules
+proposed in discussion. The rule, already in `docs/ROADMAP.md` row 331 and `docs/runbooks/delegate-doc-hygiene.md`,
+is that a figure must say **INTENDED** (a schedule someone proposes) or **RESOLVED** (what the shipped resolver
+returns, on a named tree and dependency set). Measured here to show why the dependency set has to be named: the
+carrying probe, `docs/evidence/2026-11-08-context-window/compaction-policy-probe.mjs`, exits **1** on the lockfile
+pin `@earendil-works/pi-durable` **1.3.0** (`TypeError: compactionPolicy is not a function` — that release exports no
+such function) and exits **0** where **1.5.1** is installed, printing `reserve=16384 keepRecent=20000 background=32768`
+for every family.
 
 **Three findings the rows do not yet carry** (spooled to `lead` as intent `delegate-20261107-bands` for #5309 / #5310 /
 #5308 — the delegate minted nothing, per protocol):
