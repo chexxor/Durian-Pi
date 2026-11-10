@@ -1,11 +1,11 @@
 ---
 runbook: stale-held-backlog
-symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so"
+symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so; ALSO: a queued row can NEVER be claimed and the scan says `gate-cancelled:#<id>""
 writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
 precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
 last_verified: 2026-11-10        # the tool below was run against the live store; see Evidence
 verified_by: devtools
-evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed"
+evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below"
 check_rule: demo/held-gate-audit.test.mjs
 ---
 
@@ -18,6 +18,9 @@ check_rule: demo/held-gate-audit.test.mjs
 - You are doing a periodic queue hygiene pass and want the parked rows classified.
 - After an incident of the class in
   [`incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md`](../incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md).
+- **A row that can never be claimed**: the oldest-workable scan reports `gate-cancelled:#<id>` for a
+  `queued` row, and the id it names is a **container** (an umbrella registration), not work.
+- You are closing an umbrella and are about to `cancel_work` it.
 
 ## Impact
 
@@ -116,6 +119,54 @@ to `pm`; `pm` issues the transition. For each candidate:
    tail -n 5 selfdev.sqlite.broker.log                        # INTENT delivered=1 dead=0 dup=0
    ```
 
+## Umbrella rows are pointers, never gates - close them, do not cancel
+
+**Symptom you are searching for:** "a row can never be claimed" / "why is this dependent stuck". The
+oldest-workable scan (`selectOldestWorkable`, `src/rig.mjs`) skips the row and prints a reason naming a
+container id.
+
+**The machine rule** - `workable()`, `src/rig.mjs:303`, gate loop at `:309-316`. For every id in
+`blockedBy`:
+
+| gate target's status | verdict | reason string |
+|---|---|---|
+| `done` | workable (gate satisfied) | - |
+| `cancelled` | NOT workable, **permanently** | `gate-cancelled:#<id>` |
+| `queued` / `claimed` / `held` | NOT workable, until it finishes | `gate-open:#<id>(<status>)` |
+| no such item | workable (conservative default) | - |
+
+`cancelled` is terminal (`src/checkup.mjs:192`, `TERMINAL_STATUSES = {"done","cancelled"}`) and can never
+become `done`. So a gate naming a cancelled id is closed forever: the dependent is not delayed, it is
+starved. That is the difference between closing and cancelling a container.
+
+**The convention (lead's ruling, #6214, from the disposition of #2465):**
+
+1. An umbrella row is a **pointer to an audit**, not a dependency. **Never** put an umbrella id in a
+   `blockedBy` list.
+2. When every child is individually registered with its own owner, the umbrella **CLOSES** -
+   `complete_work(<id>, "tracking row processed; nothing landed here")` - it does **not** `cancel_work`.
+   Cancelling the container turns every dependent into a permanently unclaimable row.
+3. If a dependent genuinely waits on the container's content, gate on the **child that carries the work**,
+   not on the container.
+
+**Worked example - #2465 (the container that was done right).** Registered 2026-10-19 by `pm` to `lead`
+as "DOCS TRUTH-UP (2026-10-19) - umbrella registration (do not start)", status `held`, **no `blockedBy`
+recorded on it**: a container owns no gate. Its six children are each individually registered with an
+owner - #2458 scribe, #2459 devtools, #2460 impl, #2461 scribe, #2462 impl, #2463 scribe - so the
+container adds a wake and a claim slot without adding work. `lead` released it (`released` transition
+2026-11-10T09:03:47Z), claimed it, and closed it; the disposition reached `pm` as #6214.
+
+**The counter-example, live at the time of writing.** #6123 (`pm` -> `scribe`) carries
+`blockedBy:[6122]`, and #6122 is `cancelled` - so the scan reports `gate-cancelled:#6122` and that row is
+never claimable. Same family, same failure: `docs/reviews/security-5269-landing-correction.md` §5 names
+#3747 (gate naming a cancelled/superseded id) and #3863 (gate bound to a cancelled twin).
+
+**Unverified, stated as a gap:** there is **no `check` rule** that detects this shape today. The rule was
+registered as #3747 ("check rule for a NON-TERMINAL item whose `blockedBy` names a CANCELLED/SUPERSEDED
+id") - that row is still `held` (created `held`, never transitioned), and `src/checkup.mjs` contains no
+such rule (grep `blockedBy` in it returns nothing). The convention is therefore **prose plus the
+`workable()` behaviour**, not enforcement.
+
 ## Verify
 
 - The audit exits 0 and prints `git landing commits read: <n>` (the git pass ran) and per-seat totals that
@@ -129,6 +180,22 @@ to `pm`; `pm` issues the transition. For each candidate:
   count fall), and the dependent work is `queued`/`claimed`.
 - If a doc was "delivered but unlanded", it appears on `main` after the landing window:
   `git cat-file -e main:<path> && echo present`.
+- **The umbrella rule is pinned by a demo** (run 2026-11-10, exit 0):
+
+  ```bash
+  node demo/workable-claim.test.mjs; echo "exit=$?"          # exit 0
+  ```
+
+  Its assertion reads `a gate on a CANCELLED item is NOT workable (terminal != done)` and
+  `...reason is gate-cancelled` (`demo/workable-claim.test.mjs:74-75`).
+- **The entry is reachable from the symptom index, not only from the rule text** (run 2026-11-10, exit 0):
+
+  ```bash
+  grep -n "never be claimed" docs/runbooks/README.md; echo "exit=$?"
+  ```
+
+  It prints the README Index (symptom) row that points at this runbook. A grep that finds the phrase only
+  in this file and not in the README means the index row was not added - the rule is then undiscoverable.
 
 ## If it fails
 
