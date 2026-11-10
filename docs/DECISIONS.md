@@ -3943,6 +3943,76 @@ documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (s
 store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
 unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
 
+## D### — Provider/model configuration is OPERATOR-LEVEL; store-vs-config drift is LABELED, not GATED (lead ruling from #3242, adjudicated 2026-10-20; reissues #3246, point 7 added after the #3249 adjudication)
+
+**Mint note (#3075).** The heading carries a `D###` PLACEHOLDER on purpose: derive the next FREE number by
+scanning `docs/DECISIONS.md` at merge. The highest at this branch's fork point `f192f543` is **D256**, so
+re-derive rather than assuming 257. This entry does not reserve D113.
+
+**Trigger, measured.** `cafee744` ("chore(rig): local provider moves to Swift 1.5 (swift-1.5-iq2_xs) on the
+Qwen engine") landed *inside* a landing pass, sitting directly on landing merges: `git log --oneline -4
+cafee74` shows `abb9c549 merge: land devtools-item-1558 onto main` and `0976cc45 Revert "merge: land
+devtools-item-1558 onto main"` around it. A model move carried as a chore commit in a pass is what makes
+"was this intended?" unanswerable afterwards. D121 records the switch; this entry is the RULE about such
+moves, not a second record of it.
+
+**Decision.**
+1. **Provider/model config is operator-level**, in the same class as the D113 control-plane spool ops. It is
+   not seat-decidable and must not land as a seat chore commit during a landing pass.
+2. **One concern per change binds config edits as strictly as code.** A provider/model move and an encoding
+   repair in one commit destroys the auditability of intent — that combination is exactly what made the
+   trigger commit unreadable as to intent.
+3. **The live store is the evidence of record for what actually served.** A rig-config value on main is a
+   claim; the store is the fact. Pass reports name the store's effective model, not main's configured model.
+4. **`up <rig> --refresh` is operator-only** under D113. Seats surface the drift as a waiting item
+   (D114 / #2788); they never close it, and a seat is never at fault for it.
+5. **Drift between main's rig config and the live store is a standing DRIFT line — not a pass gate, failure,
+   or abort.** A gate clearable only by the operator stalls every pass while the operator is away, and no
+   seat can legitimately perform the fix: a self-inflicted deadlock. Safety-over-scope cuts against gates
+   whose only key is held outside the loop.
+6. **Results whose validity depends on the model** — provider-specific tool-call formatting, cacheRead/measure
+   calibration, model-identity assertions — are labelled "unverified for target model" while drift is open,
+   and may not certify or close a provider-sensitive item. Model-independent results from the same pass stay
+   fully trusted. This extends D121's "unverified for swift-1.5/strata until the refresh is observed" from
+   tips to certifications.
+7. **Waiting markers are one per DISTINCT operator ask** — never per pass, never bundled. A decision ("was X
+   intended?") and an action ("run the refresh") are separate asks with separate markers, because the decision
+   can close while the action is still outstanding; bundling loses the marker at the exact moment the answer
+   arrives. **Corollary, the sharper half:** a structured gate (`blockedBy`) is a REGISTRATION POINTER, not
+   release authority — it resolves on the target's terminal state, which is not the condition holding. Where a
+   gated item's condition is an ANSWER rather than a closure, the control is `held` plus an explicitly named
+   ruling. Source: #3249 — #3248's gate on #3242 would have auto-released a revert on the "intended" answer.
+
+**Instrumented today vs. ruled only (read 2026-11-10 on main `f192f543`).** Recorded as a ruling, with the
+state of the code named so a reader does not mistake a norm for a shipped control:
+- **Point 7 is code.** `src/rig.mjs:310-316`: a gate clears only when the target is `done`; `cancelled` gives
+  `gate-cancelled:#id`; any other status gives `gate-open:#id(status)`. Note the sharp edge at
+  `src/rig.mjs:312-313`: a gate whose target is **absent** is treated as workable ("the conservative default
+  says workable") — a pointer at a row that no longer exists reads as ungated, a second reason a gate is not
+  authority. Proven: `node demo/blockedby-field.test.mjs` exit 0, `node demo/workable-claim.test.mjs` exit 0.
+- **Point 3's premise holds; its wiring does not.** The store DOES record what served: `src/readapi.mjs:110-127`
+  `readSeatModels()` reads each seat's persisted `pi.agent.model` as `provider/modelId`. But the audit and
+  health surfaces are fed the SPEC-derived map — `cli.mjs:3063-3073` `resolveModelsBySeat(spec)` ("Every seat's
+  resolved model, from the spec"), passed at `cli.mjs:1014` and `cli.mjs:1101-1105`. So today the reports name
+  the configured model, not the effective one: the data exists, the pass-report line does not.
+- **Point 5 is not instrumented, and is also not violated.** No model-drift gate exists in the pass path: the
+  drift checks in `src/checkup.mjs` are seat-level (`store-missing-seat` / stray-seat, line 689) and the docs
+  staleness check (`:862-869`). Nothing aborts a pass over model drift today.
+- **Point 6 is prose only.** "unverified for target model" appears in `docs/NEXT-ARCHIVE.md:761`; no
+  machine-readable field carries it. Do not read `src/checkup.mjs:95,345-387`'s `last_verified: unverified` as
+  model labelling — that is runbook verification, a different thing.
+- **Point 4's waiting surface exists:** `src/attention.mjs:12,70-71` (`deferred_awaiting_answer`, and "waiting
+  on an answer — NO TARGET was recorded, so nobody has been asked") — the named-who-answers requirement is
+  already in code.
+
+**Cross-references.** D113 (operator-only control-plane ops, the `up` carve-out), D114 (the waiting view),
+D121 (the switch itself), #3075 (number minted at land), #2788/#2789 (waiting derivation / the `answer` op),
+#3236 (held items are not reviable).
+
+**Status.** RULED by lead (#3242, adjudicated at #3249); registered by `scribe` at item #3252. Registering is
+not starting: the implementation row for the cost/spend mechanism is **#6191** (HELD, DO NOT START), and this
+entry lands from the pass branch, never as an independent side-branch entry (#3186).
+
 ## D122 — The fused process is the HARNESS'S HOST, not "harness" or "broker"; post-split names `harnessd` (store+runtime owner) and `broker` (automation client) (lead #4294, 2026-10-21; recorded by scribe, item #4338)
 
 **Decision:** TODAY: NO RENAME. The fused process is a broker that hosts the harness, and NO SINGLE WORD IS
