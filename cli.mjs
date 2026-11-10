@@ -72,7 +72,7 @@ import {
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { followCommits } from "./src/commitstream.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -89,7 +89,8 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
-import { readData } from "./src/readclient.mjs";
+import { readData, setLocalReads } from "./src/readclient.mjs";
+import { installSignalHandlers, isStopping, stopSignalName, stoppableSleep } from "./src/signals.mjs";
 import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
 import { mergeInProgress, mergeRefusal } from "./src/mergeguard.mjs";
@@ -153,6 +154,14 @@ const { config: CFG, source: CFG_SOURCE, defaultsSource: CFG_DEFAULTS_SOURCE } =
 // means the rig you read depends on which tree served the process; every surface now reports the absolute
 // path, so "which database did this answer come from" is answered by the output, not by memory.
 const DB_PATH = resolve(CFG.DURIG_DB ?? "./rig.sqlite");
+
+// THE SIGNAL SEAM (#314). Installed BEFORE any verb runs, so a Ctrl-C reaches the await the
+// process is actually sitting on - not just a flag nobody reads. Read verbs get a 1.5 s grace
+// then a hard exit; a resident daemon (`serve`, `run --watch`) keeps its own bounded drain, so
+// the global hard timer is set past that drain and cannot preempt it. (The `--local` flag is
+// consumed in the same block, at the bottom of this file, before dispatch.)
+const LOCAL_REQUESTED = process.argv.includes("--local");
+setLocalReads(LOCAL_REQUESTED);
 // Read commands must be able to tell "this rig is empty" apart from "you are
 // pointed at a database that did not exist a moment ago". Opening storage
 // creates the file on demand, so without this snapshot the default
@@ -253,8 +262,11 @@ function fail(error) {
     ok: false,
     error: process.env.DURIG_DEBUG ? (error?.stack ?? String(error)) : String(error?.message ?? error),
     ...(error?.code === undefined ? {} : { cause: error.code, ...(error?.db === undefined ? {} : { db: error.db }) }),
+    ...(error?.remedy ? { remedy: error.remedy } : {}),
   });
-  process.exit(1);
+  // 130 = 128 + SIGINT: "the user stopped this", which is the difference between a failure and
+  // an interruption, and the code a shell script can branch on (#314).
+  process.exit(isStopping() ? 130 : 1);
 }
 
 /** Whole of stdin as text, for `send --body-file -`. */
@@ -1806,12 +1818,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
   // here, not inside the try, because the finally removes the handlers and reports `stoppedBy`.
   const startedAt = Date.now();
   let stoppedBy = null;
-  let stopping = false;
-  const onSignal = () => {
-    stopping = true;
-  };
-  process.on("SIGINT", onSignal);
-  process.on("SIGTERM", onSignal);
+  // #314: the signal seam in src/signals.mjs owns the flag; this verb only names WHY it stopped.
   try {
     const maxPasses = watch ? Infinity : 200;
     let passes = 0;
@@ -1822,7 +1829,7 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
     // asserted: a pass that escalates nothing adds nothing.
     const escalations = [];
     for (;;) {
-      if (stopping) {
+      if (isStopping()) {
         stoppedBy = "signal";
         break;
       }
@@ -1879,12 +1886,14 @@ async function cmdRun({ watch = false, maxDurationMs = 0 } = {}) {
         }
         escalations.push(...escalated);
       }
-      if (watch) await new Promise((r) => setTimeout(r, 750));
+      if (watch) {
+        if (await stoppableSleep(750)) break; // a Ctrl-C ends the watch loop inside the cadence, not after it
+      }
     }
     out({ ok: true, command: "run", db: DB_PATH, passes, failedSeats: [...failedSeats], stoppedBy, escalated: escalations.length });
   } finally {
-    process.off("SIGINT", onSignal);
-    process.off("SIGTERM", onSignal);
+    // #314: no per-verb handler to remove here - src/signals.mjs owns the listeners for the
+    // whole process, and a verb that unregistered them would leave the process un-interruptable.
     await harness.close(BACKGROUND_CONTEXT);
     await probeStorage.close(BACKGROUND_CONTEXT);
   }
@@ -1934,7 +1943,7 @@ async function ensureBroker() {
     if (child.exitCode !== null) {
       return { started: false, reason: `broker exited (code ${child.exitCode}); see ${logPath}` };
     }
-    await new Promise((r) => setTimeout(r, 50));
+    await stoppableSleep(50);
   }
   return { started: false, reason: `broker did not report within 3s; see ${logPath}` };
 }
@@ -1988,7 +1997,9 @@ async function cmdPause(paused, { wait = false, reason = undefined } = {}) {
   }
 }
 
-/** Poll the broker's intent result file until it appears (the applied/refused outcome). */
+/** Poll the broker's intent result file until it appears (the applied/refused outcome).
+ * #314: a Ctrl-C returns here in one poll, and the report says which request was left in the
+ * spool — a mutating verb that dies silently leaves work the next pass will do anyway. */
 async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, pollMs = 100 } = {}) {
   const path = join(intentResultDir(dbPath), `${requestId}.json`);
   const deadline = Date.now() + timeoutMs;
@@ -1999,7 +2010,12 @@ async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, p
       // Not yet written (or mid-write); keep polling until the deadline.
     }
     if (Date.now() >= deadline) fail(`${requestId}: timed out waiting for the broker to apply the request`);
-    await new Promise((r) => setTimeout(r, pollMs));
+    if (await stoppableSleep(pollMs)) {
+      fail(
+        `${requestId}: interrupted (${stopSignalName()}) while the broker was applying it; ` +
+        `the request was spooled in ${intentInboxDir(dbPath)} and may still be applied by the broker's next drain`,
+        );
+    }
   }
 }
 
@@ -2039,7 +2055,7 @@ async function cmdStopBroker() {
   // broker exits at its own stop grace, so this only has to outlast that.
   const deadline = Date.now() + resolveStopGraceMs() + 5_000;
   while (Date.now() < deadline && pidAlive(state.pid)) {
-    await new Promise((r) => setTimeout(r, 100));
+    if (await stoppableSleep(100)) break; // the operator interrupted the wait; report the truth, don't keep polling
   }
   const stillAlive = pidAlive(state.pid);
   if (!stillAlive) {
@@ -2094,6 +2110,17 @@ function resolveStopGraceMs() {
   const n = Number(raw);
   return Number.isFinite(n) && n >= 0 ? n : STOP_GRACE_DEFAULT_MS;
 }
+
+// Install the signal seam here (not at the top of the file) because its grace is derived from
+// `resolveStopGraceMs`, and dispatch of every verb happens further down this file — so this is
+// still "before any verb runs". See src/signals.mjs.
+const FIRST_VERB = process.argv[2] ?? "";
+installSignalHandlers({
+  gracefulMs:
+    FIRST_VERB === "serve" || (FIRST_VERB === "run" && process.argv.includes("--watch"))
+      ? resolveStopGraceMs() + 3000
+      : 1500,
+});
 
 async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   if (stop) return cmdStopBroker();
@@ -2167,7 +2194,6 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
     }
   })();
   const startedAt = Date.now();
-  let stopping = false;
   let stopRequestedAt = null;
   // #2420 (operator ruling): a resident daemon must have a BOUNDED graceful stop with an
   // unconditional force fallback. `DURIG_STOP_GRACE_MS` is how long the broker may keep
@@ -2177,8 +2203,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
   const stopGraceMs = resolveStopGraceMs();
   let forceTimer = null;
   const onSignal = () => {
-    if (stopping) return;
-    stopping = true;
+    if (stopRequestedAt !== null) return;
     stopRequestedAt = Date.now();
     signal.raise(); // interrupt a resting wait, so a signal is not stuck behind the floor
     if (stopGraceMs > 0) {
@@ -2246,7 +2271,7 @@ async function cmdServe({ maxDurationMs = 0, stop = false } = {}) {
       },
       maxDurationMs,
       startedAt,
-      isStopping: () => stopping,
+      isStopping: isStopping,
       stopGraceMs,
       stopRequestedAt: () => stopRequestedAt,
       dbPath: DB_PATH,
@@ -2586,10 +2611,8 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
   const limit = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20;
   const interactive = Boolean(process.stdout.isTTY);
   const color = human && interactive && !process.env.NO_COLOR;
-  let stopping = false;
-  process.on("SIGINT", () => {
-    stopping = true;
-  });
+  // #314: src/signals.mjs owns the stop flag; this verb checks it on each poll instead of
+  // registering its own listener.
   const asJson = (entry) => ({
     id: entry.id,
     kind: entry.kind,
@@ -2712,8 +2735,8 @@ async function cmdLog(seatName, limitStr, { follow = false, human = false, full 
 
     let lastId = history.reduce((max, e) => Math.max(max, e.id ?? 0), 0);
     await pollPartial(seat.conversationId);
-    while (!stopping) {
-      await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
+    while (!isStopping()) {
+      if (await stoppableSleep(WATCH_POLL_MS)) break;
       // Clear the streaming block before committed output so a committed turn can
       // never end up above the partial it supersedes on screen.
       if (streamingCount > 0) {
@@ -2777,10 +2800,7 @@ const SERVE_SEAT_COOLDOWN_MS = 30_000;
 // committed state, so a late/reconnecting subscriber resumes from `--since`
 // rather than replaying. One JSON event per line; diagnostics on stderr.
 async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
-  let stopping = false;
-  process.on("SIGINT", () => {
-    stopping = true;
-  });
+  // #314: src/signals.mjs owns the stop flag.
   let cursor = Number.isFinite(sinceSeq) ? sinceSeq : 0;
   {
     do {
@@ -2791,18 +2811,15 @@ async function cmdEvents({ sinceSeq = 0, follow = false } = {}) {
       // Advance the cursor past what we emitted, so a --follow poll never
       // replays the previous line and a reconnect resumes from `nextSeq`.
       if (events.length) cursor = Math.max(cursor, nextSeq);
-      if (!follow || stopping) break;
-      await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
-    } while (!stopping);
+      if (!follow || isStopping()) break;
+      if (await stoppableSleep(WATCH_POLL_MS)) break;
+    } while (!isStopping());
   }
 }
 
 async function cmdWatch(once, human) {
   let seq = 0;
-  let stopping = false;
-  process.on("SIGINT", () => {
-    stopping = true;
-  });
+  // #314: src/signals.mjs owns the stop flag.
   const interactive = Boolean(process.stdout.isTTY);
   const screen = human
     ? createWatchScreen({
@@ -2845,8 +2862,8 @@ async function cmdWatch(once, human) {
   let last = JSON.stringify(initial);
   await render(initial);
   if (once) return;
-  while (!stopping) {
-    await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
+  while (!isStopping()) {
+    if (await stoppableSleep(WATCH_POLL_MS)) break;
     let health;
     try {
       health = await readData(DB_PATH, "health", healthParams(), (s) =>
@@ -3448,7 +3465,10 @@ usages:
   node cli.mjs format [--check] [-- <paths>]   format explicit files with the pinned prettier (--check = gate, no write)
 `;
 
-const [, , cmd, ...rest] = process.argv;
+const [, , cmd, ...rawRest] = process.argv;
+// `--local` was already read above; drop it so a verb's positional parsing never sees a flag
+// it does not know.
+const rest = rawRest.filter((a) => a !== "--local");
 
 // Verbs that MUTATE the store or the working tree. Read verbs are deliberately absent: a
 // seat must be able to DIAGNOSE a stuck merge, not be locked out of its own rig.

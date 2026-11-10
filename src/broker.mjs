@@ -363,7 +363,7 @@ export function readIntentError(dbPath, requestId) {
 export async function awaitIntentResult(
   dbPath,
   requestId,
-  { timeoutMs = 120000, intervalMs = 200, now = Date.now, sleep } = {},
+  { timeoutMs = 120000, intervalMs = 200, now = Date.now, sleep, signal = null } = {},
 ) {
   const wait = sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const deadline = now() + timeoutMs;
@@ -372,6 +372,10 @@ export async function awaitIntentResult(
     if (result) return { ok: true, result };
     const error = readIntentError(dbPath, requestId);
     if (error) return { ok: false, reason: error };
+    // INTERRUPTIBILITY: a wait that only checks the clock is a wait the operator cannot end.
+    // `signal` is the AbortController from src/signals.mjs; on Ctrl-C this returns in one poll
+    // (200 ms) instead of running out the full bound.
+    if (signal?.aborted) return { ok: false, reason: `interrupted by ${signal.reason ?? "SIGINT"}` };
     if (now() >= deadline) return { ok: false, reason: "timed out awaiting the broker's result" };
     await wait(intervalMs);
   }
@@ -759,23 +763,50 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
  * requests whose `requestId` already had a recorded result (applied ONCE, not again).
  */
 export async function drainIntentInbox(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage } = {}) {
+  return drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage });
+}
+
+/** Unlink a spool file, tolerating the race where a concurrent drain consumed it first.
+ * The out-of-band read drain and a pass drain can reach the same inbox in the same second;
+ * an unguarded unlinkSync would throw ENOENT and dead-letter an intent that was DELIVERED.
+ */
+function consumeIntentFile(file) {
+  try {
+    unlinkSync(file);
+    return true;
+  } catch (err) {
+    if (err?.code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage } = {}) {
   if (!dbPath) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const files = readIntentFiles(dbPath);
   if (files.length === 0) return { delivered: 0, deadLettered: 0, duplicates: 0 };
-  const seatsDoc = await harness.snapshot(Seats, undefined, context);
-  const seats = seatsDoc?.seats ?? {};
+  // Parse the spool BEFORE touching storage, so an all-read drain never depends on the
+  // harness handle at all. That is the point of the out-of-band drain (#314 / #2321): it
+  // must answer while the harness's own connection is stuck mid-call.
+  const parsed = [];
   let delivered = 0;
   let deadLettered = 0;
   let duplicates = 0;
   for (const file of files) {
-    let request;
     try {
-      request = JSON.parse(readFileSync(file, "utf8"));
+      parsed.push({ file, request: JSON.parse(readFileSync(file, "utf8")) });
     } catch (err) {
       deadLetterIntent(dbPath, file, `unreadable intent: ${err?.message ?? err}`);
       deadLettered += 1;
-      continue;
     }
+  }
+  // The seat roster is only needed by MUTATING ops (message/configure/stop/reset/compact).
+  // An all-read spool skips it - one fewer call that can hang on a wedged handle. The snapshot is
+  // taken OUTSIDE the per-intent try on purpose: a harness that cannot answer must make the whole
+  // drain throw, so the wake loop reaches its recovery branch instead of silently dead-lettering
+  // intents it never had a chance to apply (pinned by demo/broker-hotloop-bound.test.mjs).
+  const needsSeats = parsed.some(({ request }) => requestOp(request) !== "read");
+  const seats = needsSeats ? ((await harness.snapshot(Seats, undefined, context))?.seats ?? {}) : {};
+  for (const { file, request } of parsed) {
     const op = requestOp(request);
     const requestId = request.requestId ?? null;
 
@@ -783,8 +814,7 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
     // an earlier pass (its file survived a crash before the unlink). Consume the file
     // WITHOUT applying again — a duplicate requestId applies ONCE.
     if (readIntentResult(dbPath, requestId)) {
-      unlinkSync(file);
-      duplicates += 1;
+      if (consumeIntentFile(file)) duplicates += 1;
       continue;
     }
     if (!SPOOL_OPS.includes(op)) {
@@ -826,8 +856,7 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
         writeIntentResult(dbPath, requestId, { requestId, op, ok: true, result, at: new Date().toISOString() });
       }
       clearRetryAttempt(file);
-      unlinkSync(file);
-      delivered += 1;
+      if (consumeIntentFile(file)) delivered += 1;
     } catch (err) {
       const reason = String(err?.message ?? err);
       // A CLOSED handle is transient: the loop's reopen replaces it. Do not consume the intent —
@@ -1634,6 +1663,12 @@ export async function runWakeLoop({
   // Injected so a demo can exercise the heartbeat/progress legs exactly instead of waiting 20 s.
   // Same pattern as `now` and `random` above (#2483).
   heartbeatMs = BROKER_HEARTBEAT_MS,
+  // #314 / #2321: how often the broker sweeps the spool for READ intents it can answer WITHOUT
+  // a pass, and how long that sweep may run before it is abandoned as stuck. A read served only
+  // at pass start means an operator's `status` waits behind whatever the wake loop is stuck in -
+  // the 120 s of silence this removes.
+  readDrainMs = 1_000,
+  readDrainBoundMs = 10_000,
 }) {
   const failedSeats = new Set();
   const escalations = [];
@@ -1720,6 +1755,13 @@ export async function runWakeLoop({
   let heartbeat = null;
   let lastPassAt = null;
   let stateSeed = null; // { pid, since, runToken } — the identity the heartbeat/progress rewrites keep
+  // A pass is IN FLIGHT from the moment it starts until it returns; the out-of-band read drain
+  // below uses this to tell "the loop is resting" from "the loop is wedged", and the log line it
+  // emits names a wedged pass instead of leaving the operator to infer it from a frozen PASS.
+  let passInFlight = false;
+  let passInFlightStartAt = 0;
+  let readDrainInFlight = false;
+  let lastStuckLogAt = 0;
   if (dbPath) {
     const state = readBrokerState(dbPath);
     if (state && state.pid === process.pid) {
@@ -1739,6 +1781,62 @@ export async function runWakeLoop({
       }, heartbeatMs);
       if (typeof heartbeat.unref === "function") heartbeat.unref();
     }
+  }
+  // THE OUT-OF-BAND READ DRAIN (#314). Read intents used to be served only at the START of a
+  // pass (drivePass -> drainIntentInbox) or in the idle branch (#2321). Both live inside the
+  // wake loop's own iteration, so a loop parked inside a long await - the observed wedge: fresh
+  // heartbeat, frozen PASS, an inbox of unread `read` intents - answers nothing, and every
+  // operator verb times out at 120 s. The heartbeat interval proves the EVENT loop is turning
+  // even when the wake loop is not, so a timer here can serve reads regardless of where the
+  // wake loop is stuck.
+  //
+  // It is guarded three ways: (1) only when EVERY pending intent is a `read` - a mutating op
+  // still needs the real pass, and delivering it here would bypass the wake scheduling;
+  // (2) one drain at a time, so two drains never race the same spool file;
+  // (3) bounded - if the drain itself wedges, it is logged and abandoned rather than piling up.
+  // Reads are served from `probeStorage` (the broker's SECOND connection), not the harness's
+  // own storage, precisely because the harness handle is the thing that may be stuck.
+  let readDrainTimer = null;
+  if (dbPath && readDrainMs > 0) {
+    readDrainTimer = setInterval(() => {
+      if (isStopping() || readDrainInFlight) return;
+      const pending = readIntentFiles(dbPath);
+      if (pending.length === 0) return;
+      if (passInFlight && now() - passInFlightStartAt >= PASS_STUCK_LOG_MS && now() - lastStuckLogAt >= PASS_STUCK_LOG_MS) {
+        lastStuckLogAt = now();
+        logBrokerLine(dbPath, `PASS-STUCK ms=${now() - passInFlightStartAt} pending-reads=${pending.length}`);
+      }
+      if (!onlyReadIntents(dbPath)) return;
+      readDrainInFlight = true;
+      const started = now();
+      const bound = new Promise((resolve) => {
+        const t = setTimeout(() => resolve(READ_DRAIN_BOUND), readDrainBoundMs);
+        if (typeof t.unref === "function") t.unref();
+      });
+      Promise.race([
+        drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: p }),
+        bound,
+      ])
+        .then((outcome) => {
+          if (outcome === READ_DRAIN_BOUND) {
+            logBrokerLine(dbPath, `READ-DRAIN-STUCK bound=${readDrainBoundMs}ms pending=${pending.length}`);
+            onDiagnostic?.({ kind: "read-drain-stuck", boundMs: readDrainBoundMs, pending: pending.length });
+          } else if (outcome.delivered > 0 || outcome.deadLettered > 0 || outcome.duplicates > 0) {
+            logBrokerLine(
+              dbPath,
+              `READ-DRAIN served=${outcome.delivered} dead=${outcome.deadLettered} dup=${outcome.duplicates} ms=${now() - started}`,
+            );
+          }
+        })
+        .catch((err) => {
+          logBrokerLine(dbPath, `READ-DRAIN-FAILED ${String(err?.message ?? err)}`);
+          onDiagnostic?.({ kind: "read-drain-failed", error: String(err?.message ?? err) });
+        })
+        .finally(() => {
+          readDrainInFlight = false;
+        });
+    }, readDrainMs);
+    if (typeof readDrainTimer.unref === "function") readDrainTimer.unref();
   }
   for (;;) {
     // A raised SIGNAL (SIGINT/SIGTERM) stops at once. A `.stop` FILE is deliberately NOT
@@ -1855,6 +1953,8 @@ export async function runWakeLoop({
     }
     scheduler.beginPass(now());
     const passStartedAt = now();
+    passInFlight = true;
+    passInFlightStartAt = passStartedAt;
     const wokeThisPass = [];
     const suppressedThisPass = new Set();
     // Seats whose wake failed THIS pass (distinct from the cumulative `failedSeats`,
@@ -2004,6 +2104,7 @@ export async function runWakeLoop({
         }
       }
     } finally {
+      passInFlight = false;
       scheduler.endPass();
     }
     // A successful reopen re-arms the loop so recovery is IMMEDIATE, not at the next scheduled
@@ -2105,6 +2206,7 @@ export async function runWakeLoop({
     await h.waitForIdle(context);
   }
   if (heartbeat) clearInterval(heartbeat);
+  if (readDrainTimer) clearInterval(readDrainTimer);
   // Close the audit opened by START: the reason the broker stopped (a `.stop` request, a
   // bound, or a signal) survives the process here instead of only on stdout.
   logBrokerLine(dbPath, `EXIT pid=${process.pid} reason=${stoppedBy ?? "unknown"} passes=${passes}`);
@@ -2249,6 +2351,12 @@ export function brokerAlive(state, { now = Date.now() } = {}) {
 /** A pass may legitimately run as long as the model stream timeout; this much beyond it is
  * still normal (pass startup, the drain), so PROGRESS is judged stale only past the sum. */
 export const BROKER_PROGRESS_MARGIN_MS = 60_000;
+/** A pass that has been running this long while read intents sit unread is LOGGED as stuck
+ * (#314). The log is the only post-mortem surface for a resident broker (D46), so the wedge has
+ * to be nameable without attaching a debugger. */
+export const PASS_STUCK_LOG_MS = 30_000;
+/** Sentinel for the out-of-band read drain's bound: the drain never returns this value. */
+const READ_DRAIN_BOUND = Symbol("read-drain-bound");
 /** The pass bound assumed when no `DURIG_STREAM_TIMEOUT_MS` is configured (a long call is
  * minutes, not hours), so a rig with no explicit timeout still gets a progress check. */
 export const DEFAULT_PASS_TIMEOUT_MS = 300_000;

@@ -1,8 +1,18 @@
 {
   "note": "Functional-area partition of the suite (#1558) plus the suite MEMBERSHIP itself (#6132): `suiteRoots` declares which directories the gate considers suite members, and `demo/test-areas.test.mjs` is the check rule that fires when a file in those roots is unmapped. A root's `exclude` names, in the open, the files in that root the gate does NOT run — tools/what-to-test.mjs is the selector, not a test, and demo/land-changed-suite.test.mjs guards it; an exclusion that no longer exists is itself an error. Areas roughly follow docs/FEATURES.md sections; `toolchain` is the devtools-owned upstream-pin/format surface. Every test file the roots discover must appear under exactly one area, and every listed file must exist. Run one area with `node scripts/test.mjs --area <name>`; the FULL suite (`node scripts/test.mjs --all`) is the pre-landing/QA gate — an area subset is NEVER sufficient evidence to land.",
   "suiteRoots": [
-    { "dir": "demo", "glob": "*.test.mjs", "exclude": [] },
-    { "dir": "tools", "glob": "*-test.mjs", "exclude": ["what-to-test.mjs"] }
+    {
+      "dir": "demo",
+      "glob": "*.test.mjs",
+      "exclude": []
+    },
+    {
+      "dir": "tools",
+      "glob": "*-test.mjs",
+      "exclude": [
+        "what-to-test.mjs"
+      ]
+    }
   ],
   "areas": {
     "rig": [
@@ -115,6 +125,7 @@
       "demo/broker-wakepath.test.mjs",
       "demo/broker-worktree-sweep.test.mjs",
       "demo/broker.test.mjs",
+      "demo/cli-sigint-exits.test.mjs",
       "demo/cooldown-skip-line.test.mjs",
       "demo/degeneration-duration.test.mjs",
       "demo/degeneration-text.test.mjs",
@@ -132,9 +143,15 @@
       "demo/local-reset.test.mjs",
       "demo/malformedcall.test.mjs",
       "demo/parked-wake-dedup.test.mjs",
-      "demo/provider-auth-cause.test.mjs",
       "demo/pause-wait-bound.test.mjs",
       "demo/pause.test.mjs",
+      "demo/provider-auth-cause.test.mjs",
+      "demo/queue-compat-args.test.mjs",
+      "demo/queue-filter-attention.test.mjs",
+      "demo/queue-held-gates.test.mjs",
+      "demo/queue-row-read.test.mjs",
+      "demo/read-drain-out-of-band.test.mjs",
+      "demo/read-intent-interrupt.test.mjs",
       "demo/readboundary-corrupt-live.test.mjs",
       "demo/scheduler.test.mjs",
       "demo/spool-gc.test.mjs",
@@ -145,11 +162,7 @@
       "demo/supervisor.test.mjs",
       "demo/wake-reason.test.mjs",
       "demo/wake-suppression-trace.test.mjs",
-      "demo/wake-trace-wiring.test.mjs",
-      "demo/queue-row-read.test.mjs",
-      "demo/queue-compat-args.test.mjs",
-      "demo/queue-filter-attention.test.mjs",
-      "demo/queue-held-gates.test.mjs"
+      "demo/wake-trace-wiring.test.mjs"
     ],
     "worktree": [
       "demo/complete-teardown-root.test.mjs",
@@ -261,8 +274,9 @@
       "demo/context-measure.test.mjs",
       "demo/read-no-create-store.test.mjs",
       "demo/readapi-activity.test.mjs",
-      "demo/status-view-bound.test.mjs",
       "demo/readapi.test.mjs",
+      "demo/readonly-store-parity.test.mjs",
+      "demo/status-view-bound.test.mjs",
       "demo/viewmodel.test.mjs"
     ],
     "check": [
