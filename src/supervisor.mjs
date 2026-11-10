@@ -14,7 +14,7 @@
 // escalation lives here. `run --watch` runs this as a pass (bounded, idempotent).
 
 import { REPEATED_FAILURE_STREAK } from "./attention.mjs";
-import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed } from "./causes.mjs";
+import { SPEND_CAUSE, isProviderAuthStopMessage, isSpendStopMessage, spendCapNamed } from "./causes.mjs";
 import { DEFERRED_TO_HUMAN, RigQueue, isTerminalItem } from "./rig.mjs";
 
 /** How long a question parked on another SEAT waits before the human is escalated. */
@@ -50,10 +50,17 @@ function deferredAgeMs(item, nowMs) {
  *     that was supposed to answer is not, so it is escalated to the human.
  *
  * A THIRD, added by #5047, escalates on the FIRST failure rather than the third: a run stopped by the rig's own
- * spend cap. Waiting for a streak here is not caution, it is a budget — each attempt costs money and meets the
+ * spend cap. Waiting for a streak here is not caution, it is a budget - each attempt costs money and meets the
  * same cap, so the streak is guaranteed and the money is spent getting there. The cause is read from the run's
  * error message (`errorByConv`), because the submission record only says `model_error`, and that category is
  * exactly what hides the distinction.
+ *
+ * A FOURTH class is deliberately NOT escalated, added by #6081: a provider that refuses the CREDENTIAL. Measured
+ * on this host, one unset `DURIG_LOCAL_API_KEY` in the broker's environment turned 171 queue rows into human
+ * escalations - the supervisor parked on a person a fault that a person fixes by setting a variable. The seat is
+ * surfaced by `src/attention.mjs` instead and the queue is left alone: the item stays where it is, unescalated,
+ * until the environment is fixed. Genuine repeated seat failure still escalates at the streak - that path is
+ * unchanged.
  * Idempotent by construction: an item already owned by the human (`deferredTo === "human"`) is
  * never re-planned, so repeated passes are harmless.
  *
@@ -75,6 +82,10 @@ export function planEscalations({
     const streak = failureStreakByConv?.get(seat.conversationId) ?? 0;
     const stopText = errorByConv?.get(seat.conversationId);
     const spendStopped = isSpendStopMessage(stopText);
+    // #6081: an environment fault is not a seat that cannot progress. Surface it in attention, escalate nothing:
+    // a human has no decision to make about a variable the broker process never had, and parking 171 rows on a
+    // person is what this rule replaces.
+    if (isProviderAuthStopMessage(stopText)) continue;
     if (!spendStopped && streak < repeatedFailureStreak) continue;
     // The item a human can actually decide on: the seat's oldest non-terminal one. A `deferred`
     // item is excluded here — the queue scan below covers the ones parked on a seat.

@@ -22,6 +22,9 @@
 //   different meaning: the next attempt costs the same money and meets the same cap. The
 //   notice names the cap and says who may raise it, because the operator's reflex would
 //   otherwise be "retry it".
+// - "provider_auth": the provider REFUSED THE CREDENTIAL (#6081). Identical visible shape - an unanswered run,
+//   again and again - opposite meaning: the operator sets a variable, and a human has nothing to decide. The
+//   notice names the credential variable the rig reads and says nothing is escalated.
 // - "context_over_window": ONE TURN moved more tokens than the seat's window allows (#5049,
 //   ROADMAP 208). The fraction already existed in `status.context` and NOTHING consumed it, so a
 //   seat reading 9.96x its window was displayed and dropped. The notice carries the denominator's
@@ -44,8 +47,14 @@ export const STRANDED_ADMITTED_MS = 30_000;
  */
 export const REPEATED_FAILURE_STREAK = 3;
 
-import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed, CONTEXT_OVER_WINDOW_CAUSE } from "./causes.mjs";
+import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed, PROVIDER_AUTH_CAUSE, isProviderAuthStopMessage, CONTEXT_OVER_WINDOW_CAUSE } from "./causes.mjs";
 import { contextOverWindow } from "./context.mjs";
+import { LOCAL_ENV_PREFIXES } from "./providers/local.mjs";
+
+/** The credential variables the rig reads, derived from the prefixes that actually REGISTER a provider
+ * (`src/providers/local.mjs`), so an operator-facing remedy can never name a variable the loader would
+ * reject (#6081). */
+const PROVIDER_KEY_ENVS = LOCAL_ENV_PREFIXES.map((prefix) => `${prefix}API_KEY`);
 
 /** Thousands separator for token counts in operator text — 244751 and 244,751 are different reads. */
 function tokens(n) {
@@ -412,6 +421,20 @@ export function computeAttention(
 					`not a model fault and not retried - the item is parked. Money record: .spike/gate/spend.jsonl; ` +
 					`only the OPERATOR raises a cap, deliberately and for a named run (D193)`,
 			});
+		} else if (isProviderAuthStopMessage(stopText)) {
+			// #6081: the credential, not the seat. Reported INSTEAD of the streak notice for the same reason the cap
+			// stop is - the streak is one cause wearing three symptoms - and it does NOT escalate: a human has no
+			// decision to make about a variable the broker process never had.
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: PROVIDER_AUTH_CAUSE,
+				detail:
+					`the provider refused the CREDENTIAL (${summarizeError(stopText)}); this is ENVIRONMENTAL, not a seat that cannot make progress. ` +
+					`The rig reads the credential from the process that runs the broker: ${PROVIDER_KEY_ENVS.join(", ")}. ` +
+					`Set the one this seat's provider uses there and re-wake - see docs/runbooks/local-provider-down.md. ` +
+					`Nothing is escalated to a human and the seat is not reset: every retry meets the same refusal.`,
+			});
 		} else if (streak >= repeatedFailureStreak) {
 			notices.push({
 				scope: "seat",
@@ -459,7 +482,9 @@ export function computeAttention(
 			}
 		}
 		const latest = latestByConv.get(seat.conversationId);
-		if (latest?.status === "unanswered" && !isSpendStopMessage(stopText)) {
+		// One notice per cause: the credential refusal above already names the stop, so the generic failed-run
+		// line would report the same event twice under two classes (#6081, same rule as the cap stop).
+		if (latest?.status === "unanswered" && !isSpendStopMessage(stopText) && !isProviderAuthStopMessage(stopText)) {
 			notices.push({
 				scope: "seat",
 				seat: seat.name,
