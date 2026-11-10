@@ -9,6 +9,9 @@ These two instruments are kept here because `.spike/` is gitignored and is wiped
 probe is lost (the rule is `docs/SELFDEV.md` pitfall 133; promotion into `tools/` still needs a row from `lead`).
 Both are **read-only, no model spend, broker-down safe**.
 
+> **No longer in this directory:** `compaction-acceptance.mjs` was promoted to `tools/compaction-acceptance.mjs`
+> by #6131. Cite the new path — a cite to the old one resolves to nothing.
+
 ## 1. `compaction-policy-probe.mjs` — the override never reaches the harness
 
 ```bash

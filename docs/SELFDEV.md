@@ -3771,7 +3771,11 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
 223. **A snapshot with in-flight tasks makes a mocked driver hang.** `Harness.waitForTask`/`run.wait` on a store
     copy that still carries running seat tasks never settles, and node exits **13** (unsettled top-level await).
     Bound every wait (`Promise.race` with a timeout) rather than stopping the broker to make the snapshot quiet;
-    `.spike/compaction-acceptance.mjs` now does this and runs clean with a live broker resident.
+    `tools/compaction-acceptance.mjs` does this, and bounding is what turns a hang (node exit **13**) into a report.
+    But bounding does not make the tranche reach its target: measured 2026-11-10 against the live store with the
+    broker resident, only **70 of 100** compaction tasks settled, ~50 growth turns hit the 20 s bound, wall clock
+    **1809.7 s**, exit **1**. A live-store acceptance number needs the broker stopped; otherwise use the fixture
+    the suite builds (`demo/compaction-acceptance-gate.test.mjs`).
 224. **`serve --stop` on a past-deadline broker returns `stopped: false` — that is not a store fault.** The CLI
     refuses a forced kill; `kill -INT <pid>` ends it cleanly and logs `EXIT … reason=deadline passes=-`, which is
     the CLI-side literal (ROADMAP 328), not the run's pass count. `cli.mjs status`/`queue` timing out while a direct
@@ -3786,10 +3790,15 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     stranded submissions, exit 0) → restart with the key exported; pass 1 woke 9 seats and the spool drained 4 → 0.
     No row owns this signature yet (registered as a candidate in the pm intent 2026-11-10).
 226. **An acceptance instrument living in gitignored `.spike/` is lost the moment the scratch is swept.** The
-    100-compaction driver and its negative control are now in the tracked tree at
-    `docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs` (rows #6128/#6131 still ask devtools to
-    promote it to `tools/`). Note the import lesson when moving a probe: a static `../src/…` import only resolves
-    from one directory depth — walk up to the repo root and import with `pathToFileURL`.
+    100-compaction driver and its negative control are now `tools/compaction-acceptance.mjs` (#6131 promoted it out
+    of `docs/evidence/2026-11-08-context-window/`, where the `.spike/` copy had been preserved). It prints its own
+    `PROVENANCE` line — tree sha, branch, uncommitted-path count, node, pi-durable version and whether that version
+    came from the built pin or the lockfile — and names the snapshot file it counted, because "0 truncated" against
+    an empty snapshot is not a measurement: `max(id)` on an empty store is NULL and `id > NULL` matches nothing, so
+    the driver reported 0 markers over a copy that held 48. It also carries an **inverse control**
+    (`--mode control --stopReason stop`) that exits 1, so the instrument can be shown to be able to fail. Note the
+    import lesson when moving a probe: a static `../src/…` import only resolves from one directory depth — walk up
+    to the repo root and import with `pathToFileURL`.
 
 ## Operational pitfalls (delegate pi-pin pass, 2026-11-10 — numbered 227-231, continuing from 226; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 

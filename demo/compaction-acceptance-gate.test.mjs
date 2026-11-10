@@ -3,7 +3,7 @@
 //
 // WHY THIS EXISTS: `src/testareas.mjs` discovers only `demo/*.test.mjs`, so an instrument that lives in
 // docs/evidence/ is invisible to every seat's `check` no matter how good its measurement is. The
-// instrument (docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs) drives compactions on a
+// instrument (tools/compaction-acceptance.mjs) drives compactions on a
 // SNAPSHOT copy of a store and counts what the harness actually wrote. This wrapper runs it, carries its
 // exit code, and asserts BOTH halves of the claim.
 //
@@ -34,7 +34,7 @@ import { join } from "node:path";
 import { areaNames, discoverTests, filesForArea, readManifest, selectTests, validateManifest } from "../src/testareas.mjs";
 
 const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
-const INSTRUMENT = "docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs";
+const INSTRUMENT = "tools/compaction-acceptance.mjs";
 const SELF = "demo/compaction-acceptance-gate.test.mjs";
 const dir = mkdtempSync(join(tmpdir(), "durig-acceptance-"));
 

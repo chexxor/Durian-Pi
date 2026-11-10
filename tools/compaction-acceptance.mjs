@@ -1,31 +1,55 @@
-// .spike/compaction-acceptance.mjs — the N18 acceptance measurement (ROADMAP 331:
-// "truncated summaries drop to zero over 100 compactions").
+// tools/compaction-acceptance.mjs — the N18 acceptance measurement (ROADMAP 331: "truncated summaries
+// drop to zero over 100 compactions").
 //
 // WHY this exists: the milestone gate counts NATURAL compactions in the live store, and only 1 has
 // happened since the continuity extension was armed. 100 natural seat compactions cannot happen in one
-// session, so this driver drives 100 compactions on a SNAPSHOT COPY of the live store and counts the
-// outcomes the harness actually wrote. The live store is never opened for write.
+// session, so this driver drives 100 compactions on a SNAPSHOT COPY of a store and counts the outcomes
+// the harness actually wrote. The store it is pointed at is never opened for write - the copy is made
+// with SQLite's own backup API.
 //
-// Tranches (no key, no network, no spend):
+// PROVENANCE OF THIS FILE: written in gitignored `.spike/` during the 2026-11-09/10 delegate session, then
+// preserved in the tracked tree, then promoted to `tools/` by #6131. An instrument that lives only in
+// scratch is not evidence: the next seat cannot re-run it (docs/SELFDEV.md pitfall 226).
+//
+// THIS IS AN OPERATOR/DELEGATE INSTRUMENT, NOT A SUITE MEMBER and NOT a `check` rule. Its exit code is
+// not the pre-landing gate. The gate is `demo/compaction-acceptance-gate.test.mjs`, which runs this file
+// against a fixture store the suite builds; the recurring numbers come from that demo, and this file is
+// what you run when you want the measurement against a real store.
+//
+// Tranches (no key, no network, no spend - the "model" is the in-process faux provider):
 //   --mode armed   extensions/continuity.mjs installed: beforeCompact supplies the summary, so pi-durable
 //                  never builds a summariser request (dist/harness/compaction.js:82-89 -> place() :374).
-//   --mode control no extension: the harness's own summariser runs against a faux provider whose reply is
+//   --mode control no extension: the harness's own summariser runs against the faux provider whose reply is
 //                  canned. --stopReason length reproduces the harness's own truncation branch
-//                  (dist/harness/compaction.js:303) so the instrument is proven able to count a non-zero.
+//                  (dist/harness/compaction.js:303) so the instrument is PROVEN able to count a non-zero.
+//   --mode control --stopReason stop  the INVERSE control: nothing truncates, so the verdict is FAIL and the
+//                  exit is 1. Run it: an acceptance run with no way to fail is a rubber stamp.
 //
-// Run: node docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs --target 100
-//      node docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs --target 12 --mode control --stopReason length
+// Run (in order - the second command reads the snapshot the first one wrote, because a brand-new seat
+// conversation has no cut to summarise and a 100-compaction run against it reports 0 truncated while
+// placing nothing at all):
+//   node tools/compaction-acceptance.mjs --db ./selfdev.sqlite --copyDir .spike/acceptance-seed --target 120 --mode armed
+//   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance --target 100 --mode armed
+//   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-ctl --target 12 --mode control --stopReason length
+//   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-inv --target 12 --mode control --stopReason stop   # exits 1, by design
 //
-// PROVENANCE: written in gitignored `.spike/` during the 2026-11-09/10 delegate session and preserved here
-// so the measurement survives the next session (queue rows #6128/#6131 ask devtools to promote it into
-// `tools/`; an unpromoted probe in `.spike/` is deleted with the scratch). Read-only against the live store:
-// the snapshot is made with SQLite's own backup API.
 // Exit 0 when the armed tranche placed >= target compactions with 0 truncated summaries, or when the
-// control tranche reproduced the truncation it is meant to reproduce.
+// control tranche reproduced the truncation it is meant to reproduce. Everything printed names the TREE
+// and the STORE SNAPSHOT it counted, because a number without its tree is not a measurement.
+//
+// MEASURED, this tree (#6131, branch item-6131, pi-durable 1.5.1 built-pin, node v24.22.1, Linux):
+//   seed+armed fixture  -> exit 0, 100 tasks, 100 summaries placed, 0 truncated, 0 summariser requests, 1.4 s
+//   negative control    -> exit 0, 9 truncated == 9 summariser requests, 0.4 s
+//   inverse control     -> exit 1, 0 truncated               <- the instrument can fail
+//   LIVE store, broker resident -> exit 1: only 70 of 100 compaction tasks settled, ~50 growth turns hit the
+//   20 s bound, 1809.7 s wall clock. That is not a store fault: a snapshot taken while a broker is live
+//   carries conversations with in-flight tasks (docs/SELFDEV.md pitfall 223). A live-store tranche needs
+//   the broker stopped, and the number it produces is not comparable to the fixture number.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
@@ -57,6 +81,26 @@ const COPY_DB = join(COPY_DIR, "acceptance-snapshot.sqlite");
 
 const t0 = Date.now();
 const secs = () => ((Date.now() - t0) / 1000).toFixed(1);
+
+/* ---- 0. PROVENANCE: name the tree and the snapshot BEFORE any number is printed ---- */
+const git = (...a) => {
+	try {
+		return execFileSync("git", ["-c", "safe.directory=*", ...a], { encoding: "utf8" }).trim();
+	} catch {
+		return "unknown";
+	}
+};
+const TREE = git("rev-parse", "HEAD");
+const BRANCH = git("rev-parse", "--abbrev-ref", "HEAD");
+const dirtyPaths = git("status", "--porcelain").split("\n").filter((l) => l.trim()).length;
+const pkgDir = realpathSync(join(ROOT, "node_modules", "@earendil-works", "pi-durable"));
+const dependencySet = pkgDir.includes(join("vendor", "pi-main")) ? "built-pin" : "lockfile";
+const piDurableVersion = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")).version;
+console.log(
+	`PROVENANCE tree=${TREE.slice(0, 12)} branch=${BRANCH} uncommittedPaths=${dirtyPaths} node=${process.version} host=${process.platform} ${os.release()} pi-durable=${piDurableVersion} dependencySet=${dependencySet}`,
+);
+console.log(`store read (NEVER opened for write): ${LIVE_DB}`);
+console.log(`snapshot the numbers are counted from: ${COPY_DB}`);
 
 /* ---- 1. snapshot: the live store is read through SQLite's own backup API, never opened for write ---- */
 mkdirSync(COPY_DIR, { recursive: true });
@@ -196,5 +240,5 @@ console.log(`  wall clock: ${secs()} s`);
 for (const sample of samples) console.log(`  sample: ${sample}`);
 const truncated = during.truncated ?? 0;
 const ok = MODE === "armed" ? during.n >= TARGET && truncated === 0 : truncated > 0;
-console.log(`VERDICT ${ok ? "PASS" : "FAIL"}`);
+console.log(`VERDICT ${ok ? "PASS" : "FAIL"} (tree ${TREE.slice(0, 12)}, snapshot ${COPY_DB}, mode ${MODE}, target ${TARGET})`);
 process.exit(ok ? 0 : 1);
