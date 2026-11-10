@@ -6,9 +6,13 @@ utilizing pi-durable."*
 
 This file is the **delta and the accommodation map**, the successor to
 [`docs/PI-UPGRADE-DELTA-2026-11-04.md`](../PI-UPGRADE-DELTA-2026-11-04.md). Decomposition, sequencing and routing
-are the team's; the delegate ran the move, measured it, and **reverted it**. **Verdict: the rig stays on the
-validated pin (`2ec55d80`, built as pi-durable 1.3.0, suite 278/280 in 59.7 s) until the symbol migration in
-ROADMAP **353** lands.** The procedure is `docs/runbooks/pi-pin-update.md`; the stop rule it cites — "a pin bump
+are the team's; the delegate ran the move, measured it, and **reverted it** in the first window.
+
+**STATUS NOW (same day, second window): the pin is landed.** `pi-main.pin.json` pins tag **`v1.5.1`**
+(`dd30101cfc5b0609411dd80b6f93adbc14db14cf`), the symbol migration is in the tree at commit **`d3dd1300`**, and
+`node scripts/test.mjs --all --jobs 8` reports **280/280 in 47.6 s** on this box. Sections 1–5 below are the
+first window's measurement, kept verbatim because the numbers are still true of the gap they measured; **section 8
+is what actually landed and how each red was closed**. Nothing is pushed — the operator holds that grant. The procedure is `docs/runbooks/pi-pin-update.md`; the stop rule it cites — "a pin bump
 that leaves `documentState`/`viewState`/`AgentEvent*`/pi-ai's `Type`/`checkpointWhen` un-migrated is a half-done
 change" — is exactly what the measurement below proves.
 
@@ -203,3 +207,77 @@ signatures above are already in this file.
   effect is untested; both pass fast at the pin.
 - The `watchEvents` removal hits `src/tui/durable/adapter.mjs` and `src/inflight.mjs`; only the two demos failed in
   this run because those modules are loaded lazily by the failing paths.
+
+## 8. What landed, and how every red closed (second window, 2026-11-10)
+
+Host for every number in this section, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five),
+kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`.
+
+### 8.1 The pin, as written
+
+| field | value | re-measure |
+|---|---|---|
+| `ref` / `refType` | `v1.5.1` / `tag` | `node scripts/sync-pi.mjs --check` |
+| `pinnedSha` | `dd30101cfc5b0609411dd80b6f93adbc14db14cf` | same |
+| `policyGap` | `null` — the `#5093` "pin floats on main" gap is closed by naming a tag | same |
+| packages built | **10**, with `{"name":"@earendil-works/pi-schema","dir":"packages/schema"}` as the **FIRST** entry | `node -e 'console.log(require("./pi-main.pin.json").packages.map(p=>p.dir))'` |
+| drift | `true`, `behind: 14` vs tip `b2aabe02…` | same |
+
+**Contract note, said plainly:** the task's success clause asked for `drift: false`. For a *tag* pin that is
+unsatisfiable while upstream moves — drift is the point of pinning a tag. `ref`/`refType` are exactly as required;
+`drift: false` is a mis-specified clause, not a failed step.
+
+### 8.2 The migration, symbol by symbol
+
+| removed at 1.5.1 | replacement | sites |
+|---|---|---|
+| `pi-ai`'s `Type` | `@earendil-works/pi-schema` builders `obj/str/num/int/arr/lit/union/bool/opt/nul`; `additionalProperties: true` → `open: true` | 4 files (`src/seattools.mjs`, `src/rig.mjs`, `extensions/continuity.mjs`, `demo/secretredact.test.mjs`) |
+| `Session.documentState()` | `Session.snapshot()` — returns the **value**, not a `{value}` wrapper | 117 hits / 49 files |
+| `Session.subscribeCommits(listener)` | `Session.observeCommits({advance,end})` behind a new seam **`src/commitstream.mjs`** `followCommits(harness, listener)` | `cli.mjs` + 6 demos |
+| `watchEvents(harness, convId, ctx)` (gone) | new seam **`src/livewatch.mjs`** `watchLive()`, translating `pi.live` (`LiveDoc`) into the old event shapes | `demo/guard`, `demo/inflight`, `src/tui/durable/adapter.mjs` |
+| `Conversation.viewState()` (gone) | `Conversation.watch(context)` → `WatchHandle<ConversationView>`, adapted by `attachConversationView()` | `src/tui/durable/adapter.mjs` |
+| `Storage.commit(writes, ctx)` | `Storage.commit(batches, receive, ctx)` | `scripts/repair-pi-live.mjs`, `demo/livestream`, `demo/driversurvive{,-pre}`, `demo/readboundary-corrupt-live` |
+| `checkpointWhen` now **required** by `defineDoc` (`session/transaction.ts:1058` calls it unconditionally) | `checkpointWhen: () => false` on the 6 rig docs — **provisional**, the real policy is ROADMAP **355** | 5 in `src/rig.mjs`, `ContinuityNotes` in `extensions/continuity.mjs` |
+| `Harness.open` now requires `models` (`harness/types.ts:709`) | `models: createModels()` | `demo/broker-wakepath`, `demo/up-model-reset`, `demo/seat-turn-shape` |
+| `pi.live` is **version 3** (was 1) | demos read the doc's real version instead of hard-coding 1 | 3 demos |
+
+Two traps this window found, both worth remembering:
+
+1. **The bulk rename ate a different API's `.value`.** `Storage.document(id, "current", ctx)` still returns a
+   `StoredDocument` with `.value` (`packages/durable/src/types.ts:905-911`); only `documentState`→`snapshot`
+   dropped the wrapper. Hand-fixed at `src/broker.mjs:1290` and `cli.mjs:3287`. `.spike/pin-update/migrate-symbols.mjs`
+   is not safe to re-run blindly.
+2. **A refused delta is silent.** `Storage.commit` returns `{stored: 0, refused: {}}` when a delta declares a
+   version other than the document's (`packages/durable/src/storage/store/commit.ts:285`). It does **not** throw.
+   A corruption fixture that declares the wrong version quietly stops being a corruption fixture.
+
+### 8.3 Every formerly-failing demo, attributed
+
+Suite progression on this box, `node scripts/test.mjs --all --jobs 8`: **93 → 251 → 266 → 272 → 280 PASS** (47.6 s
+at the end; the same suite at the old pin was 280/280 in 61.8 s — the move made the suite **faster**, not slower).
+Captures: `.spike/pin-update/suite-mig{,2,3}.{txt,err}`.
+
+| demo | symptom at the moved pin | cause (measured) | disposition |
+|---|---|---|---|
+| `demo/driversurvive-pre.test.mjs` | "Missing expected rejection … the exact F14 unresolvable path" | the injected orphan delta declared `version: 1`; `pi.live` is version **3**, so `Storage.commit` **refused** it (`{stored:0,refused:{}}`) and the document was never corrupted | **fixed** — version read from the document; the demo now asserts `corruptResult.stored === 1` so a silent refusal cannot masquerade as a pass |
+| `demo/driversurvive.test.mjs` | "the driver survives the bad document and wakes the healthy seat" (`2 !== 1`) | same root cause: with no corruption, both seats wake | **fixed** — same version read, same guard assertion |
+| `demo/dry-run.test.mjs` | "the unchanged constitution is reported as no change" (`true !== false`) | `previewUp` read `constitutionDoc?.value?.text` / `edgesDoc?.value?.edges` off `harness.snapshot()` results, which now return the value directly → `undefined` ≠ the spec text → "changed" | **fixed** in `cli.mjs:931-933` |
+| `demo/tui-durable-boot.test.mjs` | user message and answer never rendered | `watchEvents` is gone, so no `message_start`/`message_end` reached `InteractiveMode`; `src/livewatch.mjs` was emitting a placeholder assistant message shaped `{type:"assistant"}` where the renderer keys on `role` | **fixed** — `attachConversationView()` + `#emitEntryEvents()` in the adapter, `role`-shaped placeholder in `src/livewatch.mjs`, `bridge.streamingMessage` getter |
+| `demo/tui-durable-compaction.test.mjs` | the compaction boundary never reached the session entries | same missing event source; and v1.5.1's view returns the **whole window** with head markers "where they were written" (`packages/durable/src/harness/view.ts:40-41`) instead of the active transcript, head marker first | **fixed** — `#activeTranscript()` re-orders the head marker to the front, and events are emitted **after** the session manager is replaced (the renderer's `entries[0]?.id !== event.entry.id` guard needs the boundary already present) |
+| `demo/tui-durable-compaction-tui.test.mjs` | "[compaction]" row absent | same as above (rendering path) | **fixed** — same two changes |
+| `demo/tui-round-trip-terminal.test.mjs` | durable user message/answer absent from the injected terminal | same as above | **fixed** — same two changes |
+| `demo/clockin-digest.test.mjs` | the digest exits 1 in a DETACHED scratch tree | **not** a 1.5.1 API break: the scratch worktree is cut from `HEAD`, and `HEAD` still held the pre-migration source while `node_modules` was already linked to 1.5.1 — `import { Type } from "@earendil-works/pi-ai"` → SyntaxError. Measured: `node cli.mjs status` in a detached scratch at the pre-migration HEAD fails with exactly that line | **fixed by committing the migration** (`d3dd1300`); re-measured 280/280 after the commit |
+| `demo/command-spool.test.mjs`, `demo/compact-spool.test.mjs` | 120 s TIMEOUT at the shimmed pin | the pass loop awaited a `subscribeCommits` signal that never arrived | **resolved** — `src/commitstream.mjs` `followCommits()`; no TIMEOUT line appears in any run since |
+
+**No demo was weakened.** Every change above is in `src/`, `cli.mjs`, or a fixture's construction; the assertions
+themselves are unchanged, and two demos gained an assertion (the fixture-landing guard) rather than losing one.
+
+### 8.4 Still open, and who owns it
+
+- **`checkpointWhen`** — `() => false` on all 6 rig docs is the upstream default applied mechanically. ROADMAP **355**.
+- **`persistWithinMs`** — the TUI's streaming now rides `pi.live`'s throttled partials (default 1,000 ms), so
+  in-flight rendering is coarser than it was at the old pin. Measured qualitatively, not benchmarked. ROADMAP **355**.
+- **`restartLimit`** — untouched; the harness is still opened with upstream's default. ROADMAP **355**.
+- **Fidelity gaps in `src/livewatch.mjs`, stated out loud:** `turn_start`/`turn_end` are derived from the
+  generation attempt, not a turn record; tool *results* are synthesised from committed `pi.tool-result` entries
+  rather than streamed. A seat that needs exact tool streaming must grow the seam, not patch the demo.
