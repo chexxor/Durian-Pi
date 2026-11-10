@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { seatHasReadTool } from "./seattools.mjs";
+import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 
@@ -300,6 +300,23 @@ export function isTerminalItem(item) {
  * D24 forbids inventing a schema or write path for it. That gap is registered as backlog
  * rather than faked with model-level guessing.
  */
+/**
+ * The FIRST gate id on this row that names a CANCELLED row, or null when the gate is live.
+ *
+ * The same semantics as the `gate-cancelled:#<id>` code in `workable` above: a CANCELLED
+ * prerequisite is a DROPPED prerequisite, not an unmet one, and a missing id is ambiguous, so it
+ * is passed over rather than treated as dead. Extracted because two write paths now need it - the
+ * release refusal below and the claim predicate - and a gate rule kept in two places is a rule
+ * that drifts (#6112).
+ */
+export function deadGateId(item, items = []) {
+	for (const id of item?.blockedBy ?? []) {
+		const target = items.find((it) => it.id === id);
+		if (target && target.status === "cancelled") return id;
+	}
+	return null;
+}
+
 export function workable(item, seat, { items = [], capabilities = [] } = {}) {
 	if (!item) return { workable: false, reason: "missing-item" };
 	if (item.status !== "queued") return { workable: false, reason: `not-queued:${item.status}` };
@@ -348,7 +365,13 @@ export function selectOldestWorkable(items, seat, { capabilities = [] } = {}) {
 function queueItemLine(it) {
 	const gate =
 		it.blockedBy && it.blockedBy.length ? ` blockedBy=${[...it.blockedBy].join(",")}` : "";
-	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}`;
+	// #6112: a row that was un-parked says WHO un-parked it and WHY in the same line the seat
+	// already reads. A release that is only a `transitions` entry is invisible to a seat scanning
+	// its queue, so the row looks as if it un-parked itself and the coordinator's action is lost.
+	const release = it.release
+		? ` releasedBy=${it.release.by}${it.release.reason ? ` reason=${it.release.reason}` : ""}`
+		: "";
+	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}${release}`;
 }
 
 /**
@@ -1257,13 +1280,21 @@ const Router = defineExtension({
 		defineTool({
 			name: "release_work",
 			description:
-				"Restore a held item to queued, so the driver can re-wake the seat. The recipient may release an item addressed to it; the SENDER may release a held item it created (e.g. a parked backlog registration).",
-			parameters: obj({ itemId: num() }),
+				"Restore a held item to queued, so the driver can re-wake the seat. The recipient may release an item addressed to it; the SENDER may release a held item it created (e.g. a parked backlog registration). " +
+				"A COORDINATING seat (one that declares no working capability, e.g. pm) may also release a parked row it did not mint - release is reversible, so it is delegable; cancel, revise and tier are not, and stay with the row's parties. A release by such a seat MUST carry a `reason`, and it is REFUSED when the row's gate names a cancelled item.",
+			parameters: obj({
+				itemId: num(),
+				reason: opt(str({
+					description:
+						"why the row is being un-parked. Required when the releasing seat is neither the sender nor the recipient; recorded on the row and shown in the queue view.",
+				})),
+			}),
 			replay: "safe",
 			execute: async (args, api, context) => {
 				const me = await mySeatName(api, context);
 				const out = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
+					const seats = await tx.doc(Seats);
 					const item = queue.items.find((it) => it.id === args.itemId);
 					if (!item) return `unknown item #${args.itemId}`;
 					// #5778 — TERMINAL BEFORE AUTHORITY. A closed row is not parked, and the authority refusal
@@ -1274,20 +1305,54 @@ const Router = defineExtension({
 					// The refusal stays for genuinely non-terminal rows (checked next).
 					if (isTerminalItem(item))
 						return `item #${args.itemId} is already ${item.status} (terminal); there is nothing to release`;
-					if (item.to !== me && item.from !== me)
-						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender or recipient may release it`;
+					// #6112 (ruling #6097) — SCOPED RELEASE AUTHORITY. The party check is kept for everyone, and
+					// the coordinator is added to it, not allowed to act on rows it has no relation to.
+					// WHY ONLY RELEASE: a released row returns to queued and its sender can hold it again, so a
+					// wrong release is one more call to undo; cancel is terminal and revise rewrites the request
+					// under someone's feet. Delegable power is power that can be taken back, so the grant stops
+					// at release and the refusal NAMES the boundary.
+					const isParty = item.to === me || item.from === me;
+					const coordinating = seatIsCoordinator({
+						name: me,
+						role: seats.seats[me]?.role,
+						capabilities: seats.seats[me]?.capabilities ? [...seats.seats[me].capabilities] : [],
+					});
+					if (!isParty && !coordinating)
+						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender, the recipient, or a coordinating seat may release it`;
 					if (item.status !== "held")
 						return `item #${args.itemId} is not held (status=${item.status})`;
+					// A release by a seat with no stake in the row is only legible if it says why. Without the
+					// reason the sender cannot tell an un-park from a re-park cycle and the queue view records
+					// that a row changed state for no stated cause (#6112).
+					const reason = typeof args.reason === "string" ? args.reason.trim() : "";
+					if (!isParty && !reason)
+						return `item #${args.itemId}: a release by a seat that neither sent nor receives the row must carry a reason (release_work(${args.itemId}, reason: "..."))`;
+					// A parked row whose gate is a CANCELLED row is not workable, so un-parking it makes it
+					// claimable-but-broken: the seat claims it, the gate refuses it, and the row burns a turn
+					// for nothing. Refusing the release is the cheap, honest answer, and it is the same
+					// `gate-cancelled` semantics the claim predicate already uses (#3747/#3863 class, #6112).
+					const dead = deadGateId(item, queue.items);
+					if (dead)
+						return `item #${args.itemId} not released: its gate names #${dead}, which is cancelled - releasing it would make a row claimable whose prerequisite was dropped`;
 					item.status = "queued";
 					// #6150: a released row is no longer parked, so its park record goes — leaving a stale
 					// `park` behind would make a metric count a running row as parked.
 					item.park = null;
-					item.transitions.push({
+					// #6112: the release is STRUCTURE, not only a transition, so the queue line and any metric
+					// can read who un-parked the row and why without parsing prose.
+					item.release = {
 						at: new Date().toISOString(),
+						by: me,
+						reason: reason || null,
+						authority: isParty ? (item.from === me ? "sender" : "recipient") : "coordinator",
+					};
+					item.transitions.push({
+						at: item.release.at,
 						event: "released",
 						by: me,
+						reason: item.release.reason,
 					});
-					return `item #${item.id} released back to queued.`;
+					return `item #${item.id} released back to queued${item.release.authority === "coordinator" ? ` by ${me} (coordinator release: ${item.release.reason})` : ""}.`;
 				}, context);
 				return toolText(out);
 			},
