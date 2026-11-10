@@ -73,7 +73,9 @@ try {
 		check("the broker passes onSkipped into driveOnce", /onSkipped:\s*\(skip\)\s*=>/.test(broker), "no onSkipped");
 		check("the broker passes pendingAgeMs into driveOnce", /pendingAgeMs:\s*\(convId\)\s*=>/.test(broker), "no pendingAgeMs");
 		check("the age comes from the submission's admittedAt", /sub\.admittedAt/.test(broker), "admittedAt not used");
-		check("the line is written through logBrokerLine (the existing surface)", /logBrokerLine\(dbPath,\s*`SKIP /.test(broker), "no SKIP line");
+		check("the line is written through logBrokerLine (the existing surface)", /logBrokerLine\(dbPath,\s*wakeSkipLine\(/.test(broker), "no SKIP line");
+	check("ONE builder renders every no-wake line, so the paths cannot drift", /function wakeSkipLine\(/.test(broker), "no shared builder");
+	check("the cooldown path is not silent: it emits the same SKIP shape (#6101)", /wakeSkipLine\(\{ seat: name, reason: "cooldown"/.test(broker), "onSuppressed collects a set and logs nothing");
 		const attention = readFileSync(new URL("../src/attention.mjs", import.meta.url), "utf8");
 		check("attention reads the SAME field (admittedAt)", /latest\.admittedAt/.test(attention), "attention uses a different field");
 	}
@@ -89,7 +91,9 @@ try {
 	console.log("  and the submission id), so the presentation half needed NO new surface — the trace now joins");
 	console.log("  the wake decision to the same measurement that surface already makes.");
 	console.log("  NOT asserted here: that a live broker writes the line in a real pass (needs a store and a");
-	console.log("  running broker). The wiring and the arithmetic are asserted; the live line is not.");
+	console.log("  running broker). The wiring and the arithmetic are asserted; the live line is asserted by");
+	console.log("  demo/cooldown-skip-line.test.mjs, which runs runWakeLoop over a stub harness and reads");
+	console.log("  <db>.broker.log back.");
 
 	console.log(
 		failures === 0

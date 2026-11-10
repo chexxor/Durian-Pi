@@ -1419,9 +1419,7 @@ export async function drivePass(
     },
     onSkipped: (skip) => {
       if (!dbPath) return;
-      const age = typeof skip.ageMs === "number" ? ` age=${Math.round(skip.ageMs / 1000)}s` : "";
-      const conv = skip.conversationId !== undefined ? ` conv=${skip.conversationId}` : "";
-      logBrokerLine(dbPath, `SKIP ${skip.seat} reason=${skip.reason}${conv}${age}`);
+      logBrokerLine(dbPath, wakeSkipLine(skip));
     },
     // #5740 option A: the scheduler owns the parked-set state; drivePass only forwards it. Without this
     // line the predicate silently defaults to null and the dedup does nothing - which is exactly the
@@ -1892,7 +1890,17 @@ export async function runWakeLoop({
           wokeThisPass.push(name);
           logBrokerLine(dbPath, `WAKE ${name}`);
         },
-        onSuppressed: (name) => suppressedThisPass.add(name),
+        // #6101: a seat dropped by the per-seat cooldown used to leave NO line at all, so the log could
+        // not distinguish "suppressed" from "never considered" - the same legibility gap the parked path
+        // closed for deduped wakes. Same shape as the parked/pending SKIP, and the remaining time is the
+        // scheduler's OWN measurement (msUntilSeatReady), never a guess.
+        onSuppressed: (name) => {
+          suppressedThisPass.add(name);
+          logBrokerLine(
+            dbPath,
+            wakeSkipLine({ seat: name, reason: "cooldown", remainingMs: scheduler.msUntilSeatReady(name, now()) }),
+          );
+        },
         // #5740 option A: the scheduler owns the parked-set signatures; the driver only asks.
         parkedChanged: (seat, signature) => scheduler.parkedChanged(seat, signature),
       });
@@ -2166,6 +2174,24 @@ export function isSessionFailed(error) {
     if (e?.name === "SessionFailed") return true;
   }
   return false;
+}
+
+/**
+ * THE ONE SHAPE OF A NO-WAKE DECISION (#6101).
+ *
+ * Every candidate this pass did NOT wake must name the seat and the reason - cooldown, deduped,
+ * pending, busy, no-work - because a silent non-wake is indistinguishable from "there was nothing
+ * here", which is exactly the question an operator cannot answer from the log. One builder for every
+ * path so the shapes cannot drift apart: `ageMs` and `remainingMs` are always MEASURED by the caller
+ * (the submission's `admittedAt`, the scheduler's own cooldown clock), never invented.
+ * A line with no reason is refused here rather than logged, so the contract is structural.
+ */
+export function wakeSkipLine({ seat, reason, conversationId, ageMs, remainingMs }) {
+  if (!seat || !reason) throw new Error(`a SKIP line must name its seat and its reason (got seat=${seat} reason=${reason})`);
+  const conv = conversationId !== undefined ? ` conv=${conversationId}` : "";
+  const age = typeof ageMs === "number" ? ` age=${Math.round(ageMs / 1000)}s` : "";
+  const remaining = typeof remainingMs === "number" ? ` remaining=${Math.ceil(remainingMs / 1000)}s` : "";
+  return `SKIP ${seat} reason=${reason}${conv}${age}${remaining}`;
 }
 
 /** Append one line to `<db>.broker.log`. */

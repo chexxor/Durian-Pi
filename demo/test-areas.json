@@ -109,6 +109,7 @@
       "demo/broker-wakepath.test.mjs",
       "demo/broker-worktree-sweep.test.mjs",
       "demo/broker.test.mjs",
+      "demo/cooldown-skip-line.test.mjs",
       "demo/degeneration-duration.test.mjs",
       "demo/degeneration-text.test.mjs",
       "demo/degeneration.test.mjs",
