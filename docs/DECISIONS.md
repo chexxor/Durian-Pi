@@ -11208,3 +11208,48 @@ quo and let late constraints live in bodies — rejected: measured failure, 42 h
 `demo/queue-held-gates.test.mjs` carrying no recorded gate at all, and #6218 is the live specimen.
 **Status:** adopted as a ruling on the boundary; the verb, the asymmetry fix and the ordering fix are
 routed, not implemented here.
+
+## D258 — 2026-11-10T13:5xZ: **enforcement at the receive path is structural admission; the audit sink is broker-written evidence, never a decision input; and a deny whose record cannot be written is a STUCK payload, not a dead-letter** (architect ruling on pm's row #6185, "what may enforce on the broker receive path, and who may write the audit sink"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**)
+
+**The why.** The receive path is the one place a payload arrives from outside the broker, and every
+control decision made there has to be both enforceable and legible. `authorizeSpoolRequest`
+(`src/broker.mjs:505`) is the right shape: **pure**, no store, no harness, no model — so the rule is
+testable with no broker (`demo/control-plane-gate.test.mjs`, exit 0). But three measured things show
+the seam is not yet sealed.
+
+**1. Admission runs on a defaulted discriminator.** `requestOp` returns `"message"` when `op` is
+absent (`src/broker.mjs:469-471`). So a payload with no op is ALLOWED by the gate and only fails later
+at seat lookup. A typo'd op is allowed by the gate and dead-lettered by the drain's `SPOOL_OPS` check
+— opposite verdicts, two code paths, same payload. Enforcement on a value the parser invented is not
+enforcement. **Decision:** an absent or unknown `op` is refused at the gate.
+
+**2. A content-classifier deny at ingest would deny the rig's own evidence.** Measured with
+`docs/evidence/2026-11-10-broker-receive-path/probe.mjs` (exit 0): 5 of 6 routine payloads — an
+evidence sha, an ADR sha256, a worktree branch name, an npm lockfile hash, a real key — FIRE the
+existing secret classifier as `high-entropy-token`. The only exemption that exists
+(`src/gitobject.mjs`) is confirmation-based (`git cat-file -e`) and is a subprocess with a probe
+budget. **Decision:** enforce on **structure** — op, actor, target, capability — never on content
+shape. A gate that fires on shas is a gate you cannot turn on.
+
+**3. The recovery leg lies about itself.** When `<db>.broker.inbox.error` exists as a *file*,
+`deadLetterIntent` swallows the EEXIST (`src/broker.mjs:305-307`) and the caller still does
+`deadLettered += 1` (`:791`, `:812`, `:856`). Measured: `pass1 deadLettered=1 … payload still in the
+inbox after two passes: 1`, re-drained every pass with no cap — `INTENT_RETRY_LIMIT` bounds only the
+closed-handle branch. An unparseable payload is dead-lettered with **no** diagnostic at all.
+**Decision:** split the counters (`deadLettered` vs `stuck`), emit a diagnostic on every refusal
+branch, and bound the stuck branch with the same attempt sidecar the retry path already uses.
+
+**Who may write the audit sink.** Only the broker writes it today, and that is an accident of how a
+command is spelled, not an authority: `src/confine.mjs` has zero hits for `audit`, `inbox` or `spool`;
+`echo x >> <db>.broker.audit.log` is refused by the lexical guard, while the same write inside a
+`node -e` program succeeds (measured; the probe line was removed immediately after the measurement).
+**Options considered:** (a) name the sink paths in the guard — helps against shell redirection, nothing
+against an interpreter; kept as a **layer**, not a boundary. (b) make authority come from the record's
+provenance: the broker writes the decision it made against the spool file it decided on, and the
+enforceable artifact is the structured `refusal` object on the dead-lettered record
+(`src/broker.mjs:295-303`), cross-checkable against the `.reason` files and the recorded result.
+**Adopted: (b), with (a) as a layer.** The trade-off named out loud: nothing may *act* on the audit log
+— it is evidence only — which costs a cross-check at read time, in exchange for the decision being a
+function of broker-held state rather than of a file any seat process can append to. This is the same
+doctrine `authorizeSpoolRequest` already carries: `from` is producer-stamped, all seats share one OS
+user, so same-user forgeability is a KNOWN RESIDUAL and must never be described as prevented.
