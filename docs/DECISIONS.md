@@ -10368,7 +10368,11 @@ config names 'qwen3.8-flash-next-iq3_s'`.
   `local/qwen3.8-flash-next-q2_0` — leaving the old key would silently lose the 20,480-token compaction reserve.
   Backup: `.spike/delegate-20261108h/durig.config.preceding.json`.
 - `rig.selfdev.json`: all 11 local seats re-pointed to `local/qwen3.8-flash-next-q2_0` (`auditor` stays
-  `verifier/openai/gpt-oss-120b` as the gate canary). Backup:
+  `verifier/openai/gpt-oss-120b` as the gate canary). The routing rule that goes with the canary — routine verify
+  legs to the local seats, `auditor` woken only when the metered path IS the point of the check — is recorded in
+  `docs/runbooks/verifier-independence.md` ("Routing rule: the metered canary is not a work queue", relayed from
+  lead's #5390 clause E), which is where a seat looks; the number for it is not minted here, per the mint-at-land
+  rule. Backup:
   `.spike/delegate-20261108h/rig.selfdev.preceding.json`. Applied with `cli.mjs up rig.selfdev.json --refresh`
   (broker stopped — `--refresh` re-points every seat) → `refreshed: pm, impl, qa, qa2, lead, advocate, scribe,
   devtools, auditor, designer, security, architect`.
