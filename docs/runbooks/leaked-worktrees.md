@@ -3,9 +3,9 @@ runbook: leaked-worktrees
 symptom: "stray or dirty item-* worktrees; a merged item-branch that cannot be pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-06
-verified_by: devtools
-evidence: "2026-11-06 (#5209, Linux node v24.22.1, main 46c28b73): the sole-copy probe section's three commands RAN — `git merge-base --is-ancestor e173f397 main` exit 1 (sole-copy proof), `test -e <common-dir>/worktrees/item-5094/locked` exit 0 (lock marker), `git worktree lock item-5094 --reason ...` exit 128 (already locked: the reason is immutable without opening the reap window), `git cherry main <branch>` all-`+` for all ten non-ancestor branches, `git for-each-ref --contains <head>` >=1 ref for all ten. Census: 30 worktrees, 14 LOCKED / 16 unlocked; item-5094 LOCKED + landing entry #5207. 2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced"
+last_verified: 2026-11-10
+verified_by: scribe
+evidence: "2026-11-06 (#5209, Linux node v24.22.1, main 46c28b73): the sole-copy probe section's three commands RAN — `git merge-base --is-ancestor e173f397 main` exit 1 (sole-copy proof), `test -e <common-dir>/worktrees/item-5094/locked` exit 0 (lock marker), `git worktree lock item-5094 --reason ...` exit 128 (already locked: the reason is immutable without opening the reap window), `git cherry main <branch>` all-`+` for all ten non-ancestor branches, `git for-each-ref --contains <head>` >=1 ref for all ten. Census: 30 worktrees, 14 LOCKED / 16 unlocked; item-5094 LOCKED + landing entry #5207. 2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced. 2026-11-10 (#6149, main f192f543): the cherry-as-verdict bullet was corrected by measurement — `git cherry -v main dd2583b` exit 0 printing `+ dd2583b12…` while `git rev-parse dd2583b:src/compacteval.mjs` equals `git rev-parse bc51ba5b:src/compacteval.mjs` (4 of 5 files blob-identical) and `node demo/compacteval.test.mjs` exit 0"
 check_rule: null
 ---
 
@@ -281,8 +281,15 @@ git for-each-ref --contains <head> --format='%(refname)'  # (3) is HEAD containe
 - **(1) non-zero does NOT prove absence.** A re-cut lands as a different sha with the same content (patch-id
   section above), and once `main` moves forward `git diff --name-only main <branch>` **overstates** the gap —
   it counts `main`'s own later edits to the same paths. It is a triage number, never the verdict.
-- **(2) `git cherry main <branch>` is the content verdict** (it compares patch-ids, so it survives re-cuts and
-  re-squash): an all-`+` output means the branch carries work upstream does not have → NOT content-present.
+- **(2) `git cherry main <branch>` is a CONTENT SCREEN, not the verdict.** It compares **patch-ids** — diffs,
+  not results — so a re-cut whose surrounding hunks differ reports `+` even when every resulting blob is
+  byte-identical. Measured 2026-11-10 in `item-6149` off `main f192f543`: `git cherry -v main dd2583b` prints
+  `+ dd2583b12…` (patches 1474 vs 1416 diff lines) while `git rev-parse dd2583b:src/compacteval.mjs` equals
+  `git rev-parse bc51ba5b:src/compacteval.mjs`, and the same for the demo, the script and the runbook. An
+  all-`+` output means "not patch-present": **escalate to per-file blob identity**
+  (`git rev-parse <sha>:<file>` vs `git rev-parse main:<file>`, or against the landed re-cut's sha) before
+  calling it a loss, and confirm by running the demo that commit shipped on the merged tree
+  (`node demo/compacteval.test.mjs` → exit 0).
 - **(3) A reaped WORKTREE does not lose commits whose HEAD is contained by a ref** — the sweep removes the
   worktree, never the branch, and `prepare_workspace` re-attaches. Every durian-pi item worktree is on its own
   `item-<id>` branch, so the loss vector is **BRANCH removal** (`-D`, which needs a named grant) or a **ref-less
