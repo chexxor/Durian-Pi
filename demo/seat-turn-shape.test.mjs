@@ -38,6 +38,9 @@ import { tmpdir } from "node:os";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+
+// The live leg must know whether another owner is writing the store it is hashing (#6057).
+import { brokerAliveFor } from "../src/readclient.mjs";
 import { registerSeat } from "../src/rig.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -257,6 +260,44 @@ const asstToolCall = () => ({
 	// 118 KB store in the tree.
 	assert.equal(sha256(fixtureDb), fixtureHashBefore, "the read must leave the store bytes identical");
 
+	// 9b. MOVING SUBJECT (#6057). The byte check is only meaningful if (a) it CAN fail, and (b) the
+	// store is not being committed into by another owner while it runs. In the shared checkout the
+	// live leg hashed `selfdev.sqlite` before and after the read while a resident broker was attached
+	// to that same store; a pass committed between the two hashes and the demo printed `the read must
+	// not modify selfdev.sqlite` - a behaviour red measuring a busy machine. Here the two directions
+	// are separated in a store this demo owns: a write to the path moves the bytes, a read does not.
+	{
+		const movingDb = join(tmp, "moving.sqlite");
+		let movingConv = null;
+		{
+			const s1 = await openNodeSqliteStorage(movingDb);
+			const d1 = await Harness.open(s1, { registry: createRegistry() }, BACKGROUND_CONTEXT);
+			await d1.commit(async (tx) => {
+				const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
+				await registerSeat(tx, "moving-driver", conv.id, "implementation");
+				movingConv = conv.id;
+			}, BACKGROUND_CONTEXT);
+			await d1.close(BACKGROUND_CONTEXT);
+			await s1.close(BACKGROUND_CONTEXT); // closing checkpoints, so the main file is settled
+		}
+		const settled = sha256(movingDb);
+		{
+			const s2 = await openNodeSqliteStorage(movingDb);
+			const d2 = await Harness.open(s2, { registry: createRegistry() }, BACKGROUND_CONTEXT);
+			await d2.commit(async (tx) => {
+				for (let i = 0; i < 40; i++) await tx.appendEntry(movingConv, { kind: "pi.assistant", model: [{ role: "assistant" }] });
+			}, BACKGROUND_CONTEXT);
+			await d2.close(BACKGROUND_CONTEXT);
+			await s2.close(BACKGROUND_CONTEXT);
+		}
+		const afterWrite = sha256(movingDb);
+		assert.notEqual(afterWrite, settled, "a write to this path DOES move the bytes, so passing the byte check means something");
+		const reread = await readSeatShapes(movingDb, { maxEntries: 500 });
+		assert.equal(reread.length, 1, "the store still reports its seat after the write");
+		assert.equal(sha256(movingDb), afterWrite, "the read alone leaves the bytes identical");
+		process.stdout.write("  ok   MOVING SUBJECT control: a write moves these bytes, a read does not\n");
+	}
+
 	// The rig's own store: run it when it resolves. Every failure mode measured at this base is
 	// ENVIRONMENTAL, and none of them may read as a behaviour red OR as a silent pass:
 	//   - no file at the path (a fresh worktree — `*.sqlite` is gitignored, `.gitignore:2`);
@@ -269,12 +310,47 @@ const asstToolCall = () => ({
 	// this demo whatever the live leg finds. The live leg exists for the real-pages value (D78), and it
 	// reports what it met.
 	const liveDb = process.env.DURIG_DB || join(rootDir, "selfdev.sqlite");
+	const brokerState = (() => {
+		try {
+			return JSON.parse(readFileSync(`${liveDb}.broker.json`, "utf8"));
+		} catch {
+			return null;
+		}
+	})();
 	if (!existsSync(liveDb)) {
 		skips.push(`no store at ${liveDb} (DURIG_DB=${process.env.DURIG_DB ?? "unset"})`);
 		process.stdout.write(
 			`  SKIP (ENVIRONMENTAL — not a behaviour red) ${liveDb}: no store resolves in this tree; the fixture leg above ran\n`,
 		);
+	} else if (brokerAliveFor(liveDb)) {
+		// A resident broker owns this store and commits into it. Hashing before and after the read
+		// measures the broker, not the read, and the red it prints accuses the reader of writing the
+		// rig's store (#6057). Name it, and still read the real pages.
+		const pid = brokerState?.pid ?? "unknown";
+		let live = null;
+		let liveFailure = null;
+		try {
+			live = await readSeatShapes(liveDb, { maxEntries: 500 });
+		} catch (err) {
+			liveFailure = String(err?.message ?? err);
+		}
+		if (live) {
+			for (const s of live) {
+				assert.ok(s.seat && s.conversationId, "every shape names its seat and conversation");
+				assert.equal(typeof s.violations, "number");
+				assert.equal(typeof s.nextSendAdmissible, "boolean");
+			}
+			process.stdout.write(
+				`  SKIP (MOVING SUBJECT - not a behaviour red) ${liveDb}: broker pid ${pid} is attached and commits between the hashes, so the byte check is not taken here; the read still ran and got ${live.length} shape(s)\n`,
+			);
+			skips.push(`moving subject ${liveDb}: broker pid ${pid} attached; byte check not taken, shapes read instead`);
+		} else {
+			process.stdout.write(`  SKIP (MOVING SUBJECT) ${liveDb}: broker pid ${pid} attached and the read could not open it (${liveFailure})\n`);
+			skips.push(`moving subject ${liveDb}: broker pid ${pid} attached, read failed (${liveFailure})`);
+		}
 	} else {
+		// No other owner is attached, which is the only condition under which the byte check is a
+		// claim about the read rather than about a broker passing through (#6057).
 		const liveBefore = sha256(liveDb);
 		let live = null;
 		let liveFailure = null;
@@ -293,9 +369,9 @@ const asstToolCall = () => ({
 			process.stdout.write(`  ok   REAL STORE ${liveDb}: ${live.length} seat shape(s), bytes unchanged\n`);
 		} else {
 			const emptyRig = /no seat named/.test(liveFailure ?? "");
-			skips.push(`${liveDb}: ${emptyRig ? "opens, but holds no seat document — an empty rig, not an error (src/readapi.mjs:60-61)" : liveFailure}`);
+			skips.push(`${liveDb}: ${emptyRig ? "opens, but holds no seat document - an empty rig, not an error (src/readapi.mjs:60-61)" : liveFailure}`);
 			process.stdout.write(
-				`  SKIP (ENVIRONMENTAL — not a behaviour red) ${liveDb}: ${emptyRig ? `opens, but no seat document; the reader's own message is ${JSON.stringify(liveFailure)}` : liveFailure}\n`,
+				`  SKIP (ENVIRONMENTAL - not a behaviour red) ${liveDb}: ${emptyRig ? `opens, but no seat document; the reader's own message is ${JSON.stringify(liveFailure)}` : liveFailure}\n`,
 			);
 		}
 	}
