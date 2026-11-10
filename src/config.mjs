@@ -334,13 +334,7 @@ export async function loadConfig({ env = {}, readFile, defaults = {}, defaultsSo
 		source = path;
 		break;
 	}
-	const merged = mergeConfig(fileValues, env, defaults);
-	// ROADMAP 331: a compaction policy that cannot fit the families it will be applied to is refused at
-	// load, not carried silently into `Harness.open`. This is the choke point every verb goes through
-	// (cli.mjs, tools/broker-serve.mjs, tools/keycheck.mjs), so the gate cannot be bypassed by a caller
-	// that builds settings itself.
-	assertCoherentCompactionPolicy(merged);
-	return { config: merged, source, defaultsSource };
+	return { config: mergeConfig(fileValues, env, defaults), source, defaultsSource };
 }
 
 /**
@@ -406,65 +400,21 @@ export function strandedMsSetting(config) {
 }
 
 /**
- * Which provider FAMILY a model key names, taken from the specs this config actually REGISTERS -
- * the same objects the harness builds the provider from. "verifier/openai/gpt-oss-120b" -> the
- * verifier spec. A bare model id, a provider this config never armed with a BASE_URL, or no config
- * at all yields null: an unregistered family has no window, and inventing one is the inert-key class
- * this rig keeps being bitten by.
- *
- * @param {Record<string, unknown>} [config]
- * @param {string|null} [modelKey] the seat's resolved `provider/modelId`
- * @returns {object|null} the registered spec, or null
- */
-function familyForModelKey(config, modelKey) {
-	if (typeof modelKey !== "string" || modelKey.trim() === "") return null;
-	const key = modelKey.trim();
-	for (const spec of localProviderSpecs(config)) {
-		if (key === spec.id || key.startsWith(`${spec.id}/`)) return spec;
-	}
-	return null;
-}
-
-/** A positive number from a config value, or null when it cannot be read. */
-function positiveNumber(value) {
-	if (value === undefined || value === null || value === "") return null;
-	const n = typeof value === "number" ? value : Number(String(value).trim());
-	return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/**
  * The operator's DECLARED usable context window (ROADMAP 27's three-state denominator).
  * This is the middle state: more trustworthy than a vendor's advertised figure, less than
  * item 97's measured effective window (#1087). It is deliberately NOT the advertised
  * number, so an operator can state the window their model actually gives them.
  *
- * TWO SOURCES, in order (#6066):
- *   1. the FAMILY's own key - `DURIG_VERIFIER_CONTEXT`, `DURIG_LOCAL_CONTEXT`, `DURIG_LOCAL2_CONTEXT`
- *      - for a seat whose model names a family this config registered. This is the window the
- *      harness opens that family's conversation with, so it is the only denominator that can be
- *      honoured; measured before the fix, a rig that declares 24,576 for its verifier and 204,800
- *      for its local seats reported `declaredWindow=null` for both (docs/evidence/2026-11-08-context-window).
- *   2. `DURIG_CONTEXT_WINDOW`, the global fallback: either a bare positive number (one window for
- *      every model) or a JSON object keyed by model (`"zai-org/GLM-5.3-Flash": 200000` or
- *      `"GLM-5.3-Flash": 200000`) for the per-model case. It still governs every family that has no
- *      plane key of its own - a remote seat, or a registered family whose `CONTEXT` key is unset.
- * Unset/blank/malformed at BOTH levels returns null: a declaration that cannot be read is not a
- * declaration, and the resolver then falls through to `advertised`. A registered family with no
- * `CONTEXT` key runs on pi-durable's built-in 65,536 - a DEFAULT, not an operator declaration - so
- * it is not returned here as a `declared` value.
+ * `DURIG_CONTEXT_WINDOW` is either a bare positive number (one window for every model) or
+ * a JSON object keyed by model (`"zai-org/GLM-5.3-Flash": 200000` or `"GLM-5.3-Flash":
+ * 200000`) for the per-model case. Unset/blank/malformed returns null — a declaration that
+ * cannot be read is not a declaration, and the resolver then falls through to `advertised`.
  *
  * @param {Record<string, unknown>} [config]
  * @param {string|null} [modelKey] the seat's resolved `provider/modelId` (from `modelsBySeat`)
  * @returns {number|null}
  */
 export function declaredContextWindow(config, modelKey = null) {
-	const family = familyForModelKey(config, modelKey);
-	if (family) {
-		const declared = positiveNumber(config?.[`${family.prefix}CONTEXT`]);
-		if (declared != null) return declared;
-		// The family is registered but its CONTEXT key is absent or unreadable: fall through to the
-		// global declaration rather than launder the spec's built-in 65,536 into a `declared` number.
-	}
 	const raw = config?.DURIG_CONTEXT_WINDOW;
 	if (raw === undefined || raw === null || raw === "") return null;
 	if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw : null;
@@ -633,198 +583,6 @@ export function compactionSettings(config) {
 }
 
 /**
- * THE ONE POLICY THAT ACTUALLY RUNS (ROADMAP 331). Mirrored from the PIN, not invented, and checked
- * in this tree: `node_modules/@earendil-works/pi-durable/dist/harness/agent.js:10-15` defines
- * `DEFAULT_COMPACTION_POLICY = {enabled: true, reserveTokens: 16384, keepRecentTokens: 20000,
- * backgroundTokens: 32768}`, and `resolveSettings` (agent.js:41) merges it with `settings.compaction`
- * and NOTHING else. There is no per-conversation compaction hook - `configure(tx, conversationId,
- * change)` (agent.js:47) writes model, instructions and tools only - and `modelOverrides` has ZERO
- * readers in the pin:
- *   grep -rn modelOverrides node_modules/@earendil-works/pi-durable/dist --include='*.js'  -> no hits
- * So a schedule keyed per family is INERT: one policy runs for every family, and the pin's window is
- * per model (generation.js:38 `runtime.models.getModel(...)`, generation.js:226-227 for the thresholds).
- */
-export const PIN_COMPACTION_DEFAULTS = Object.freeze({
-	enabled: true,
-	reserveTokens: 16384,
-	keepRecentTokens: 20000,
-	backgroundTokens: 32768,
-});
-
-/** The policy `resolveSettings` will hand to every generation, whatever the config says about families. */
-export function effectiveCompactionPolicy(config = {}) {
-	const { modelOverrides: unreadByThePin, ...policy } = compactionSettings(config).compaction ?? {};
-	void unreadByThePin;
-	return { ...PIN_COMPACTION_DEFAULTS, ...policy };
-}
-
-/**
- * Every family the harness-wide policy will be applied to, with the window and output budget the
- * CONFIG DECLARES for it. Nothing is guessed: a family nobody declared is not gated, and the default
- * provider's output budget lives in pi-ai's catalog rather than in this config, so it is reported as
- * null and the summary budget is taken as `floor(0.8*reserve)` alone.
- */
-export function compactionFamilies(config = {}) {
-	const rows = localProviderSpecs(config).map((spec) => ({
-		key: `${spec.id}/${spec.modelId}`,
-		window: spec.contextWindow,
-		maxTokens: spec.maxTokens,
-		declaredBy: `${spec.prefix}CONTEXT / ${spec.prefix}MAX_TOKENS`,
-	}));
-	const raw = config?.DURIG_CONTEXT_WINDOW;
-	if (raw === undefined || raw === null || String(raw).trim() === "") return rows;
-	const provider = String(config?.DURIG_PROVIDER ?? "deepinfra");
-	const model = String(config?.DURIG_MODEL ?? "zai-org/GLM-5.3-Flash");
-	const text = String(raw).trim();
-	if (text.startsWith("{") || text.startsWith("[")) {
-		let map;
-		try {
-			map = JSON.parse(text);
-		} catch {
-			return rows; // an unreadable declaration is not a declaration; `declaredContextWindow` already falls through
-		}
-		if (map && typeof map === "object") {
-			for (const [key, value] of Object.entries(map)) {
-				const window = Number(value);
-				if (Number.isFinite(window) && window > 0) rows.push({ key, window, maxTokens: null, declaredBy: "DURIG_CONTEXT_WINDOW" });
-			}
-		}
-		return rows;
-	}
-	const window = Number(raw);
-	if (Number.isFinite(window) && window > 0) rows.push({ key: `${provider}/${model}`, window, maxTokens: null, declaredBy: "DURIG_CONTEXT_WINDOW" });
-	return rows;
-}
-
-/**
- * GATE: the ONE harness-wide compaction policy must be COHERENT for every declared family, or the
- * config is refused at load. The arithmetic is the pin's, restated, not a rule durian-pi invented:
- *   blocking   = window - reserveTokens                        (generation.js:226)
- *   background = blocking - backgroundTokens                   (generation.js:227)
- *   post-cut floor = keepRecentTokens + min(floor(0.8*reserveTokens), maxTokens)
- *       `selectCut` keeps at least `keepRecentTokens` verbatim (compaction.js:196-215) and the summary
- *       call is capped at that min (compaction.js:95), so this is the SMALLEST context a compaction can
- *       leave. If it exceeds the window, compaction cannot make that family fit: the cut it is allowed
- *       to make leaves more context than the window holds, and every turn that compacts still has no
- *       room to answer - the measured qa failure (`stopReason=length`, empty reply, tasks 275457/275459).
- *   headroom >= maxTokens (#6064). `reserveTokens` is the space the policy keeps free for the ANSWER.
- *   In the pin only the SUMMARY call is bounded by the reserve (compaction.js:95); the answer's output
- *   budget is the provider's declared `maxTokens`, which nothing ties to the reserve. A reserve smaller
- *   than that budget is a reservation the model is free to break: an input at window - reserve plus an
- *   answer of maxTokens > reserve exceeds the window, and the turn dies `stopReason=length` while the
- *   policy reports itself coherent.
- * REFUSE, do not silently default: the same shape as `assertNoSecretsInFile` and
- * `assertNoUnknownFileKeys`. A policy that cannot fit is not a policy, it is a wall, and a wall that
- * reads as "configured" is the inert-by-name class this rig keeps being bitten by.
- */
-export function compactionGate(config = {}) {
-	const policy = effectiveCompactionPolicy(config);
-	const families = compactionFamilies(config);
-	if (!policy.enabled) {
-		return { policy, families, verdicts: [], ok: true, skipped: "compaction is disabled (DURIG_COMPACTION_ENABLED), so no threshold arithmetic applies" };
-	}
-	const summaryCap = Math.floor(0.8 * policy.reserveTokens);
-	const verdicts = families.map((family) => {
-		const summaryBudget = family.maxTokens == null ? summaryCap : Math.min(summaryCap, family.maxTokens);
-		const floor = policy.keepRecentTokens + summaryBudget;
-		const blocking = family.window - policy.reserveTokens;
-		const background = blocking - policy.backgroundTokens;
-		const headroomGap = family.maxTokens == null ? null : family.maxTokens - policy.reserveTokens;
-		const fails = [];
-		if (headroomGap != null && headroomGap > 0) {
-			fails.push(
-				`reserveTokens ${fmt(policy.reserveTokens)} is smaller than this family's declared output budget ${fmt(family.maxTokens)}: the answer may emit ${fmt(family.maxTokens)} tokens into ${fmt(policy.reserveTokens)} of reserved headroom (only the summary call is capped by the reserve, compaction.js:95), so the headroom the policy counts on is short by ${fmt(headroomGap)}`,
-			);
-		}
-		if (policy.reserveTokens >= family.window) {
-			fails.push(`reserveTokens ${fmt(policy.reserveTokens)} is not below the window ${fmt(family.window)}, so blocking = ${fmt(blocking)} <= 0 and threshold compaction fires on every turn`);
-		}
-		if (floor > family.window) {
-			fails.push(
-				`the smallest context a compaction can leave is ${fmt(floor)} tokens - keepRecentTokens ${fmt(policy.keepRecentTokens)} + summary budget min(floor(0.8*${fmt(policy.reserveTokens)})=${fmt(summaryCap)}, ${family.maxTokens == null ? "output budget not declared" : fmt(family.maxTokens)})=${fmt(summaryBudget)} - against a window of ${fmt(family.window)} (${percent(floor, family.window)})`,
-			);
-		}
-		if (background <= 0) {
-			fails.push(`background = blocking ${fmt(blocking)} - backgroundTokens ${fmt(policy.backgroundTokens)} = ${fmt(background)}, so a background compaction is scheduled on every turn`);
-		}
-		return { ...family, floor, blocking, background, headroomGap, ok: fails.length === 0, fails };
-	});
-	return { policy, families, verdicts, ok: verdicts.every((v) => v.ok), offenders: verdicts.filter((v) => !v.ok) };
-}
-
-/**
- * A triple derived from the declarations, then re-checked against every family before it is offered.
- * Derivation, not folklore: the reserve must cover the LARGEST declared output budget (or the window's
- * eighth, whichever is bigger); the keep budget takes half the tightest remaining slack; the background
- * takes half of the headroom left after the reserve. If the probe does not pass - e.g. no reserve can
- * both cover an output budget and stay below the smallest window - NOTHING is suggested, because an
- * unvalidated remedy is worse than no remedy.
- */
-export function suggestedCoherentPolicy(config, families) {
-	if (families.length === 0) return null;
-	const window = Math.min(...families.map((f) => f.window));
-	const declaredOut = families.filter((f) => f.maxTokens != null).map((f) => f.maxTokens);
-	const reserveTokens = Math.max(1, declaredOut.length > 0 ? Math.max(...declaredOut) : Math.floor(window / 8));
-	if (reserveTokens >= window) return null;
-	const summaryCap = Math.floor(0.8 * reserveTokens);
-	const slack = Math.min(...families.map((f) => f.window - Math.min(summaryCap, f.maxTokens ?? summaryCap)));
-	if (slack <= 0) return null;
-	const candidate = {
-		reserveTokens,
-		keepRecentTokens: Math.max(1, Math.floor(slack / 2)),
-		backgroundTokens: Math.max(1, Math.floor((window - reserveTokens) / 2)),
-	};
-	const probe = compactionGate({
-		...config,
-		DURIG_COMPACTION_RESERVE_TOKENS: String(candidate.reserveTokens),
-		DURIG_COMPACTION_KEEP_RECENT_TOKENS: String(candidate.keepRecentTokens),
-		DURIG_COMPACTION_BACKGROUND_TOKENS: String(candidate.backgroundTokens),
-	});
-	return probe.ok ? candidate : null;
-}
-
-const fmt = (n) => Number(n).toLocaleString("en-US");
-const percent = (a, b) => `${((a / b) * 100).toFixed(1)}%`;
-
-/** Throw with the family, the arithmetic and the remedy; return the gate when it is coherent. */
-export function assertCoherentCompactionPolicy(config = {}) {
-	const gate = compactionGate(config);
-	if (gate.ok) return gate;
-	const lines = gate.offenders
-		.map((v) => `  - ${v.key} (window ${fmt(v.window)}, output budget ${v.maxTokens == null ? "not declared" : fmt(v.maxTokens)}, declared by ${v.declaredBy}): ${v.fails.join("; ")}`)
-		.join("\n");
-	const overrideKeys = (() => {
-		const raw = config?.DURIG_COMPACTION_MODEL_OVERRIDES;
-		if (raw == null || raw === "") return null;
-		try {
-			const map = typeof raw === "string" ? JSON.parse(raw) : raw;
-			const keys = Object.keys(map ?? {});
-			return keys.length > 0 ? keys.join(", ") : null;
-		}
-		catch {
-			return null;
-		}
-	})();
-	const suggestion = suggestedCoherentPolicy(config, gate.families);
-	throw new Error(
-		`incoherent compaction policy: the config cannot be loaded. ONE harness-wide policy is what pi-durable ` +
-		`runs (reserveTokens ${fmt(gate.policy.reserveTokens)} / keepRecentTokens ${fmt(gate.policy.keepRecentTokens)} / ` +
-		`backgroundTokens ${fmt(gate.policy.backgroundTokens)}${gate.policy.reserveTokens === PIN_COMPACTION_DEFAULTS.reserveTokens ? ", pi-durable's built-in defaults, because no DURIG_COMPACTION_* key is set" : ", from the DURIG_COMPACTION_* keys"}), and it is not coherent for every declared family:\n` +
-		lines +
-		(overrideKeys
-			? `\nDURIG_COMPACTION_MODEL_OVERRIDES (${overrideKeys}) cannot fix this on the pinned pi-durable: ` +
-			`resolveSettings merges DEFAULT_COMPACTION_POLICY with settings.compaction only, and ` +
-			`modelOverrides has no reader in the pin (ROADMAP 331) - a per-family entry is inert, not a schedule.`
-			: "") +
-		(suggestion
-			? `\nFix: set the ONE harness-wide policy the harness reads - DURIG_COMPACTION_RESERVE_TOKENS=${suggestion.reserveTokens} ` +
-			`DURIG_COMPACTION_KEEP_RECENT_TOKENS=${suggestion.keepRecentTokens} DURIG_COMPACTION_BACKGROUND_TOKENS=${suggestion.backgroundTokens} ` +
-			`(computed from the tightest declared window and re-checked against every family before it is offered).`
-			: "\nFix: set DURIG_COMPACTION_RESERVE_TOKENS / _KEEP_RECENT_TOKENS / _BACKGROUND_TOKENS so every declared family's post-cut floor fits inside its window."),
-	);
-}
-
-/**
  * Pure classification of ONE `compact` verb outcome into three states (the reporting half of #4898).
  *
  * The measured defect: this same verb reported "compact: no compaction entry was written" for BOTH a
@@ -887,11 +645,6 @@ export function describeConfig({ config, source }) {
 		DURIG_COMPACTION_KEEP_RECENT_TOKENS: config.DURIG_COMPACTION_KEEP_RECENT_TOKENS ?? null,
 		DURIG_COMPACTION_BACKGROUND_TOKENS: config.DURIG_COMPACTION_BACKGROUND_TOKENS ?? null,
 		DURIG_COMPACTION_MODEL_OVERRIDES: config.DURIG_COMPACTION_MODEL_OVERRIDES ?? null,
-		// ROADMAP 331: what pi-durable will ACTUALLY run, and the arithmetic per declared family. The
-		// keys above can be inert (a per-family entry has no reader on the pin); these two rows are the
-		// policy and its fit, so `config` answers the question instead of echoing what was typed.
-		DURIG_COMPACTION_EFFECTIVE_POLICY: effectiveCompactionPolicy(config),
-		DURIG_COMPACTION_GATE: compactionGate(config),
 		// Where the continuation-note mirrors live (D240). Reported as a path, never as its contents, so this
 		// summary stays safe to print (secrets rule above).
 		DURIG_NOTES_DIR: config.DURIG_NOTES_DIR ?? ".durig/notes (default)",

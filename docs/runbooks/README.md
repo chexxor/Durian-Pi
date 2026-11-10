@@ -164,7 +164,6 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
 | [compaction-eval.md](compaction-eval.md) | a compaction threshold needs a MEASUREMENT: the compacted-vs-full delta or a model’s real window | no |
-| [compaction-policy-refused.md](compaction-policy-refused.md) | every verb dies at start with `incoherent compaction policy: the config cannot be loaded`; a verifier-class seat keeps settling `stopReason=length` with an empty reply while `compact` reports a NO-OP; you set `DURIG_COMPACTION_MODEL_OVERRIDES` and nothing changed (on the pin it has no reader — ROADMAP 331) | no (the fix is an operator config edit) |
 | [write-corruption-recovery.md](write-corruption-recovery.md) | a `write` was refused as a one-line collapse, or a source file was silently collapsed to one line | maybe |
 | [compact-a-seat.md](compact-a-seat.md) | a seat's context is saturated and a reset would lose durable context | yes |
 | [harness-compaction-guard.md](harness-compaction-guard.md) | `Auto-compaction failed: Summarization failed: generation hit the token cap and the summary is incomplete` in the delegate/interactive session | no |
