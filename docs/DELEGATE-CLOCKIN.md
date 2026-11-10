@@ -43,8 +43,12 @@ measurements.
 
 1. `## POINTER` — the live `## NEXT SESSION` section of `docs/NEXT.md` **verbatim**, with the line range it came
    from and the size of the file it came from. It never reads the rest of the file.
-2. `## RIG` — seat count, `attention` count, `last_run_failed` per seat (70-char reason), and which seats have
-   items parked awaiting the operator.
+2. `## RIG` — seat count, `attention` count, `last_run_failed` per seat (70-char reason), which seats have
+   items parked awaiting the operator, and the **compaction guard's state** (#6125): `guard: <state>  <the
+   install tool's own line>  probe <n> ms (bound 100 ms)  tree <path>`. The guard is installed into
+   `.pi/extensions/`, which is gitignored, so a seat cannot see it in the tree — this line is the only place
+   it is visible, and it reports the state of the tree clock-in was run from. States: `UP TO DATE`, `STALE`,
+   `NOT INSTALLED`, `SOURCE MISSING`, `PROBE TIMED OUT`, `PROBE MISSING`, `UNKNOWN`. It reports; it never installs.
 3. `## QUEUE` — row counts by status and the `deferred` ids **grouped per seat, one greppable line each**
    (#5596): a header `deferred (parked on a question): <n> rows across <m> seats`, then
    `deferred <seat> (<count>): #id #id …` biggest-seat-first, so a sweep gets one seat's whole set from
