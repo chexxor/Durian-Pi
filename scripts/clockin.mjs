@@ -62,14 +62,20 @@ export const DEFERRED_LIST_FILE = resolve(".durig", "clockin-deferred.txt");
 // small fixed set; the cap is paranoia, and paranoia is what keeps a bounded thing bounded).
 export const DEFERRED_SEAT_MAX = 20;
 
-/** The first `## NEXT SESSION` section of a NEXT.md-style file, verbatim. Nothing else. */
+/** The first `## NEXT SESSION` section of a NEXT.md-style file, verbatim. Nothing else.
+ *
+ * `tail` is how many lines of the file the cut dropped, and `archive` is the file's own pointer to
+ * the verbatim history. Both exist because the pointer is a CUT: a session that reads only the
+ * digest must know what it was not given and where the full text lives, or the digest quietly
+ * becomes the record it was meant to point at (#6067). */
 export function pointerSection(text) {
 	const lines = text.split(/\r?\n/);
 	const at = lines.findIndex((l) => /^## NEXT SESSION\b/.test(l));
-	if (at < 0) return { lines: [], start: -1, end: -1, fileLines: lines.length };
+	if (at < 0) return { lines: [], start: -1, end: -1, fileLines: lines.length, tail: 0, archive: null };
 	const next = lines.findIndex((l, i) => i > at && /^## /.test(l));
 	const end = next < 0 ? lines.length : next;
-	return { lines: lines.slice(at, end), start: at + 1, end, fileLines: lines.length };
+	const archive = lines.find((l) => /ARCHIVE\.md/i.test(l)) ?? null;
+	return { lines: lines.slice(at, end), start: at + 1, end, fileLines: lines.length, tail: lines.length - end, archive };
 }
 
 /**
@@ -310,6 +316,12 @@ export function renderDigest(s) {
 		`## POINTER (docs/NEXT.md lines ${s.pointer.start}-${s.pointer.end} of ${s.pointer.fileLines}; cap ${POINTER_CAP_LINES})`,
 	);
 	say(s.pointer.lines.join("\n"));
+	// The cut is stated, not hidden: which lines were dropped, and the verbatim source they came from.
+	// The line is derived from the file, so a file with no archive pointer renders no archive line.
+	if (s.pointer.archive && s.pointer.start > 0)
+		say(
+			`pointer tail: lines ${s.pointer.end + 1}-${s.pointer.fileLines} of ${s.pointer.fileLines} NOT rendered; full history verbatim: ${s.pointer.archive}`,
+		);
 	say("\n## RIG");
 	const fails = {};
 	for (const a of s.attention || [])
