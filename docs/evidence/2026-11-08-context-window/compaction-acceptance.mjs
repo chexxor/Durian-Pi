@@ -25,7 +25,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 
@@ -51,8 +51,8 @@ const arg = (name, dflt) => {
 const TARGET = Number(arg("target", "100"));
 const MODE = arg("mode", "armed");
 const STOP_REASON = arg("stopReason", "stop");
-const LIVE_DB = arg("db", "./selfdev.sqlite");
-const COPY_DIR = join(ROOT, ".spike", "acceptance");
+const LIVE_DB = resolve(arg("db", join(ROOT, "selfdev.sqlite"))); // an absolute --db is used as given
+const COPY_DIR = resolve(arg("copyDir", join(ROOT, ".spike", "acceptance")));
 const COPY_DB = join(COPY_DIR, "acceptance-snapshot.sqlite");
 
 const t0 = Date.now();
@@ -62,16 +62,23 @@ const secs = () => ((Date.now() - t0) / 1000).toFixed(1);
 mkdirSync(COPY_DIR, { recursive: true });
 execFileSync("python3", ["-c", `
 import sqlite3
-src = sqlite3.connect(${JSON.stringify(join(ROOT, LIVE_DB))})
+src = sqlite3.connect(${JSON.stringify(LIVE_DB)})
 dst = sqlite3.connect(${JSON.stringify(COPY_DB)})
 src.backup(dst)
 dst.close(); src.close()
 `]);
 console.log(`snapshot -> ${COPY_DB} (${secs()} s). The live store was never opened for write.`);
-const baseline = new DatabaseSync(COPY_DB, { readOnly: true }).prepare("select max(id) m from entries").get().m;
+// max(id) is NULL on an empty store, and `id > NULL` matches nothing in SQLite: a snapshot taken from a
+// store with no entries would then count zero summaries placed and still report "0 truncated" - a green
+// that measured nothing. Coerce to 0 so the tranche's own entries are counted.
+const baseline = new DatabaseSync(COPY_DB, { readOnly: true }).prepare("select max(id) m from entries").get().m ?? 0;
 
 /* ---- 2. the seat compaction policy, read from the rig's own config ---- */
-const cfg = JSON.parse(execFileSync("node", ["-e", "process.stdout.write(require('fs').readFileSync(process.argv[1],'utf8'))", join(ROOT, "durig.config.json")], { encoding: "utf8" }));
+// `durig.config.json` is the operator's local config and is gitignored: a scratch worktree (the landing
+// gate runs the suite in one) has only `durig.config.default.json`. Fall back rather than crash, and say
+// which file the policy came from so the number can be attributed to a tree.
+const CONFIG_FILE = existsSync(join(ROOT, "durig.config.json")) ? "durig.config.json" : "durig.config.default.json";
+const cfg = JSON.parse(execFileSync("node", ["-e", "process.stdout.write(require('fs').readFileSync(process.argv[1],'utf8'))", join(ROOT, CONFIG_FILE)], { encoding: "utf8" }));
 const overrides = cfg.DURIG_COMPACTION_MODEL_OVERRIDES ?? {};
 const localPolicy = overrides["local/*"] ?? {};
 const SETTINGS = {
@@ -82,7 +89,7 @@ const SETTINGS = {
 		backgroundTokens: Number(localPolicy.backgroundTokens ?? 32768),
 	},
 };
-console.log(`policy used: ${JSON.stringify(SETTINGS.compaction)} (pi-durable defaults 16384/20000/32768)`);
+console.log(`policy used: ${JSON.stringify(SETTINGS.compaction)} (from ${CONFIG_FILE}; pi-durable defaults 16384/20000/32768)`);
 
 /* ---- 3. open the copy; arm or not arm the extension ---- */
 const storage = await openNodeSqliteStorage(COPY_DB);
