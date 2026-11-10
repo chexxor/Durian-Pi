@@ -11159,3 +11159,47 @@ row (#6178), not a merge.
 upstream `main`; a tag pin can never satisfy `drift: false`, so the contract itself is mis-specified), whether the
 two seam approximations are acceptable long-term, and whether the 13 held worktrees are reaped — all are the team's,
 and the fleet is awake and routing them.
+
+## Pending (D-number minted at land time, per the convention at line 3233) — **a read routes on HEALTH, not on LIVENESS, and the diagnostic surface must survive the refusal** (architect, item #5631, 2026-11-10)
+
+**Status.** DESIGN OF RECORD for RM-329 2/3 + 3/3. Not yet implemented; no code is changed by this entry.
+
+**Context.** `brokerHealth` (`src/broker.mjs:2239`) already computes `up | degraded | down` from two legs —
+LIVENESS (heartbeat + pid) and PROGRESS (`lastPassAt` within `streamTimeout + BROKER_PROGRESS_MARGIN_MS`) —
+but only `status` prints it. `readData` (`src/readclient.mjs:109-111`) routes on `brokerAliveFor`, liveness
+alone, with `timeoutMs = 120_000` (`:35`). Measured in an item worktree of main `f192f543`
+(`node tools/probes/routing-on-liveness-vs-progress.mjs`, exit 0): a live pid, a fresh heartbeat and a
+6-hour-old `lastPassAt` sends a `queue` read to the spool (inbox 0 → 1) and the caller waits out the
+literal — exit ETIMEDOUT at 40 s, the same shape the live store shows now (`inbox=9 drainStranded=9
+resultFiles=0 hbAgeS=5 progressAgeS=22731`). A state naming a DEAD pid already routes to `readLocal` and
+answers in 373 ms, so the `down` leg is not the gap.
+
+**Decision.** One predicate, one verdict, two consumers. (1) `brokerAlive` keeps the heartbeat-stale guard
+and calls `brokerProcessAlive` rather than carrying its own `process.kill(pid, 0)` block — the same
+`!== "ESRCH"` fail-safe (#3398) written twice in one file is the drift the row is hunting for. (2) `readData`
+computes `brokerHealth` once and routes three-way: `up` → spool; `degraded` → structured refusal
+(`code = "broker-degraded-no-progress"`, `err.db`, the ages in the message) that touches **neither the
+spool nor the store**; `down` → `readLocal`, and "proven gone" means the conjunction of a fresh-enough
+heartbeat and `ESRCH`, never signal 0 alone. (3) The read bound is **derived** — `min(progressTimeoutMs,
+callerBound)`, 10-30 s default — replacing the 120 s literal, and the number is named in the demo. (4) The
+3/3 check rule reads `<db>.broker.json` off-store and calls the same predicate; it must survive an
+unreadable store.
+
+**Consequences.** `status`, `queue`, `check` and every read verb inherit one definition of "is the broker
+useful right now", so a seat and an operator cannot get different answers from two surfaces. Refusal is
+fast and named, which is what makes a permanent refusal survivable rather than a reason to kill the process.
+The cost is real and must be designed for: if `degraded` refuses reads, the operator's way of SEEING the
+wedge is itself refused — measured, 40 s, ETIMEDOUT — so `status` must answer inside the bound with the
+broker block and the store-derived sections marked unavailable, not error out. Demos must refresh the
+forged heartbeat before each verb or they pass for the wrong reason: the 60 s liveness gate
+(`BROKER_HEARTBEAT_TIMEOUT_MS`, `src/broker.mjs:2195`) makes a once-forged state read as dead by the third
+call (#5829, recorded in `docs/runbooks/broker-down-or-stalled.md`); this probe hit exactly that trap on
+its first run.
+
+**Alternatives considered.** (a) Lower the bound only, keep liveness routing — cheap, one literal; rejected
+as a sole fix because the caller still gets a timeout with no cause and the spool still accumulates
+undrained intents. (b) On `degraded`, fall back to `readLocal` — rejected outright: it puts a second writer
+against a broker that is alive, and `SqliteStorage.document()` takes `BEGIN IMMEDIATE` even for a read;
+"unavailable-and-LOUD" is the ruling. (c) Route on signal-0 liveness for simplicity — rejected: a recycled
+pid or a broker mid-pass is misclassified, and a false-dead report admits the second writer that corrupted
+run-control docs twice on 2026-10-16.
