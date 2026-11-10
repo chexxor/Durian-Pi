@@ -5,11 +5,11 @@
 // delegate session ran `node demo/<name>.test.mjs` on eight instruments, `docs/ROADMAP.md` credited them,
 // and mid-session they were gone from disk — with NO `git status` entry, because they had never been
 // committed. `git log --all --diff-filter=A -- <path>` printed nothing: nothing to restore. The suite
-// runner enumerates members from DISK (`scripts/suite.mjs:36`, `readdirSync(demoDir).filter(...)`), so a
+// runner enumerates members from the DECLARED roots (`src/testareas.mjs` `discoverTests`, #6132), so a
 // member that vanishes is a SILENT SHRINK: the suite goes green having run fewer tests.
 //
 // This instrument makes both facts loud, read-only, from git rather than from disk:
-//   1. SUITE MEMBERSHIP — `git ls-files demo/` vs what is on disk, both directions.
+//   1. SUITE MEMBERSHIP — `git ls-files` over the DECLARED roots vs what those roots discover on disk, both
 //      git-only  = a member tracked but deleted from disk (a missing test the suite will not run, and
 //                  which `node demo/x.test.mjs` would hit as MODULE_NOT_FOUND).
 //      disk-only = an untracked member (invisible to the next clone, un-diffable, unrecoverable, and the
@@ -25,19 +25,19 @@
 // counts, for a digest line. Read-only by construction: it runs `git ls-files` / `git cat-file` and reads
 // the tree. It never prunes, never removes, never writes.
 //
-//   node tools/instrument-provenance.mjs [--quiet] [--demo-dir demo] [--strict-cites]
+//   node tools/instrument-provenance.mjs [--quiet] [--strict-cites]
 //   --strict-cites also fails on a ROADMAP cite that resolves to nothing; the default reports it, because
 //   historical rows legitimately cite files that were deliberately deleted later.
 
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { candidateTestsOutsideSuite, declaredExclusions, discoverTests, readManifest, suiteRoots } from "../src/testareas.mjs";
 
 const args = process.argv.slice(2);
 const quiet = args.includes("--quiet");
 const strictCites = args.includes("--strict-cites");
-const demoIdx = args.indexOf("--demo-dir");
-const demoDir = demoIdx >= 0 ? args[demoIdx + 1] : "demo";
 
 const git = (...a) => {
 	try {
@@ -54,18 +54,29 @@ let drift = 0; // hard: membership / ledger — always fails the run
 let citeDrift = 0; // soft: ROADMAP cite resolution — fails only under --strict-cites
 
 // ---- 1. suite membership: git is the authority, disk is the observation ----------------------------
-const tracked = git("ls-files", "--", demoDir)
+// Membership is whatever the DECLARED roots discover (#6132), not one hard-coded directory: a member living
+// in `tools/` counted as "not a suite member" here while the gate ran it, which is the same blindness the
+// runner used to have.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const manifest = readManifest(ROOT);
+const members = discoverTests(ROOT);
+const memberSet = new Set(members);
+const rootDirs = suiteRoots(manifest).map((r) => r.dir);
+const tracked = git("ls-files", "--", ...rootDirs)
 	.split("\n")
-	.filter((n) => n.endsWith(".test.mjs"))
-	.map((p) => p.split("/").pop())
+	.filter((n) => memberSet.has(n))
 	.sort();
-const onDisk = readdirSync(demoDir)
-	.filter((n) => n.endsWith(".test.mjs"))
-	.sort();
+const onDisk = members;
 const gitOnly = tracked.filter((n) => !onDisk.includes(n));
 const diskOnly = onDisk.filter((n) => !tracked.includes(n));
 
-console.log(`suite members: git=${tracked.length} disk=${onDisk.length}`);
+console.log(`suite members: git=${tracked.length} disk=${onDisk.length} (roots: ${suiteRoots(manifest).map((r) => `${r.dir}/${r.glob}`).join(", ")})`);
+const exclusions = declaredExclusions(manifest);
+if (exclusions.length) console.log(`  declared exclusions (in a root, not run by the gate): ${exclusions.join(", ")}`);
+const notCovered = candidateTestsOutsideSuite(ROOT);
+if (notCovered.length) {
+	console.log(`  NOT COVERED by the suite roots (${notCovered.length}) — test-shaped files the gate will never run: ${notCovered.join(", ")}`);
+}
 if (gitOnly.length) {
 	drift++;
 	console.log(`  GIT-ONLY (${gitOnly.length}) — tracked but absent from disk; the suite will NOT run these and`);
@@ -78,10 +89,10 @@ if (diskOnly.length) {
 }
 
 // ---- 2. does the suite RUNNER enumerate the same set this check just printed? ----------------------
-// scripts/suite.mjs reads disk, so a disk-only member is run today and gone tomorrow, and a git-only
-// member is simply missing. Print what the runner WOULD run, from the runner's own rule.
+// The runner reads disk through the declared roots, so a disk-only member is run today and gone tomorrow, and a
+// git-only member is simply missing. Print what the runner WOULD run, from the runner's own rule.
 const runnerSet = onDisk;
-say(`  the runner's own rule (scripts/suite.mjs:36 readdirSync+filter) would run ${runnerSet.length} members`);
+say(`  the runner's own rule (src/testareas.mjs discoverTests, roots ${rootDirs.join(", ")}) would run ${runnerSet.length} members`);
 
 // ---- 3. ROADMAP cites: does every named repo path resolve? ----------------------------------------
 // LIMITATION worth stating rather than hiding: a cite can be unresolved for three different reasons, and

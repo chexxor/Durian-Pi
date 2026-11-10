@@ -36,7 +36,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { areaNames, discoverTests, filesForArea, readManifest, validateManifest } from "../src/testareas.mjs";
+import { areaNames, candidateTestsOutsideSuite, declaredExclusions, discoverTests, filesForArea, readManifest, suiteRoots, validateManifest } from "../src/testareas.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** Same per-test bound the product runner uses (`scripts/test.mjs` DEFAULT_TIMEOUT_MS). */
@@ -195,6 +195,7 @@ function main(argv) {
 	const coverage = validateManifest(ROOT);
 	const manifest = readManifest(ROOT);
 	const tests = discoverTests(ROOT);
+	const outside = candidateTestsOutsideSuite(ROOT);
 	const sources = new Map(tests.map((t) => [t, readFileSync(join(ROOT, t), "utf8")]));
 	const changed = opts.paths ? opts.paths.map((p) => ({ path: p, status: "P", via: "--paths" })) : changedPaths(opts.base);
 	if (changed.length === 0) {
@@ -248,6 +249,9 @@ function main(argv) {
 		docOnly,
 		rule: "a demo test is selected when its own source contains the changed path, its containing directory, or its file name",
 		selected: selected.map((t) => ({ test: t, area: areaOf(t), tier: isDirect(t) ? "direct" : "mention", why: hits.get(t).map((h) => `${h.kind}:${h.needle}`).sort().slice(0, 4).join(" ") })),
+		suiteRoots: suiteRoots(manifest).map((r) => `${r.dir}/${r.glob}`),
+		declaredExclusions: declaredExclusions(manifest),
+		testsOutsideSuite: outside,
 		areasImplicated: [...implicatedAreas].sort(),
 		scanFindings: scan,
 		fullGate: { command: "node scripts/test.mjs --all", tests, coverage: coverage.errors },
@@ -267,6 +271,26 @@ function main(argv) {
 
 	process.stdout.write(`changed: ${changed.length} path(s)${opts.base ? ` (working tree + vs ${opts.base})` : ""} · doc-only: ${docOnly ? "YES" : "no"}\n`);
 	for (const c of changed) process.stdout.write(`  ${c.status} ${c.path}\n`);
+
+	// A test file the suite does not run is a silent gap, not a detail (#6132): discovery is a partition of the
+	// declared roots, so anything test-shaped outside them never executes in the gate. Name it, do not drop it.
+	const changedOutside = changed.filter((c) => outside.includes(c.path));
+	if (changedOutside.length) {
+		process.stdout.write(
+			`\nNOT COVERED BY THE SUITE — ${changedOutside.length} changed path(s) are test-shaped but live outside the declared suite roots ` +
+				`(${suiteRoots(manifest).map((r) => `${r.dir}/${r.glob}`).join(", ")}); the gate will NEVER run them: ${changedOutside.map((c) => c.path).join(", ")}\n` +
+				`  add them to demo/test-areas.json under an area (and their directory to "suiteRoots"), or delete them. A test nobody runs is worse than no test.\n`,
+		);
+	}
+	const excluded = declaredExclusions(manifest);
+	if (excluded.length) {
+		process.stdout.write(`\nSUITE MEMBERSHIP: the roots are ${suiteRoots(manifest).map((r) => `${r.dir}/${r.glob}`).join(", ")}; declared exclusions (in a root, not run by the gate): ${excluded.join(", ")}\n`);
+	}
+	if (outside.length) {
+		process.stdout.write(
+			`\nSUITE MEMBERSHIP: ${tests.length} files in the roots; ${outside.length} test-shaped file(s) outside them are NOT run by the gate: ${outside.slice(0, 12).join(", ")}${outside.length > 12 ? ` … +${outside.length - 12} more` : ""}\n`,
+		);
+	}
 
 	if (scan.length) {
 		process.stdout.write(`\nBYTE SCAN FAIL — ${scan.length} invisible character(s) in changed text files (a broken repro command is invisible in review):\n`);
