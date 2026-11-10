@@ -3776,3 +3776,17 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     refuses a forced kill; `kill -INT <pid>` ends it cleanly and logs `EXIT … reason=deadline passes=-`, which is
     the CLI-side literal (ROADMAP 328), not the run's pass count. `cli.mjs status`/`queue` timing out while a direct
     read-only open answers in milliseconds is the same signature (`docs/runbooks/broker-down-or-stalled.md`).
+
+225. **A broker can be ALIVE, heartbeating, and incapable of a pass — `SqliteStorage is closed`.** Measured
+    2026-11-10T04:17Z (pid 1961882): `PASS-FAILED Error: SqliteStorage is closed` three times, then
+    `HARNESS-REOPEN attempt=3` and `HARNESS-REOPEN-CAP-EXCEEDED attempts=4`; `heartbeatAt` kept advancing while
+    `lastPassAt` froze, so `broker-serve.mjs --status` says "up" and every broker-routed read (`cli.mjs status`,
+    `cli.mjs queue`) times out (exit 1 / 124) while a direct read-only open answers. The reopen loop has a cap and
+    then goes silent — it does not exit. Recovery that worked: `kill -INT <pid>` → `cli.mjs resume` (withholds the
+    stranded submissions, exit 0) → restart with the key exported; pass 1 woke 9 seats and the spool drained 4 → 0.
+    No row owns this signature yet (registered as a candidate in the pm intent 2026-11-10).
+226. **An acceptance instrument living in gitignored `.spike/` is lost the moment the scratch is swept.** The
+    100-compaction driver and its negative control are now in the tracked tree at
+    `docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs` (rows #6128/#6131 still ask devtools to
+    promote it to `tools/`). Note the import lesson when moving a probe: a static `../src/…` import only resolves
+    from one directory depth — walk up to the repo root and import with `pathToFileURL`.

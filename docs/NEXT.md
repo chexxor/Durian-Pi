@@ -1,15 +1,16 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-10T03:1xZ (delegate session **N23** — the fleet is **running**: the broker was restarted with
+**Last update:** 2026-11-10T04:57Z (delegate session **N23** — the fleet is **running**: the broker was restarted with
 `DURIG_LOCAL_API_KEY` in its own process env, the spool drained to 0, passes are advancing, and seats are minting
 their own rows. The fleet-silence root cause was **not** routing: it was a broker with **no** `DURIG_*` env at all,
 so every seat generation 401'd and the supervisor escalated 171 rows as `repeated_failure`.
-Measured this window: **8 natural seat compactions since the mechanism armed, 0 truncated, 8 note-backed**; the
-100-compaction / 0-truncated acceptance ran clean on a snapshot copy (exit 0, 7.0 s) with a negative control that
-reproduces 11 truncations. `milestone-check.mjs` exits **0** with **6** blockers (was 8). **9 branches landed** to
-main across this thread (7 earlier + item-6077 + item-5745); worktrees 22 → **11**, refs 14. **N18 is still not
-closed**: 10 of 12 seats have no note because they have no claimed work, and ROADMAP 352 (the install gap) is
-unlanded — both are team routing decisions the delegate cannot make. **M5** gate unchanged: 3 PASS, 1 PARTIAL,
+Measured this window: **12 natural seat compactions since the mechanism armed, 0 truncated, 14 note-backed**; the
+100-compaction / 0-truncated acceptance ran clean on a snapshot copy (exit 0, **27.9 s**) with a negative control that
+reproduces **10** truncations. `milestone-check.mjs` exits **0** with **5** blockers (was 8 → 6 → 5). **10 branches
+landed** to main across this thread (9 earlier + item-6077 + item-5745 + **item-6057**, main tip `226b8d76`);
+`node scripts/test.mjs --all` on main is **280/280 in 62.9 s**; worktrees 22 → **17**, refs **20**. **N18 is still not
+closed**: **8 of 12 seats** have no note because they have no claimed work, and ROADMAP 352 (the install gap) is
+unlanded — `--check` exits 0 on main but **1 in every seat worktree** (11/11 measured) — both are team routing decisions the delegate cannot make. **M5** gate unchanged: 3 PASS, 1 PARTIAL,
 4 FAIL. Nothing was claimed in the queue by the delegate.
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240, first tranche ROADMAP 331)**.
@@ -32,22 +33,29 @@ not delivered.
 
 **Current item:** N18's mechanism is proven, its coverage is not. `node
 docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` → **exit 0**, `PASS (mechanism)`,
-**6 operational blockers**: 219 lifetime truncated summaries, 209 run-cap refusals, 212 truncations on seats with no
-cap refusals, **10 of 12 seats have no continuity note** (they hold no claimed work to note), scribe at 111% of its
-declared window, impl claimed 1 item and completed none. Live evidence since arming (2026-11-09T23:47:45Z): **8
-compactions, 0 truncated, 8 note-backed**. The 100/0 number is a **driven measurement on a snapshot copy**, not 100
-natural fleet compactions — say that, do not round it. `node
-.spike/compaction-acceptance.mjs --target 100 --mode armed` → exit 0 in **7.0 s**: 100 compaction tasks, 0 truncated,
-100 provider calls = 100 growth turns + **0 summariser requests**; control `--mode control --stopReason length` → 11
-truncated (the counter is not vacuous). **Next milestone M5** is ready: 171 → 172 → 173 → 175 → 176
+**5 operational blockers**: 219 lifetime truncated summaries, 209 run-cap refusals, 212 truncations on seats with no
+cap refusals, **8 of 12 seats have no continuity note** (they hold no claimed work to note), impl claimed 1 item and
+completed none. Live evidence since arming (2026-11-09T23:47:45Z): **12 compactions, 0 truncated, 14 note-backed**.
+The 100/0 number is a **driven measurement on a snapshot copy**, not 100 natural fleet compactions — say that, do not
+round it. `node docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs --target 100 --mode armed` → exit 0
+in **27.9 s**: 100 compaction tasks, 0 truncated, 102 faux provider calls = 100 growth turns + **2 summariser
+requests**, 65 summary markers (48 note-backed); control `--target 12 --mode control --stopReason length` → exit 0,
+**10 truncated** (the counter is not vacuous). The instrument is now **tracked** — it was in gitignored `.spike/`
+(rows #6128/#6131 still ask devtools to promote it into `tools/`). **Next milestone M5** is ready: 171 → 172 → 173 → 175 → 176
 (`docs/reviews/milestone-m5-solidified-2026-11-09.md`), gate re-runnable in 1.6 s, four criteria open (C1, C3, C4, C6).
-The broker is healthy (pid in `<db>.broker.json`, passes advancing); the team's rows **#5931–#5942** (N18) and
-**#6036/#6037** (ROADMAP 352) are still `deferred` to human; the delegate asserted nothing and sent pm an intent
-(requestId `fef4cf53-996d-450b-863e-26f8549dbd47`) asking it to release them.
+The broker is pid **1999470** (started 04:42:52Z, `--max-duration 3600`, exits ~05:42:52Z, spool 0 pending, pass 1
+woke 9 seats); it had to be restarted twice today because it wedged with `PASS-FAILED Error: SqliteStorage is closed`
+→ `HARNESS-REOPEN-CAP-EXCEEDED attempts=4` (alive, fresh heartbeat, frozen `lastPassAt`; every broker-routed read
+timed out while a direct read-only open answered). `kill -INT <pid>` → `cli.mjs resume` → restart cleared it. The
+team's rows **#5931–#5942** (N18) are still `deferred` to human by the supervisor; ROADMAP 352 was **cancelled and
+re-issued as #6125/#6127** (pm → devtools, queued, #6127 blockedBy #6125). The delegate asserted nothing and sent pm
+intents `fef4cf53-996d-450b-863e-26f8549dbd47` and `209af9be-7873-4a1c-a64b-6c46b4339e9b` (coverage + re-drive).
 `node docs/evidence/2026-11-09-milestone-m5/gate.mjs --db ./selfdev.sqlite` (1.6 s, no model, no broker — expect
 `3 PASS, 1 PARTIAL, 4 FAIL`) then
 `node docs/evidence/2026-11-08-context-window/milestone-check.mjs --db ./selfdev.sqlite` (3.7 s, expect `PASS
-(mechanism)` exit 0 with 8 blockers; a `FAIL` now means code, not configuration). Then the harness-plane guard chain:
+(mechanism)` exit 0 with 5 blockers; a `FAIL` now means code, not configuration). The install gap is per tree: `cd
+item-<id> && node tools/compaction-guard-install.mjs --check` exits **1 (NOT INSTALLED)** while main reports UP TO
+DATE (measured 11/11 seat worktrees at 04:33Z). Then the harness-plane guard chain:
 `node tools/compaction-guard-install.mjs --check && node tools/compaction-guard-test.mjs && node tools/compaction-guard-e2e.mjs && COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs`
 (expect `UP TO DATE ... (+ .pi/extensions/compaction-guard-core.mjs)`, `ALL PASS` 28 checks in ~0.5 s, then
 `ALL PASS` manual mode 3–5 s, then `ALL PASS` auto mode **50–86 s** — measured 52 s and 86 s on this box on the same
