@@ -11233,3 +11233,54 @@ row (#6178), not a merge.
 upstream `main`; a tag pin can never satisfy `drift: false`, so the contract itself is mis-specified), whether the
 two seam approximations are acceptable long-term, and whether the 13 held worktrees are reaped — all are the team's,
 and the fleet is awake and routing them.
+
+## D257 — the single-family rig is ACCEPTED, so cross-family author/verifier verification is SUSPENDED and `verified` in a landing report means SINGLE-FAMILY verified (ruling 2026-11-07, recorded 2026-11-10; minted by `pm` on lead's #5390 clause F; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0`)
+
+**Number is provisional.** D257 is the next free slot in ledger order at the time of writing; per the mint-at-land
+rule the landing pass re-mints it in issue order, and no branch should treat this number as final.
+
+**Status.** In force. Docs-only: this entry changes no number, no knob and no seat pin.
+
+**The ruling, in the words it was given.** "the single-family rig is ACCEPTED until a second local model fits." The
+loopback server serves one model and both GPUs are full (A4000 15,816/16,376 MiB; 3090 23,012/24,576 MiB). Therefore the
+cross-family author/verifier rule is **SUSPENDED, not fixed**.
+
+**The consequence this entry exists for — a change in the meaning of a word.** Every `verified` in a landing report
+means **SINGLE-FAMILY verified**: the author seat and the verifying seat resolve to the same model family. That is the
+already-named lost axis in `docs/runbooks/verifier-independence.md`, now stated for the record. A reader of an old
+landing report cannot tell which meaning applied, so the meaning must be **stated in the report, not assumed**.
+"Independent" buys seat, transcript and execution; it does not buy model family. **The exception is named so the rule
+is not overclaimed:** a leg routed to `auditor`, the metered canary, IS cross-family — which is why such rows are minted
+only when the metered path is the point of the check (`docs/runbooks/verifier-independence.md`, "Routing rule: the metered
+canary is not a work queue"). The report has to say which kind it actually ran.
+
+**Exit condition, named so the suspension cannot rot into a permanent claim.** It lapses when **a second local model
+fits**. The machinery is already in the tree — measured 2026-11-10 in the `item-5566` worktree: `src/config.mjs:127`
+reads a SECOND locally-served provider (ROADMAP 189), `durig.config.default.json:11` carries `local2/*` compaction
+overrides, and `node demo/second-local-provider.test.mjs` exits **0**. What is not true is the roster: `rig.selfdev.json`
+names 11 seats on `local/qwen3.8-flash-next-q2_0` and exactly one on `verifier/openai/gpt-oss-120b` (`auditor`, line 139).
+
+**What this seat measured, so the entry is not purely carried forward.** `node cli.mjs check rig.selfdev.json` (exit
+**0**) reports `single-model-rig` as `{"status":"pass","found":0}` and `no-verifier-seat` as `{"status":"pass","found":0}`.
+Read that precisely: the guard passes because ONE metered seat splits the model ids. A `pass` there is **not** evidence
+that cross-family verification is happening — it is the shape the rig's own principle warns about, a cheap signal that
+can accept but must not decide. With one family plus a canary the honest reading is: the check is satisfied, the
+invariant is suspended.
+
+**Provenance, as the row requires.** The GPU figures and the single-model fact are the **operator's** measurements
+carried forward by lead; lead ran no command for clause F and pm ran none, and lead's own framing — "No verification
+claimed by me in this row" — is preserved here. The green guards lead reports (`test.mjs --area docs` 6/6; `check`
+findings 142 → 136 with `single-model-rig` pass/0) are the operator's, **not** re-checked by lead or pm. The only numbers
+in this entry produced by the writing seat are the roster count and the commands named above, each with its exit code.
+
+**A pin that is wrong in three places, recorded rather than papered over.** This row names the suspended rule
+"D48/D119", and the pairing repeats at `docs/DECISIONS.md:4417` and in `rig.selfdev.json`'s own `_readme`. The headings at
+`docs/DECISIONS.md:1292` (D48) and `docs/DECISIONS.md:3423` / `:3813` (D119, the identical heading twice) are about
+worktree recovery / shared-tree safety and about a void ADR-number reservation — not about verifier families. The
+cross-family author/verifier decisions in the log are **D137** (`docs/DECISIONS.md:4667`) and **D166**
+(`docs/DECISIONS.md:6363`), and the code-side split is `src/providers/local.mjs`, which `demo/deepinfra-catalog.test.mjs:81`
+calls "D166's cross-family author/verifier split". The ruling stands in its own words; the citation does not match it.
+Whoever owns the numbering should re-pin it, and no seat should read this entry as a reopen of D48 or D119.
+
+**Scope limit.** This entry opens **no** second-model acquisition row: GPU headroom is operator-owned. It does not re-open
+D48, D119, D137 or D166 — an entry that reads as a reopen invites a seat to start work that cannot run.
