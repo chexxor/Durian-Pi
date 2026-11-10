@@ -224,6 +224,7 @@ forge; timeout 60  node cli.mjs status --json > hang-probe.txt; echo $?   # 124;
 forge; timeout 150 node cli.mjs status --json > dark-probe.txt; echo $?   # 1; read health: timed out awaiting the broker's result
 kill $BPID
 rm rig.sqlite rig.sqlite.broker.json status-probe.txt hang-probe.txt dark-probe.txt probe.out
+rm -r rig.sqlite.broker.inbox rig.sqlite.broker.inbox.out rig.sqlite.broker.inbox.error   # the timed reads spooled intents here
 ```
 All three exit codes were measured this way. The state file's pid only has to be *alive* — signal 0 plus a
 heartbeat under 60 s is the whole predicate, and that is the finding.
