@@ -5,7 +5,7 @@ writes: true
 precondition: "none"
 last_verified: unverified
 verified_by: delegate
-evidence: "ROADMAP 61-64 (design docs/BROKER-SUPERVISION.md)"
+evidence: "ROADMAP 61-64 (design docs/BROKER-SUPERVISION.md); env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -28,7 +28,7 @@ Once the daemon exists: none. A restart is the daemon's job and is idempotent.
 
 ## Diagnose (read-only)
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
+DURIG_DB=./selfdev.sqlite node cli.mjs status
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId"
 cat selfdev.sqlite.broker.down 2>/dev/null   # durable down marker (item 61) — present means an intended stop
 ```

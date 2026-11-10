@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-11-10
 verified_by: scribe
-evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders). Fold rule added 2026-11-10 (#6111), verified in `item-6111` off `main f192f543`: `grep -c 'RELAYS a ruling' docs/runbooks/branch-cleanup.md` → 2; `grep -c 'duplicate a recorded ruling' docs/runbooks/delegate-doc-hygiene.md` → 1; `git grep -niE 'relays|relay a ruling' -- docs/DECISIONS.md` → no matches, exit 1; `node tools/review-cite-check.mjs docs/runbooks/branch-cleanup.md` → 0 failing, exit 0. #6149 (2026-11-10, `main` f192f543): the Verify probe below was run on the re-cut `dd2583b` — `git merge-base --is-ancestor dd2583b main` exit 1, `git cherry -v main dd2583b` exit 0 printing `+ dd2583b12…`, per-file blob comparison against the landed re-cut `bc51ba5b` exit 0 with 4 of 5 files BLOB-IDENTICAL, `node demo/compacteval.test.mjs` exit 0, `node demo/worktree-prune-branch.test.mjs` exit 0."
+evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders). Fold rule added 2026-11-10 (#6111), verified in `item-6111` off `main f192f543`: `grep -c 'RELAYS a ruling' docs/runbooks/branch-cleanup.md` → 2; `grep -c 'duplicate a recorded ruling' docs/runbooks/delegate-doc-hygiene.md` → 1; `git grep -niE 'relays|relay a ruling' -- docs/DECISIONS.md` → no matches, exit 1; `node tools/review-cite-check.mjs docs/runbooks/branch-cleanup.md` → 0 failing, exit 0. #6149 (2026-11-10, `main` f192f543): the Verify probe below was run on the re-cut `dd2583b` — `git merge-base --is-ancestor dd2583b main` exit 1, `git cherry -v main dd2583b` exit 0 printing `+ dd2583b12…`, per-file blob comparison against the landed re-cut `bc51ba5b` exit 0 with 4 of 5 files BLOB-IDENTICAL, `node demo/compacteval.test.mjs` exit 0, `node demo/worktree-prune-branch.test.mjs` exit 0. ; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -167,7 +167,7 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    it removes the ref ONLY when every commit is patch-equivalent to `main` AND no worktree holds it,
    and it prints the recovery command:
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs worktree prune-branch <branch>
+   DURIG_DB=./selfdev.sqlite node cli.mjs worktree prune-branch <branch>
    ```
    Refusals are loud (`ok:false`, exit 1) and name the reason: an unlanded `+` commit, a worktree
    holding the ref, or an already-ancestor ref (that one needs `git branch -d`, which is allowed and

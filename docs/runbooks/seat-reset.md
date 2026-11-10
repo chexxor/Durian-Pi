@@ -5,7 +5,7 @@ writes: true
 precondition: "broker-stopped"   # a full reset is a write verb; a steer is not (see Do)
 last_verified: 2026-10-21
 verified_by: impl
-evidence: "items 806/#700; commits f086382+c38815f (D77 detect), 7d62929 (auto re-drive), a0ab993 (P3 Language)"
+evidence: "items 806/#700; commits f086382+c38815f (D77 detect), 7d62929 (auto re-drive), a0ab993 (P3 Language); env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); Verify re-run 2026-11-10 (tree f192f543): node demo/degeneration.test.mjs exit 0, node demo/scheduler.test.mjs exit 1 (AssertionError: the harness published its commits to the subscriber) - the re-drive half stays unverified here, and the red is not attributable to the env-name change"
 check_rule: null
 ---
 
@@ -27,10 +27,10 @@ through the broker inbox while the broker runs.
 
 ## Diagnose (read-only)
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
 # Preview the reset — READ-ONLY, needs no broker stop (ROADMAP 84):
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs reset <seat> --dry-run
+DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> --dry-run
 ```
 A repeating assistant entry with no tool calls, or CJK in the live stream, confirms a loop / wrong
 language. For the text-form tool call, **read the stored entry, not a screen capture**: the terminal
@@ -43,7 +43,7 @@ STRIPS the DSML delimiter, so a screen read shows a clean `<parameter>` block an
 the inbox; the broker submits it to the seat on its next pass.
 ```bash
 # write the directive to a file first (never inline — a backtick would be command-substituted)
-DURIAN_PI_DB=./selfdev.sqlite node intent.mjs <seat> --body-file .spike/delegate/intent-<seat>-english.txt
+DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --body-file .spike/delegate/intent-<seat>-english.txt
 ```
 
 **Detected degeneration is reset for you (no manual step).** The degeneration guard (`src/degeneration.mjs`
@@ -56,8 +56,8 @@ generic stall after a reset is fixed; you do not need to spool a nudge to re-wak
 **Full context reset (breaks a degenerative loop that did not trip the guard):** stop the broker, reset,
 restart.
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve --stop          # proceed only on "stopped": true
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs reset <seat> "Re-anchor: work and think in English; continue your claimed item."
+DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop          # proceed only on "stopped": true
+DURIG_DB=./selfdev.sqlite node cli.mjs reset <seat> "Re-anchor: work and think in English; continue your claimed item."
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
 ```
 `reset` refuses while the seat holds a live generation lease; wait for the run to settle first.
@@ -94,9 +94,9 @@ broker-stopped write verb, so it needs the same window as a reset; if the seat's
 `admitted_not_started`, run `resume` first. A delegate/operator runs it (a seat cannot stop the broker
 it lives in):
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs serve --stop      # confirm the PROCESS exited, not just the flag
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume            # re-arm any admitted_not_started submission
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs compact <seat> "Re-anchor: keep turns short and in English."
+DURIG_DB=./selfdev.sqlite node cli.mjs serve --stop      # confirm the PROCESS exited, not just the flag
+DURIG_DB=./selfdev.sqlite node cli.mjs resume            # re-arm any admitted_not_started submission
+DURIG_DB=./selfdev.sqlite node cli.mjs compact <seat> "Re-anchor: keep turns short and in English."
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/serve-noroot.ps1
 ```
 

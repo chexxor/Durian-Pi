@@ -3,9 +3,9 @@ runbook: store-secret-detected
 symptom: "`status`/`watch` shows a `secret_detected` attention notice — a secret-shaped value is in the committed store"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-21
+last_verified: 2026-11-10
 verified_by: impl
-evidence: "item #828; src/secretdetect.mjs; demo/secretdetect.test.mjs"
+evidence: "item #828; src/secretdetect.mjs; demo/secretdetect.test.mjs; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/secretdetect.test.mjs exit 0"
 check_rule: null
 ---
 
@@ -37,7 +37,7 @@ Read-only. The Diagnose step only reads; it opens no writing harness.
 
 ## Diagnose (read-only)
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
+DURIG_DB=./selfdev.sqlite node cli.mjs status
 ```
 Look for `"kind":"secret_detected"` in the `attention` array (and the matching `secretFindings`), which
 name the seat, the entry id, the location inside the entry (`content[i].text` / `content[i].arguments`)

@@ -55,11 +55,14 @@ Blast radius: every seat, the broker, the TUI, the degeneration guard, and the s
   `--sync` + `--link`. This is D129's finding ("an UN-LINKED PIN, not a version gap") and the 2026-10-19 incident,
   and it also makes every suite verdict from that tree non-comparable. See
   [worktree-unlinked-deps.md](worktree-unlinked-deps.md).
-- **Name the store with `DURIG_DB`, never `DURIAN_PI_DB`.** Measured: with both set the CLI used `DURIG_DB`, and
-  with **only** `DURIAN_PI_DB` set it opened the fallback `./rig.sqlite` (exit 1, `cause: no_store`). Only
-  `scripts/clockin.mjs` honours the old name; `CONFIG_KEYS` has 24 keys and `DURIAN_PI_DB` is not one of them, yet
-  **14 files in `docs/runbooks/` still carry the stale literal** (including `_template.md`). Copying one of those
-  lines during a pin update means you back up, migrate, or gate **the wrong file**. (D103.)
+- **Name the store with `DURIG_DB`, never `DURIAN_PI_DB`.** Re-measured 2026-11-10 in worktree
+  `item-5911` @ `f192f543` (Linux, node v24.22.1): with **both** set the CLI opened the `DURIG_DB` path; with
+  **only** `DURIAN_PI_DB` set it opened the fallback `./rig.sqlite` (exit 1, `cause: no_store`). Only
+  `scripts/clockin.mjs:379` honours the old name, and it takes it **first**; `CONFIG_KEYS`
+  (`src/config.mjs:116-219`) carries 39 keys, none of them `DURIAN_PI_DB`. The stale literal used to sit in
+  **16 runbook files / 31 command lines**, including `_template.md` — swept by #5911 on 2026-11-10, so the only
+  `DURIAN_PI_DB` mentions left under `docs/runbooks/` are this row's own trap discussion. Copying one of those
+  lines during a pin update means you back up, migrate, or gate **the wrong file**. (D103, ROADMAP 191.)
 
 ## Diagnose (read-only; safe with the broker up, changes nothing)
 
