@@ -6,7 +6,7 @@ writes: false
 precondition: "read-only probe of src/seatguard.mjs, src/confine.mjs, src/genlockreserve.mjs and the guard demos"
 last_verified: 2026-11-09
 verified_by: security
-evidence: "item #1779, worktree item-1779 @HEAD: `node demo/seatguard.test.mjs` exit 0, `node demo/confine.test.mjs` exit 0, `node demo/commit-secrets.test.mjs` exit 0; fail-open sites at src/seatguard.mjs:42,50,281,355-374 and src/genlockreserve.mjs:78"
+evidence: "item #1779, worktree item-1779 @HEAD: `node demo/seatguard.test.mjs` exit 0, `node demo/confine.test.mjs` exit 0, `node demo/commit-secrets.test.mjs` exit 0; fail-open sites at src/seatguard.mjs:42,50,282,355-374 and src/genlockreserve.mjs:78. Re-checked at main f192f543 (#6208): lines 42,50,362,78 hold verbatim; the collapse-detector catch moved 281 -> 282, which is why every citation here carries a re-check date; `git show --stat 5686be7` = 1 file, docs only; `grep -rn WORKTREE_ROOT --include=*.mjs src/` exit 1 (the #2425 seam does not exist yet)"
 check_rule: null
 ---
 
@@ -36,11 +36,19 @@ The danger is not that a heuristic fails open. The danger is that a heuristic's 
 
 - **Severity:** medium-high.
 - **Exploit path:** the guard's decision depends on the seat's persisted cwd. If `api.snapshot(AgentDoc, …)` throws, resolution falls back to `resolveSeatRoot().root`. `complete_work` already "SILENTLY resets the seat's persisted cwd to the broker's cwd, the shared tree" (`src/seatguard.mjs:355`-area comment, the `#3961` note) — so under a degraded read the guard resolves to exactly the tree the guard exists to protect. A relative write or a commit then lands in the shared checkout, which is the `#3122` / commit-on-main class. No attacker is needed; a store hiccup is enough, and a seat that wants a write to succeed has an incentive not to notice the warning on stderr.
-- **Fix:** when the root cannot be determined, **refuse the write/execute** and name the remedy (`prepare_workspace`). Fail-closed does not mean blocking ordinary work — it means the guard may not guess a root. The registered `DURIAN_PI_WORKTREE_ROOT` seam (`#2425`) is the deterministic source to fall back to before refusing.
+- **Fix:** when the root cannot be determined, **refuse the write/execute** and name the remedy (`prepare_workspace`). Fail-closed does not mean blocking ordinary work — it means the guard may not guess a root.
+  **Correction (from #6206), the first draft was wrong:** I wrote that the `DURIAN_PI_WORKTREE_ROOT` seam (`#2425`) is the deterministic fallback. It is **registered, not built** — `grep -rn "WORKTREE_ROOT" --include="*.mjs" src/` returns nothing, exit 1; the only mentions are a comment in `demo/complete-teardown-root.test.mjs:23` and this doc. Until it exists, the only legitimate fallback is the resolution the guard already shares: `src/seatroot.mjs:11` (`persisted seat cwd -> DURIG_SEAT_ROOT -> process cwd`), fed by the broker-side call that created the worktree for the item id the queue handed the seat. If that cannot name a root, deny — do not guess.
+
+### F-1b — a fallback root read from a seat-writable channel is fail-open wearing a fail-closed label
+- **Severity:** high, because it looks like a fix.
+- **Why:** `src/confine.mjs:28-32` states outright that every in-repo channel is seat-forgeable (D-ENV-AUTH: one OS user, so OS identity is a norm, not a control) and that the harness's own `process.env` is the only gate a seat cannot write for itself. `pickEnv` with `inheritEnv: false` (`src/confine.mjs:811-824`) makes a seat's command environment an allowlist-filtered subset **plus whatever the caller requests**, and `DURIG_SEAT_ROOT` is in the declared config inventory (`src/config.mjs:162`). The persisted cwd is written by `configure` (`src/seatroot.mjs:11`).
+- **Exploit path:** a guard that resolves its fallback root from env or from the persisted cwd accepts a root the seat chose. "Refuse when the root is undeterminable" becomes "accept whatever the seat supplied" — the boundary is crossed while the code reads as fail-closed.
+- **Fix:** the root comes from the broker process, for the item id the queue handed the seat. No env var, no persisted cwd, no seat-supplied value.
+- **Probe that can fail:** set `DURIAN_PI_WORKTREE_ROOT` (or `DURIG_SEAT_ROOT`) in a seat shell call to an arbitrary path and assert a relative write is still refused against the broker-resolved root. Today nothing can be asserted, because the variable does not exist in `src/`.
 - **Probe that can fail:** stub `api.snapshot` to throw, run a relative `write` through `beforeTool`, assert a block. Today it returns no block and prints a warning.
 
 ### F-2 — the collapse detector returns null when it cannot read
-`src/seatguard.mjs:281`: `catch { return null; // unreadable/no prior: not provably a collapse, so not refused }`.
+`src/seatguard.mjs:282` (281 when this was first measured; it shifted with the #3961 work): `catch { return null; // unreadable/no prior: not provably a collapse, so not refused }`.
 
 - **Severity:** low. It is a heuristic and it is honest about being weak ("WEAK check deliberately").
 - **Fix:** not a deny — a **reported non-check**. `refusalForWrite` should be able to return `{decision: "not-evaluated", reason: "prior state unreadable"}` so the seam can record that the rule did not run, rather than the absence of a refusal meaning the rule ran and was clean.
@@ -89,12 +97,14 @@ Two constraints, both mine and both non-negotiable:
 
 ## Gates — before any 133/134 code lands
 
-1. G1: every guard is labelled boundary or heuristic in its own comment, and the label drives its failure direction.
-2. G2: a boundary guard that cannot evaluate **denies**. No exception without a ratified reason in the code.
-3. G3: a heuristic that did not run reports `not-evaluated` in a machine-readable form.
-4. G4: a demo asserting F-1's fix (stub the snapshot, expect a block) — failing first.
-5. G5: genlock distinguishes confirmed-dead from unknown, with a demo.
-6. G6: refusal records contain classes and rule ids, never values; and the sink's write authority is settled before the sink exists.
+1. G0: the root a boundary guard resolves comes from the broker process, never from a seat-writable channel (env, persisted cwd, or a config value the seat can influence).
+2. G1: every guard is labelled boundary or heuristic in its own comment, and the label drives its failure direction.
+3. G2: a boundary guard that cannot evaluate **denies**. No exception without a ratified reason in the code.
+4. G3: a heuristic that did not run reports `not-evaluated` in a machine-readable form.
+5. G4: a demo asserting F-1's fix (stub the snapshot, expect a block) — failing first.
+6. G5: genlock distinguishes confirmed-dead from unknown, with a demo.
+7. G6: refusal records contain classes and rule ids, never values; and the sink's write authority is settled before the sink exists.
+8. G7: any root fallback is traced to the broker in a demo; a fallback that cannot be traced to the broker is not a fallback.
 
 ## Re-runnable evidence
 
@@ -107,7 +117,7 @@ node demo/commit-secrets.test.mjs   # exit 0 — includes the ratified fail-open
 grep -n "fail-open\|fail-closed" src/seatguard.mjs src/confine.mjs src/genlockreserve.mjs src/worktree.mjs src/gitobject.mjs
 ```
 
-That grep is the whole argument in one line: the rig already fails closed in some places (`src/confine.mjs:696` "fail-open-by-default is the defect this item is about"; `src/worktree.mjs:626`, `:1036`; `src/gitobject.mjs:110`) and fails open in others (`src/seatguard.mjs:42,50,281,355-374`; `src/genlockreserve.mjs:78`). What is missing is not intelligence, it is a named invariant that decides which direction is allowed where.
+That grep is the whole argument in one line: the rig already fails closed in some places (`src/confine.mjs:696` "fail-open-by-default is the defect this item is about"; `src/worktree.mjs:626`, `:1036`; `src/gitobject.mjs:110`) and fails open in others (`src/seatguard.mjs:42,50,282,355-374`; `src/genlockreserve.mjs:78`). What is missing is not intelligence, it is a named invariant that decides which direction is allowed where.
 
 ## Citations
 
@@ -115,4 +125,4 @@ That grep is the whole argument in one line: the rig already fails closed in som
 - `docs/ROADMAP.md:2621-2632` — items 133 and 134, owners, acceptance text.
 - `src/seatguard.mjs:42,50,268-289,355-374,442-500`; `src/confine.mjs:696,837,903`; `src/genlockreserve.mjs:41,78`.
 - `docs/runbooks/resume-while-broker-runs.md` — the second-writer incident that makes F-4 concrete.
-- Related rows: `#3635` (refusals name their verb), `#3743` (only ESRCH is dead), `#3961` (degraded-cwd refusal), `#2425` (`DURIAN_PI_WORKTREE_ROOT`), `#5976`/`#6014` (evidence-tree verdict, which is the same "a cheap signal may accept but never decide" principle).
+- Related rows: `#3635` (refusals name their verb), `#3743` (only ESRCH is dead), `#3961` (degraded-cwd refusal), `#2425` (`DURIAN_PI_WORKTREE_ROOT` — REGISTERED, HELD, not built), `#5976`/`#6014` (evidence-tree verdict: the same "a cheap signal may accept but never decide" principle), `#6181`/`#6183`/`#6184`/`#6185` (the rows these gates bind).
