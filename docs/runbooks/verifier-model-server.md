@@ -543,7 +543,9 @@ evidence that nothing was spent (ROADMAP **295**, **296**). The `:1234` steps ab
 **Symptom.** A verb that registers providers prints
 `{"spend":"registration-refused",…,"causes":["metered-endpoint-unkeyed"],…}`, or — further from the cause and far more
 confusing — every seat on the family goes dark with **`no_model`** before any request. The emitter is
-`src/providers/local.mjs:256` (`createLocalProvider`); it fires **only** when the endpoint class is `metered`
+`src/providers/local.mjs:302` (`createLocalProvider`; the `metered-endpoint-unkeyed` cause is pushed at **:318** and
+the `registration-refused` report emitted at **:324** — re-measured 2026-11-10 in `item-6130`, where line 256 is a
+docstring for `declaredLocalWindow`); it fires **only** when the endpoint class is `metered`
 (a non-loopback base URL) and the key variable resolves empty or unset — the variable is
 `spec.apiKeyEnv`, i.e. `DURIG_VERIFIER_API_KEY` / `DURIG_LOCAL_API_KEY` by family prefix. The provider is then
 registered with **no model row** (a refusal, not a throw), so the seat never reaches the wire.
