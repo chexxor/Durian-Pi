@@ -1,11 +1,10 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-10T08:2xZ (delegate session **N25** — the **pinned-pi thread landed**: pi-durable
-**v1.5.1** is on the pin, the mechanical symbol migration is committed, the suite is **282/282 in 47.8 s**, and
-**six of the eight open branches are merged**. The fleet is **awake** and pm has minted the policy rows the
-delegate deliberately did not decide. The worktree/ref inventory is down from 20 worktrees / 27 refs to **16 worktrees, 21 refs**
-at the prune; re-measured at 09:05Z it is **20 worktrees, 24 refs** because the fleet minted `item-3570`, `item-6089`
-and a `verify`-class ref while the pass ran — **count it live, do not trust this number**. Nothing was pushed; the
+**Last update:** 2026-11-10T18:3xZ (delegate session **N26** — the **branch-landing pass**: **68 of 82 refs are now
+ancestors of `main`**, 8 merged+free refs pruned, the three compaction-gate landings **reverted** because they took
+the whole CLI down, and `main` is proven **289/289 green in 117.7 s** (`.spike/suite-final.out`). refs **82**, worktrees
+**75** (measured at clock-out with `git branch --format='%(refname:short)' | wc -l` and `git worktree list | wc -l`);
+**count it live, do not trust this number** — the fleet mints refs while you measure. Nothing was pushed; the
 delegate claimed, completed or deferred no row.)
 
 **Milestone this window worked** — **landing the pinned pi (D255 → D256, ROADMAP 353–357)**. D255 staged the move;
@@ -22,39 +21,53 @@ policy calls (rows **#6171/#6172/#6173**), the item-5301 rework (**#6174**), the
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **landing the pinned pi (D256, ROADMAP 353)**; the seat-plane policy calls are
-now rows, not prose.
+**Milestone this window worked** — **landing the accumulated branches and pruning them (the branch-cleanup pass, `docs/runbooks/branch-cleanup.md`)**, with the pin move (D256) still the frame it operates in.
 
-**Current item (#6171):** the rig is green at the new pin and the team has work in flight. Read the four rows pm minted
-from the delegate intent (**#6171** `checkpointWhen`, **#6172** `persistWithinMs`, **#6173** `restartLimit`,
-**#6174** the item-5301 rework), then run the gate the pin move must keep passing:
+**Run these first, in this order:**
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/test.mjs --all --jobs 8            # must read 282/282; baseline at the old pin was 280/280 in 61.8 s
-node scripts/sync-pi.mjs --check                # ref "v1.5.1", refType "tag", policyGap null, drift true (a tag pin always drifts)
-node cli.mjs queue --id 6171 --id 6172 --id 6173 --id 6174   # the three policy rows + the item-5301 rework
-node tools/broker-serve.mjs --status            # broker pid is in ./selfdev.sqlite.broker.json
-node tools/rig-portability-audit.mjs            # 1 finding: seat-host-unaware (ROADMAP 217) — will EXIT 124 while a generation is in flight
-git worktree list | wc -l; git branch --format='%(refname:short)' | wc -l   # 20 and 24 measured 2026-11-10T09:05Z
+node scripts/suite.mjs --jobs 8                  # last measured 289/289 green, 117.7 s, exit 0 (.spike/suite-final.out)
+node scripts/sync-pi.mjs --check                 # pin dd30101cf tag v1.5.1, drift true, 44 behind; package.json says ^1.3.0
+git worktree list | wc -l; git branch --format='%(refname:short)' | wc -l   # 75 and 82 measured 2026-11-10T18:3xZ
+bash .spike/diagnose.sh                          # the read-only branch/worktree census probe (gitignored; promote it)
+git branch --list                                # the refs still NOT landable: item-3570, item-5301, item-5301-resolved,
+                                               # verify-5180, wip/seat-prompt-files, and the reverted item-6063/6064/6066
 ```
 
-**State:** `main` tip read it with `git rev-parse --short main` (this window ended at `e3685a8f`; a pinned sha here
-goes stale by its own commits). refs **24**, worktrees **20** (measured 09:05Z with `git worktree list | wc -l` and
-`git branch --format='%(refname:short)' | wc -l`). Broker pid **2585214** is **alive but draining**: started
-`08:04:30.660Z` with `--max-duration 1800`, its last logged pass is `PASS 273 ms=12 woke=-` at `08:34:26.491Z`, the
-heartbeat is seconds old and `lastPassAt` is **31 minutes frozen** — four `selfdev.sqlite.genlock.<n>` files name that
-pid and seat `devtools`, so a generation is in flight and **do not kill it**. Consequence: `cli.mjs queue …` and
-`rig-portability-audit.mjs` both **exit 124** (reads routed to a broker that cannot answer). When it exits, restart
+**Open decisions the operator owns:** (a) **item-6063/6064/6066** — the compaction-gate trio was reverted. Either
+re-cut it against the 1.5.1 pin and current `main`, or accept the guard and set
+`DURIG_COMPACTION_RESERVE_TOKENS=8192`, `DURIG_COMPACTION_KEEP_RECENT=9288`, `DURIG_COMPACTION_BACKGROUND=8192` in
+the gitignored `durig.config.json` (the config write is operator-owned — `docs/runbooks/compaction-policy-refused.md`)
+and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `modelOverrides` reader while
+`vendor/pi-main/packages/durable/dist/harness/agent.js:145` reads it. (b) **`item-3570`** and **`item-5301`** need a
+seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
+**D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
+
+**Blocker:** the broker is **wedged** — pid **3566266** (`cli.mjs serve --max-duration 1800`, running 2 h 42 m at
+clock-out) holds `selfdev.sqlite.genlock.0`, and every broker-routed read answers `ok:false "read health: timed out
+awaiting the broker's result"` (exit 1). `node cli.mjs status --json` measured exactly that. **Do not kill it while a
+genlock slot is held** (`docs/runbooks/broker-down-or-stalled.md`); the recovery sequence and the item-5301
+not-landable note both live in that runbook. Until it answers, no verb can read item terminality, so the 74
+merged-but-held worktrees stay exactly where they are — that is the documented ceiling, a `pm` disposition act.
+
+**State:** `main` tip — read it with `git rev-parse --short main` (this window ended at `9ec3d1b0`; a pinned sha here
+goes stale by its own commits). refs **82**, worktrees **75** (measured at clock-out with `git worktree list | wc -l` and
+`git branch --format='%(refname:short)' | wc -l`); 68 refs are provably ancestors of `main` (`git merge-base
+--is-ancestor <ref> main` exit 0), 74 of them are still pinned by a worktree, and 67 of those trees are CLEAN. Broker pid **3566266** is **alive past its bound** and holds `selfdev.sqlite.genlock.0`, so a generation is in flight and **do not kill it**. Consequence: every broker-routed read (`cli.mjs status/queue/…`) answers `ok:false "read health: timed out awaiting the broker's result"`. When it exits, restart
 with `node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800` after `--dry-run` acks. This broker
 wedged once this window with `PASS-FAILED Error: SqliteStorage is closed` → `HARNESS-REOPEN-CAP-EXCEEDED attempts=4`
 and was cleared with `kill -INT <pid>` → `cli.mjs resume` → restart (pitfall **237**). Store backup unchanged: `.spike/backups/20261110T0551Z/selfdev.sqlite`
 (617,492,480 bytes, sha256 `0996cd61…`, `cmp` exit 0).
 
-**Blocker:** none blocking a landing. Two live hazards the next session must not mistake for green: (1)
-**`item-5301` is not landable** — `node --check` on its `cli.mjs` exits 1 on the branch tip, and its merged tree reads
-279/283 (see pitfall **232**); (2) **`item-6057`'s worktree carries 88 lines of uncommitted tracked work on a `done`
-row** (`demo/syncpi.test.mjs`, `scripts/sync-pi.mjs`) — relocate it, never delete it (ROADMAP 330).
+**Hazards the next session must not mistake for green:** (1) **`item-5301` and `item-5301-resolved` are not
+landable** — the resolved branch merges clean but its own demo is red (`demo/worktree-reap.test.mjs:114` asserts
+`dry.candidates/.refusedSoleCarrier/.kept/.counts`; `reapWorktrees` returns a bare array → `TypeError: Cannot read
+properties of undefined (reading 'map')`, exit 1). (2) **`item-3570` is not landable as-is** — its demo needs the
+1.5.1 `documentState`→`snapshot` migration AND asserts a refusal message (`blockedBy.0: must be integer`) that does
+not exist in the installed pi-durable 1.5.1 (`grep -rn 'must be integer' node_modules/@earendil-works/pi-durable/dist/`
+exit 1). (3) **`item-6063/6064/6066` are ancestors of `main` but their content is reverted** — `git branch -d` would
+succeed on them; do not prune them, they are the input to the re-cut.
 
 ## The pinned-pi thread — v1.5.1 LANDED (ROADMAP 353–357)
 
