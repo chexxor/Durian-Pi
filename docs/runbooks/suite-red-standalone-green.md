@@ -1,0 +1,89 @@
+---
+runbook: suite-red-standalone-green
+symptom: "a demo exits 0 on its own but the suite reports it FAIL or TIMED OUT"
+writes: false
+precondition: "read-only"
+last_verified: 2026-11-10
+verified_by: qa
+evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10"
+check_rule: null
+---
+
+# A demo that is green alone and red in the suite
+
+## When to use
+`node demo/<name>.test.mjs` prints PASS and exits 0, and `node scripts/test.mjs --all` prints
+`FAIL` or `TIMEOUT` for the same file. Also when a red appears only while another suite run, a
+seat turn, or a model server is live.
+
+## Impact
+A gate that is red for a reason it cannot name is not a gate. Two earlier reports of exactly this
+shape were **attributed, never reproduced** ("`checkup-citation`: exit 0 standalone,
+order-dependent" — DECISIONS.md; "running the suite while a seat run is live manufactures reds —
+241/244 with `seat-turn-shape` + `broker-stop-audit` red, both green standalone 40 s later" —
+NEXT-ARCHIVE.md). The reason nobody could pin it is the report itself: the runner printed only the
+**last 8 lines** of a failing test, and for a crash the cause sits above the tail.
+
+## Preconditions
+None: every command here reads. The suite writes only to its own `/tmp` scratch.
+
+## Diagnose (read-only)
+
+```bash
+node scripts/test.mjs --all                       # the gate: note file + exit code
+node demo/<name>.test.mjs                         # the same file, alone
+node scripts/test.mjs --area <area>               # the file with fewer neighbours
+awk '/MemAvailable|SwapTotal|SwapFree/{print}' /proc/meminfo
+ps -e -o pid,comm,rss --sort=-rss | head -10
+ls -t /tmp/durig-suite-*/output.txt | head -5     # full capture of each failed test
+```
+
+Read the exit code the report prints, and classify it:
+
+1. **`TIMEOUT ... (exit 0)`** — the demo **exited 0**; the runner simply never saw its stdio close.
+   This is the runner's verdict rule, not contention and not ordering. Measured 2026-11-10 with a
+   one-file fixture (`demo/test-runner-concurrency.test.mjs` §8: spawn a detached child, print
+   `PASS`, `process.exit(0)`): against the pre-fix `scripts/test.mjs` the run reported
+   `TIMEOUT demo/linger.test.mjs (60.1s)` even with `--timeout 5000` — the SIGKILL to the process
+   group missed the detached grandchild, so the run stayed open until it exited — while the demo's
+   own exit code was 0. With the verdict taken from `exit` instead of `close`, the same fixture
+   reports `PASS ... (0.0s)`, exit 0.
+2. **`exit 1` with an unreadable stack** — the tail is 8 lines and the cause is above it. Open the
+   `full output: /tmp/durig-suite-<x>/output.txt` path the runner now prints and read the first
+   lines. `spawnSync git ENOENT` / `Fatal process out of memory` are environmental, not a defect in
+   the demo.
+3. **A red that only appears with other work running** — that is contention, and the resource is
+   the box, not CPU. Measured 2026-11-10, two `scripts/test.mjs --all` runs in one tree: **612
+   processes**, `SwapFree` **0 kB** (zram, 8 GiB) while `MemAvailable` held ~19 GB. One run came
+   back 260/282, the other 261/282; the extra red was `demo/init.test.mjs` (exit 1, `ENOENT ...
+   open 'rig.json'` on its own `mkdtemp` directory). Demos that write in the shared working tree,
+   or that spawn a broker, contend with each other.
+
+## Do
+1. [judgement] A red is a defect only if it survives a **single, quiet** run: `node scripts/test.mjs
+   --area <area>` with no other suite run or seat turn live. Anything else is classified first.
+2. Compare the two exit codes (alone vs in the gate). If the gate says TIMEOUT and the file exits 0,
+   the demo left a child alive — fix the demo's cleanup, not the timeout.
+3. Quote the `full output:` path in the ticket, not the tail.
+
+## Verify
+```bash
+node demo/test-runner-concurrency.test.mjs   # exit 0, prints TEST-RUNNER-CONCURRENCY TEST PASS
+```
+Measured 2026-11-10: exit 0. And the verdict change is provably verdict-neutral on real failures:
+`node scripts/test.mjs --all` → exit 1, `261/282 passed`, the same 21 reds before and after.
+
+## If it fails
+If the leak fixture reports TIMEOUT again, `runOne` has gone back to waiting on `close`; restore the
+`child.on("exit", ...)` verdict in `scripts/test.mjs`. If `/tmp/durig-suite-*` keeps growing, the
+runner is not cleaning scratch for passing tests — file it, do not delete by hand.
+
+## Escalate to
+`devtools` — a red that survives a quiet single run is real. Note that **`scripts/suite.mjs` still
+takes its verdict from `close`** (`runOne`, ~line 89), so that runner has the same manufactured-red
+path; it is not fixed here.
+
+## Evidence
+Item 6104, 2026-11-10. Old-vs-new pair, one command each: `node scripts/old-test.mjs --area leak
+--timeout 5000` → exit 1, `TIMEOUT demo/linger.test.mjs (60.1s)`; `node scripts/test.mjs --area leak
+--timeout 5000` → exit 0, `PASS demo/linger.test.mjs (0.0s)`.
