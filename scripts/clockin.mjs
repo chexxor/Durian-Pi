@@ -183,6 +183,82 @@ export function staleRunbooks({ root = process.cwd() }) {
 	return { dated: rows.length, stale: rows.filter((r) => r.changed.length > 0), probeFailures };
 }
 
+/**
+ * ROADMAP 352 (1/2) #6125 — the compaction guard's STATE is invisible to a seat.
+ *
+ * WHY. The guard is installed into `.pi/extensions/`, which is gitignored on purpose (`.gitignore:15`),
+ * so it is host-local: it is not in the tree, not in any doc, and not in the digest. Measured by the
+ * delegate on Linux Fedora 45 / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1: `node
+ * tools/compaction-guard-install.mjs --check` exits 0 and reports the guard up to date, while
+ * `grep -ic guard scripts/clockin.mjs` returned **0** — nothing at clock-in told a seat whether its
+ * session is guarded at all. That is the plane-of-origin problem: a number (or a boolean) a seat acts
+ * on with no stated source is not evidence.
+ *
+ * The probe is the install tool's OWN `--check` — the same code path that decides the answer — so the
+ * digest cannot disagree with the tool. Report only: it never installs, never writes, no model, no key,
+ * no network, no broker. Measured cost here: 5 runs of the bare probe, 0.02-0.03 s each (node startup
+ * dominates), which is what makes GUARD_PROBE_BOUND_MS a demonstrated bound rather than an aspiration.
+ */
+export const GUARD_PROBE_BOUND_MS = 100;
+// A wedged subprocess must not stall a cold-start tool. The timeout is a ceiling on the probe, and
+// exceeding it is REPORTED as its own state, never swallowed into "fine".
+export const GUARD_PROBE_TIMEOUT_MS = 5000;
+export const GUARD_TOOL = "tools/compaction-guard-install.mjs";
+
+/**
+ * Every branch returns a status. "We could not look" and "there is nothing there" are different facts,
+ * and an absent line is how a guard that is not installed starts looking like a guard that is.
+ * `spawn` and `now` are injectable so a demo can drive every state without touching a filesystem.
+ */
+export function guardStatus({
+	root = process.cwd(),
+	spawn = execFileSync,
+	now = Date.now,
+	tool = GUARD_TOOL,
+} = {}) {
+	const t0 = now();
+	let stdout = "";
+	let stderr = "";
+	let exit = 0;
+	let spawnCode = null;
+	try {
+		stdout = spawn(process.execPath, [resolve(root, tool), "--check"], {
+			cwd: root,
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "pipe"],
+			timeout: GUARD_PROBE_TIMEOUT_MS,
+		});
+	} catch (err) {
+		// execFileSync throws on a non-zero exit: the code and the streams are on the error, not the return.
+		exit = typeof err?.exitCode === "number" ? err.exitCode : 1;
+		spawnCode = err?.code ?? null;
+		stdout = String(err?.stdout ?? "");
+		stderr = String(err?.stderr ?? "");
+	}
+	const ms = now() - t0;
+	const line = String(stdout || "").split(/\r?\n/).find((l) => l.trim()) || "";
+	let status;
+	if (exit === 0) status = "UP TO DATE";
+	else if (spawnCode === "ETIMEDOUT") status = "PROBE TIMED OUT";
+	else if (/^NOT INSTALLED/.test(line)) status = "NOT INSTALLED";
+	else if (/^STALE/.test(line)) status = "STALE";
+	else if (/source missing/i.test(stderr)) status = "SOURCE MISSING";
+	// The tool itself is not in this tree: node exits 1 with "Cannot find module", which is a
+	// different fact from "the guard is not installed" and must not be read as one.
+	else if (/Cannot find module/i.test(stderr) || spawnCode === "ENOENT") status = "PROBE MISSING";
+	// An exit code we cannot explain is a FINDING, not a clean state: name it UNKNOWN so a reader
+	// knows the probe ran and disagreed, rather than guessing which of the real states it meant.
+	else status = "UNKNOWN";
+	return {
+		status,
+		detail: status === "UNKNOWN" ? (stderr || stdout || `exit ${exit}`).trim().slice(0, 140) : line,
+		ms,
+		exit,
+		root,
+		tool,
+	};
+}
+
 /** Render the digest from already-read state. Pure: nothing here touches git, the store, or the network. */
 /**
  * The suite marker is written by whoever last ran the suite, and the shapes used so far disagree: the .spike
@@ -333,6 +409,19 @@ export function renderDigest(s) {
 	say(`last_run_failed: ${JSON.stringify(fails)}`);
 	if (Object.keys(parked).length) say(`deferred_awaiting_answer: ${JSON.stringify(parked)}`);
 	say(`broker: ${s.broker.detail}`);
+	// The guard is host-local (.pi/ is gitignored), so its state has to be said out loud here or a seat
+	// has no way to know it. `??` is the degrade path: an unprobed state prints NOT PROBED rather than
+	// nothing, because silence reads as "guarded". #6125.
+	const guard = s.guard ?? { status: "NOT PROBED", detail: "no probe in this state", ms: null };
+	// The tool's own line already starts with the state word; printing it twice reads like two facts.
+	const detail = String(guard.detail || "");
+	const sayDetail = detail.startsWith(guard.status) ? detail.slice(guard.status.length).trim() : detail;
+	say(
+		`guard: ${guard.status}` +
+			(sayDetail ? `  ${sayDetail}` : "") +
+			(guard.ms === null ? "" : `  probe ${guard.ms} ms (bound ${GUARD_PROBE_BOUND_MS} ms)`) +
+			(guard.root ? `  tree ${guard.root}` : ""),
+	);
 	say(
 		`\n## QUEUE  ${s.census?.rows ?? (s.items || []).length} rows ${JSON.stringify(s.counts)}` +
 			(s.census ? ` (view carries ${s.items?.length ?? 0} of them; ${s.census.terminal} terminal)` : ""),
@@ -585,6 +674,9 @@ export async function main(argv = process.argv.slice(2)) {
 		seats: (status.seats || []).length,
 		attention: status.attention || [],
 		broker: brokerLiveness({ stateFile: `${db}.broker.json` }),
+		// #6125: the guard lives in gitignored .pi/, so this probe is the only place a seat learns it.
+		// Report-only; runs in the tree clock-in was invoked from, and the line names that tree.
+		guard: guardStatus({ root: process.cwd() }),
 		items: status.queueItems || [],
 		census: status.queueCensus ?? null,
 		deferred: deferredRows,
