@@ -43,6 +43,18 @@ const metricsDb = join(dir, "metrics.sqlite");
 	const made = await openNodeSqliteStorage(metricsDb);
 	await made.close();
 }
+// ISOLATE THE CONFIG FILE, not just the environment. `cli.mjs` discovers a rig config from
+// $DURIG_CONFIG, then ./durig.config.json, then ./.durig/config.json (src/config.mjs:1-8), and
+// `cliMetrics` inherits `process.env` AND the cwd's file. Measured 2026-11-10 (item #6057): in the
+// shared checkout this demo's "nothing declared" assertion read the OPERATOR's
+// `durig.config.json` line 28 (`"DURIG_EXTENSIONS": "extensions/continuity.mjs"`) and failed with
+// `['durig.router','extensions/continuity.mjs']` while passing in a fresh item worktree. The demo
+// was measuring the machine, not the fixture. An EMPTY config file still EXISTS, so discovery stops
+// there and the active set is whatever THIS demo declares.
+const emptyConfig = join(dir, "empty-config.json");
+const declaredConfig = join(dir, "declared-config.json");
+writeFileSync(emptyConfig, "{}\n", "utf8");
+writeFileSync(declaredConfig, JSON.stringify({ DURIG_EXTENSIONS: "./extensions/isolated-router.mjs" }) + "\n", "utf8");
 function cliMetrics(env = {}) {
 	const r = spawnSync(process.execPath, ["cli.mjs", "metrics"], {
 		cwd: durigDir,
@@ -50,6 +62,7 @@ function cliMetrics(env = {}) {
 			...process.env,
 			DURIG_PROVIDER: "faux",
 			DURIG_DB: metricsDb,
+			DURIG_CONFIG: emptyConfig,
 			...env,
 		},
 		encoding: "utf8",
@@ -162,6 +175,25 @@ try {
 		declared.json.provenance.active,
 		[BUILTIN_EXTENSION, "./extensions/timing.ts"],
 		"the declared extension must be reported in the active set",
+	);
+
+	// Both directions, so the "nothing declared" row above cannot be vacuous in either
+	// direction (#6057): a config FILE this demo wrote is read, and an env value beats it.
+	// Without these, "active == [durig.router]" could be satisfied by an inherited operator
+	// config that happens to declare nothing - which is exactly how this demo went quiet.
+	const fromFile = cliMetrics({ DURIG_CONFIG: declaredConfig });
+	assert.equal(fromFile.status, 0, `metrics with a config file failed: ${fromFile.text.slice(0, 400)}`);
+	assert.deepEqual(
+		fromFile.json.provenance.active,
+		[BUILTIN_EXTENSION, "./extensions/isolated-router.mjs"],
+		"an extension declared in the CONFIG FILE must appear - the file layer is being read, not skipped",
+	);
+	const envWins = cliMetrics({ DURIG_CONFIG: declaredConfig, DURIG_EXTENSIONS: "./extensions/env-wins.mjs" });
+	assert.equal(envWins.status, 0, `metrics with env over file failed: ${envWins.text.slice(0, 400)}`);
+	assert.deepEqual(
+		envWins.json.provenance.active,
+		[BUILTIN_EXTENSION, "./extensions/env-wins.mjs"],
+		"environment beats the config file (src/config.mjs header), so the isolation is provable",
 	);
 } finally {
 	try {
