@@ -3,9 +3,9 @@ runbook: pi-pin-update
 symptom: "the pinned pi must move (an ordered update, or a tag we skipped becomes available); or a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned 0 hits and you are about to conclude something is absent upstream"
 writes: true
 precondition: "broker-stopped"
-last_verified: 2026-11-04
-verified_by: devtools
-evidence: "#5089 (the mint) and the read-only half of this procedure run ON that row, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1: `node scripts/sync-pi.mjs --check` exit 0 `drift=true` pin `2ec55d80` tip `707888ec`; `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` = **0 ahead / 515 behind** (the delta doc's 508 was already stale); `git -C vendor/pi-main fetch --tags origin` exit 0, tags `v1.2.0 v1.3.0 v1.4.0 v1.5.0`; pin and tip `migrations.ts` both carry exactly `version: 1, version: 2`; live `durable_schema = {singleton:1, version:2}` (read-only open); scratch-`/tmp`-DB gate: `status`/`queue`/`ps`/`show` exit 1, `cause:no_store`, `-wal`/`-shm` ABSENT; and the lockout itself - an un-linked worktree refused `selfdev.sqlite` (exit 1, \"schema version 2 is newer than supported version 1\") until `--sync` + `--link`, after which the same read exited 0."
+last_verified: 2026-11-10
+verified_by: delegate (read-only half on #5089 2026-11-04; the WRITE half run end-to-end 2026-11-10, staged then reverted)
+evidence: "#5089 (the mint) and the read-only half of this procedure run ON that row, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1: `node scripts/sync-pi.mjs --check` exit 0 `drift=true` pin `2ec55d80` tip `707888ec`; `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` = **0 ahead / 515 behind** (the delta doc's 508 was already stale); `git -C vendor/pi-main fetch --tags origin` exit 0, tags `v1.2.0 v1.3.0 v1.4.0 v1.5.0`; pin and tip `migrations.ts` both carry exactly `version: 1, version: 2`; live `durable_schema = {singleton:1, version:2}` (read-only open); scratch-`/tmp`-DB gate: `status`/`queue`/`ps`/`show` exit 1, `cause:no_store`, `-wal`/`-shm` ABSENT; and the lockout itself - an un-linked worktree refused `selfdev.sqlite` (exit 1, \"schema version 2 is newer than supported version 1\") until `--sync` + `--link`, after which the same read exited 0. 2026-11-10, Linux Fedora 45 `7.2.15-300.fc45.x86_64` node v24.22.1 (the WRITE half, staged then reverted): `--update v1.5.1` → pin `dd30101c`, `refType: tag`; `--sync` 14 s / 10 packages (needs `pi-schema` FIRST in `packages`, else chord fails TS2307); `--link` 14 s / 10 linked; suite **93 PASS / 187 FAIL**; revert → **278/280 in 59.7 s**; migrations identical at both ends (`version: 1, 2`) so **nothing migrates**; backup `cmp` exit 0. Migration inventory: `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`, ROADMAP **353–357"}
 check_rule: null
 ---
 
@@ -69,6 +69,7 @@ node scripts/sync-pi.mjs --check                       # drift as a verdict, wit
 git -C vendor/pi-main fetch --tags origin              # PREREQUISITE for the three commands below
 git -C vendor/pi-main rev-parse --short origin/main    # NAME this sha in every upstream-facing claim
 git -C vendor/pi-main rev-list --left-right --count "$(node -e 'process.stdout.write(require("./pi-main.pin.json").sha)')...origin/main"
+git -C vendor/pi-main rev-list --count HEAD        # 1 = the clone is SHALLOW, so the count above is depth-bounded
 git -C vendor/pi-main show <pin>:packages/durable/package.json | grep '"version"'   # what the pin IS
 ```
 
@@ -141,7 +142,10 @@ node scripts/sync-pi.mjs --check                      # must now report the pin 
 
 `--sync` re-applies the **sparse checkout** (`sparse-checkout init --cone` then `set` to the pin's package dirs),
 so a package upstream split out must be **added to the pin's `packages` array** or it silently isn't built
-(upstream has `schema`, `env`, `evals` that we do not build — delta §2). `--link` uses `npm install --no-save`, so
+(upstream has `schema`, `env`, `evals` that we do not build — delta §2). **Order inside the array is a build order**:
+measured 2026-11-10, `pi-schema` must come **first** — chord compiles before durable/ai and fails
+`src/store/json-column.ts(5,33): error TS2307: Cannot find module '@earendil-works/pi-schema'` otherwise (durable,
+ai, agent and chord all depend on it at 1.5.1). `--link` uses `npm install --no-save`, so
 `package.json`/`package-lock.json` stay clean; if they show a diff after `--link`, something else happened.
 
 **4. Gates at EVERY stage boundary**, not once at the end (the suite is ~62 s):

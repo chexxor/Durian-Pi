@@ -3790,3 +3790,34 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     `docs/evidence/2026-11-08-context-window/compaction-acceptance.mjs` (rows #6128/#6131 still ask devtools to
     promote it to `tools/`). Note the import lesson when moving a probe: a static `../src/…` import only resolves
     from one directory depth — walk up to the repo root and import with `pathToFileURL`.
+
+## Operational pitfalls (delegate pi-pin pass, 2026-11-10 — numbered 227-231, continuing from 226; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+227. **A "N commits behind" from the vendored clone is a depth artifact, not a fact.** At session start
+    `git -C vendor/pi-main rev-list --count HEAD` printed **1** and `vendor/pi-main/.git/shallow` listed 2 shas,
+    so `rev-list --left-right --count <pin>...v1.5.1` answered **`1 1`**. After one
+    `git -C vendor/pi-main fetch --unshallow origin` (6,994 commits reachable) the same command answers **`0 729`**
+    and `sync-pi --check` reports `behind: 743`. State the depth with the number, or run the unshallow first;
+    `scripts/sync-pi.mjs:277` already says so in words.
+228. **A package split upstream is invisible until the build fails: add it to the pin's `packages` array, and
+    build it FIRST.** `pi-durable` 1.5.1 depends on `@earendil-works/pi-schema` 1.5.1 (`git -C vendor/pi-main show
+    v1.5.1:packages/durable/package.json`), which our 9-package pin does not list. `--sync` with schema appended
+    after the others dies at chord: `src/store/json-column.ts(5,33): error TS2307: Cannot find module
+    '@earendil-works/pi-schema'`. Putting `{"name":"@earendil-works/pi-schema","dir":"packages/schema"}` **first**
+    in the array builds cleanly (10 packages, 14 s).
+229. **`sync-pi --update <tag>` already exists; the pin simply does not use it.** `--update v1.5.1` wrote
+    `ref:"v1.5.1"`, `refType:"tag"`, `pinnedAt`, and `previous[]` — the **#5093** plumbing is shipped, and
+    `--check` still prints `POLICY GAP (#5093): the pin names no ref and floats on branch "main"`. Do not re-mint
+    a tag-resolving tool; set the ref.
+230. **A red suite at a moved pin is several unrelated breakages, and the cheap way to see that is a one-line
+    shim.** At `v1.5.1`: 93/187. Changing only four `import { Type } from "@earendil-works/pi-ai"` lines to
+    `typebox` (already in `node_modules` at 1.3.27 via pi-coding-agent, **not declared in our `package.json`**)
+    gives 184/94 + 2 TIMEOUT in 127.5 s — enough to group the residue by signature (37 `documentState`, 36
+    assertion failures with no stderr, 5 `viewState`, 4 `subscribeCommits`, 3 `checkpointWhen`, 2 `watchEvents`).
+    The shim is a **diagnostic, not a migration**: pi-schema's builders are closed by default, so
+    `src/rig.mjs:675`'s `Type.Object({}, { additionalProperties: true })` needs `{ open: true }` or the rig starts
+    rejecting fields.
+231. **`demo/clockin-digest.test.mjs` and `demo/next-pointer.test.mjs` are doc-cap tests, not code tests.** When
+    the suite reads 278/280 and those two are red, the cause is `docs/NEXT.md`'s size (cap 200 **counted** lines =
+    `split("\n")`, so `wc -l` must be ≤ 199), not a bug. `clockin-digest` spends **28–32 s** proving a line count,
+    so check `wc -l docs/NEXT.md` before opening any code.
