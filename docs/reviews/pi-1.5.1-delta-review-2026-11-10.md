@@ -274,10 +274,40 @@ themselves are unchanged, and two demos gained an assertion (the fixture-landing
 
 ### 8.4 Still open, and who owns it
 
-- **`checkpointWhen`** — `() => false` on all 6 rig docs is the upstream default applied mechanically. ROADMAP **355**.
+- **`checkpointWhen`** — `() => false` on all 6 rig docs is a **stop-bleeding choice, not an upstream default**: 1.5.1
+  requires the predicate with no default and calls it unconditionally
+  (`vendor/pi-main/packages/durable/src/session/transaction.ts:1058`), and upstream's own `AgentDoc` passes
+  `() => true` (`vendor/pi-main/packages/durable/src/harness/agent.ts:45`). ROADMAP **355**, rows **#6171–#6173**.
 - **`persistWithinMs`** — the TUI's streaming now rides `pi.live`'s throttled partials (default 1,000 ms), so
   in-flight rendering is coarser than it was at the old pin. Measured qualitatively, not benchmarked. ROADMAP **355**.
 - **`restartLimit`** — untouched; the harness is still opened with upstream's default. ROADMAP **355**.
 - **Fidelity gaps in `src/livewatch.mjs`, stated out loud:** `turn_start`/`turn_end` are derived from the
   generation attempt, not a turn record; tool *results* are synthesised from committed `pi.tool-result` entries
   rather than streamed. A seat that needs exact tool streaming must grow the seam, not patch the demo.
+
+### 8.5 The landing pass: six in, two named as not-landable
+
+| ref | landed | merge commit | merged-tree suite |
+|---|---|---|---|
+| `item-1779` | yes | `ca807c22` | 280/280 |
+| `item-2915` | yes | `c90c1fa2` | 280/280 |
+| `item-3041` | yes | `263ec680` | 280/280 |
+| `item-6067` | yes | `1588229e` | 281/281 |
+| `item-6082` | yes | `117272ea` | 281/281 only after the `item-6082-mig` fork |
+| `item-6121` | yes | `81c473e5` | 280/280 |
+| `item-6082-mig` (fork, one-line symbol fix) | yes | `e50cf5b6` | 282/282 |
+| `item-5301` | **no** | — | 279/283 on the merged tree |
+| `wip/seat-prompt-files` | **no** | — | conflicts in `cli.mjs`, `prompts/impl.md` (add/add), `rig.selfdev.json` |
+
+`item-5301` has four separate defects, each measured on the merged tree, and only the first is mechanical: (1) the
+branch tip's `cli.mjs` **does not parse** — `git show refs/heads/item-5301:cli.mjs | node --check -` exits 1, two
+USAGE lines put backticks inside a backtick-delimited template literal; (2) `reapWorktrees()` returns no
+`candidates` key while its own demo asserts `dry.candidates` (`demo/worktree-reap.test.mjs:114`); (3) `planReap`
+dereferences `terminalItemIds.has(...)` (`src/broker.mjs:1281`) with no default, and the pre-existing orphan sweep
+calls it without the argument — a **regression in an existing path**, visible as a TypeError in
+`demo/worktree-sweep.test.mjs`; (4) the new demo is not mapped in `demo/test-areas.json`, so both
+`demo/test-areas.test.mjs` and `demo/land-changed-suite.test.mjs` fail. Routed as **#6174**.
+
+`wip/seat-prompt-files` is **superseded, not stalled**: main already carries the capability (`44e9a86d`, with the
+resolver imported from `src/rig.mjs` precisely because the WIP had two copies), and landing the WIP would re-add the
+duplicate resolver and revert seat models to `local/iq3_s` — a cleanup applied backwards. Routed as **#6178.**

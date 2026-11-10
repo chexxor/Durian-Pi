@@ -11121,3 +11121,41 @@ blamed for a failure measured in a different tree at a different pin.
 **shallow**, so every "N commits behind" ever written from it is depth-bounded, not upstream truth — this session
 measured `1 1` before `fetch --unshallow` (6,994 commits) and `0 729` after, and `sync-pi --check` reports
 `behind: 743`. A doc that quotes a count without the depth is a claim nobody can falsify (D211's class).
+
+## D256 — 2026-11-10T08:1xZ: **the pin move and the symbol migration are one change, and the delegate does only the mechanical half** (delegate acting on the operator's "Land pi v1.5.1 now and fix the red demos after landing it. After that's done, finish merging all the branches that are complete"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The why.** D255 staged the pin because a red suite is not a landing. The operator then said land it and fix the
+reds. Two kinds of work turned out to be required, and they belong to different actors. **Mechanical** work has one
+correct answer and no judgement: rename `documentState` → `snapshot` (which also returns the value, not a wrapper),
+replace `watchEvents` and `subscribeCommits` with something, add the `checkpointWhen` field upstream now requires,
+escape the bytes that stop `cli.mjs` from parsing. **Judgement** work has several defensible answers: what
+`checkpointWhen` predicate each rig doc deserves, whether `persistWithinMs` stays at 1,000 ms or goes to 0, what
+`restartLimit` should be. The delegate did the first kind and handed the second to the team as rows — **#6171**
+(`architect`), **#6172** (`lead`), **#6173** (`impl`), **#6174** (`impl`, the item-5301 rework), **#6178**
+(`devtools`, the superseded WIP ref). No row was claimed, completed, deferred or routed by the delegate.
+
+**Why the seams live in our source, not in upstream patches.** `src/commitstream.mjs` `followCommits()` and
+`src/livewatch.mjs` `watchLive()` translate pi-durable 1.5.1's stored-cadence model (`pi.live`, LiveDoc version 3,
+commits flushed within `persistWithinMs`) into the event shapes the rig's guards already consume. Patching the
+vendored pin would make the next `sync-pi` erase the fix and would hide the rename inside a third party's tree; a
+named module in our tree makes the approximation readable and its limits stateable: turn boundaries are derived from
+the generation attempt, not a turn record, and tool results are synthesised from committed `pi.tool-result` entries
+rather than streamed. Those are the exact facts the policy rows need to decide, which is why they are written down
+as approximations rather than shipped as truth.
+
+**`checkpointWhen: () => false` is a stop-bleeding measure, not a decision.** Upstream has no default and calls it
+unconditionally (`vendor/pi-main/packages/durable/src/session/transaction.ts:1058`); its own `AgentDoc` passes
+`() => true` (`harness/agent.ts:45`). Choosing "never checkpoint" makes the rig safe to run at the new pin while
+leaving the real predicate — keyed on the transitions a reader ACTS ON (claim, complete, defer, hold, release) — to
+the seat that owns the store contract. Six docs carry the provisional value and each is labelled in code.
+
+**A superseded branch is not a stalled branch.** `wip/seat-prompt-files` conflicts with main in `cli.mjs`,
+`prompts/impl.md` (add/add) and `rig.selfdev.json` because main already landed the same capability better
+(`44e9a86d`, with the resolver imported from `src/rig.mjs` specifically because the WIP had two copies). Landing it
+would apply a cleanup backwards — the same failure class the BOM case in `land.md` records. The disposition is a
+row (#6178), not a merge.
+
+**What this does not decide.** Which tag to ride next (the pin now reports `drift: true / behind 14` against
+upstream `main`; a tag pin can never satisfy `drift: false`, so the contract itself is mis-specified), whether the
+two seam approximations are acceptable long-term, and whether the 13 held worktrees are reaped — all are the team's,
+and the fleet is awake and routing them.
