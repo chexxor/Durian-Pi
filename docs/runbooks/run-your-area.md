@@ -94,6 +94,34 @@ node tools/what-to-test.mjs --paths=docs/NEXT.md --direct-only   # exit 0; names
 `devtools` for the partition, the runner or the manifest; `pm` to route a failing test to
 its owner.
 
+## When a red measures the machine rather than the behaviour (added 2026-11-10, #6057)
+
+Two shapes measured in a live working tree. Both print as a behaviour red and neither is one.
+
+1. **The demo inherits the operator's config file.** `cli.mjs` discovers a rig config from
+   `$DURIG_CONFIG`, then `./durig.config.json`, then `./.durig/config.json` (`src/config.mjs:1-8`), so a
+   demo that spawns the CLI with `...process.env` and a cwd inside the checkout reads whatever the
+   operator declared. Measured 2026-11-10 at main tip 09a94b4c: `demo/provenance.test.mjs` asserted
+   "nothing declared" and got `['durig.router','extensions/continuity.mjs']` straight out of the tree's
+   own `durig.config.json`.
+   Do: point the spawn at a config file the DEMO wrote - `DURIG_CONFIG: <tmp>/empty-config.json`. An
+   empty file still EXISTS, so discovery stops there. Pin both directions: the empty file yields the
+   built-in set, a file the demo wrote is read, and env beats the file. An assertion satisfiable only by
+   "nothing declared" is vacuous until you also show the declared case arriving.
+2. **The demo hashes a store another owner is writing.** A byte-identity check on a SQLite file taken
+   before and after a read is a claim about the read only if no other owner is attached: a resident
+   broker's pass commits between the two hashes, and a WAL checkpoint moves the main file.
+   Do: gate the check on `brokerAliveFor(db)` (`src/readclient.mjs:22`), print a named
+   `SKIP (MOVING SUBJECT - not a behaviour red) ... broker pid <n>`, and still run the read for its real-pages
+   value. Prove the check is sensitive in a store the demo owns: a write moves the bytes, a read does not.
+
+Verify (both run 2026-11-10 in the item worktree, exit 0):
+- `node demo/provenance.test.mjs` with a `durig.config.json` declaring `DURIG_EXTENSIONS` present in the tree.
+- `node cli.mjs serve --max-duration 45 &` on a scratch store, then `DURIG_DB=<that store> node demo/seat-turn-shape.test.mjs` -> the MOVING SUBJECT line, and after the serve window closes, `ok REAL STORE ... bytes unchanged`.
+
+Do not fix a red of this class by loosening the assertion. The fix is to make the subject something the
+demo owns, and to keep the assertion capable of failing.
+
 ## Evidence
 #1558 (the partition: `demo/test-areas.json`, `src/testareas.mjs`, `scripts/test.mjs`,
 `demo/test-areas.test.mjs`; full suite 124/124). Concurrency made the default on 2026-10-27:
