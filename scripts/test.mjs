@@ -21,7 +21,7 @@ import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs"
 import { availableParallelism, cpus, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { areaNames, discoverTests, filesForArea, readManifest, selectTests, validateManifest } from "../src/testareas.mjs";
+import { areaNames, candidateTestsOutsideSuite, declaredExclusions, discoverTests, filesForArea, readManifest, selectTests, suiteRoots, validateManifest } from "../src/testareas.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -188,11 +188,24 @@ async function main(argv) {
 	if (opts.list) {
 		const manifest = readManifest(ROOT);
 		const rows = areaNames(manifest).map((area) => ({ area, count: filesForArea(manifest, area).length }));
+		const roots = suiteRoots(manifest).map((r) => `${r.dir}/${r.glob}`);
+		const outside = candidateTestsOutsideSuite(ROOT);
+		const excluded = declaredExclusions(manifest);
 		if (opts.json) {
-			process.stdout.write(`${JSON.stringify({ ok: coverage.ok, areas: rows, coverage: coverage.errors }, null, 2)}\n`);
+			process.stdout.write(
+				`${JSON.stringify({ ok: coverage.ok, areas: rows, coverage: coverage.errors, suiteRoots: roots, testsOutsideSuite: outside }, null, 2)}\n`,
+			);
 		} else {
 			for (const r of rows) process.stdout.write(`${r.area.padEnd(12)} ${String(r.count).padStart(3)}\n`);
-			process.stdout.write(`\n${discoverTests(ROOT).length} tests on disk; manifest ${coverage.ok ? "covers all of them" : "ROTATED — " + coverage.errors.join("; ")}\n`);
+			process.stdout.write(
+				`\n${discoverTests(ROOT).length} tests on disk (roots: ${roots.join(", ")}); manifest ${coverage.ok ? "covers all of them" : "ROTATED — " + coverage.errors.join("; ")}\n`,
+			);
+			if (excluded.length) process.stdout.write(`declared exclusions (files inside a root the gate does NOT run): ${excluded.join(", ")}\n`);
+			if (outside.length) {
+				process.stdout.write(
+					`${outside.length} test-shaped file(s) OUTSIDE the suite roots — the gate never runs these: ${outside.join(", ")}\n`,
+				);
+			}
 		}
 		return coverage.ok ? 0 : 1;
 	}

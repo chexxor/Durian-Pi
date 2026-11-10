@@ -1,5 +1,9 @@
 {
-  "note": "Functional-area partition of demo/*.test.mjs (#1558). Areas roughly follow docs/FEATURES.md sections; `toolchain` is the devtools-owned upstream-pin/format surface. demo/test-areas.test.mjs is the check rule: every test file on disk must appear under exactly one area, and every listed file must exist. Run one area with `node scripts/test.mjs --area <name>`; the FULL suite (`node scripts/test.mjs`) is the pre-landing/QA gate — an area subset is NEVER sufficient evidence to land.",
+  "note": "Functional-area partition of the suite (#1558) plus the suite MEMBERSHIP itself (#6132): `suiteRoots` declares which directories the gate considers suite members, and `demo/test-areas.test.mjs` is the check rule that fires when a file in those roots is unmapped. A root's `exclude` names, in the open, the files in that root the gate does NOT run — tools/what-to-test.mjs is the selector, not a test, and demo/land-changed-suite.test.mjs guards it; an exclusion that no longer exists is itself an error. Areas roughly follow docs/FEATURES.md sections; `toolchain` is the devtools-owned upstream-pin/format surface. Every test file the roots discover must appear under exactly one area, and every listed file must exist. Run one area with `node scripts/test.mjs --area <name>`; the FULL suite (`node scripts/test.mjs --all`) is the pre-landing/QA gate — an area subset is NEVER sufficient evidence to land.",
+  "suiteRoots": [
+    { "dir": "demo", "glob": "*.test.mjs", "exclude": [] },
+    { "dir": "tools", "glob": "*-test.mjs", "exclude": ["what-to-test.mjs"] }
+  ],
   "areas": {
     "rig": [
       "demo/admission-deadline.test.mjs",
@@ -250,7 +254,8 @@
       "demo/text-integrity-wiring.test.mjs",
       "demo/text-integrity.test.mjs",
       "demo/wrap-newlines.test.mjs",
-      "demo/write-targets.test.mjs"
+      "demo/write-targets.test.mjs",
+      "tools/compaction-guard-test.mjs"
     ],
     "readapi": [
       "demo/context-measure.test.mjs",
