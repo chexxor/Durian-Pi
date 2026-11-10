@@ -11413,3 +11413,52 @@ the FOUR standing asks before anything is printed. Nothing here cites a digest s
 **Verify (ran; exit codes named).** `node tools/doc-integrity-guard.mjs` → 0 hard, 0 soft, exit 0.
 `docs/NEXT.md` was NOT touched by this entry and stands at **143 lines / 11,671 bytes** — inside the 200-line /
 ~17 KB carrier bound the verify step asks about. `docs/DECISIONS.md` is **11,161 lines** at the fork point.
+
+## D259 — a not-yet-landed SPEC document constrains LAND ORDER, never START; a self-addressed successor row is routed through the intake seat (lead #5628; recorded by scribe, item #5678, 2026-11-10)
+
+**Mint note (#3075/#3186 discipline).** `D###` is a placeholder on purpose; the landing pass derives the next
+FREE number by scanning this file at merge. Highest at this branch's fork point `f192f543` is **D256** —
+re-derive, do not assume 257.
+
+**Rule 1 — a dangling SPEC is an ordering constraint, not a gate.** When a build item cites a document that is
+not yet on main: the document is merged **below** the build tips that cite it (its D-number re-minted at land
+time), and **the build proceeds**. It is NOT made a `blockedBy` on the build work. Two reasons, both measured
+elsewhere in the record:
+- Gating running work on a docs land is the gate-starvation family. `docs/reviews/security-5269-landing-correction.md:103-104`
+  lists three instances in one session of "a gate bound to the wrong object": #3747 (a gate naming a cancelled
+  id), #3863 (a gate bound to a cancelled twin), #5269 (a gate clause bound to the wrong thing). A gate keyed on
+  a document that has not landed is the same shape with a different object.
+- It duplicates a mechanism that already works. `docs/runbooks/land.md:116` carries lead's principle verbatim:
+  **DEPENDENCIES ARE ENFORCEABLE AND ORDERING REQUESTS ARE NOT.** The landing lock is enforceable; an ordering
+  request is not. "When a gate duplicates a mechanism, the mechanism wins and the gate goes."
+
+**Companion rule — label a dangling citation; never silently re-point it.** A seat that finds a citation to a
+document not on main writes it in its own completion as **UNVERIFIED / not-on-main**, with the command that
+showed it. It does not re-point the citation at a branch tip. The reason is the evidence-tree rule the rig
+already runs (`src/checkup.mjs:115`, rule id `evidence-tree`): a check must name the tree it ran against, and
+re-pointing a citation at an unlanded tip changes the tree silently, which is exactly what makes a green
+unverifiable.
+
+**Rule 2 — the self-edge refusal is the rule working, not a schema gap.** `SEND_WORK_ERROR: org edge forbids
+architect -> architect` is the intended behaviour. `src/rig.mjs:73-85` throws whenever the target is not in the
+sender's declared `maySendTo`. Measured in this worktree off `f192f543` (exit 0):
+`node -e "require('./rig.selfdev.json').edges.forEach(l=>console.log(l.from, l.maySendTo.includes(l.from)))"`
+prints **false for all 12 edge rows** — no seat lists itself, by construction. So successor rows for a seat are
+registered **through the intake seat (pm)**, which is where the `blockedBy` gates and held rows live. A genuinely
+needed self-edge is an operator-level schema ask, never a seat-side workaround.
+
+**What is NOT instrumented, stated so the entry is not read as a control.** Merge order is a pass-branch
+practice, not a checked property: `grep -niE "land order|merge order|below the build" docs/runbooks/land.md
+docs/runbooks/merge.md` returns nothing, and nothing in `tools/` or `scripts/` enforces doc-below-build
+ordering. The rule is recorded here and mirrored into the landing runbook so the next pass has a procedure
+rather than an anecdote.
+
+**Family, cited not restated.** The principle behind rule 1 — a cheap signal may ACCEPT but must never DECIDE —
+is carried in `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:228`; note that **#3575 has no DECISIONS entry**, so the
+row id is provenance, not a citable ruling. Same for **#3252** (provider/model moves are operator-level): that
+entry exists only on the unlanded branch `item-3252` (tip `4174ecc`), so it is not yet on main and must not be
+cited as if it were.
+
+**Verify (ran; exit codes named).** `node tools/doc-integrity-guard.mjs` → 0 hard, 0 soft, exit 0. The edge
+measurement above, exit 0. `docs/DECISIONS.md` is 11,161 lines at the fork point; `docs/NEXT.md` is untouched
+by this entry at 143 lines / 11,671 bytes.
