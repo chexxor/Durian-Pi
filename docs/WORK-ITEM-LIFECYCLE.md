@@ -74,13 +74,32 @@ Six statuses. **Terminal** means `done` **or** `cancelled` (both are invisible t
 | `held` | `queued` | `release_work` | **the sender or the recipient** (`src/rig.mjs:783`) |
 | any non-terminal | `cancelled` | `cancel_work` | the sender or the recipient |
 
-Two facts a reader must internalise:
+Three facts a reader must internalise:
 
 1. **`held` has exactly two exits: `release_work` → `queued`, or `cancel_work` → `cancelled`.** There is
    no automatic exit and no other tool. A held row nobody releases is a held row forever.
 2. **`deferred` is not stuck in the same way.** A `deferredTo: <seat>` deferral *enqueues a `QUESTION`
    item* to that seat, which the driver wakes (`defer_work`, `src/rig.mjs:663-713`). A
    `deferredTo: human` deferral enqueues nothing but is surfaced by attention (§5).
+3. **Changing a row's *status* and changing a row's *content* are different authorities.** The table above
+   governs status. Content splits three ways, and only two of them have a verb
+   (ruled in [`docs/reviews/architecture-revise-authority-6225.md`](reviews/architecture-revise-authority-6225.md),
+   D257, measured by `tools/probes/revise-authority-boundary.mjs`, exit 0):
+
+| Field class | Verb | Who may write | When |
+|---|---|---|---|
+| intent — `subject`, `body` | `revise_work` | `from` **or** `to` only | `queued` only (`src/rig.mjs:1291`, `:1297`) |
+| constraint — `blockedBy`, `requires`, `tier`, `block` | **none after mint** | the minting seat, at `enqueueItem` (`src/rig.mjs:441`, reached only from `send_work` at `:737`) | mint time only |
+| outcome — `resultSummary`, `evidence`, `cancelReason` | the verb that made the move | the actor | — |
+
+So a gate discovered *after* a row is minted has nowhere to go. Writing it into the body is not a gate:
+`workable()` reads `item.blockedBy` (`src/rig.mjs:310`), never a sentence. The operating rule is
+**mint the row that carries the gate, or ask a party to** — see
+[`runbooks/attach-a-gate.md`](runbooks/attach-a-gate.md). Two defects are registered against this model:
+`hold_work` is recipient-only (`src/rig.mjs:1212`) while `release_work`/`cancel_work` are party-wide
+(`:1257`, `:1339`), so a seat can cancel its own row but cannot park it; and `revise_work`/`cancel_work`
+check authority **before** terminality, so a `done` row answers "not yours to revise" — the misreading
+`release_work` fixed for itself in #5778 (`src/rig.mjs:1254`).
 
 ## 3. Why `held` exists at all (and why it is the orphan shape)
 

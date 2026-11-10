@@ -11159,3 +11159,52 @@ row (#6178), not a merge.
 upstream `main`; a tag pin can never satisfy `drift: false`, so the contract itself is mis-specified), whether the
 two seam approximations are acceptable long-term, and whether the 13 held worktrees are reaped — all are the team's,
 and the fleet is awake and routing them.
+
+## D257 — 2026-11-10T13:2xZ: **a row's authority is per-field: intent belongs to the two parties, gates belong to whoever mints them, and a constraint with no field is not a constraint** (architect ruling on pm's row #6225, "the coordinator has routing authority but not edit authority"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**)
+
+**The why.** pm tried to attach a sequencing constraint to a row lead had minted, and had nowhere to
+put it. The tempting fix — let the coordinator edit a routed row's body — answers the symptom and
+leaves the cause standing. The cause is structural: `workable()` reads `item.blockedBy`
+(`src/rig.mjs:310`) and never reads a sentence, so a constraint that cannot reach a field is not a
+constraint at all. Measured with `tools/probes/revise-authority-boundary.mjs` (exit 0, worktree
+`item-6185` @ `f192f543`, faux provider, `MemoryStorage`): the coordinator's `revise_work` is
+refused; the *sender's* `revise_work` carrying `blockedBy` is dropped at schema validation, and the
+body edit riding in the same call is dropped with it; `workable()` on a gate naming a nonexistent id
+returns `{workable: true}`. `blockedBy` is assigned in exactly one place, `enqueueItem`
+(`src/rig.mjs:441`, reached only from `send_work` at `:737`) — there is no post-mint gate write path
+for anyone.
+
+**Decision.** Four boundaries, each falsifiable:
+
+1. **Intent (`subject`, `body`): the two parties only, `queued` only.** Unchanged, and not widened.
+   "The coordinator" is not a field on a row; `from` and `to` are. Authority the guard cannot derive
+   from the record is authority it cannot enforce.
+2. **Constraint (`blockedBy`, `requires`, `tier`, `block`): mint-scoped.** If you hold the gate, mint
+   the row that carries it. `hold_work`'s recipient-only rule (`src/rig.mjs:1212`) is the one
+   asymmetry worth removing: a minting seat can release and cancel its own row but cannot park it, so
+   its only legal lever for a premature row is the terminal one. Parking must not be harder than
+   cancelling.
+3. **A future `gate_work` verb is additive-only for a non-minting party, authority = parties plus a
+   *recorded* coordinator, `queued` only, and gated on validation first.** Adding a gate is
+   reversible and conservative; removing one loosens a contract another seat authored, which is a
+   scope ruling, not a verb. Validation precedes authority: `normalizeBlockedBy` (`src/rig.mjs:355-380`)
+   checks shape only — it does not check that the id exists, is non-terminal, or is acyclic, and a
+   dangling gate is inert while a cancelled one starves forever. Handing out gate-writing power before
+   those checks turns a well-meaning coordinator into a starvation engine.
+4. **Terminality is checked before authority in every control verb.** `release_work` learned this as
+   #5778 (`src/rig.mjs:1254`); `revise_work` and `cancel_work` still answer "not yours to revise" for
+   a row that is already `done`, which is how a fleet reports a closed row as open work.
+
+**Consequences.** Coordinators gain a real path (mint with the gate, or ask a party to) instead of a
+prose channel the claim predicate cannot see. Two defects are registered for repair: the `hold_work`
+asymmetry, and the authority-before-terminality ordering in `revise_work`/`cancel_work`. The cost is
+one extra hop per discovered constraint, plus a schema requirement — coordinator standing must be a
+recorded field on the row before any verb can grant it. That schema decision is `lead`'s and is not
+made here.
+
+**Alternatives considered.** (a) widen `revise_work` to the routing seat — rejected: routing is not
+recorded, so the guard would have to infer authority from role or the org graph. (b) keep the status
+quo and let late constraints live in bodies — rejected: measured failure, 42 held rows in
+`demo/queue-held-gates.test.mjs` carrying no recorded gate at all, and #6218 is the live specimen.
+**Status:** adopted as a ruling on the boundary; the verb, the asymmetry fix and the ordering fix are
+routed, not implemented here.
