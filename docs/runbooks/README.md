@@ -177,6 +177,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
 | [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
 | [attach-a-gate.md](attach-a-gate.md) | you know a row must wait on another row, but you are neither its sender nor its recipient, and every way of writing that gate is refused or silently dropped (`revise_work` with `blockedBy` drops the whole call, including the body edit riding in it) | no |
+| [intent-stuck-in-inbox.md](intent-stuck-in-inbox.md) | a spooled intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; a command vanishes with no verdict and no diagnostic | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
@@ -227,6 +228,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Queue / parked work | stale-held-backlog, block-shape-refused, attach-a-gate |
+| The broker receive path: what may enforce, who may write the audit sink, and a refused intent that never leaves the spool | intent-stuck-in-inbox, broker-down-or-stalled |
 | Who may change a row: intent vs gate vs disposition, and the mint-only gate write path | attach-a-gate, stale-held-backlog |
 | The structured park (`block`): reason → constraint-kind pairing, ref shapes (`#<id>` vs `RM-<n>` vs a `window` note), `reviewBy` defaults, and why a refused send does not half-land | block-shape-refused |
 | Which reads are free and which verb is expensive; batching a brief; promoting a `.spike` probe into `tools/` | session-start-cost, verifier-serving-headroom, run-your-area |
