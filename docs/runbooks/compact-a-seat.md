@@ -5,7 +5,7 @@ writes: true
 precondition: "none"
 last_verified: 2026-10-30
 verified_by: devtools (the compaction path) + delegate (the no-op mechanism, read from shipped source 2026-10-30)
-evidence: "#1904 (demo/compact-spool.test.mjs — broker applies op:compact live) + #873 (demo/compact.test.mjs) + pi-durable dist/harness/compaction.js:69-71,194-201,211-234 and generation.js:236-245, read 2026-10-30"
+evidence: "#1904 (demo/compact-spool.test.mjs — broker applies op:compact live) + #873 (demo/compact.test.mjs) + pi-durable dist/harness/compaction.js:69-71,194-201,211-234 and generation.js:236-245, read 2026-10-30; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -36,8 +36,8 @@ compact.**
 
 ## Diagnose (read-only)
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+DURIG_DB=./selfdev.sqlite node cli.mjs status
+DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
 ```
 A very long history with no recent `pi.compaction` entry, and a seat that is still progressing (so a
 reset would lose work), is the case this runbook is for.
@@ -47,11 +47,11 @@ reset would lose work), is the case this runbook is for.
    broker; the report carries `viaSpool: true`, the `requestId`, and the `summaryEntryId`. The optional
    trailing text is folded into the summarization prompt; omit it for a plain compaction.
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs compact <seat> "fold the early turns into a summary; keep the latest work"
+   DURIG_DB=./selfdev.sqlite node cli.mjs compact <seat> "fold the early turns into a summary; keep the latest work"
    ```
    The producer form is equivalent (and needs no CLI):
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node intent.mjs <seat> --op compact --instructions "fold the early turns"
+   DURIG_DB=./selfdev.sqlite node intent.mjs <seat> --op compact --instructions "fold the early turns"
    ```
 2. With NO broker running, the same command opens its own harness (the direct path) and refuses a seat
    holding a live generation lease — wait for the run to settle, or `stop <seat>` first.
@@ -66,7 +66,7 @@ reset would lose work), is the case this runbook is for.
 
 ## Verify
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs log <seat> 6
+DURIG_DB=./selfdev.sqlite node cli.mjs log <seat> 6
 ```
 Expect a `"kind": "pi.compaction"` entry among the newest entries, matching the `summaryEntryId` the
 `compact` report returned. The verb fails loud when no summary entry was written, so an `ok:true` report

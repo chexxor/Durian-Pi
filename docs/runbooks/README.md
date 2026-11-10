@@ -107,6 +107,14 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   *and* a named file changed since; `runbook-unverified` (`fix-now`) if `Verify` never ran.
 - **Verification recording:** the `check` provenance line reports "runbooks verified against rev X"
   (ROADMAP 86).
+- **Env-name fidelity (#5911, swept 2026-11-10 on tree `f192f543`):** every command in these runbooks must name
+  the variable **the entry point it invokes actually reads**. Measured in that tree: `cli.mjs` (`cli.mjs:155`),
+  `intent.mjs` (`intent.mjs:105`) and `scripts/land.mjs` (`scripts/land.mjs:248`) read `DURIG_DB`; 
+  `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. A command
+  carrying a name the entry point ignores is not a typo - it silently runs against the fallback store, which is how
+  a wrong store gets read as a quiet rig. 31 command lines across 14 runbooks were corrected in that sweep; the
+  machine-side surfacing is `tools/broker-serve.mjs:153` (`legacy-env-set`), and ROADMAP 191 is the un-built
+  single-alias resolver that would remove the discrepancy at the source.
 
 ## Agent execution (from the research report)
 
@@ -127,6 +135,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Stale / describes a system that no longer exists | Sends the reader down dead ends; rot is a failing test |
 | Multiple copies | One canonical, version-controlled file, linked from the alert |
 | Prose pseudo-commands | Cannot be copy-pasted or executed |
+| A command naming an env the entry point does not read | It runs, but against the fallback store - the procedure is silently about the wrong file (#5911) |
 | Hidden state | The reader cannot tell what the procedure assumes |
 | No rollback | Leaves a half-applied write |
 | **Precondition as prose only** | **The exact 2026-10-16 failure** — enforced in code instead |

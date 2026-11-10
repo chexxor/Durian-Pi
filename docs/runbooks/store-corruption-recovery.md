@@ -5,7 +5,7 @@ writes: true
 precondition: "broker-stopped"
 last_verified: 2026-10-18
 verified_by: delegate
-evidence: "2026-10-18 impl conv 9 doc 12105 (alive-broker `[\"tools\",0]` shape); docs 16/22 from 2026-10-16"
+evidence: "2026-10-18 impl conv 9 doc 12105 (alive-broker `[\"tools\",0]` shape); docs 16/22 from 2026-10-16; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -60,7 +60,7 @@ For the alive-broker shape, verify all three:
 ```bash
 tail -6 selfdev.sqlite.broker.log          # expect `WAKE <seat>` and `PASS n woke=<seat>`
 tail -4 .spike/serve.err 2>/dev/null      # no new `wake-failed`
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status >/dev/null   # stderr: no `unreadable pi.live`
+DURIG_DB=./selfdev.sqlite node cli.mjs status >/dev/null   # stderr: no `unreadable pi.live`
 ```
 
 ## If it fails

@@ -3,9 +3,9 @@ runbook: block-shape-refused
 symptom: "a send_work carrying `block` dies: 'may only carry queue constraints', 'must look like RM-<n>', or 'reviewBy is mandatory for reason …'; or you are about to park a row and cannot tell which reason matches which constraint kind"
 writes: false                    # a send goes THROUGH the broker; this procedure never opens a Harness
 precondition: "none"
-last_verified: 2026-11-07
+last_verified: 2026-11-10
 verified_by: scribe
-evidence: "item 5279; `node demo/queue-lifecycle-m1a.test.mjs` exit 0; the Diagnose probe below printed 3 REFUSED lines from src/queue-lifecycle.mjs normalizeBlock"
+evidence: "item 5279; `node demo/queue-lifecycle-m1a.test.mjs` exit 0; the Diagnose probe below printed 3 REFUSED lines from src/queue-lifecycle.mjs normalizeBlock; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/queue-lifecycle-m1a.test.mjs exit 0"
 check_rule: null                 # no check rule covers block shape today — see Evidence
 ---
 
@@ -111,7 +111,7 @@ a clocked reason → refused`, and `a malformed block through send_work writes N
 Then confirm the re-sent row exists, with the gate you intended:
 
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs queue
+DURIG_DB=./selfdev.sqlite node cli.mjs queue
 ```
 
 Expected: the re-sent item id is present, and its park shows the reason you authored (not a prose gate).

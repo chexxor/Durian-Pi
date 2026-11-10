@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-10-18
 verified_by: devtools
-evidence: "#1931 (documented refusal; the broker reconciles stranded submissions at startup and every pass)"
+evidence: "#1931 (documented refusal; the broker reconciles stranded submissions at startup and every pass); env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -32,7 +32,7 @@ None — this is a read-only decision. Do not stop the broker.
 
 ## Diagnose (read-only)
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
+DURIG_DB=./selfdev.sqlite node cli.mjs status
 tail -12 selfdev.sqlite.broker.log      # look for STRANDED settled=N / RECONCILE lines
 ```
 The broker settles a `queued`/`placed` submission whose run task is terminal at **startup**
@@ -48,7 +48,7 @@ heartbeat but a stale `PASS`) — that is `broker-down-or-stalled.md` case (b), 
    then restart.
 3. Only when NO broker is running is `resume`/`doctor` the right verb:
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume
+   DURIG_DB=./selfdev.sqlite node cli.mjs resume
    ```
 
 ## Verify

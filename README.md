@@ -149,7 +149,7 @@ append-only change log, so this adds no write path and no stored state.
 | `rig.starter.json` | **Start here for a real rig.** The hardened 4-seat starter: inline constitution, a verifier seat on a different model family, and an outgoing edge on every seat — so `check` reports no findings on a fresh copy. Generic by design; no corpus is baked in. Proof: `demo/starter.test.mjs` |
 | `rig.v2.json` | Rig spec: seats (`name`, `role`, `goal`, `constraints`, `backstory`, `capabilities`, `model` — bare id or `{provider}/{modelId}`, e.g. `deepinfra/meta-llama/Llama-3.3-70B-Instruct`; a leading segment is the provider only when it names a registered provider, so slash-containing ids like `zai-org/GLM-5.3-Flash` work bare —, `instructions`), `edges` (send permissions), `constitution` (file path) or `constitutionInline` (text; wins if both are set) |
 | `constitution.txt` | Priority-ordered team rules; highest applicable rule governs |
-| `DURIG_DB` | Storage path (default `./rig.sqlite`). **The CLI reads `DURIG_DB`, not `DURIAN_PI_DB`** — `src/config.mjs:112` (`CONFIG_KEYS`) and `cli.mjs:151` (`resolve(CFG.DURIG_DB ?? "./rig.sqlite")`). Measured in this tree: `DURIAN_PI_DB=./scratch-x.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` (the variable was ignored, exit 1, `cause: no_store`), while `DURIG_DB=./scratch-y.sqlite node cli.mjs status` → `"db": "…/scratch-y.sqlite"` (honored). The one entry point that still takes the old name is `scripts/clockin.mjs:245`, and it takes it **first** (`DURIAN_PI_DB` → `DURIG_DB` → `./selfdev.sqlite`). The guard that surfaces this is proven by `demo/cli.test.mjs:263` (asserts the `no store at … If you meant a different rig` note) and `demo/read-no-create-store.test.mjs` (a read verb never manufactures the store it is observing, D18/#4955) |
+| `DURIG_DB` | Storage path (default `./rig.sqlite`). **The CLI reads `DURIG_DB`, not `DURIAN_PI_DB`** — `src/config.mjs:116` (`CONFIG_KEYS`) and `cli.mjs:155` (`resolve(CFG.DURIG_DB ?? "./rig.sqlite")`). Measured in this tree: `DURIAN_PI_DB=./scratch-x.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` (the variable was ignored, exit 1, `cause: no_store`), while `DURIG_DB=./scratch-y.sqlite node cli.mjs status` → `"db": "…/scratch-y.sqlite"` (honored). The one entry point that still takes the old name is `scripts/clockin.mjs:379`, and it takes it **first** (`DURIAN_PI_DB` → `DURIG_DB` → `./selfdev.sqlite`). The guard that surfaces this is proven by `demo/cli.test.mjs:263` (asserts the `no store at … If you meant a different rig` note) and `demo/read-no-create-store.test.mjs` (a read verb never manufactures the store it is observing, D18/#4955) |
 | `DURIAN_PI_PROVIDER` | `deepinfra` (default) or `faux` for offline runs |
 | `DURIAN_PI_MODEL` | Default model id for seats without their own |
 | `DEEPINFRA_API_KEY` | Ambient credential; read from env only, never stored |
@@ -162,10 +162,11 @@ append-only change log, so this adds no write path and no stored state.
  disagree.** D103 ruled that the pre-rebrand `DURIG_*` env-var names and the old `durian-pi`-era
  filenames stay accepted as deprecated aliases, with the new `DURIAN_PI_*` name winning when both are set.
  Measured on this checkout, the config loader does **not** implement that: `src/config.mjs` `CONFIG_KEYS`
- (`:111-135`) lists `DURIG_*` names **only**, `src/config.mjs` contains no alias resolver, and `cli.mjs:151`
+ (`:116-219`) lists `DURIG_*` names **only**, `src/config.mjs` contains no alias resolver, and `cli.mjs:155`
  resolves `CFG.DURIG_DB`. So for `cli.mjs` the live spelling is `DURIG_*`, and `DURIAN_PI_DB` is inert (the
- measured pair above). `DURIAN_PI_*` is read by four entry points only: `scripts/clockin.mjs:245` (first,
- ahead of `DURIG_DB`), `tui.mjs`, `tools/broker-serve.mjs`, `src/tui/durable/enter.mjs` — which is why one
+ measured pair above). `DURIAN_PI_*` is read by four entry points only: `scripts/clockin.mjs:379` (first,
+ ahead of `DURIG_DB`), `tui.mjs:42-43`, `tools/broker-serve.mjs:153` (which reports a `DURIAN_PI_*` name as
+ `legacy-env-set` rather than acting on it), `src/tui/durable/enter.mjs:137` — which is why one
  name cannot be correct for every command in this file.
  **Known gap, stated rather than hidden:** the other rows in the table above still print the `DURIAN_PI_*`
  spelling; each one is a claim about a specific entry point and has NOT been re-verified against the loader

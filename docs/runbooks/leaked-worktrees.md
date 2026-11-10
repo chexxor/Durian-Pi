@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-11-06
 verified_by: devtools
-evidence: "2026-11-06 (#5209, Linux node v24.22.1, main 46c28b73): the sole-copy probe section's three commands RAN — `git merge-base --is-ancestor e173f397 main` exit 1 (sole-copy proof), `test -e <common-dir>/worktrees/item-5094/locked` exit 0 (lock marker), `git worktree lock item-5094 --reason ...` exit 128 (already locked: the reason is immutable without opening the reap window), `git cherry main <branch>` all-`+` for all ten non-ancestor branches, `git for-each-ref --contains <head>` >=1 ref for all ten. Census: 30 worktrees, 14 LOCKED / 16 unlocked; item-5094 LOCKED + landing entry #5207. 2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced"
+evidence: "2026-11-06 (#5209, Linux node v24.22.1, main 46c28b73): the sole-copy probe section's three commands RAN — `git merge-base --is-ancestor e173f397 main` exit 1 (sole-copy proof), `test -e <common-dir>/worktrees/item-5094/locked` exit 0 (lock marker), `git worktree lock item-5094 --reason ...` exit 128 (already locked: the reason is immutable without opening the reap window), `git cherry main <branch>` all-`+` for all ten non-ancestor branches, `git for-each-ref --contains <head>` >=1 ref for all ten. Census: 30 worktrees, 14 LOCKED / 16 unlocked; item-5094 LOCKED + landing entry #5207. 2026-10-18: reclaimed 17 merged item-branches pinned by pure-scratch verify worktrees (157->122 worktrees, 109->93 refs, main unmoved, nothing forced). 2026-10-19: 27 dirty merged worktrees RELOCATED to ../pi-opendurig.worktrees/ (untracked+tracked residue preserved) after switch --detach + branch -d, plus 4 clean+locked+terminal worktrees removed (1390/1531/1585/1108), refs 108->73, main unmoved, nothing forced. 2026-10-19 (second pass): 9 merged+dirty+unlocked terminal trees relocated (2629/2683/2701/2720/2728/2737/2766/2772/2910) + 2 reapable removed (2632 merged, 2757 unmerged-so-ref-kept) + 4 landed-but-dirty trees relocated (1705/2600/2602/2643); worktrees 206->204, refs 111->83, nothing forced; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -91,7 +91,7 @@ tree holds files that exist nowhere else — name them and ask, never `--force`.
 ```bash
 node cli.mjs worktree audit              # every worktree: item status, uncommitted count, lock, keep-reason
 git worktree list
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
+DURIG_DB=./selfdev.sqlite node cli.mjs queue   # which item ids are still live?
 ```
 `worktree audit` (ROADMAP 76 / #1881) is the visibility surface: it lists every registered worktree
 with the **queue status** of its item, its **uncommitted path count**, its **lock state**, its

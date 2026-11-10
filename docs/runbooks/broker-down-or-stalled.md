@@ -5,7 +5,7 @@ writes: true
 precondition: "broker-stopped"   # diagnosis half is read-only; the Do half writes
 last_verified: unverified
 verified_by: delegate
-evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md)"
+evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md); env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. Addendum 2026-11-08T07:4xZ (impl, #5663): the three read shapes in the section below were reproduced deterministically in an item worktree of main `7ccb2163` on a 139,264 B store made by `node cli.mjs up rig.starter.json` — no live store, no broker process, so the shape is NOT size- or load-dependent. No state file: `node cli.mjs status --json` exit 0. Forged state naming a live pid (a `sleep 400`) with a fresh heartbeat and nothing draining the spool: exit 1 after 120 s, and exit 124 with ZERO bytes when an external `timeout 60` killed the wait. The `Do` half (kill, `resume`, restart) was NOT run in that repro and stays unverified. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here. Addendum 2026-11-07 (same host, the 05:18Z diagnostic pass, pid 1673276, `--max-duration 120`, 14 passes): the signature recurred, and three instrument facts were measured — `pgrep -a node | grep \"cli.mjs serve\"` returned NOTHING while the broker was ALIVE (do not call a run uncleanly exited off it); the reads that work are `cat <db>.broker.json` then `ps -o pid,etime,args -p <pid>`; and that broker's `EXIT … reason=deadline passes=-` is a hard-coded CLI-side line (`cli.mjs:2105`, on the stop-grace force timer) whose reason and pass count are both untrustworthy — see ROADMAP 328. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here. #5829 re-ran that recipe and found the exit-1 step does NOT reproduce when the forged heartbeat is written once and reused: by the second read it is older than the 60 s liveness gate, the routing falls back to `readLocal`, and the verb exits 0. The recipe below now refreshes the heartbeat before each read; both shapes re-measured green."
 check_rule: null
 ---
@@ -31,7 +31,7 @@ None for diagnosis. The fix writes, so it needs no other writer.
 
 ## Diagnose (read-only)
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status
+DURIG_DB=./selfdev.sqlite node cli.mjs status
 powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -eq 'node.exe' -and \$_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId,CreationDate"
 tail -12 selfdev.sqlite.broker.log        # last START? any EXIT? a long ms=? 
 cat selfdev.sqlite.broker.json 2>/dev/null  # a live pid, or gone?
@@ -161,7 +161,7 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   ```bash
   powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -match 'cli.mjs serve' } | Select-Object ProcessId"
   taskkill /F /PID <pid>          # or: Stop-Process -Id <pid> -Force
-  DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume
+  DURIG_DB=./selfdev.sqlite node cli.mjs resume
   ```
   A foreground `serve` in the operator's shell is expected to receive Ctrl+C; if it does not, it is
   wedged, not detached. The bounded graceful stop is owed as `#2237`.
@@ -299,7 +299,7 @@ demo are the work item (impl, #5807 ruling handed to them).
    ```
 2. With the broker down, clear anything stranded while it was gone:
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs resume
+   DURIG_DB=./selfdev.sqlite node cli.mjs resume
    ```
 3. Restart the broker **without `DURIAN_PI_SEAT_ROOT`** (a seat's own prepared cwd wins; a global root trips
    the F12 guard):

@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-11-09
 verified_by: scribe
-evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders)."
+evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders).; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
 
@@ -148,7 +148,7 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    it removes the ref ONLY when every commit is patch-equivalent to `main` AND no worktree holds it,
    and it prints the recovery command:
    ```bash
-   DURIAN_PI_DB=./selfdev.sqlite node cli.mjs worktree prune-branch <branch>
+   DURIG_DB=./selfdev.sqlite node cli.mjs worktree prune-branch <branch>
    ```
    Refusals are loud (`ok:false`, exit 1) and name the reason: an unlanded `+` commit, a worktree
    holding the ref, or an already-ancestor ref (that one needs `git branch -d`, which is allowed and
