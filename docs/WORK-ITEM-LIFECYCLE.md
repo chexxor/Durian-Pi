@@ -154,6 +154,15 @@ early-warning system:
 *staleness*); `held` is covered by nothing. This is the detection gap the redesign closes
 ([`reviews/queue-lifecycle-redesign.md`](reviews/queue-lifecycle-redesign.md) §4).
 
+**Streaming caveat (CR-2, adopted in the advocate's closure of the queue-lifecycle redesign; rule-id wiring is
+#3023).** Everything above is a **state snapshot**: a kind is rendered because the state is true now, not because an
+event happened. If/when a surface **streams** queue-scoped attention kinds — a robot consumer or the TUI live view
+rendering them continuously rather than on a poll — **per-epoch dedup is mandatory before that surface ships**: one
+fire per epoch per item. Without it the same state is re-emitted every pass, the snapshot becomes a nag stream, and the
+operator can no longer tell a new fact from a repeat. This is a precondition on future work, not a description of code
+that exists today: no streaming consumer of these kinds is built, and `computeQueueAttention` is not in `src/` as of
+this reading (`grep -rn "computeQueueAttention" src/ demo/` → no matches, exit 1).
+
 ## 6. The stuck taxonomy (say which one, then act)
 
 | Shape | How to recognise it | Is it surfaced? | Correct response |
