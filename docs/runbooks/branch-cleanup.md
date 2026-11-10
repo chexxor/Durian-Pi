@@ -3,9 +3,9 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-09
+last_verified: 2026-11-10
 verified_by: scribe
-evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders)."
+evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders). Fold rule added 2026-11-10 (#6111), verified in `item-6111` off `main f192f543`: `grep -c 'RELAYS a ruling' docs/runbooks/branch-cleanup.md` → 2; `grep -c 'duplicate a recorded ruling' docs/runbooks/delegate-doc-hygiene.md` → 1; `git grep -niE 'relays|relay a ruling' -- docs/DECISIONS.md` → no matches, exit 1; `node tools/review-cite-check.mjs docs/runbooks/branch-cleanup.md` → 0 failing, exit 0."
 check_rule: null
 ---
 
@@ -83,6 +83,25 @@ collisions**), the second printed **5** placeholder headings. If either prints a
 pass must mint the collisions in issue order **before** the new entry is appended — an append on top
 of a collision leaves every later `D111` citation ambiguous, and the ambiguity is invisible until two
 seats cite different entries for the same number.
+
+**Step 0e carries the fold rule too: never mint an entry that RELAYS a ruling the record already
+holds.** Before appending a `## D` heading, ask whether the decision already lives somewhere retrievable —
+a runbook, a review, a `docs/ROADMAP.md` row. If it does, annotate that place instead of creating a second
+entry. Measured in `item-6111` off `main f192f543` (2026-11-10): `git grep -niE "relays|relay a ruling" --
+docs/DECISIONS.md` returns **no matches, exit 1** — the prohibition was nowhere in the file it governs. What
+is retrievable: `docs/runbooks/delegate-doc-hygiene.md` § "A number in a roadmap or spec row must say INTENDED
+or RESOLVED, and name the tree it was measured on" ("minting a DECISIONS entry to relay it would duplicate a
+recorded ruling") and `docs/NEXT-ARCHIVE.md` ("the scribe should fold rather than mint a second entry").
+**Why the source is the text and not the id:** the ruling is **#5568**, a DONE queue row, and a done row has no
+read path (#3486) — an id-only citation is a dead pin, the same class as the dangling citation in #4169 and the
+dead dependency path in #6077. The rule runs from this runbook; the id is provenance.
+
+The pre-mint check:
+
+```bash
+git grep -niE '<a phrase from the ruling itself>' -- docs/DECISIONS.md docs/runbooks docs/reviews docs/ROADMAP.md
+# hit  -> fold the annotation into the hit, do not mint;  no hit -> mint
+```
 
 **Step 0d — a rebase is safe ONLY where a demo can catch the error it
 introduces.** Before attempting a rebase, ask what would FAIL if the resolution
@@ -198,6 +217,11 @@ git diff --exit-code docs/DISPOSITIONS.md                              # append-
 ```bash
 grep -c 'Step 0e — DECISIONS-number pre-flight' docs/runbooks/branch-cleanup.md   # >= 1
 git show main:docs/DECISIONS.md | grep -oE '^## D[0-9]+' | sort | uniq -d          # exit 0 while collisions exist
+```
+**The fold rule is readable without a queue read (Step 0e, #6111):**
+```bash
+grep -n 'RELAYS a ruling' docs/runbooks/branch-cleanup.md                          # >= 1 — the rule is in the doc, not only in a closed row
+git grep -n 'duplicate a recorded ruling' docs/runbooks/delegate-doc-hygiene.md    # exit 0 — the retrievable source it names
 ```
 
 **The three disposition rules (Step 0b / Step 0c / Step 0d) are present:**
