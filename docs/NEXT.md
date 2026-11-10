@@ -1,17 +1,14 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-10T04:57Z (delegate session **N23** — the fleet is **running**: the broker was restarted with
-`DURIG_LOCAL_API_KEY` in its own process env, the spool drained to 0, passes are advancing, and seats are minting
-their own rows. The fleet-silence root cause was **not** routing: it was a broker with **no** `DURIG_*` env at all,
-so every seat generation 401'd and the supervisor escalated 171 rows as `repeated_failure`.
-Measured this window: **12 natural seat compactions since the mechanism armed, 0 truncated, 14 note-backed**; the
-100-compaction / 0-truncated acceptance ran clean on a snapshot copy (exit 0, **27.9 s**) with a negative control that
-reproduces **10** truncations. `milestone-check.mjs` exits **0** with **5** blockers (was 8 → 6 → 5). **10 branches
-landed** to main across this thread (9 earlier + item-6077 + item-5745 + **item-6057**, main tip `226b8d76`);
-`node scripts/test.mjs --all` on main is **280/280 in 62.9 s**; worktrees 22 → **17**, refs **20**. **N18 is still not
-closed**: **8 of 12 seats** have no note because they have no claimed work, and ROADMAP 352 (the install gap) is
-unlanded — `--check` exits 0 on main but **1 in every seat worktree** (11/11 measured) — both are team routing decisions the delegate cannot make. **M5** gate unchanged: 3 PASS, 1 PARTIAL,
-4 FAIL. Nothing was claimed in the queue by the delegate.
+**Last update:** 2026-11-10T06:45Z (delegate session **N24** — the **pinned-pi thread**: pi-durable **v1.5.1** was
+moved, gated, measured (**93 PASS / 187 FAIL**), shim-probed (**184 / 94 + 2 TIMEOUT**, 127.5 s) and **reverted**; the
+rig is green on the validated pin at **278/280 in 59.7 s**. The **fleet is stopped** — the broker was stopped for the
+pin work and left stopped on purpose. N23's fleet findings stand: the silence was a broker with **no `DURIG_*` env**
+(401 on every generation, 171 rows escalated as `repeated_failure`); **12 natural seat compactions, 0 truncated, 14
+note-backed**; the 100/0 acceptance ran clean on a snapshot copy (exit 0, **27.9 s**) with a control reproducing
+**10** truncations; **8 of 12 seats** still have no note because they hold no claimed work, and ROADMAP **352** (the
+install gap) is unlanded — both are team routing decisions the delegate cannot make. **M5** gate unchanged: 3 PASS,
+1 PARTIAL, 4 FAIL. Nothing was claimed in the queue by the delegate.
 
 **Milestone this window worked** — **ensuring LLM task completion (D226 / D240, first tranche ROADMAP 331)**.
 The harness plane is closed (ROADMAP 351, D252, runbook `docs/runbooks/harness-compaction-guard.md`, pitfalls
@@ -88,73 +85,59 @@ cannot be recovered from the transcript (failure events are not persisted). The 
 **Cheap probe that proves the guard is in place:** `node tools/compaction-guard-install.mjs --check` → exit 0, and
 in a live session `/compaction-guard` prints caps and `fired=`.
 
-## What this pass actually changed (evidence, not activity)
+## The pinned-pi thread — v1.5.1 staged, NOT landed (ROADMAP 353–357)
 
-- **A guard now exists on the extension plane** (D212 — no base change): tracked source
-  `tools/compaction-guard-extension.js` + `tools/compaction-guard-core.mjs`, installed to
-  `.pi/extensions/compaction-guard.js` by `tools/compaction-guard-install.mjs` (`.pi/` is gitignored on purpose:
-  machine-local keys, `.gitignore:15`).
-- **Measured root cause**, not a guess: `dist/core/compaction/compaction.js:495` — "summaries use the model's
-  output limit (#9512)" (no explicit cap); `:454/:459` make a `stopReason: "length"` a hard failure;
-  `dist/core/agent-session.js:2594-2595` prints it. Provider probe on the local server: `max_tokens:32` →
-  `finish_reason "length"`, all 32 completion tokens are `reasoning_content`; `max_tokens:48` +
-  `chat_template_kwargs {"enable_thinking": false}` → "stop", 5 tokens.
-- **The failure was reproduced, then closed, on the path the operator hit.** Auto (threshold) compaction on a
-  640,861-char span with the guard NOT loaded emitted `Auto-compaction failed: Summarization failed: generation
-  hit the token cap and the summary is incomplete` — the operator's string, verbatim. With the guard loaded the
-  same span succeeded: `details {"guard":true,"reason":"bounded"}`, 2,320-char summary, 8.4 s, no failure event.
-  Permanent gate: `COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs` → ALL PASS (6 checks, 52 s,
-  408,516-char span bounded). Unguarded control at a *small* span (63,340 tokens) succeeded in 254 s — the cap is
-  a large-span failure, not every compaction.
-- **A second bug found and fixed this pass:** the extension imported its core as `./compaction-guard-core.mjs`
-  with a `../../tools/...` fallback (`tools/compaction-guard-extension.js:44) — correct only at
-  `<repo>/.pi/extensions/`. Anywhere else the extension silently does not load and the session runs unguarded
-  (SELFDEV **217**). `tools/compaction-guard-install.mjs` now installs the core next to the extension and
-  `--check` verifies both files.
-- **Verified three ways.** Gate: `node tools/compaction-guard-test.mjs` → **ALL PASS, 28 checks, 0.53 s**, no
-  model/key/network/broker. E2E: `node tools/compaction-guard-e2e.mjs` → **ALL PASS**; span 158,764 chars →
-  1,454-char summary, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, `compact()` 3.4 s. Forced
-  length stop (`COMPACT_GUARD_OUTPUT_TOKENS=256`): **ALL PASS**, `details.reason "length-rescued"`, 7,591-char
-  checkpoint, 5.1 s. Composition: with `@woksin/pi-context-budget` also loaded, compaction succeeded in 6.9 s with
-  `details {"guard":true,"reason":"bounded","spanChars":155353}`.
-- **A bug found and fixed in this pass:** the guard's deterministic-fallback line read `srecord(...)` — a
-  `ReferenceError` on exactly the path that is supposed to make failure impossible. `node --check` does not catch
-  it. The handler is now wrapped in its own try/catch (`details.reason: "guard-fault-fallback"`), and the gate has
-  two checks for it.
+**What the last window did with the operator's "update pi-durable to v1.5.1" directive:** it ran the move, gated
+it, measured it, and **reverted it**. The rig is on the validated pin `2ec55d80` (pi-durable **1.3.0** built from
+it), suite **278/280 in 59.7 s**. At tag `v1.5.1` (`dd30101c`, 729 commits ahead of the pin) the suite is
+**93 PASS / 187 FAIL**; with a 4-line `Type`→`typebox` shim, **184 PASS / 94 FAIL + 2 TIMEOUT, 127.5 s**. The
+evidence and the itemised migration are `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`; the procedure is
+`docs/runbooks/pi-pin-update.md`.
+
+**The rule that stopped the landing:** a pin bump that leaves `documentState` (117 hits / 49 files),
+`subscribeCommits` (9 files), `viewState`, `watchEvents`, pi-ai's `Type` and the now-required `checkpointWhen`
+(0 occurrences in our tree, 5 rig docs) un-migrated is a half-done change. **Do not move the pin before ROADMAP
+353 lands**, and never treat `sync-pi --unlink` as a rollback — the live store is schema v2 and released pi-durable
+≤ 1.3.0 cannot open it. Backup: `.spike/backups/20261110T0551Z/selfdev.sqlite` (617,492,480 bytes, sha256
+`0996cd61…`, `cmp` exit 0).
+
+**Broker state:** deliberately **stopped** for the pin work — wedged pid 1999470 ended with `kill -INT`
+(`EXIT reason=deadline`), the stranded genlock was removed, `cli.mjs resume` exits 0 with 2 `run-cancelled
+submissions`. Restart: `DURIG_LOCAL_API_KEY=… node tools/broker-serve.mjs`.
 
 ## Exact next command
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
+node scripts/sync-pi.mjs --check        # pin identity + the #5093 tag-pin policy gap; read-only, ~1 s
+node demo/next-pointer.test.mjs         # the pointer cap — red until NEXT.md is under 200 counted lines
+node demo/clockin-digest.test.mjs       # the other cap: the clock-in digest budget
+node scripts/test.mjs --all --jobs 8    # the baseline a pin move must beat: 278/280
 node tools/compaction-guard-install.mjs --check   # exit 0 = the guard is installed and current
-node tools/compaction-guard-test.mjs              # ALL PASS (28 checks) in ~0.5 s, no broker, no key, no model
-node tools/compaction-guard-e2e.mjs              # manual path: one real local model call, ~5 s
-COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs   # the threshold path, 50-86 s (witness, not a loop)
-node scripts/clockin.mjs                          # BEFORE starting a broker; it hangs while one drives
-node tools/broker-serve.mjs --status
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
+node tools/broker-serve.mjs --status    # the broker is stopped by design this window
 ```
-
-The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktree list | wc -l`, `git branch
---format='%(refname:short)' | wc -l`); read the live tip with `git rev-parse --short main`.
 
 ## Current item (priority order)
 
-1. **Close the install gap** (registered as **ROADMAP 352**, unclaimed): nothing at session start runs
+1. **Move the pin when ROADMAP 353 lands** (353–357 registered 2026-11-10): the symbol migration is a seat job —
+   `pi-schema` first in the pin's `packages`, `documentState` → `watchDoc()` in 49 files, `subscribeCommits`
+   semantics, the 5 rig docs' required `checkpointWhen`, and the 36 unclassified assertion failures. Evidence:
+   `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`.
+2. **Close the install gap** (registered as **ROADMAP 352**, unclaimed): nothing at session start runs
    `tools/compaction-guard-install.mjs`, so a fresh clone, a new worktree or another machine starts **unguarded with
    no signal** (`.pi/` is gitignored by design, `.gitignore:15`). Fix shape: `scripts/clockin.mjs` prints a `guard:`
    line from `install --check` (<100 ms, no model/key/network), and a `demo/compaction-guard-gate.test.mjs` wrapper
    puts the 28-check gate inside the area suite (discovery scans only `demo/*.test.mjs`, `src/testareas.mjs:31-38`, so
    today the pre-landing gate never runs it). A seat job, not a delegate job.
-2. **Get a provider that registers a model** (operator grant) — the extension is armed
+3. **Get a provider that registers a model** (operator grant) — the extension is armed
    (`durig.config.json`, `cli.mjs config`), so the remaining step is a live seat run: `DURIG_LOCAL_API_KEY` unset →
    **401** on 127.0.0.1:8080. Until then N18's acceptance cannot be measured, and the gate will keep reporting
    "armed but never exercised" as a blocker (pitfall **219**). Procedure: **`docs/runbooks/continuation-notes.md`**.
-3. **Decide how a landing closes its row** (D249) — spooled as `delegate-20261109-auto-clean`, undrained while the
+4. **Decide how a landing closes its row** (D249) — spooled as `delegate-20261109-auto-clean`, undrained while the
    broker is down.
-4. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2) — a seat job.
-5. **#5785** — code on `main`, row `deferred`; a zero-build close for its owner.
-6. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5,
+5. **Re-cut `item-5301`** (the `worktree reap` verb, ROADMAP 311 cut 2) — a seat job.
+6. **#5785** — code on `main`, row `deferred`; a zero-build close for its owner.
+7. **Ratify or revise M5's eight acceptance criteria** (operator) — `docs/MILESTONES.md` §M5,
    `docs/reviews/milestone-m5-solidified-2026-11-09.md` §4; gate baseline **3 PASS, 1 PARTIAL, 4 FAIL**.
 
 **Promotion candidates** (gitignored `.spike/`, broker-down safe, no spend beyond the local model):

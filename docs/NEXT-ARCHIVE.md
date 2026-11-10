@@ -14226,3 +14226,55 @@ composer), `.spike/delegate/compaction-policy-probe.mjs`, `.spike/delegate/conte
 4. **#5785** the compaction fallback — code is on `main`, the row is `deferred`, its own subject says "nesting
    DONE on item-5306". Closing it is a zero-build act for its owner.
 
+
+## Archived 2026-11-10 (delegate session N24) — the N23 pointer paragraphs cut from docs/NEXT.md VERBATIM (pre-cut main tip 1b985538)
+
+## What this pass actually changed (evidence, not activity)
+
+- **A guard now exists on the extension plane** (D212 — no base change): tracked source
+  `tools/compaction-guard-extension.js` + `tools/compaction-guard-core.mjs`, installed to
+  `.pi/extensions/compaction-guard.js` by `tools/compaction-guard-install.mjs` (`.pi/` is gitignored on purpose:
+  machine-local keys, `.gitignore:15`).
+- **Measured root cause**, not a guess: `dist/core/compaction/compaction.js:495` — "summaries use the model's
+  output limit (#9512)" (no explicit cap); `:454/:459` make a `stopReason: "length"` a hard failure;
+  `dist/core/agent-session.js:2594-2595` prints it. Provider probe on the local server: `max_tokens:32` →
+  `finish_reason "length"`, all 32 completion tokens are `reasoning_content`; `max_tokens:48` +
+  `chat_template_kwargs {"enable_thinking": false}` → "stop", 5 tokens.
+- **The failure was reproduced, then closed, on the path the operator hit.** Auto (threshold) compaction on a
+  640,861-char span with the guard NOT loaded emitted `Auto-compaction failed: Summarization failed: generation
+  hit the token cap and the summary is incomplete` — the operator's string, verbatim. With the guard loaded the
+  same span succeeded: `details {"guard":true,"reason":"bounded"}`, 2,320-char summary, 8.4 s, no failure event.
+  Permanent gate: `COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs` → ALL PASS (6 checks, 52 s,
+  408,516-char span bounded). Unguarded control at a *small* span (63,340 tokens) succeeded in 254 s — the cap is
+  a large-span failure, not every compaction.
+- **A second bug found and fixed this pass:** the extension imported its core as `./compaction-guard-core.mjs`
+  with a `../../tools/...` fallback (`tools/compaction-guard-extension.js:44) — correct only at
+  `<repo>/.pi/extensions/`. Anywhere else the extension silently does not load and the session runs unguarded
+  (SELFDEV **217**). `tools/compaction-guard-install.mjs` now installs the core next to the extension and
+  `--check` verifies both files.
+- **Verified three ways.** Gate: `node tools/compaction-guard-test.mjs` → **ALL PASS, 28 checks, 0.53 s**, no
+  model/key/network/broker. E2E: `node tools/compaction-guard-e2e.mjs` → **ALL PASS**; span 158,764 chars →
+  1,454-char summary, `sentMaxTokens 4000`, `thinkingOff true`, `stopReason "stop"`, `compact()` 3.4 s. Forced
+  length stop (`COMPACT_GUARD_OUTPUT_TOKENS=256`): **ALL PASS**, `details.reason "length-rescued"`, 7,591-char
+  checkpoint, 5.1 s. Composition: with `@woksin/pi-context-budget` also loaded, compaction succeeded in 6.9 s with
+  `details {"guard":true,"reason":"bounded","spanChars":155353}`.
+- **A bug found and fixed in this pass:** the guard's deterministic-fallback line read `srecord(...)` — a
+  `ReferenceError` on exactly the path that is supposed to make failure impossible. `node --check` does not catch
+  it. The handler is now wrapped in its own try/catch (`details.reason: "guard-fault-fallback"`), and the gate has
+  two checks for it.
+
+## Exact next command
+
+```bash
+cd /home/chexxor/Git/Durian-Pi
+node tools/compaction-guard-install.mjs --check   # exit 0 = the guard is installed and current
+node tools/compaction-guard-test.mjs              # ALL PASS (28 checks) in ~0.5 s, no broker, no key, no model
+node tools/compaction-guard-e2e.mjs              # manual path: one real local model call, ~5 s
+COMPACT_GUARD_E2E_MODE=auto node tools/compaction-guard-e2e.mjs   # the threshold path, 50-86 s (witness, not a loop)
+node scripts/clockin.mjs                          # BEFORE starting a broker; it hangs while one drives
+node tools/broker-serve.mjs --status
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
+```
+
+The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktree list | wc -l`, `git branch
+--format='%(refname:short)' | wc -l`); read the live tip with `git rev-parse --short main`.
