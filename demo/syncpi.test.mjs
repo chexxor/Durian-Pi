@@ -12,13 +12,16 @@ import {
 	applyPinUpdate,
 	behindAhead,
 	decideDrift,
+	deepenClone,
 	dependencySet,
 	describePinRef,
 	driftReport,
 	inspectBuildTree,
 	inspectBuilt,
 	inspectLinked,
+	isShallowClone,
 	linkSpecs,
+	namePinRef,
 	parseArgs,
 	parseLsRemote,
 	readPin,
@@ -122,11 +125,17 @@ assert.equal(gap.pinAgeDays, 16, "the pin's age is reported: an unaged pin is ho
 assert.deepEqual(gap.tagsBetween, ["v1.4.0", "v1.5.0"], "the releases sitting between us and tip are named");
 assert.match(gap.policyGap, /POLICY GAP \(#5093\)[\s\S]*floats on branch "main"/, "a pin that names no ref is called out on every run");
 assert.equal(gap.refType, "branch", "a legacy pin resolves its identity through branch");
-// A counted gap the tool cannot measure is reported as UNCERTAIN, naming the fix command.
-const shallow = driftReport({ pin: floating, upstreamSha: "tip9", behind: null, ahead: null, countsReason: "the vendored clone is shallow; run: git -C vendor/pi-main fetch --unshallow origin", tags: ["v1.4.0"], tagsReason: "the list below is INCOMPLETE, not authoritative", now });
+// A gap the tool could not measure is reported as a NAMED unknown state, never as a bare null the
+// reader has to interpret (#6061).
+const shallow = driftReport({ pin: floating, upstreamSha: "tip9", behind: null, ahead: null, gap: "unknown", gapReason: "the deepening fetch FAILED: ...", tags: ["v1.4.0"], tagsReason: "the list below is INCOMPLETE, not authoritative", now });
 assert.equal(shallow.behind, null, "an unmeasurable count stays null - never a fabricated 0");
-assert.match(shallow.countsReason, /fetch --unshallow/, "the null names the command that clears it");
+assert.equal(shallow.gap, "unknown", "the uncertainty itself is the field a caller can filter on");
+assert.match(shallow.gapReason, /fetch FAILED/, "the reason says what was TRIED, not a hypothetical fix");
+assert.equal(shallow.countsReason, shallow.gapReason, "countsReason stays readable for an existing reader");
 assert.match(shallow.tagsReason, /INCOMPLETE, not authoritative/, "a partial tag list is labelled partial");
+const measuredGap = driftReport({ pin: floating, upstreamSha: "tip9", behind: 515, ahead: 0, gap: "measured", gapReason: null, tags: [], tagsReason: null, now });
+assert.equal(measuredGap.gap, "measured", "a counted gap says it is counted");
+assert.equal(measuredGap.gapReason, null, "and carries no excuse");
 // And a tagged pin says so, with no policy gap.
 const tagged = driftReport({ pin: { ...floating, ref: "v1.4.0", refType: "tag" }, upstreamSha: "tip9", behind: 3, ahead: 0, countsReason: null, tags: ["v1.5.0"], tagsReason: null, now });
 assert.equal(tagged.policyGap, null, "a tag pin has no policy gap");
@@ -134,7 +143,7 @@ assert.equal(tagged.ref, "v1.4.0");
 console.log("DRIFT OK");
 
 // --- the git FACT layer, against a fixture repo with a gap we control ----------
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -169,8 +178,15 @@ try {
 	const counts = behindAhead(repo, shaA, shaC);
 	assert.equal(counts.behind, 2, "two commits between the pinned commit and tip, counted from real history");
 	assert.equal(counts.ahead, 0, "we are not ahead of upstream");
-	assert.equal(counts.countsReason, null, "a measured count carries no excuse");
-	assert.deepEqual(behindAhead(repo, shaA, shaA), { behind: 0, ahead: 0, countsReason: null }, "pin at tip measures zero, not null");
+	assert.equal(counts.gap, "measured", "a counted gap is labelled counted");
+	assert.equal(counts.gapReason, null, "a measured count carries no excuse");
+	assert.equal(counts.countsReason, null, "the old field name still reads");
+	assert.equal(counts.deepened, false, "a deep clone needs no deepening");
+	assert.deepEqual(
+		behindAhead(repo, shaA, shaA),
+		{ behind: 0, ahead: 0, gap: "measured", gapReason: null, countsReason: null, deepened: false },
+		"pin at tip measures zero, not null",
+	);
 
 	const tagFacts = tagsBetween(repo, shaA);
 	assert.deepEqual(tagFacts.tags, ["v1.1.0"], "the tag the pin does NOT contain is listed; the one it does is not");
@@ -178,22 +194,90 @@ try {
 	assert.deepEqual(tagsBetween(repo, shaC).tags, [], "a pin at tip has nothing in between");
 
 	// A ref the clone cannot see is an UNCERTAINTY with the fix named, never a confident 0/0.
-	const missing = behindAhead(repo, "0000000000000000000000000000000000000000", shaC);
+	const absentSha = "f".repeat(40);
+	const missing = behindAhead(repo, absentSha, shaC);
 	assert.equal(missing.behind, null);
-	assert.match(missing.countsReason, /fetch --unshallow|Invalid symmetric difference/);
+	assert.equal(missing.gap, "unknown", "the state is named, so a caller can filter on it");
+	assert.match(missing.gapReason, /is not in this clone/, "the reason names the endpoint git could not resolve");
 	// No clone at all is its own named absence.
 	const noClone = behindAhead(join(dir, "nope"), shaA, shaC);
 	assert.equal(noClone.behind, null);
 	assert.match(noClone.countsReason, /no vendored clone/);
 	assert.match(tagsBetween(join(dir, "nope"), shaA).tagsReason, /no vendored clone/);
 
-	// A SHALLOW clone (what --sync creates with fetch --depth 1) must say so instead of reporting 0.
+	// #6061: a SHALLOW clone is one fetch away from a number. The report used to print nulls and point
+	// at a command the reader had to run by hand; now it runs the fetch itself and counts.
 	const shallowDir = join(dir, "shallow");
 	sh(dir, ["clone", "--quiet", "--depth", "1", `file://${repo}`, "shallow"]);
-	const shallowFacts = behindAhead(shallowDir, shaA, shaC);
-	assert.equal(shallowFacts.behind, null, "a shallow clone cannot prove the gap; it must not answer 0");
-	assert.match(shallowFacts.countsReason, /shallow|Invalid symmetric difference/);
-	console.log("GIT FACTS OK");
+	assert.equal(isShallowClone(shallowDir), true, "the fixture clone really is shallow");
+	const deepenedFacts = behindAhead(shallowDir, shaA, shaC);
+	assert.equal(deepenedFacts.behind, 2, "the shallow clone was deepened and the gap became a NUMBER");
+	assert.equal(deepenedFacts.ahead, 0);
+	assert.equal(deepenedFacts.gap, "measured");
+	assert.equal(deepenedFacts.deepened, true, "the report says it did the fetching itself");
+	assert.equal(isShallowClone(shallowDir), false, "the clone is left deep, so the next report needs no fetch");
+
+	// When the deepening fetch FAILS the gap is UNKNOWN with the failure named - not bare nulls, and
+	// never a fabricated count.
+	const unreachableDir = join(dir, "unreachable");
+	sh(dir, ["clone", "--quiet", "--depth", "1", `file://${repo}`, "unreachable"]);
+	sh(unreachableDir, ["remote", "set-url", "origin", "file:///nonexistent/nowhere.pi"]);
+	assert.equal(isShallowClone(unreachableDir), true);
+	const stuck = behindAhead(unreachableDir, shaA, shaC);
+	assert.equal(stuck.behind, null, "an unmeasurable gap stays null - never a 0");
+	assert.equal(stuck.gap, "unknown", "and the state is a field, not an inference the reader must make");
+	assert.match(stuck.gapReason, /deepening fetch FAILED/, "the reason names the fetch that was attempted");
+	assert.match(stuck.gapReason, /fetch --unshallow origin -> exit \d+/, "and shows the command run and its exit code");
+	const probe = deepenClone(unreachableDir);
+	assert.equal(probe.ok, false, "deepening against an unreachable origin fails rather than pretending");
+	assert.ok(probe.tried.length >= 3, "the failure lists every command it actually tried");
+
+	// #5093: a pin whose sha IS a published tag gets NAMED - the sha does not move.
+	const named = namePinRef(shallowDir, { sha: shaA, branch: "main" });
+	assert.equal(named.named, true, "v1.0.0 points exactly at the pinned commit, so the checkpoint can be named");
+	assert.equal(named.ref, "v1.0.0");
+	assert.equal(named.refType, "tag");
+	assert.equal(named.reason, null);
+	const untagged = namePinRef(shallowDir, { sha: shaC, branch: "main" });
+	assert.equal(untagged.named, false, "a pin on an untagged commit is not given a name it does not have");
+	assert.match(untagged.reason, /none points exactly at/, "the reason says why, with the tags it did find");
+	assert.match(untagged.reason, /--update <tag>/, "and names the verb that would fix it");
+	const already = namePinRef(shallowDir, { sha: shaA, ref: "v1.0.0", refType: "tag", branch: "main" });
+	assert.equal(already.named, false, "an already-named pin is left alone: the write is idempotent");
+	assert.equal(already.alreadyNamed, true);
+	assert.match(namePinRef(join(dir, "nope"), { sha: shaA, branch: "main" }).reason, /no vendored clone/);
+
+	// THE REPORT ITSELF, end to end: a fixture rig whose pin names no ref and whose vendored clone is
+	// shallow. Before #6061 this printed `behind: null, ahead: null, pinRef: null`.
+	const rigDir = join(dir, "rig");
+	mkdirSync(join(rigDir, "scripts"), { recursive: true });
+	mkdirSync(join(rigDir, "vendor"), { recursive: true });
+	const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+	writeFileSync(join(rigDir, "scripts", "sync-pi.mjs"), readFileSync(join(ROOT, "scripts", "sync-pi.mjs"), "utf8"));
+	writeFileSync(
+		join(rigDir, "pi-main.pin.json"),
+		JSON.stringify({ repo: `file://${repo}`, branch: "main", sha: shaA, pinnedAt: "2026-11-01T00:00:00.000Z", packages: [] }, null, 2) + "\n",
+	);
+	sh(join(rigDir, "vendor"), ["clone", "--quiet", "--depth", "1", `file://${repo}`, "pi-main"]);
+	const ran = spawnSync("node", [join(rigDir, "scripts", "sync-pi.mjs")], { encoding: "utf8" });
+	assert.equal(ran.status, 0, `the report must still exit 0: ${ran.stderr}`);
+	const report = JSON.parse(ran.stdout);
+	assert.equal(report.drift.gap, "measured", "the report answers the gap instead of printing nulls");
+	assert.equal(report.drift.behind, 2, "how far behind is the only question that matters - it is answered");
+	assert.equal(report.drift.ahead, 0);
+	assert.equal(report.pinRef, "v1.0.0", "the validated checkpoint is NAMED in the report");
+	assert.equal(report.pinRefType, "tag");
+	assert.equal(report.pinRefNamed, true);
+	assert.equal(report.pinnedSha, shaA, "naming the ref did NOT move the sha (#6061: do not move the pin)");
+	const writtenPin = JSON.parse(readFileSync(join(rigDir, "pi-main.pin.json"), "utf8"));
+	assert.equal(writtenPin.ref, "v1.0.0", "the name is written into the pin file");
+	assert.equal(writtenPin.sha, shaA, "and the pin file's sha is untouched");
+	const second = JSON.parse(spawnSync("node", [join(rigDir, "scripts", "sync-pi.mjs")], { encoding: "utf8" }).stdout);
+	assert.equal(second.pinRefNamed, false, "the second run writes nothing: naming is idempotent");
+	assert.equal(second.drift.policyGap, null, "the #5093 policy gap disappears once the pin is named");
+	assert.equal(second.drift.gap, "measured", "the clone is deep now, so the count needs no fetch");
+	assert.equal(second.drift.deepened, false, "and the second report does not fetch again");
+	console.log("GIT FACTS OK (shallow clone deepened and counted; a failed fetch reported as a named unknown; a tag name written in place without moving the sha; the report answers the gap end to end)");
 
 	// --- tag round-trip: move the pin in a COPY, read it back, prove the provenance ----
 	const legacy = { ...floating };

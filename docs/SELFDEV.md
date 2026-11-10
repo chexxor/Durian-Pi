@@ -3798,7 +3798,10 @@ Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
     so `rev-list --left-right --count <pin>...v1.5.1` answered **`1 1`**. After one
     `git -C vendor/pi-main fetch --unshallow origin` (6,994 commits reachable) the same command answers **`0 729`**
     and `sync-pi --check` reports `behind: 743`. State the depth with the number, or run the unshallow first;
-    `scripts/sync-pi.mjs:277` already says so in words.
+    `scripts/sync-pi.mjs:277` already says so in words. **As of #6061 the instrument does the fetching itself:**
+    `behindAhead` asks `git rev-parse --is-shallow-repository`, runs `git fetch --unshallow origin`, recounts, and
+    reports `gap: "measured"` with `deepened: true`. If the fetch fails the gap is a named `gap: "unknown"` whose
+    `gapReason` lists every command tried and its exit code - never a bare `behind: null`.
 228. **A package split upstream is invisible until the build fails: add it to the pin's `packages` array, and
     build it FIRST.** `pi-durable` 1.5.1 depends on `@earendil-works/pi-schema` 1.5.1 (`git -C vendor/pi-main show
     v1.5.1:packages/durable/package.json`), which our 9-package pin does not list. `--sync` with schema appended

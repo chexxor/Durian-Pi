@@ -259,26 +259,122 @@ export function applyPinUpdate(pin, resolved, now = new Date().toISOString()) {
 	};
 }
 
-/** How far the pin sits from upstream's tip. Returns nulls WITH a reason naming the fix command. */
+/**
+ * Is this clone shallow? `git rev-parse --is-shallow-repository` answers it directly, so the report
+ * never has to INFER shallowness from a failed rev-list (the inference that produced the nulls).
+ */
+export function isShallowClone(cloneDir) {
+	if (!existsSync(join(cloneDir, ".git"))) return null;
+	const res = run("git", ["rev-parse", "--is-shallow-repository"], cloneDir, { allowFail: true });
+	if (res.status !== 0) return null;
+	return (res.stdout || "").trim() === "true";
+}
+
+/**
+ * Deepen a shallow vendored clone so the gap can actually be COUNTED (#6061).
+ * A shallow clone is not an unmeasurable gap; it is one fetch away from being measurable. The report
+ * used to print `behind: null, ahead: null` and hand the reader a shell command, which is a null that
+ * LOOKS like a finding: the instrument could not answer "how far behind are we?" and nobody had to
+ * notice that it could not.
+ * Returns { ok, tried, detail }. `tried` is every command actually run, so a failure names what was
+ * attempted rather than a hypothetical fix.
+ */
+export function deepenClone(cloneDir) {
+	const attempts = [
+		["fetch", "--unshallow", "origin"],
+		["fetch", "--unshallow"],
+		["fetch", "--tags", "origin"],
+	];
+	const tried = [];
+	let last = null;
+	for (const args of attempts) {
+		const res = run("git", args, cloneDir, { allowFail: true });
+		tried.push({ command: `git -C ${cloneDir} ${args.join(" ")}`, exit: res.status, detail: (res.stderr || res.stdout || "").trim().slice(0, 200) });
+		last = res;
+		// A successful unshallow is enough; a successful --tags fetch alone does not make the history
+		// countable, so keep going and let the caller's retry decide whether the gap is now measurable.
+		if (args[1] === "--unshallow" && res.status === 0) return { ok: true, tried, detail: null };
+	}
+	return {
+		ok: false,
+		tried,
+		detail: (last?.stderr || last?.stdout || "").trim().slice(0, 200) || `exit ${last?.status}`,
+	};
+}
+
+/**
+ * Which endpoint of the symmetric difference git cannot see. Names the object that is missing instead
+ * of blaming "shallow history" for a sha that was simply never fetched.
+ */
+function missingEndpoint(cloneDir, sha) {
+	if (!/^[0-9a-f]{7,40}$/.test(String(sha || ""))) return `${JSON.stringify(sha)} is not a sha`;
+	const probe = run("git", ["cat-file", "-e", `${sha}^{commit}`], cloneDir, { allowFail: true });
+	return probe.status === 0 ? null : `${sha} is not in this clone`;
+}
+
+/**
+ * How far the pin sits from upstream's tip.
+ *
+ * THREE OUTCOMES, kept distinct, because a null that is not labelled is the defect (#6061):
+ *   gap "measured"  - behind/ahead are integers, counted from a clone deep enough to count;
+ *   gap "unknown"   - the count could not be obtained: no clone, no upstream sha, the deepening
+ *                     fetch failed, or an endpoint object is simply not present. The reason names
+ *                     what was TRIED and what it returned, never a bare suggestion.
+ * `countsReason` is kept as a synonym of `gapReason` so an existing reader still finds the text.
+ */
 export function behindAhead(cloneDir, pinnedSha, upstreamSha) {
+	const nulls = (reason, deepened = false) => ({
+		behind: null,
+		ahead: null,
+		gap: "unknown",
+		gapReason: reason,
+		countsReason: reason,
+		deepened,
+	});
 	if (!upstreamSha) {
-		return { behind: null, ahead: null, countsReason: "upstream sha unavailable (offline?) - run: node scripts/sync-pi.mjs --observe" };
+		return nulls("upstream sha unavailable (offline?) - run: node scripts/sync-pi.mjs --observe");
 	}
 	if (!existsSync(join(cloneDir, ".git"))) {
-		return { behind: null, ahead: null, countsReason: `no vendored clone at ${cloneDir} - run: node scripts/sync-pi.mjs --sync` };
+		return nulls(`no vendored clone at ${cloneDir} - run: node scripts/sync-pi.mjs --sync`);
 	}
-	const res = run("git", ["rev-list", "--left-right", "--count", `${pinnedSha}...${upstreamSha}`], cloneDir, { allowFail: true });
-	if (res.status !== 0) {
-		return {
-			behind: null,
-			ahead: null,
-			countsReason:
-				`git rev-list --left-right --count ${pinnedSha}...${upstreamSha} failed in ${cloneDir} (exit ${res.status}): ` +
-				`${(res.stderr || res.stdout || "").trim().slice(0, 160)} - the vendored clone is shallow/missing history; run: git -C ${cloneDir} fetch --unshallow origin`,
-		};
+	const count = () => run("git", ["rev-list", "--left-right", "--count", `${pinnedSha}...${upstreamSha}`], cloneDir, { allowFail: true });
+	const read = (res) => {
+		const [aheadOfPin, behindPin] = (res.stdout || "").trim().split(/\s+/);
+		const behind = Number(behindPin);
+		const ahead = Number(aheadOfPin);
+		if (!Number.isInteger(behind) || !Number.isInteger(ahead)) return null;
+		return { behind, ahead, gap: "measured", gapReason: null, countsReason: null };
+	};
+	const first = count();
+	if (first.status === 0) {
+		const measured = read(first);
+		if (measured) return { ...measured, deepened: false };
+		return nulls(`git rev-list --left-right --count ${pinnedSha}...${upstreamSha} in ${cloneDir} printed an unparseable count: ${(first.stdout || "").trim().slice(0, 120)}`);
 	}
-	const [aheadOfPin, behindPin] = (res.stdout || "").trim().split(/\s+/);
-	return { behind: Number(behindPin), ahead: Number(aheadOfPin), countsReason: null };
+	// The count failed. A shallow clone is a FETCH away from a number, so try the fetch before
+	// declaring the gap unknown, and re-measure if it worked.
+	if (isShallowClone(cloneDir)) {
+		const deep = deepenClone(cloneDir);
+		if (deep.ok) {
+			const again = count();
+			if (again.status === 0) {
+				const measured = read(again);
+				if (measured) return { ...measured, deepened: true };
+				return nulls(`the clone deepened (git fetch --unshallow succeeded) but the count still failed in ${cloneDir} (exit ${again.status}): ${(again.stderr || "").trim().slice(0, 160)}`, true);
+			}
+			return nulls(`the clone was deepened but the count is still unmeasurable: ${missingEndpoint(cloneDir, pinnedSha) ?? missingEndpoint(cloneDir, upstreamSha) ?? "git rev-list exit ${again.status}"}`, true);
+		}
+		return nulls(
+			`the vendored clone at ${cloneDir} is shallow and the deepening fetch FAILED: ${deep.detail} (tried: ${deep.tried.map((t) => `${t.command} -> exit ${t.exit}`).join("; ")})`,
+			false,
+		);
+	}
+	const missing = missingEndpoint(cloneDir, pinnedSha) ?? missingEndpoint(cloneDir, upstreamSha);
+	return nulls(
+		missing
+			? `${missing} - git rev-list --left-right --count ${pinnedSha}...${upstreamSha} cannot count it (exit ${first.status})`
+			: `git rev-list --left-right --count ${pinnedSha}...${upstreamSha} failed in ${cloneDir} (exit ${first.status}): ${(first.stderr || first.stdout || "").trim().slice(0, 160)}`,
+	);
 }
 
 /**
@@ -315,8 +411,43 @@ export function tagsBetween(cloneDir, pinnedSha) {
 	return { tags: newer, tagsReason: null };
 }
 
+/**
+ * NAME THE PIN (#6061, closing the #5093 policy gap). A pinned sha that no ref names cannot be
+ * argued with, aged, or compared: "we are validated against 2ec55d80" is a fact nobody can check
+ * against a release. If a published tag points EXACTLY at the pinned commit, that tag is the name.
+ *
+ * This never moves the sha - it only attaches the ref that already describes it. When no tag does,
+ * the reason says which tags exist and what to do, rather than leaving `pinRef: null` with no
+ * explanation (the same fail-open shape as a null behind/ahead).
+ */
+export function namePinRef(cloneDir, pin) {
+	if (pin.refType === "tag" && typeof pin.ref === "string" && pin.ref) {
+		return { named: false, alreadyNamed: true, ref: pin.ref, refType: "tag", reason: null };
+	}
+	if (!existsSync(join(cloneDir, ".git"))) {
+		return { named: false, ref: null, refType: null, reason: `cannot name the pin: no vendored clone at ${cloneDir} - run: node scripts/sync-pi.mjs --sync` };
+	}
+	const probe = run("git", ["describe", "--tags", "--exact-match", pin.sha], cloneDir, { allowFail: true });
+	const tag = (probe.stdout || "").trim();
+	if (probe.status === 0 && tag) return { named: true, ref: tag, refType: "tag", reason: null };
+	const listed = run("git", ["tag", "--list", "--sort=version:refname"], cloneDir, { allowFail: true });
+	const names = (listed.stdout || "").trim().split("\n").filter((n) => /^v?\d+(\.\d+)*$/.test(n));
+	if (names.length === 0) {
+		return { named: false, ref: null, refType: null, reason: `no tag refs are fetched in ${cloneDir} - run: git -C ${cloneDir} fetch --tags origin` };
+	}
+	const missing = missingEndpoint(cloneDir, pin.sha);
+	return {
+		named: false,
+		ref: null,
+		refType: null,
+		reason:
+			`${names.length} tag refs exist in ${cloneDir} and none points exactly at the pinned sha ${pin.sha}${missing ? ` (${missing})` : ""}. ` +
+			`The pin floats on branch ${JSON.stringify(pin.branch ?? "main")}. Name it deliberately with: node scripts/sync-pi.mjs --update <tag> (nearest tags: ${names.slice(-3).join(", ")})`,
+	};
+}
+
 /** Assemble the drift finding. Pure: every fact is passed in, so a demo can pin a known gap. */
-export function driftReport({ pin, upstreamSha, behind, ahead, countsReason, tags, tagsReason, observedAt = null, now = Date.now() }) {
+export function driftReport({ pin, upstreamSha, behind, ahead, gap = "unknown", gapReason = null, countsReason = null, deepened = false, tags, tagsReason, observedAt = null, now = Date.now() }) {
 	const described = describePinRef(pin);
 	const pinnedAt = typeof pin.pinnedAt === "string" ? pin.pinnedAt : null;
 	const ageDays = pinnedAt ? Math.round(((now - Date.parse(pinnedAt)) / 86400000) * 10) / 10 : null;
@@ -330,7 +461,13 @@ export function driftReport({ pin, upstreamSha, behind, ahead, countsReason, tag
 		upstreamSha: upstreamSha ?? null,
 		behind,
 		ahead,
-		countsReason,
+		// #6061: the gap is a NAMED state, not a null the reader has to interpret.
+		gap,
+		gapReason: gapReason ?? countsReason,
+		countsReason: gapReason ?? countsReason,
+		// Did THIS report have to deepen the clone to get the number? Said out loud, because a report
+		// that quietly fetches is a report whose cost nobody sees.
+		deepened,
 		tagsBetween: tags,
 		tagsReason,
 		pinnedAt,
@@ -613,7 +750,19 @@ function main(argv) {
 	// feature, it was a surface nobody had to look at.
 	const tip = observedTip ?? upstreamSha(pin);
 	const tags = tagsBetween(BUILD_DIR, pin.sha);
+	// Measure first: behindAhead deepens a shallow clone when it can, and a deepened clone is the same
+	// clone the pin-naming step needs to resolve a tag (#6061).
 	const counts = behindAhead(BUILD_DIR, pin.sha, tip);
+
+	// #6061/#5093: name the pin. If the pinned commit IS a published tag, the pin file says so - the
+	// sha does not move, only the ref that describes it. Idempotent: once named, namePinRef reports
+	// `alreadyNamed` and nothing is written.
+	const naming = namePinRef(BUILD_DIR, pin);
+	if (naming.named) {
+		pin = { ...pin, ref: naming.ref, refType: "tag", refNamedAt: new Date().toISOString() };
+		writeFileSync(PIN_PATH, `${JSON.stringify(pin, null, 2)}\n`);
+		pinWritten = true;
+	}
 	const drift = {
 		...driftReport({
 			pin,
@@ -649,6 +798,9 @@ function main(argv) {
 		pinnedSha: pin.sha,
 		pinRef: pin.ref ?? null,
 		pinRefType: pin.refType ?? null,
+		pinRefNamed: naming.named,
+		pinRefReason: naming.reason ?? null,
+		pinShaMoved: naming.named ? false : null, // naming a ref NEVER moves the sha (#5093)
 		pinFileWritten: pinWritten,
 		drift,
 		upstream: drift, // kept: the old key name, same finding, so an existing reader still finds it
