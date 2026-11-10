@@ -2830,7 +2830,10 @@ reasoning on the record (lead): a vendored table keeps cost computation hermetic
 network in the TUI/measure path — so the demo suite can assert a number; staleness becomes a local,
 checkable property because the table carries its own as-of date, so a stale table is detectable without a
 fetch. This pins **SOURCE only**: MECHANISM (how the table is loaded, keyed and surfaced) is still
-lead/design per #1127, and held item **#1135 stays HELD — do not start it**.
+lead/design per #1127, and the live implementation row is **#6191** — lead-registered, HELD, DO NOT START.
+(#1135 itself is terminal: it is not in the non-terminal queue view, so a reader looking for "held item
+#1135" will find nothing — the two Scope/Status sentences below still name it, and that is stale wording,
+not a live gate.)
 
 **Read the two rulings together, because quoted alone they contradict each other.** The Decision above
 says "the former blocker — an operator-supplied vendor price table — is REMOVED"; #2962 says the numbers
