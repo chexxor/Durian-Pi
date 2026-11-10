@@ -52,14 +52,15 @@ opened, no key, no broker process). The four existing contracts re-run green in 
 |---|---|---|
 | 1 | pm (coordinator, not a party) `revise_work` on a row it routed | `item #1 is not yours to revise (from=lead to=devtools)` |
 | 1 | lead and devtools (the parties) | both succeed, with the stored digest reported (`#3435` contract) |
-| 2 | the **sender** `revise_work` with `blockedBy: [3]` | `Validation failed for tool "revise_work": blockedBy: schema is false; root: must not have additional properties` |
-| 3 | did the legitimate half of that call land? | **No.** The stored body is still the previous one — the whole call is dropped, gate *and* body edit |
-| 4 | `revise_work` on a `done` row | `item #2 is not yours to revise (from=lead to=devtools)` — an *authority* refusal for a *closed* row |
-| 4 | `cancel_work` on a `done` row | `item #2 is not yours to cancel (from=lead to=devtools)` — same |
-| 4 | `release_work` on a `done` row | correct: `already done (terminal); there is nothing to release` (`#5778` fix) |
-| 5 | pm `hold_work` on a QUEUED row **it minted** | refused: `item #3 is addressed to devtools, not you` |
-| 5 | pm `cancel_work` on that same row | succeeds |
-| 6 | `workable()` on `blockedBy: [9999]` (no such item) | `{workable: true}` — a dangling gate is **inert** (`src/rig.mjs:312`) |
+| 2 | the **sender** `revise_work` with `blockedBy: [2]` | `Validation failed for tool "revise_work": blockedBy: schema is false; root: must not have additional properties` |
+| 3 | did the legitimate half of that call land? | **No.** Stored body is still `recipient edits intent` and `blockedBy` is `(absent)` — the whole call is dropped, gate *and* body edit |
+| 4 | `revise_work` on a row made terminal by `claim_work` + `complete_work` | `item #3 is not yours to revise (from=lead to=devtools)` — an *authority* refusal for a *closed* row |
+| 4 | `cancel_work` on that same terminal row | `item #3 is not yours to cancel (from=lead to=devtools)` — same |
+| 4 | `release_work` on that same terminal row | correct: `item #3 is already done (terminal); there is nothing to release` (the `#5778` ordering) |
+| 5 | pm `hold_work` on a QUEUED row **it minted** | refused: `item #2 is addressed to devtools, not you` |
+| 5 | pm `cancel_work` on that same row | succeeds: `item #2 cancelled: no longer worth doing (notified devtools as notice #7)` |
+| 6 | `workable()` on `blockedBy: [9999]` (no such item) | `{"workable":true,"reason":null}` — a dangling gate is **inert** (`src/rig.mjs:312`) |
+| 6 | `workable()` on `blockedBy: [2]` where item 2 is `cancelled` | `{"workable":false,"reason":"gate-cancelled:#2"}` — a cancelled gate blocks **forever**, with no exit (`src/rig.mjs:314`) |
 
 ## 4. The ruling
 

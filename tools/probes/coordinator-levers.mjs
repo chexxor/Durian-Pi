@@ -21,7 +21,7 @@ await harness.commit(async (tx) => {
   const ed = await tx.doc(Edges);
   ed.edges = [{ from: "lead", maySendTo: ["pm", "devtools"] }, { from: "pm", maySendTo: ["lead", "devtools"] }, { from: "devtools", maySendTo: ["pm", "lead"] }];
   await enqueueItem(tx, "lead", "devtools", "Row lead minted, pm coordinated", "body"); // #1
-  await enqueueItem(tx, "lead", "devtools", "A row already DONE", "body", null, true);    // #2
+  await enqueueItem(tx, "lead", "devtools", "A row devtools will finish", "body", null, false);    // #2
   await enqueueItem(tx, "pm", "devtools", "A row PM minted itself", "body", null, false, "small", true, null, null, null); // #3: minted BY pm, HELD
 }, ctx);
 const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
@@ -49,6 +49,10 @@ console.log("state of #1 after the attempts:", JSON.stringify({ status: (await i
 console.log("own mint, held row #3 (from=pm to=devtools):", JSON.stringify({status:(await item(3)).status, tier:(await item(3)).tier, block:(await item(3)).block ?? "absent"}));
 console.log("  pm holds its own minted row ->", await call("pm", "hold_work", { itemId: 3, reason: "gate not written" }));
 console.log("  pm releases its own minted row ->", await call("pm", "release_work", { itemId: 3 }));
+// Make #2 genuinely TERMINAL rather than asserting it is: claim it, complete it.
+console.log("  devtools claims #2 ->", (await call("devtools", "claim_work", { itemId: 2 })).slice(0, 60));
+console.log("  devtools completes #2 ->", (await call("devtools", "complete_work", { itemId: 2, resultSummary: "done" })).slice(0, 60));
+console.log(`  status of #2 now: ${(await item(2)).status}`);
 const doneRow = await call("pm", "release_work", { itemId: 2 });
-console.log(`release_work on a DONE row (#2) -> ${doneRow}`);
+console.log(`release_work on a genuinely terminal row (#2) -> ${doneRow.slice(0, 120)}`);
 process.exit(0);
