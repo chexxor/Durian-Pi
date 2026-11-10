@@ -14,6 +14,7 @@
       "demo/compact-spool.test.mjs",
       "demo/compact.test.mjs",
       "demo/compacteval.test.mjs",
+      "demo/compaction-coherence.test.mjs",
       "demo/compaction-harness.test.mjs",
       "demo/compaction-nesting.test.mjs",
       "demo/config-credential-surface.test.mjs",
