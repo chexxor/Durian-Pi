@@ -11253,3 +11253,54 @@ enforceable artifact is the structured `refusal` object on the dead-lettered rec
 function of broker-held state rather than of a file any seat process can append to. This is the same
 doctrine `authorizeSpoolRequest` already carries: `from` is producer-stamped, all seats share one OS
 user, so same-user forgeability is a KNOWN RESIDUAL and must never be described as prevented.
+
+## D259 — The fault signal is ONE seat-scoped marker written by the code that RAISES the cause, read as four states, and UNKNOWN never means "no fault" (2026-11-10)
+
+**Status:** ruling issued (schema, not code); implementation routed and gated on this row.
+
+**Context:** `workable()`'s contract has four clauses; three are implemented. Clause 4 — "not marked
+blocked by a recorded PROVIDER/SEAT FAULT" — has no field, and D24 forbids inventing one. Measured by
+`node tools/probes/fault-signal-states.mjs` (exit 0): **1 distinct verdict out of 6 fault situations** —
+active, expired, unreadable and absent faults all read as "clean" — and an undeclared option passed to
+the predicate is silently dropped, no error, no effect. Today the rig's only durable expression of a
+fault is the supervisor's park on an item (`src/supervisor.mjs:75-92`), derived each pass from the
+transcript: observation time, not fault time, no provenance, no expiry. That is why the gap has sat
+parked since #2673.
+
+**Decision:**
+- **The marker is on the seat** (`Seats.seats[name].fault`), not the item. The live store measures 2,961
+  queue items and 12 seats (`node cli.mjs config`); a fault is a property of the actor, and per-item
+  marking would write and unwrite ~3k rows per outage.
+- **Shape mirrors the park shape** (`normalizeBlock`, `src/queue-lifecycle.mjs:146`): `cause` from the
+  `src/causes.mjs` allow-list, `scope`, `at` (fault time), `by` (the raiser), `evidence`, `resolver`
+  (mandatory), `reviewBy` (mandatory — a fault with no expiry is permanent starvation). The write path
+  refuses a marker missing any of them.
+- **Only the raiser writes it, at fault time** — `src/providers/spend.mjs` for `SPEND_CAUSE`, the
+  run-settle path for `model_error`, in the commit that settles the failing submission. `attention`,
+  `checkup` and the supervisor are READERS; the supervisor stops deriving the fault in order to decide.
+- **The read is four states:** `none`, `active`, `expired`, `unknown`. `workable()` gains a *named*
+  `fault` parameter — naming is load-bearing, because an undeclared key is silently dropped today — and
+  returns `reason: "fault:<cause>"` when active, keeping `reason: null` while carrying `caveats:
+  ["fault-unknown" | "fault-expired:<cause>"]` otherwise, so the invariant "a non-null reason means not
+  workable" survives.
+- **UNKNOWN is claimable but never reported as clean.** #2673's conservative default is kept: a false
+  negative starves invisibly, a false positive is legible. A broken fault read does not stop the claim;
+  it names the state, prints it in the claim response, and is counted by `check`.
+- **Clause 4 gates claim and wake through the same predicate** (`src/queue-lifecycle.mjs:348` already
+  assigns claimability to `workable`), and gates nothing else — a seat mid-run must still be able to
+  complete, defer, hold, release or resume.
+
+**Options considered:** (a) `fault` on the item — cheapest to write, impossible to clear; (b) derive it
+at claim time from the transcript — rejected: not persisted (D24), makes a provably pure predicate
+impure, and uses observation time when the decision needs fault time; (c) one seat-scoped marker written
+by the raiser — **chosen**.
+
+**Consequences:** a write lands on the provider seam, the rig's hottest path; a bug there blocks claims
+fleet-wide. Accepted because the decision is reversible both ways — clause 4 can be switched off without
+touching the data, and the marker is independently auditable. Expiry is mandatory, so a fault cannot
+become permanent starvation; a faulted seat that is never woken would never clear, so the wake selector
+must wake a seat whose `reviewBy` has passed. `fault-unknown` is a countable finding, so "the fault check
+is broken" is visible rather than looking like an empty queue.
+
+**Residual:** this ruling fixes the shape and the read states. It does not decide which causes qualify,
+nor whether a faulted seat should be re-tested before its expiry — that is a scope question for `lead`.
