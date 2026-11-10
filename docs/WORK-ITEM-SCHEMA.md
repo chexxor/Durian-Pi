@@ -44,6 +44,7 @@ A queue item has exactly these fields (`node cli.mjs queue`):
 | `body` | the detail: rationale, acceptance, evidence |
 | `status` | `queued` · `claimed` · `held` · `deferred` · `done` · `cancelled` |
 | `transitions` | append-only history: `queued`/`claimed`/`done`/`revised`/… with `at`, `by` |
+| `release` | recorded when a parked row is un-parked (#6112): `{at, by, reason, authority}` — `authority` is `sender`, `recipient` or `coordinator`. A release by a seat that is neither the sender nor the recipient MUST state the reason; the queue line prints `releasedBy=<seat> reason=<why>` so the un-parking is visible to the seat that has to act on it |
 | `resultSummary` | the completion record: claim, and (for a verification) the evidence |
 | `optimizedVia` | provenance for an optimized instruction |
 | `notice` | **structural flag**: this item is a notification, not work |
