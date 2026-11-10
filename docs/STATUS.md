@@ -11,7 +11,7 @@ and found that the converter was dropping OpenRig's rig-level `edges:` list (D26
 the fix restored every lost send permission, the docs pod joined the rig (D27),
 and the corrected constitution was applied to the live store (backup:
 `C:/tmp/<store>.bak-2026-10-11`). Finally, measurement shipped (D28):
-`metrics`, four measures, metric notices on the attention channel — 21 demos. The
+`metrics`, four measures at first cut (the live set is six, declared in `src/metrics.mjs` `MEASURES`), metric notices on the attention channel — 21 demos. The
 OpenRig daemon was also recovered (dead since 2026-10-06, and reported as a
 starved event loop because a recycled PID was trusted as the daemon), and the
 owed `security.sec` consult was finally taken (D30).
@@ -90,7 +90,7 @@ Updated **2026-10-14 (later delegate session — the resident broker landed)**:
 
 Milestone **M2 (operator can see the rig)** is finished and verified, and the
 measurement layer that was made to precede the change it judges is built (D28):
-`metrics` reports four measures with their bands, baselines, evidence classes and
+`metrics` reports the six measures declared in `src/metrics.mjs` `MEASURES` — five ambient, one config-derived — with their bands, baselines, evidence classes and
 blind spots, and the out-of-band ones ride the attention channel in `status` and
 `watch`.
 

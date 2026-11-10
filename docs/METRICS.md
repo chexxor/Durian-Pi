@@ -1,6 +1,6 @@
 # Metrics — design note: measurement and UX
 
-Status: **first cut built (2026-10-11)** — the `metrics` command, four measures,
+Status: **first cut built (2026-10-11)** — the `metrics` command, four measures at first cut (six live now — the set is declared in `src/metrics.mjs` `MEASURES`),
 and metric notices riding the attention channel; `demo/metrics.test.mjs` is the
 21st demo. What is live and what was deferred *with reasons* is under "Built"
 below; the design that produced it is the rest of this file. The policy that
@@ -206,9 +206,12 @@ Shipped, against the five rulings:
   values carrying their band, baseline, direction, evidence class and blind spot
   out. Every surface renders this one computation, so a number cannot disagree
   with itself between views.
-- **Four measures**, not three: the queue scope was ruled in, and a scope with no
+- **Four measures at first cut**, not three: the queue scope was ruled in, and a scope with no
   measure is not shipped — hence `queue-ageing` alongside `step-repetition`,
-  `unverified-completions` and `shared-reviewer-model`.
+  `unverified-completions` and `shared-reviewer-model`. The set has since grown to **six**, all of
+  them declared in `src/metrics.mjs`'s `MEASURES` object: `malformed-tool-call` (direct, ambient) and
+  `pass-failed` (direct, ambient, ROADMAP 78) were added later. That object is the only definition of
+  the set — any doc count is a report of it, not a source.
 - **`metrics [rig.json] [--window N|all]`**, human on a terminal and JSON on a
   pipe (D19). The rig file is what makes the config-derived measure judgeable,
   because the store does not record which model a seat runs; without it the

@@ -234,7 +234,7 @@ from one helper (`src/seatmodel.mjs`), so the two paths cannot drift apart
 | **Live partial (streaming)** | The in-flight assistant partial read from the conversation's `pi.live` document, rendered distinctly from committed turns in `log --follow` and `watch`; it is never emitted as an entry, so a rewritten or withdrawn partial cannot be replayed as history | `src/readapi.mjs` `readLiveState`, `src/viewmodel.mjs` `partialView`, `src/chatview.mjs` `formatPartial` | `demo/livestream.test.mjs` | cli |
 | **Tool-role palette (U4)** | The chat/transcript surface renders tool rows/output with pi's role vocabulary (`toolPendingBg`/`toolSuccessBg`/`toolErrorBg`/`toolTitle`/`toolOutput`), per theme, from `THEME_ROLES`/`themeToolRoles`; success/failure is also carried by glyph, never by hue alone. **Accepted known limitation (lead ruling #669):** the palette is DERIVED on the existing 256-color ramp family â€” `toolPendingBg` IS the pre-existing `TOOL_BG` token (kept, not replaced), success/error are one-step derivatives on the same ramp (darker on the dark ramp / lighter on the light), `toolTitle`/`toolOutput` are fg-level `dim`; it is NOT copied from pi's theme files, because `<pi-coding-agent>`'s `dark.json`/`light.json` are not vendored in this checkout and no upstream hexes could be copied. A re-hex is only a CONDITIONAL, triggered follow-up if the operator later decides to vendor pi's theme files (revision-pinned) â€” it is not planned or in-progress work | `src/chatview.mjs` `THEME_ROLES`/`themeToolRoles` | `demo/tui-roles.test.mjs` | `both` |
 | **Peer navigation graph** | Who sent to / received from whom, derived from the queue's `from`/`to` with direction kept (org edges are directional); exposed on `status`/`watch` so a client can switch to a peer without re-deriving it | `src/viewmodel.mjs` `peerGraph`, `peerTargets` | `demo/viewmodel.test.mjs` | cli |
-| **Drift metrics** | Four measures over data already persisted, each declaring its band, evidence class and blind spot | `src/metrics.mjs`, `cli.mjs` `cmdMetrics` | `demo/metrics.test.mjs` | cli |
+| **Drift metrics** | Six measures declared in `src/metrics.mjs` `MEASURES` — five ambient (direct or proxy, over data the store already persists) and one config-derived; each declares its band, evidence class and blind spot | `src/metrics.mjs`, `cli.mjs` `cmdMetrics` | `demo/metrics.test.mjs`, `demo/malformedcall.test.mjs` | cli |
 | **Config provenance** | `metrics` reports the revision it ran at, whether the tree was dirty, and the active extension set â€” so a movement can be attributed to a change | `src/provenance.mjs` | `demo/provenance.test.mjs` | cli |
 
 ### Drift metrics (`metrics`)
@@ -247,10 +247,13 @@ nothing, opens no socket and adds no table.
 | Measure | Evidence class | Reads |
 |---|---|---|
 | `step-repetition` | direct | a tool call repeating one the seat made within its last 3 calls |
+| `malformed-tool-call` | direct | a tool call whose arguments the harness rejected; counted from the validation text on the `pi.tool-result` entry, because the structured diagnostic code is not persisted |
 | `unverified-completions` | proxy | `complete_work` with no retrieval call in the same turn |
 | `queue-ageing` | direct | minutes since the oldest queued item last changed state |
 | `pass-failed` | direct | `PASS-FAILED` lines the broker wrote to `<db>.broker.log` in the last 24h (ROADMAP 78) |
 | `shared-reviewer-model` | config-derived | a verifier seat sharing an author's model |
+
+The set is whatever `src/metrics.mjs`'s `MEASURES` declares — six entries at this reading, exactly the six rows above. Check it: `node -e 'import("./src/metrics.mjs").then(m=>console.log(Object.keys(m.MEASURES).length, Object.values(m.MEASURES).filter(x=>x.ambient).length))'` → `6 5`, exit 0. Each measure declares itself in that object rather than in a doc, so the source is the only place the count can be checked. Proofs: `demo/metrics.test.mjs` covers repetition, unverified completions, queue ageing, shared model and pass-failed; the malformed-call classification is proved by `demo/malformedcall.test.mjs` — the metrics demo does not exercise it.
 
 Every value travels with its band, baseline, unit and blind spot, and a reading
 that cannot be judged says so rather than guessing: `no data`, `no baseline yet`,
@@ -259,7 +262,7 @@ that cannot be judged says so rather than guessing: `no data`, `no baseline yet`
 
 Notices ride the attention channel above rather than claiming a surface: they
 reach `status` and the `watch` footer **only when a measure has moved**, and only
-for the three admissible measures â€” `shared-reviewer-model` stays out because it
+for the five ambient measures (every entry marked `ambient: true` in `src/metrics.mjs`) â€” `shared-reviewer-model` stays out because it
 is already visible as a `check` rule. Notices carry `scope` alongside `seat`, and
 the per-seat glyph path excludes rig- and queue-scoped notices explicitly.
 
