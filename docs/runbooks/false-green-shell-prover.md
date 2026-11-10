@@ -3,9 +3,9 @@ runbook: false-green-shell-prover
 symptom: "a check reported exit 0 but the report cannot say what it proved; two reports of the same check disagree (one 0, one 1)"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-08
-verified_by: scribe
-evidence: "#5702 (docs row for #4976); every command below was run in the item-5702 worktree at f1be5157 — §Verify has the outputs"
+last_verified: 2026-11-10
+verified_by: impl
+evidence: "#5702 (docs row for #4976); every command below was run in the item-5702 worktree at f1be5157 — §Verify has the outputs. Second mechanism ($1-empty xargs loop) measured 2026-11-10 in the item-6073 worktree at f192f543 — §Verify-2 has the outputs"
 check_rule: null
 ---
 
@@ -63,6 +63,57 @@ If `real` disagrees with the number in your report, the report's number came fro
    node scripts/suite.mjs > /tmp/suite.out 2>&1; rc=$?; tail -2 /tmp/suite.out; echo "exit=$rc"
    ```
    Record `pass=N fail=M` from the file, not "green" (see §6.2 of the topic doc on what `fail=1` means).
+
+## Second mechanism: the xargs loop that ran `node ""` and called it a pass
+Same class, different mechanism, and this one launders a whole suite. Measured 2026-11-10 in the
+`item-6073` worktree at `f192f543`.
+
+```bash
+ls demo/*.test.mjs | xargs -P 12 -n 1 sh -c 'f="$1"; if node "$f" > out 2>&1; then echo "PASS $f"; else echo "FAIL $f"; fi'
+```
+
+`xargs` appends the item to the command line, so for `sh -c 'script' item` the item lands in **`$0`**, not
+`$1`. `$f` is therefore empty, `node ""` exits **0**, and every line prints `PASS ` with **no filename**.
+A 282-file suite reports 282 passes while running nothing.
+
+Measured, in the same worktree:
+
+```bash
+ls demo/mergeguard.test.mjs | xargs -n 1 sh -c 'echo "A0=[$0] A1=[$1]"'   # A0=[demo/mergeguard.test.mjs] A1=[]
+ls demo/mergeguard.test.mjs | xargs -n 1 sh -c 'echo "A0=[$0] A1=[$1]"' _ # A0=[_] A1=[demo/mergeguard.test.mjs]
+node ""; echo "exit=$?"                                                   # exit=0  ← the vacuous green
+```
+
+The tell is the **empty name after PASS**. If a suite line says `PASS ` with nothing after it, the loop
+ran no file. Read the count only when each line names a file.
+
+Two safe shapes:
+1. **Use the rig's own runner** — it exists for exactly this job and classifies environment-blocked
+   demos separately from real failures:
+   ```bash
+   node scripts/test.mjs > /tmp/suite.out 2>&1; rc=$?; tail -3 /tmp/suite.out; echo "exit=$rc"
+   ```
+   (0 = all pass; 1 = at least one failed; 2 = usage error. `scripts/suite.mjs` is the variant that
+   separates a resource abort from a regression.)
+2. **A plain loop**, no quoting trap:
+   ```bash
+   for f in demo/*.test.mjs; do node "$f" > /tmp/$(basename "$f").out 2>&1 || echo "FAIL $f"; done
+   ```
+
+## Verify-2 (this step ran; observed output below)
+
+```bash
+ls demo/land-helper.test.mjs demo/mergeguard.test.mjs \
+  | xargs -n 1 sh -c 'f="$1"; if node "$f" > scratch/x.out 2>&1; then echo "PASS $f"; else echo "FAIL $f"; fi'
+# observed: `PASS ` and `PASS ` — two lines, no filenames: nothing ran
+ls demo/land-helper.test.mjs | xargs -n 1 sh -c 'echo "A0=[$0] A1=[$1]"'
+# observed: A0=[demo/land-helper.test.mjs] A1=[]
+node demo/land-helper.test.mjs > scratch/d.out 2>&1; echo "real=$?"
+# observed: real=0
+node scripts/test.mjs > scratch/all.out 2>&1; rc=$?; tail -2 scratch/all.out; echo "exit=$rc"
+# observed 2026-11-10 in the item-6073 worktree (pi-durable 1.3.0, vendor link step FAILED):
+#   261/282 passed in 129.6s ... exit=1
+```
 
 ## Verify (this step ran; expected output below)
 Self-contained — no branch or fixture needed:
