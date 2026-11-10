@@ -2813,7 +2813,7 @@ routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` bo
 consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
 non-author verify.
 
-## D111 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+## D111 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127; SOURCE pinned 2026-10-19 by #2962)
 
 **Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
 UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
@@ -2823,6 +2823,37 @@ prices, cost/spend renders "unavailable" — NEVER a fabricated or stale `$`.
 
 **Staleness.** Handled by the unavailable path: a stale price table must never render a `$`; with no
 live extension data, show unavailable.
+
+**SOURCE pinned the next day (#2962, operator 2026-10-19, via pm #2956) — folded into this entry, no new
+D-number.** The pricing **SOURCE** is a VENDORED, DATED table the rig owns, not a live/remote lookup. The
+reasoning on the record (lead): a vendored table keeps cost computation hermetic and deterministic — no
+network in the TUI/measure path — so the demo suite can assert a number; staleness becomes a local,
+checkable property because the table carries its own as-of date, so a stale table is detectable without a
+fetch. This pins **SOURCE only**: MECHANISM (how the table is loaded, keyed and surfaced) is still
+lead/design per #1127, and the live implementation row is **#6191** — lead-registered, HELD, DO NOT START.
+(#1135 itself is terminal: it is not in the non-terminal queue view, so a reader looking for "held item
+#1135" will find nothing — the two Scope/Status sentences below still name it, and that is stale wording,
+not a live gate.)
+
+**Read the two rulings together, because quoted alone they contradict each other.** The Decision above
+says "the former blocker — an operator-supplied vendor price table — is REMOVED"; #2962 says the numbers
+come from a table the rig vendors. What both survive is the invariant: **nothing renders a `$` from data
+the rig cannot name and date.** "Vendored" is not "any vendored file is read" — **D208** measured the
+failure mode (the entry pm pointed at by line number): pointing the resolver at
+`src/providers/deepinfra-prices.json` for a metered class returns `price: null, priceSource: "none"`
+(ROADMAP **272**), so a metered class is priced by `DURIG_VERIFIER_PRICE_USD_IN/_OUT` and an unpriced row
+is REFUSED, not guessed. Reconciling the wording of the two entries is lead's call; this records the
+ruling and its evidence, not a new ruling.
+
+**The shipped code matches the SOURCE ruling (read 2026-11-10 on main `f192f543`).** The dated vendored
+file is what the validation layer reads: `src/providers/deepinfra-models.ts:51` sets
+`PRICE_FILE = deepinfra-prices.json`, `:57` `datedPrices()`, `:59-68` reads `fetchedAt`, and `:122-123`
+stamps `priceSource: "deepinfra-catalog@<fetchedAt>"` with `priceAsOf`; a row with no price is refused,
+not estimated (`:172`, "an unpriced metered row is a $0 lie"). Local boxes declare their prices in
+config/env (`declaredPrice`, `src/providers/local.mjs:150`). The live fetch exists but is NOT the source:
+`fetchDeepInfraModels` is not wired into registration
+(`src/providers/vendor/pi-deepinfra/deepinfra-models.ts:152,180`; `demo/deepinfra-catalog.test.mjs:10` says
+the same) — `node demo/deepinfra-catalog.test.mjs` exit **0**.
 
 **Scope.** ROADMAP 98 stays TOKENS-ONLY (v1). This pricing decision is INDEPENDENT and NOT v1 —
 unscheduled. Owner is lead (mechanism); implementation routes to impl once scheduled. Held item #1135
