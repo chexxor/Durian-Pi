@@ -236,6 +236,61 @@ broker-less shape (row 1) arriving by accident, and it is what the recipe printe
 heartbeat was written once and reused for both timed reads. If you are driving the probe by hand, re-run `forge`
 immediately before each read; if you are watching a real broker, refresh the probe read itself inside 60 s.
 
+## The read bound: the ruling (#5807)
+
+**Measured live, 2026-11-10 00:2x–00:3xZ, on the selfdev rig (this is the shape, not a hypothesis):**
+`kill -0 1581519` exit **0** and `<db>.broker.json` `heartbeatAt` 1794271626336 (fresh) while `lastPassAt`
+1794269654105 sat **1,972 s** stale; the last `<db>.broker.log` line was `PASS 53 ms=11 woke=-` at
+00:14:14Z; **9** `read` intents were still sitting in `<db>.broker.inbox`; and
+`node cli.mjs status --db selfdev.sqlite --json` → **exit 1** after 2 m 0.5 s with
+`{"ok":false,"error":"read health: timed out awaiting the broker's result"}`. The broker had also run past
+its `--max-duration 1800` bound (started 23:47:41Z) without exiting — the deadline-linger signature above.
+
+**Why the wait is the wrong knob.** Reads are drained in exactly TWO places, both inside the driver loop:
+at the START of a pass (`drivePass`, `src/broker.mjs:1322`) and in the idle branch (`src/broker.mjs:1801-1815`).
+The heartbeat is a separate `setInterval` (`src/broker.mjs:1736`). So the process can keep beating while the
+loop is parked in a long `await` — parked inside a pass, or parked on the retry backoff at
+`src/broker.mjs:1827` (`await signal.wait(cooldownRevisitAt - now())`), which does **not** drain the inbox.
+The routing gate (`brokerAliveFor`) only asks *is the pid alive and the heartbeat under 60 s*; it never asks
+*is this broker draining*. That gap is the whole defect: the read is routed to a broker that cannot answer,
+and the sole-owner fallback is (correctly) refused.
+
+**RULING — three decisions, in this order:**
+1. **Do NOT lengthen the 120 s grace.** A longer wait makes the clock-in digest slower and changes nothing
+   about when the answer arrives.
+2. **Do NOT route reads on `lastPassAt` (the progress leg).** `lastPassAt` moves only on a COMPLETED pass
+   (`src/broker.mjs:1911`), and reads are legitimately served with **zero** passes —
+   `demo/broker-read-nopass.test.mjs`, exit 0. A progress-gated reader refuses a healthy idle rig: a false
+   positive on the instrument. `brokerHealth`'s progress leg stays a *report*, not a routing predicate.
+3. **Serve reads off the heartbeat, not off the pass loop.** In `runBroker`, alongside the heartbeat
+   interval, add a pump with the same cadence: if `readIntentFiles(dbPath).length > 0 && onlyReadIntents(dbPath)`,
+   call the SAME `drainIntentInbox(h, p, {dbPath, context, onDiagnostic, readStorage: r})` the idle branch uses,
+   guarded by a `pumpInFlight` flag. It must **not** `markDirty` (a read changes nothing, so there is no wake
+   to evaluate — the #2321 property that stopped reads hammering the broker), and it must **not** drain a
+   non-read intent (a mutating intent still waits for a pass, per #2237). Duplicate draining is already safe:
+   `drainIntentInbox` skips a `requestId` whose result is recorded in the idempotency ledger
+   (`src/broker.mjs:782`), and Node's single thread means the pump and a pass drain interleave, not race.
+4. **Make the client bound self-diagnosing.** Keep 120 s as the ceiling, but when no answer arrives after
+   ~3 heartbeat cadences, re-read `<db>.broker.json` and the spool depth and throw a structured cause
+   (add `BROKER_WEDGE_CAUSE = "broker_wedged"` to `src/causes.mjs`, alongside `NO_STORE_CAUSE`) carrying
+   `pid`, `heartbeatAgeMs`, `lastPassAtAgeMs`, `pendingReadIntents`. `1` with that payload is a diagnosis;
+   `124` with zero bytes is not. A gate built on the digest then says **BLOCKED — broker wedged (evidence)**,
+   never "unmet".
+
+**The answer to "what is the bound for a read issued during a legitimate long pass (300 s + 60 s)?"** There
+is none: a read must never queue behind a pass. The pass bound is not a read bound.
+
+### Verify the ruling's premise (ran 2026-11-10, Linux, node v24.22.1, live selfdev rig — read-only)
+
+```bash
+kill -0 $(node -e 'console.log(JSON.parse(require("node:fs").readFileSync("selfdev.sqlite.broker.json","utf8")).pid)'); echo $?   # 0 = alive
+node -e 'const s=JSON.parse(require("node:fs").readFileSync("selfdev.sqlite.broker.json","utf8"));console.log("heartbeatAgeMs",Date.now()-s.heartbeatAt,"lastPassAtAgeMs",Date.now()-s.lastPassAt)'   # fresh vs stale
+ls -1 selfdev.sqlite.broker.inbox | wc -l            # undrained reads: 9 measured
+node cli.mjs status --db selfdev.sqlite --json; echo $?   # 1, "read health: timed out awaiting the broker's result"
+```
+That sequence reproduced the wedge on the live rig while the store itself was healthy; the pump fix and its
+demo are the work item (impl, #5807 ruling handed to them).
+
 ## Do
 1. If a **wedged** `serve` process exists and **no** genlock slot is held, terminate it:
    ```bash
