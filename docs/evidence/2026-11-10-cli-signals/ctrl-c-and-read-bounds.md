@@ -128,7 +128,9 @@ e.g. `READ-DRAIN served=1 dead=0 dup=0 ms=792`, and the read spool was empty aft
    Measured: ten ~29 MB files present while the pass clock was frozen. This is the same territory as
    the architect's design position in `docs/reviews/architecture-exit-drain-6391.md` (branch
    `item-6381`, rows **#6391/#6390**): the exit path must *account* for the spool without touching
-   the store. Not implemented here — that is the team's row.
+   the store. Not implemented here — that is the team's row. The file is **on the branch, not on `main`**: read it
+   with `git show item-6381:docs/reviews/architecture-exit-drain-6391.md` (verified 23:4xZ; first lines `review: the
+   exit path must account for the spool without touching the store` / `item: #6391`).
 
 ## E. The gates that now pin this
 
@@ -169,3 +171,37 @@ the real thing — one `SKIP impl reason=cooldown remaining=1s` line between two
 
 Lesson for the next pass: a demo that passes once is not evidence. Run the demos a change can shift
 **10+ times** before calling a suite green, and bisect a new timing knob by setting it to 0.
+
+## G. The spool's dead-letters, read and explained (task 1 of this goal)
+
+`node tools/broker-serve.mjs --status` at 23:4xZ on this box: **0 pending** intents in
+`selfdev.sqlite.broker.inbox`, **61** in `selfdev.sqlite.broker.inbox.error`. Every one was read
+(both the payload and its `.reason` sidecar):
+
+| reason | count | what it means |
+|---|---|---|
+| `apply failed: SqliteStorage is closed` | 59 | the broker's harness handle was closed when the read was applied; retried up to `INTENT_RETRY_LIMIT` = 3 (`src/broker.mjs:246`, the retry log line at `src/broker.mjs:868-869`) and then dead-lettered |
+| `apply failed after 4 attempts: SqliteStorage is closed` | 1 | same leg, one attempt over the limit |
+| `apply failed: unknown read view: status (known: seats, queue, …)` | 1 | the client sent `view:"status"`; `src/brokerread.mjs:114` is the throw. No code on `main` sends that view today (`grep -rn 'view: *"status" src/ cli.mjs` → no hits) |
+
+All 61 are `op: "read"`, dated 2026-11-06T04:01:55Z → 2026-11-10T17:13:02Z. **Nothing was re-sent**: a
+read intent is a snapshot request whose answer is only useful to the client that is still waiting, and
+those CLI processes are long gone — re-spooling them would deliver answers to nobody. The read-only
+shim (`--local`) is the path that answers without the broker, and the out-of-band drain (§B) is what
+keeps the broker from dead-lettering reads again while a pass is stuck.
+
+## H. Branch dispositions, measured at 23:5xZ on this box (43 refs, `main` = `f897ea8a`)
+
+`git merge-tree --write-tree main <ref>` — exit 0 means **no textual conflict**; it does NOT mean the merged tree
+passes the suite (`item-5301-resolved` merged clean in an earlier window and its own demo was red).
+
+| disposition | refs |
+|---|---|
+| merges clean (35) | item-1158, 3087, 5604, 5631, 5912, 5995, 6057, 6063, 6064, 6066, 6106, 6112, 6150, 6155, 6162, 6176, 6177, 6208, 6216, 6223, 6279, 6290, 6310, 6317, 6328, 6361, 6363, 6365, 6381, 6393, 6404, 6429, 6466, seatroot/linux, verify-5180 |
+| **conflicts** (7) | item-3570 (`docs/runbooks/stale-held-backlog.md`) · item-5301 (`cli.mjs`) · **item-5301-resolved (`cli.mjs`)** · item-6101 (`cli.mjs`, `demo/test-areas.json`, `src/rig.mjs`) · item-6330 (`demo/runbook-diagnose.test.mjs`) · item-6402 (`docs/DECISIONS.md`) · wip/seat-prompt-files (`cli.mjs`, `rig.selfdev.json`) |
+
+**Correction to the record:** `docs/NEXT.md` said `item-5301-resolved` "merges clean". It no longer does — the signal
+seam and the read-bound work moved `cli.mjs` after that branch was cut, so `git merge-tree` reports
+`CONFLICT (content): Merge conflict in cli.mjs`. Four of the seven conflicts are in `cli.mjs` for exactly that reason:
+anything a seat branched off `cli.mjs` before 17:54Z must be re-cut against the seam. None of these branches touch the
+signal seam, so nothing in this goal depends on landing them — landing them is the PM/lead's routing call.
