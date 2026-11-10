@@ -3,10 +3,10 @@ runbook: stale-held-backlog
 symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so"
 writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
 precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
-last_verified: 2026-10-19
-verified_by: delegate
-evidence: "INC-2026-10-19 held-rows-orphaned-by-cleared-gates; live audit 153 held rows / ~51 with terminal gates"
-check_rule: null
+last_verified: 2026-11-10        # the tool below was run against the live store; see Evidence
+verified_by: devtools
+evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed"
+check_rule: demo/held-gate-audit.test.mjs
 ---
 
 # Stale held backlog — find and unstick parked work whose gates cleared
@@ -35,26 +35,41 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
 
 ## Diagnose (read-only)
 
-1. **Snapshot the queue** (the canonical read):
+1. **Read the parked rows in ONE bounded pass** (the canonical read):
 
    ```bash
-   DURIG_DB=./selfdev.sqlite node cli.mjs queue > .spike/delegate/queue-audit.json
+   DURIG_DB=./selfdev.sqlite node cli.mjs queue --held --with-gates --json > .spike/delegate/held-gates.json
    ```
 
-2. **Classify the non-terminal rows.** The full script lives in
-   [`WORK-ITEM-LIFECYCLE.md`](../WORK-ITEM-LIFECYCLE.md) §7 ("Auditing the queue"); it prints the status
-   histogram and the **held rows whose cited gates are all terminal** — the orphan candidates.
+   `--with-gates` answers **"was a gate recorded?"** - it cannot answer whether the gate is still closed,
+   and it caps at 200 rows (`GATE_VIEW_CAP`), so a fleet-wide census needs the step below.
+
+2. **Classify the held rows** - this is the "is the gate still closed?" pass, in one process (#6071):
+
+   ```bash
+   DURIG_DB=./selfdev.sqlite node tools/held-gate-audit.mjs --json .spike/delegate/held-audit.json
+   ```
+
+   Five classes, and the distinction is the whole point:
+   - **release-candidate** - every gate the row names is `done`/`cancelled`, no trigger text, nothing else
+     parks it. These are the orphan rows.
+   - **cancel-candidate** - the row's own work has a `merge: land item-<id>` commit on main, or the artifact
+     it asks for is already in the tree and contains what it names.
+   - **standing-rule** - the row's text names an EVENT it waits for (a quiet window, an operator ruling, a
+     branch that must land). A terminal gate id next to such a row proves nothing; the tool names the real
+     condition and, for a branch gate, reports the git check it ran.
+   - **gate-open** - at least one cited gate is still live. Not stale.
+   - **unattributed** - nothing was written about why the row is parked (the #5770 class). Ask for a
+     structured gate rather than calling it stale.
+
+   If the broker is wedged and the read times out (`read queue-census: timed out awaiting the broker's
+   result`), audit a COPY: `cp selfdev.sqlite .spike/delegate/audit.sqlite` - a copy has no broker state,
+   so the read falls back to a local read-only harness open. Never open a second Harness on the live store.
 
 3. **For an effort you know by name, ask the pointed question** (the durable-TUI case):
 
    ```bash
-   python - <<'PY'
-   import json, io
-   d = json.load(io.open('.spike/delegate/queue-audit.json', encoding='utf-8'))
-   for i in d['items']:
-       if i['id'] in (2096,2097,2098,2600,2626,2629,2630,2733,2788,2789,2797,2804,2826):
-           print('#%s %-9s -> %-9s %s' % (i['id'], i['status'], i['to'], (i['subject'] or '')[:90]))
-   PY
+   node tools/queue-rows.mjs 2096 2097 2098 2600 2626 2629 2630 2733 2788 2789 2797 2804 2826 < .spike/delegate/held-gates.json
    ```
 
 4. **Check whether the gate items are actually terminal:**
@@ -103,6 +118,12 @@ to `pm`; `pm` issues the transition. For each candidate:
 
 ## Verify
 
+- The audit exits 0 and prints `git landing commits read: <n>` (the git pass ran) and per-seat totals that
+  add up to `held`.
+- The rules are pinned by `node demo/held-gate-audit.test.mjs` (exit 0): a gate-cleared row, a still-open
+  gate, a standing rule with no recorded gate, a branch-landing gate, a satisfied artifact and a
+  file-exists-but-content-missing row are each classified differently. A classifier that flagged all of
+  them the same way would pass nothing here.
 - The intent result file has `"delivered":true`.
 - After `pm` acts, the targeted rows are no longer `held` (re-run Diagnose step 2 and watch the candidate
   count fall), and the dependent work is `queued`/`claimed`.
