@@ -11638,3 +11638,39 @@ is broken" is visible rather than looking like an empty queue.
 
 **Residual:** this ruling fixes the shape and the read states. It does not decide which causes qualify,
 nor whether a faulted seat should be re-tested before its expiry — that is a scope question for `lead`.
+
+## D262 — (provisional; the mint number is assigned at land) store ownership is decided by process existence, never by heartbeat freshness (architect, item #6402, 2026-11-11)
+
+**Decision:** the read path asks two separate questions and answers each with its own predicate:
+`resident` = the OS says the broker pid exists (`ESRCH` semantics, the #3398 fail-safe), and
+`progress` = `brokerHealth` (heartbeat leg plus `lastPassAt`). Routing is three-way — resident-and-advancing
+→ spool with the long bound; resident-and-not-advancing → spool with a derived short bound, then a
+structured refusal that carries the off-store state; proven-gone → local read. The write-mode store open
+inside `readLocal` is gated on the pid being **proven gone**, not on heartbeat freshness and not on
+generation-lease counts. `--local` is not an exception: it may take the read-only route while a pid exists.
+
+**Context:** `src/readclient.mjs:246` routes to `readLocal` whenever `brokerAlive(state)` is false, and
+`brokerAlive` includes a 60 s heartbeat gate (`src/broker.mjs:2352-2360`). A broker wedged inside a pass
+lets its heartbeat age, so the exact condition the routing exists to survive is read as "no owner". The
+write-mode fallback guard (`src/readclient.mjs:197`) asks whether a *seat* holds a generation lease — but
+the store's owner is the broker process, and `openNodeSqliteStorage` migrates and wraps reads in
+`BEGIN IMMEDIATE`. Measured with `tools/probes/routing-on-liveness-vs-progress.mjs`: a forged state naming
+the probe's own live pid reports `pidAlive=true, brokerAliveFor=false`, and the read is served by opening
+the store (`route=local`, 10.5 s).
+
+**Alternatives considered:** (a) keep the lease gate and refresh the heartbeat — rejected, it treats the
+symptom while the gate still answers the wrong question; (b) gate on process existence — chosen: cheap,
+single predicate, reversible, and the read-only route remains available if it proves too strict;
+(c) forbid all direct opens unless the broker is absent — rejected, a fresh rig has no broker and the
+operator needs an escape hatch.
+
+**Consequences:** some reads that today succeed will refuse — a wedged broker's store is unreadable until
+it is stopped. Accepted: a second owner on a live owner is the `SessionFailed` corruption class, and the
+refusal must carry what the operator actually needs (broker state, heartbeat age, pass age, spool counts,
+lease counts) with store-derived sections labelled unavailable, so the diagnostic verb is not blinded by
+the very condition it diagnoses. Every route must print which path served the read — the docstring at
+`src/readclient.mjs:230` already claims this and the dead-pid path prints nothing (probe assertion I).
+
+**Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
+finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
+nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
