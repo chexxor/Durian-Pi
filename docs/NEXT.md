@@ -53,19 +53,26 @@ The broker is healthy (pid in `<db>.broker.json`, passes advancing); the team's 
 `ALL PASS` manual mode 3–5 s, then `ALL PASS` auto mode **50–86 s** — measured 52 s and 86 s on this box on the same
 commit; the spread is local-server input throughput, not the guard. Both use the local model, no money).
 Then `node scripts/clockin.mjs`, then `node tools/broker-serve.mjs --status`, then
-`DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (expect `total: 9`, `reapable: 0`, all `seat-root`), then
+`DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit` (measured 2026-11-10T03:2xZ: `total: 11`, `reapable: 1`
+(item-6067, row #6067 still open), `dirty: 0`), then
 `node cli.mjs status` once a broker is healthy.
 
-**State:** refs **12**, worktrees **9**, `main` tip — read it with `git rev-parse --short main` (a pinned sha here
-goes stale by its own commits). Continuity evidence still stands:
+**State:** refs **14**, worktrees **11**, `main` tip — read it with `git rev-parse --short main` (a pinned sha here
+goes stale by its own commits; this window ended at `e2584110`). Broker pid is in `selfdev.sqlite.broker.json`
+(one run at 02:54:22Z with `--max-duration 3600`, so it self-exits ~03:54Z — restart it rather than assume it is
+there). Continuity evidence still stands:
 `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt` and the M5 gate baseline
 `docs/evidence/2026-11-09-milestone-m5/gate-baseline-2026-11-09.txt` (**3 PASS, 1 PARTIAL, 4 FAIL** — that is M5's
 honest baseline, not a bug).
 
-**Blocker:** the broker is down and no provider registers a model on this box (`DURIG_LOCAL_API_KEY` unset → 401 on
-127.0.0.1:8080; `DURIG_VERIFIER_API_KEY` unset → 402 balance), and the spend cap refuses `google/gemini-3.1-pro`
-($14 exposure against a $4 store cap). Only the operator holds those grants; 10 intents are spooled and **118** sit
-as dead-letters in `selfdev.sqlite.broker.inbox.error`.
+**Blocker:** the broker is **up and healthy** now — the fleet's silence was a broker process with **no `DURIG_*`
+environment at all** (401 on every generation), not a routing failure. Remaining blockers are operator-side: no
+verifier credential is armed by choice (`DURIG_VERIFIER_API_KEY=` empty → the auditor leg reports `no_model`) and the
+spend cap refuses `google/gemini-3.1-pro` ($14 exposure against a $4 store cap). Spool is drained (0 pending); **118**
+dead-letters remain in `selfdev.sqlite.broker.inbox.error` (59 of them `apply failed: SqliteStorage is closed`).
+**Trap worth knowing:** `node tools/compaction-guard-install.mjs --check` exits **0** in the repo root and **1** in a
+seat worktree (`item-6057`, `NOT INSTALLED`) — the guard covers the delegate session, not seat worktrees. That is the
+ROADMAP 352 gap, and it is measurable with that one command.
 
 **Unverified:** the seat plane's own compaction is untested here; the exact failing turn of the operator's session
 cannot be recovered from the transcript (failure events are not persisted). The threshold path is now exercised end-to-end and the unguarded failure was reproduced verbatim — see below.
