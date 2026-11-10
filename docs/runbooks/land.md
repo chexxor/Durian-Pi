@@ -631,6 +631,13 @@ Three rules that pass proved:
    branch moved after its verify, so the verify no longer covers it (`devtools-item-2261` on 2026-10-19).
 3. **Land in the order the item prescribes.** A stack names its order explicitly (`#2420` BEFORE `#2483`;
    `#2483` also carries a rework gate) — read the landing-list body, not just the subject.
+4. **A cited document that has not landed changes the ORDER, never whether the work starts (#5678).** Merge
+   the document BELOW the build tips that cite it — re-minting its D-number at land time — and let the build
+   land. Do not make it a `blockedBy` on the build work: a gate whose only key is a docs land starves the queue
+   (#3747/#3863, `docs/reviews/security-5269-landing-correction.md:103-104`), and this runbook's own principle
+   says DEPENDENCIES ARE ENFORCEABLE AND ORDERING REQUESTS ARE NOT. A seat that finds such a dangling citation
+   labels it UNVERIFIED in its own completion, naming the command that showed it, and does not re-point the
+   citation at a branch tip.
 
 Then prove the whole merged result ONCE on `main` (`node scripts/suite.mjs`) and prune per
 `branch-cleanup.md` / `leaked-worktrees.md`.
