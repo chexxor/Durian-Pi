@@ -11092,3 +11092,32 @@ and it is now measurable with one command. Also: `serve --stop` returns `stopped
 **What this does NOT decide.** N18 is not closed by this window. Coverage is not there: **9 of 12 seats still have no
 continuity note**, because they hold no claimed work to note, and releasing rows is pm's call. ROADMAP 352 is
 unlanded (**#6036/#6037** `deferred` to human). The delegate asserted no row.
+
+## D255 — 2026-11-10T06:4xZ: **a pin move is staged until the migration it requires is landed; a measured red is a reason to stage, not to land** (delegate acting on the operator's "Update the version of pi-durable we are using. I see it has released v1.5.1 today. Review the changes … and add items to the appropriate roadmap to ensure we are best utilizing pi-durable"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**The why, not the what.** The operator asked for the update. The update was performed — broker stopped and
+verified, store backed up and `cmp`-proved, the scratch-store gate run, `--update v1.5.1` written, `pi-schema`
+added to the pin and built first, 10 packages linked, suite run. It came back **93 PASS / 187 FAIL**, and a
+4-line `Type`→`typebox` shim showed the residue is not one bug but at least six unrelated migrations
+(`documentState` 37 blocks, 36 assertion failures with no stderr, `viewState` 5, `subscribeCommits` 4,
+`checkpointWhen` 3, `watchEvents` 2, `Storage.commit`'s new signature 1, 2 hangs at the 120 s bound).
+
+Two rules decide what to do with that number, and both were already written down: `docs/runbooks/pi-pin-update.md`
+step 5 calls a pin bump that leaves those symbols un-migrated "a half-done change", and the delegate's own
+non-negotiable is that claiming, implementing and routing queue rows is the team's job. So the delegate did the
+irreversible-looking part, measured it to the point where a seat could start work from the measurement, and
+**reverted it** (`git checkout -- pi-main.pin.json`, `--sync` 18 s, `--link` 12 s → **278/280 in 59.7 s**, then
+**280/280 in 61.8 s** after the pointer cut). The work package went to ROADMAP **353–357** with the counts, the
+file list and the one judgement call (`src/rig.mjs:675`'s `Type.Object({}, { additionalProperties: true })` needs
+`{ open: true }`, because pi-schema builders are closed by default).
+
+**What this deliberately does not decide.** Which tag to land on, whether `persistWithinMs` stays at its 1,000 ms
+default, what `checkpointWhen` policy each of the five rig docs gets, and what `restartLimit` the harness is
+constructed with — those are `lead` rulings that a seat implements, and a delegate choosing them in prose would be
+deciding the rig's behaviour without owning the code. Staging also protects attribution: a pin move cannot be
+blamed for a failure measured in a different tree at a different pin.
+
+**Second decision in the same decision, because it is the one that keeps recurring:** the vendored clone is
+**shallow**, so every "N commits behind" ever written from it is depth-bounded, not upstream truth — this session
+measured `1 1` before `fetch --unshallow` (6,994 commits) and `0 729` after, and `sync-pi --check` reports
+`behind: 743`. A doc that quotes a count without the depth is a claim nobody can falsify (D211's class).
