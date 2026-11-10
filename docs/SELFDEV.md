@@ -68,12 +68,12 @@ and `architect` entirely, while claiming "Ten seats" — the docs defect is reco
 The CLI is non-interactive and emits one JSON document per command. Two things must be right: the
 **store** (`DURIG_DB`) and the **seat root** (`DURIG_SEAT_ROOT`, where seats may read and write).
 
-**The pre-rebrand `DURIAN_PI_*` spellings are inert for `cli.mjs`.** `src/config.mjs` (`CONFIG_KEYS`, lines
-112 and 132) lists only `DURIG_*` keys, and `cli.mjs:151` resolves `CFG.DURIG_DB ?? "./rig.sqlite"` — so a copied
+**The pre-rebrand `DURIAN_PI_*` spellings are inert for `cli.mjs`.** `src/config.mjs` (`CONFIG_KEYS`, re-pinned
+2026-11-10 at `src/config.mjs:116-219`) lists only `DURIG_*` keys, and `cli.mjs:155` resolves `CFG.DURIG_DB ?? "./rig.sqlite"` — so a copied
 `DURIAN_PI_DB=...` command silently opens the default store instead of the one it names. Discriminating test,
 run in this tree: `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` (exit 1,
 `cause: no_store`), `DURIG_DB=./nope-b.sqlite node cli.mjs status` → `"db": "…/nope-b.sqlite"` (honored).
-The one entry point that still takes the old name is `scripts/clockin.mjs:245`, which tries `DURIAN_PI_DB`
+The one entry point that still takes the old name is `scripts/clockin.mjs:379`, which tries `DURIAN_PI_DB`
 first, then `DURIG_DB`, default `./selfdev.sqlite`.
 
 ```bash
@@ -787,7 +787,7 @@ leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where
 ## Operational pitfalls (second block, same session — measured, not remembered)
 
 - **`DURIAN_PI_DB` is ignored by the CLI, and you will not see it fail.** Discriminating test: `DURIAN_PI_DB=./nope.sqlite
-  node cli.mjs status` → `"db": "./selfdev.sqlite"`. `cli.mjs:143` is `CFG.DURIG_DB ?? "./rig.sqlite"`; the store is pinned
+  node cli.mjs status` → `"db": "./selfdev.sqlite"`. `cli.mjs:155` is `CFG.DURIG_DB ?? "./rig.sqlite"`; the store is pinned
   by **`durig.config.json`** in the repo root. So (i) bare `cli.mjs` opens the right store *on this repo only*, and (ii) an
   explicit `DURIAN_PI_DB=` pointing at another store (an item worktree's, a moved workspace's) is **silently discarded**.
   A test that passes `DURIAN_PI_DB=./selfdev.sqlite` and sees `./selfdev.sqlite` proves nothing — that is the confound I

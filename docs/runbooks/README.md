@@ -114,7 +114,10 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   carrying a name the entry point ignores is not a typo - it silently runs against the fallback store, which is how
   a wrong store gets read as a quiet rig. 31 command lines across 14 runbooks were corrected in that sweep; the
   machine-side surfacing is `tools/broker-serve.mjs:153` (`legacy-env-set`), and ROADMAP 191 is the un-built
-  single-alias resolver that would remove the discrepancy at the source.
+  single-alias resolver that would remove the discrepancy at the source. **And name the store in every line:**
+  `durig.config.json` is gitignored (`.gitignore:12`) so it exists only in the shared root - measured in an item
+  worktree, a bare `node cli.mjs status` falls back to `./rig.sqlite` (`durig.config.default.json:2`), not to the
+  rig the operator meant.
 
 ## Agent execution (from the research report)
 
