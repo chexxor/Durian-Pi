@@ -13,7 +13,7 @@
 // (docs/runbooks/stale-held-backlog.md §Do). Every class here is a recommendation plus the evidence the
 // class rests on, so a human can check it before acting.
 
-import { gateView } from "./queue-lifecycle.mjs";
+import { gateView, parkOf } from "./queue-lifecycle.mjs";
 
 /** A gate is closed when the row it names can never be worked on again. */
 export const TERMINAL_STATUSES = new Set(["done", "cancelled"]);
@@ -95,7 +95,38 @@ function namedCondition(item, refs) {
  *                                   asks to put in it (any of the markers, when the row names any)?
  * }
  */
+/** The class the STORED STRUCTURE alone implies, before any prose is read (#6150). `rule` parks on an
+ * event the queue cannot close; `gated-work`/`open-gate` park on queue rows, whose terminality decides
+ * release-candidate vs gate-open; `unattributed` has nothing written at all. */
+export function structuralClass(park, item, facts) {
+  if (park.class === "unattributed") return "unattributed";
+  if (park.class === "rule") return "standing-rule";
+  const ids = park.gateIds ?? [];
+  const open = ids.filter((id) => !TERMINAL_STATUSES.has(facts.statusOf(id)));
+  if (open.length) return "gate-open";
+  return facts.landedOnMain(item?.id) ? "cancel-candidate" : "release-candidate";
+}
+
+/**
+ * Classify one held row. The decision path is the gate arithmetic (unchanged since #6071); the RECORD
+ * (#6150) is what the row's own stored structure says, and a disagreement between the two is reported
+ * rather than resolved silently: a row whose trigger prose reads like a rule but whose gates say gated
+ * work is exactly the case a text heuristic gets wrong.
+ */
 export function classifyHeldRow(item, facts) {
+  const park = parkOf(item, { statusOf: facts.statusOf });
+  const row = classifyByRules(item, facts);
+  const implied = structuralClass(park, item, facts);
+  row.park = park.class;
+  row.parkSource = park.source;
+  row.parkBasis = park.basis;
+  row.parkRecordedAt = park.recordedAt ?? null;
+  if (implied !== row.class)
+    row.parkDisagreement = `structure (${park.class}: ${park.basis}) vs the audit's ${row.class}`;
+  return row;
+}
+
+function classifyByRules(item, facts) {
   const refs = collectGateRefs(item);
   const view = gateView(item);
   const evidence = [];
@@ -184,10 +215,26 @@ export function auditHeldRows(items, facts) {
   const rows = held.map((i) => classifyHeldRow(i, facts));
   const byClass = {};
   const bySeat = {};
+  const byPark = {};
+  const disagreements = [];
+  let recorded = 0;
   for (const row of rows) {
     byClass[row.class] = (byClass[row.class] ?? 0) + 1;
+    byPark[row.park] = (byPark[row.park] ?? 0) + 1;
+    if (row.parkSource === "recorded") recorded += 1;
+    if (row.parkDisagreement) disagreements.push({ id: row.id, to: row.to, detail: row.parkDisagreement });
     const seat = bySeat[row.to] ?? (bySeat[row.to] = {});
     seat[row.class] = (seat[row.class] ?? 0) + 1;
   }
-  return { held: held.length, totalRows: items.length, byClass, bySeat, rows };
+  return {
+    held: held.length,
+    totalRows: items.length,
+    byClass,
+    bySeat,
+    byPark,
+    parkRecorded: recorded,
+    parkDerived: held.length - recorded,
+    disagreements,
+    rows,
+  };
 }

@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { readData } from "../src/readclient.mjs";
 import { readQueueItems } from "../src/readapi.mjs";
 import { auditHeldRows } from "../src/heldgate.mjs";
+import { PARK_CLASSES } from "../src/queue-lifecycle.mjs";
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const argv = process.argv.slice(2);
@@ -108,8 +109,14 @@ async function main() {
 
   const byClass = {};
   const bySeat = {};
+  const byPark = {};
+  const disagreements = [];
+  let parkRecorded = 0;
   for (const r of scoped) {
     byClass[r.class] = (byClass[r.class] ?? 0) + 1;
+    byPark[r.park] = (byPark[r.park] ?? 0) + 1;
+    if (r.parkSource === "recorded") parkRecorded += 1;
+    if (r.parkDisagreement) disagreements.push({ id: r.id, to: r.to, detail: r.parkDisagreement });
     const s = bySeat[r.to] ?? (bySeat[r.to] = {});
     s[r.class] = (s[r.class] ?? 0) + 1;
   }
@@ -141,6 +148,16 @@ async function main() {
     console.log(`${cls}: ${list.length}  [${shown}${ids.length > limit ? `, …+${ids.length - limit} more` : ""}]`);
   }
   console.log("");
+  console.log("park class recorded on the row (#6150) - structure only, prose never read:");
+  for (const cls of PARK_CLASSES) console.log(`  ${cls}: ${byPark[cls] ?? 0}`);
+  console.log(`  park field WRITTEN on ${parkRecorded} row(s); derived from stored structure on ${scoped.length - parkRecorded} (rows parked before the field existed - none are migrated)`);
+  if (disagreements.length) {
+    console.log("");
+    console.log(`${disagreements.length} row(s) where structure and prose disagree - reported, not resolved (the audit's class stays the gate arithmetic; the park field is what a metric filters on):`);
+    for (const d of disagreements.slice(0, limit)) console.log(`  #${d.id} -> ${d.to}: ${d.detail}`);
+    if (disagreements.length > limit) console.log(`  …+${disagreements.length - limit} more`);
+  }
+  console.log("");
   console.log("per seat (release / cancel / standing / gate-open / unattributed):");
   for (const [s, counts] of Object.entries(bySeat).sort((a, b) => sum(b[1]) - sum(a[1]))) {
     console.log(`  ${s}: ${order.map((c) => counts[c] ?? 0).join(" / ")}`);
@@ -154,7 +171,7 @@ async function main() {
   console.log("No row is released, cancelled or routed here. Send the list to `pm` (intent.mjs), which holds the transitions.");
 
   if (jsonOut) {
-    writeFileSync(jsonOut, JSON.stringify({ db, at: new Date().toISOString(), held: report.held, byClass, bySeat, rows: scoped }, null, 2) + "\n");
+    writeFileSync(jsonOut, JSON.stringify({ db, at: new Date().toISOString(), held: report.held, byClass, bySeat, byPark, parkRecorded, disagreements, rows: scoped }, null, 2) + "\n");
     console.log(`full classification written to ${jsonOut}`);
   }
   return 0;

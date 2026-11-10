@@ -393,6 +393,9 @@ export function gateView(item) {
 		recorded,
 		gate: recorded ? "recorded" : "none",
 		basis: authored ? "authored-block" : recorded ? "declared-fields" : "none",
+		// #6150: the recorded park class, echoed as written. Derived here would recurse into
+		// derivePark, which reads this view; the metric derives the current class from the ids.
+		park: item?.park ?? null,
 	};
 }
 
@@ -402,4 +405,73 @@ export function canAutoOpen(block) {
 	if (block.reason !== "dependency") return false;
 	const constraints = Array.isArray(block.constraints) ? block.constraints : [];
 	return constraints.length > 0 && constraints.every((c) => c?.kind === "queue");
+}
+
+/* ─── #6150: the RECORDED park class ────────────────────────────────────────────────────────────────
+ * A fleet metric that decides "is this a standing rule?" by reading trigger prose is a cheap signal
+ * reading text, and #3575 says a cheap signal may accept but must not decide: the count can be moved by
+ * wording. The fix is to store WHAT the park is, next to the gate ids that already exist, so a metric
+ * filters on structure. Four classes, fixed vocabulary:
+ *   `rule`        parked on an EVENT the queue cannot close (a roadmap gate, an operator window, a
+ *                 schedule, a manual hold) - no queue-row gate is recorded;
+ *   `gated-work`  parked on queue rows, and every one of them is already terminal at the moment of
+ *                 recording: the gate is closed and the row is waiting to be reconciled;
+ *   `open-gate`   parked on queue rows, at least one of which is still live: real work, still waiting;
+ *   `unattributed` nothing was written - no `blockedBy`, no `block`, no `heldReason`, no `deferredTo`.
+ * The class is DERIVED from stored fields only; prose is never read here. Where the field is absent (the
+ * unmigrated population - #6150 forbids migrating rows) the audit derives it from the same structure and
+ * labels it `derived`, and reports any disagreement with the prose heuristic instead of hiding it.
+ */
+export const PARK_CLASSES = ["rule", "gated-work", "open-gate", "unattributed"];
+const TERMINAL_QUEUE_STATUSES = new Set(["done", "cancelled"]);
+
+/** Every queue id this row treats as a gate: the structured `blockedBy` plus any queue constraint. */
+export function parkGateIds(item) {
+	const ids = new Set(gateView(item).blockedBy ?? []);
+	for (const c of effectiveBlock(item)?.constraints ?? []) {
+		if (c?.kind !== "queue") continue;
+		const n = Number(String(c.ref).replace(/^#/, ""));
+		if (Number.isInteger(n) && n > 0) ids.add(n);
+	}
+	return [...ids].sort((a, b) => a - b);
+}
+
+/**
+ * Classify the park from STORED STRUCTURE. `statusOf(id)` supplies the status of a gate row ("absent"
+ * when the id does not resolve); without it a gate's state is unknown and the row is classed `open-gate`
+ * rather than assumed closed - the safe direction, because calling a live gate closed releases work that
+ * is not done.
+ */
+export function derivePark(item, { statusOf = () => "absent" } = {}) {
+	const ids = parkGateIds(item);
+	if (ids.length) {
+		const open = ids.filter((id) => !TERMINAL_QUEUE_STATUSES.has(statusOf(id)));
+		if (open.length)
+			return { class: "open-gate", basis: `queue gate(s) ${open.map((id) => `#${id}`).join(", ")} still live`, gateIds: ids };
+		return { class: "gated-work", basis: `every gate it names (${ids.map((id) => `#${id}`).join(", ")}) is terminal`, gateIds: ids };
+	}
+	const authored = item?.block ?? null;
+	if (authored) {
+		const gates = (authored.constraints ?? []).filter((c) => c?.kind !== "queue" && c?.ref);
+		return {
+			class: "rule",
+			basis: `authored ${authored.reason} park (resolver ${authored.resolver})${gates.length ? `, non-queue gate(s) ${gates.map((c) => `${c.kind}:${c.ref}`).join(", ")}` : ""}`,
+			gateIds: [],
+		};
+	}
+	// Nothing authored and no gate ids: `legacyBlock` would INFER a `manual`/`backlog` park from the
+	// held status, and reporting that inference as a class is exactly the text-shaped shortcut this field
+	// exists to replace. Report the absence, and name what the status mapping would have guessed.
+	return {
+		class: "unattributed",
+		basis: `nothing recorded: no blockedBy, no authored block, no heldReason, no deferredTo (the status mapping alone would guess "${legacyBlock(item)?.reason}")`,
+		gateIds: [],
+	};
+}
+
+/** The recorded park if a writer stored one, else the structural derivation (labelled, never guessed). */
+export function parkOf(item, { statusOf = () => "absent" } = {}) {
+	const recorded = item?.park && typeof item.park === "object" && PARK_CLASSES.includes(item.park.class);
+	if (recorded) return { ...item.park, source: "recorded" };
+	return { ...derivePark(item, { statusOf }), source: "derived-structure", recordedAt: null };
 }

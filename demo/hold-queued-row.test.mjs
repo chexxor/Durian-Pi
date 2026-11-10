@@ -112,6 +112,11 @@ assert.ok(
 	(parked.transitions ?? []).some((t) => t.event === "held" && t.by === "impl"),
 		"the transition is recorded with the seat that parked it",
 );
+// #6150: the park is RECORDED as structure, and a row parked with only a prose reason records that
+// there is no structural gate - which is the finding a metric must be able to see.
+assert.equal(parked.park?.class, "unattributed", "the park class is recorded on the row, not inferred from its prose");
+assert.ok(/nothing recorded/.test(parked.park?.basis ?? ""), "the record names what is missing: no gate ids, no authored block");
+assert.ok(parked.park?.recordedAt, "the record carries when it was written, so a stale class can be checked");
 assert.ok(!(await wakeableFor("impl")).includes(1), "a parked row is NOT wake-able — the claim window is gone");
 
 /* The claim that used to be forced: claim-then-hold. It still works, so nothing that used it breaks. */
@@ -119,6 +124,7 @@ await call("impl", "claim_work", { itemId: 3 });
 assert.equal((await item(3)).status, "claimed", "claiming still works");
 await call("impl", "hold_work", { itemId: 3, reason: "waiting on an answer" });
 assert.equal((await item(3)).status, "held", "holding a claimed row still parks it");
+assert.ok((await item(3)).park?.class, "a park recorded through hold_work carries a class too");
 
 console.log("\n2. the seam is not widened: who may park, and what may be parked");
 await call("impl", "hold_work", { itemId: 2, reason: "wrong seat" });
@@ -133,6 +139,7 @@ console.log("\n3. the cycle closes in one call each way");
 await call("pm", "release_work", { itemId: 1 }); // the sender may release its own parked row (#5661)
 assert.equal((await item(1)).status, "queued", "release restores the row to queued");
 assert.ok((await wakeableFor("impl")).includes(1), "after release the row is wake-able again");
+assert.equal((await item(1)).park, null, "a RELEASED row has no park record (#6150): leaving one behind makes a running row count as parked");
 
 console.log("\n4. a terminal row is not a parked row");
 await call("impl", "claim_work", { itemId: 1 });

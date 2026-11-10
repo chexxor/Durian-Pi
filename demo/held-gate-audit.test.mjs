@@ -96,6 +96,20 @@ try {
       // (G) gateless and no trigger text -> UNATTRIBUTED, the #5770 class: not stale, just undocumented.
       ids.unattributed = await add("pm", "impl", "some parked row with nothing written", "body", true, null, null);
 
+      // (H) #6150: an AUTHORED event park. Structure alone - reason + resolver, no queue gate - says it
+      // waits for something the queue can never close.
+      ids.rulePark = await add("pm", "scribe", "surface the runbook index in status (parked for the quiet window)", "registered now; waits for the operator-declared window.", true, null, {
+        source: "declared",
+        reason: "schedule",
+        resolver: "operator",
+        constraints: [{ kind: "window", note: "operator-declared quiet window" }],
+      });
+
+      // (I) #6150's failure mode: the prose reads like a standing rule, the STRUCTURE says the row is
+      // gated on a live queue row. The audit still classifies by gate arithmetic; the park field and the
+      // reported disagreement are what a metric must see.
+      ids.proseRuleLiveGate = await add("pm", "impl", "TRIGGER-GATED - DO NOT START: the drain pass (waits on #3)", "trigger-gated registration; the gate row is still queued.", true, [ids.gate3], null);
+
       // Close the gates we intend to be closed.
       const q = await tx.doc(RigQueue);
       for (const id of [ids.gate1, ids.gate2, ids.landingGate]) {
@@ -118,6 +132,27 @@ try {
 
   check("a held row with one gate still queued is NOT stale",
     classifyHeldRow({ id: 102, from: "pm", to: "impl", status: "held", subject: "the follow-up", body: "gated on #3", blockedBy: [ids.gate3], transitions: [] }, facts).class === "gate-open");
+
+  check("an authored event park is recorded as `rule`, structurally standing-rule, with no disagreement",
+    (() => {
+      const row = classifyHeldRow({ id: 105, from: "pm", to: "scribe", status: "held", subject: "parked for the quiet window", body: "waits for the operator", block: { source: "declared", reason: "schedule", resolver: "operator", constraints: [{ kind: "window", note: "quiet window" }] }, transitions: [] }, facts);
+      return row.park === "rule" && row.parkSource === "derived-structure" && !row.parkDisagreement && row.class === "standing-rule";
+    })());
+
+  check("prose that reads like a rule over a LIVE gate is recorded `open-gate` and the disagreement is reported, not hidden",
+    (() => {
+      const row = classifyHeldRow({ id: 106, from: "pm", to: "impl", status: "held", subject: "TRIGGER-GATED - DO NOT START (waits on #3)", body: "trigger-gated registration", blockedBy: [ids.gate3], transitions: [] }, facts);
+      return row.park === "open-gate" && row.parkSource === "derived-structure" && row.class === "standing-rule" && /structure \(open-gate/.test(row.parkDisagreement ?? "");
+    })());
+
+  check("a held row with NOTHING recorded derives `unattributed` and names what the status mapping would have guessed",
+    (() => {
+      const row = classifyHeldRow({ id: 107, from: "pm", to: "impl", status: "held", subject: "nothing written here", body: "body", transitions: [] }, facts);
+      return row.park === "unattributed" && /would guess/.test(row.parkBasis);
+    })());
+
+  check("a park is recorded on STRUCTURED gate ids only - a prose `#3` in the subject is not a gate",
+    classifyHeldRow({ id: 108, from: "pm", to: "impl", status: "held", subject: "parked until #3 is done", body: "body", transitions: [] }, facts).park === "unattributed");
 
   check("a standing rule with NO recorded gate is not flagged as a release candidate (#3075's shape)",
     classifyHeldRow({ id: 103, from: "lead", to: "scribe", status: "held", subject: "DECISIONS.md numbering rule (HELD)", body: "Parked registration — do NOT start until the quiet window.", transitions: [] }, facts).class === "standing-rule");
@@ -158,9 +193,16 @@ try {
 
   const doc = JSON.parse(readFileSync(join(dir, "out.json"), "utf8"));
   const byId = new Map(doc.rows.map((r) => [r.id, r]));
-  check(`the tool's read path found the held rows (held=${doc.held})`, doc.held === 7, `held=${doc.held}`);
+  check(`the tool's read path found the held rows (held=${doc.held})`, doc.held === 9, `held=${doc.held}`);
   check("gates-cleared row -> release-candidate", byId.get(ids.cleared)?.class === "release-candidate", JSON.stringify(byId.get(ids.cleared)));
   check("gate-still-open row -> gate-open", byId.get(ids.open)?.class === "gate-open", JSON.stringify(byId.get(ids.open)));
+  check("every held row carries a park class, and the park counts sum to the held count",
+    Object.values(doc.byPark).reduce((a, b) => a + b, 0) === doc.held && doc.rows.every((r) => typeof r.park === "string"), JSON.stringify(doc.byPark));
+  check("a row parked through the ONE enqueue path has its park RECORDED, not derived",
+    doc.rows.filter((r) => r.parkSource === "recorded").length > 0 && byId.get(ids.rulePark)?.park === "rule", JSON.stringify(byId.get(ids.rulePark)));
+  check("the structure-vs-prose disagreement is an artifact of the audit, not silence",
+    Array.isArray(doc.disagreements) && doc.disagreements.some((d) => d.id === ids.proseRuleLiveGate), JSON.stringify(doc.disagreements));
+
   check("standing-rule row -> standing-rule, with the condition named in its own words", byId.get(ids.standing)?.class === "standing-rule" && /do NOT start/i.test(byId.get(ids.standing)?.condition ?? ""), JSON.stringify(byId.get(ids.standing)));
   check("branch-landing row -> standing-rule (never a release candidate), and the condition names the git check", byId.get(ids.landing)?.class === "standing-rule" && /land on main/i.test(byId.get(ids.landing)?.condition ?? ""), JSON.stringify(byId.get(ids.landing)));
   check("artifact-satisfied row -> cancel-candidate", byId.get(ids.satisfied)?.class === "cancel-candidate", JSON.stringify(byId.get(ids.satisfied)));
@@ -177,7 +219,7 @@ try {
   check("an unknown flag is refused by name instead of silently scoping the audit to item 5", badFlag.status === 1 && /unknown argument/.test(badFlag.stderr), `exit ${badFlag.status}: ${badFlag.stderr.slice(0, 200)}`);
   const seatRun = spawnSync(process.execPath, ["tools/held-gate-audit.mjs", "--db", dbPath, "--seat", "impl", "--json", join(dir, "seat.json")], { cwd: ROOT, env: { ...process.env, DURIG_DB: dbPath }, encoding: "utf8", timeout: 180000 });
   const seatDoc = JSON.parse(readFileSync(join(dir, "seat.json"), "utf8"));
-  check("--seat impl scopes the rows to impl while the census still reports every held row", seatDoc.held === 7 && seatDoc.rows.length === 3 && seatDoc.rows.every((r) => r.to === "impl"), `held=${seatDoc.held} rows=${seatDoc.rows.length}`);
+  check("--seat impl scopes the rows to impl while the census still reports every held row", seatDoc.held === 9 && seatDoc.rows.length === 4 && seatDoc.rows.every((r) => r.to === "impl"), `held=${seatDoc.held} rows=${seatDoc.rows.length}`);
   const idRun = spawnSync(process.execPath, ["tools/held-gate-audit.mjs", "--db", dbPath, "--json", join(dir, "ids.json"), String(ids.cleared)], { cwd: ROOT, env: { ...process.env, DURIG_DB: dbPath }, encoding: "utf8", timeout: 180000 });
   const idDoc = JSON.parse(readFileSync(join(dir, "ids.json"), "utf8"));
   check("bare item ids scope the report to those rows only", idDoc.rows.length === 1 && idDoc.rows[0].id === ids.cleared, JSON.stringify(idDoc.rows.map((r) => r.id)));
