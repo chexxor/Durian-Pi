@@ -56,6 +56,28 @@ the work is not), `item-6290` (23 untracked solo-run logs, 45 KB), `item-6317` (
 residue is exported to `.spike/worktree-residue/` (gitignored, 148 KB) before anything is touched. A dirty orphan is
 refused on purpose: a seat commits it, or the operator rules it discarded.
 
+**The recipe that made this fast (re-run it, it is idempotent):**
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json > .spike/wt.json
+node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/wt.json","utf8"));
+ for(const w of j.worktrees) if(w.keepReason==="reapable") console.log(w.worktree)' | while read -r p; do git worktree remove "$p"; done   # 75 s for 57 trees, never --force
+git worktree prune
+```
+
+**Paused goal (the operator resumes it with `/goal-resume`):** "every CLI verb answers or fails fast against a team
+that is running or stopped, no 120 s silence, and Ctrl-C actually terminates the running command." Its WIP is in
+`stash@{0}` (a copy at `.spike/goal-wip/wip-tracked.patch`, 640 lines) and was deliberately NOT restored — half-written
+code breaks the green suite. The cheapest probe that shows where it stands now: `time node cli.mjs status --json`
+with the broker down (**2.46 s**) versus with a broker resident but not passing (120 s, exit 1).
+
+**Operator decision owed, not a git one:** `.spike/` is **13 GB** of gitignored scratch — 4.2 GB `fix-20261101`,
+1.1 GB `fix-20261031`, 1.1 GB `backups`, 814 MB `delegate`, plus four store backups (435 MB, 419 MB, 419 MB, and
+`.spike/backups/20261110T0551Z/selfdev.sqlite`). Deleting a store backup is the operator's call; the fix-* scratch
+dirs are prior landing passes and can be pruned once their content is confirmed on `main`. Also note **`docs/NEXT.md`
+is at 199 of the 200 counted lines** (`demo/next-pointer.test.mjs` enforces the cap): before appending anything, move
+a section verbatim to `docs/NEXT-ARCHIVE.md`.
+
 **Open decisions the operator owns:** (a) **item-6063/6064/6066** — the compaction-gate trio was reverted. Either
 re-cut it against the 1.5.1 pin and current `main`, or accept the guard and set
 `DURIG_COMPACTION_RESERVE_TOKENS=8192`, `DURIG_COMPACTION_KEEP_RECENT=9288`, `DURIG_COMPACTION_BACKGROUND=8192` in
@@ -65,20 +87,11 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**Blocker:** the broker is **wedged** — pid **3566266** (`cli.mjs serve --max-duration 1800`, running 2 h 42 m at
-clock-out) holds `selfdev.sqlite.genlock.0`, and every broker-routed read answers `ok:false "read health: timed out
-awaiting the broker's result"` (exit 1). `node cli.mjs status --json` measured exactly that. **Do not kill it while a
-genlock slot is held** (`docs/runbooks/broker-down-or-stalled.md`); the recovery sequence and the item-5301
-not-landable note both live in that runbook. Until it answers, no verb can read item terminality, so the 74
-merged-but-held worktrees stay exactly where they are — that is the documented ceiling, a `pm` disposition act.
-
-**State:** `main` tip — read it with `git rev-parse --short main` (this window ended at `9ec3d1b0`; a pinned sha here
-goes stale by its own commits). refs **82**, worktrees **75** (measured at clock-out with `git worktree list | wc -l` and
-`git branch --format='%(refname:short)' | wc -l`); 68 refs are provably ancestors of `main` (`git merge-base
---is-ancestor <ref> main` exit 0), 74 of them are still pinned by a worktree, and 67 of those trees are CLEAN. Broker pid **3566266** is **alive past its bound** and holds `selfdev.sqlite.genlock.0`, so a generation is in flight and **do not kill it**. Consequence: every broker-routed read (`cli.mjs status/queue/…`) answers `ok:false "read health: timed out awaiting the broker's result"`. When it exits, restart
-with `node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800` after `--dry-run` acks. This broker
-wedged once this window with `PASS-FAILED Error: SqliteStorage is closed` → `HARNESS-REOPEN-CAP-EXCEEDED attempts=4`
-and was cleared with `kill -INT <pid>` → `cli.mjs resume` → restart (pitfall **237**). Store backup unchanged: `.spike/backups/20261110T0551Z/selfdev.sqlite`
+**State at clock-out:** refs **26**, worktrees **18** (`git branch --format='%(refname:short)' | wc -l` and
+`git worktree list | wc -l`). Every ref left standing is either pinned by a worktree, ruled-kept (`item-3570`,
+`item-5301`, `item-5301-resolved`, `verify-5180`, `wip/seat-prompt-files`) or the reverted compaction trio
+(`item-6063/6064/6066`, kept as re-cut input). Queue census 6,423 rows — 4,365 done, 901 cancelled, 542 deferred,
+435 held, 176 queued, 4 claimed. Store backup unchanged: `.spike/backups/20261110T0551Z/selfdev.sqlite`
 (617,492,480 bytes, sha256 `0996cd61…`, `cmp` exit 0).
 
 **Hazards the next session must not mistake for green:** (1) **`item-5301` and `item-5301-resolved` are not
@@ -113,8 +126,8 @@ synthesised from committed `pi.tool-result` entries, not streamed.
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/test.mjs --all --jobs 8                  # 282/282 expected; exit 0
-node demo/next-pointer.test.mjs                       # red until NEXT.md is under 200 counted lines
+node scripts/test.mjs --all --jobs 8                  # 289 demos (290 on disk, 1 declared exclusion); exit 0
+node demo/next-pointer.test.mjs                       # the pointer cap: NEXT.md must stay <= 200 counted lines
 node tools/broker-serve.mjs --dry-run                 # "A start would be allowed" with ~/.config/durig/env sourced
 set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800
 node cli.mjs status
@@ -149,7 +162,8 @@ node cli.mjs status
 ## State the team is in
 
 Fleet awake: 12 seats (11 on `local2/qwen3.8-flash-next-q2_0`, auditor on `verifier/openai/gpt-oss-120b`). Queue
-6,178 rows. pm minted **#6171–#6178** from the delegate intent (`requestId b0488417-b203-4df7-83dd-077406980a9f`,
+census **6,423 rows** measured 2026-11-10T19:0xZ with no broker resident: 4,365 done, 901 cancelled, 542 deferred,
+435 held, 176 queued, 4 claimed. pm minted **#6171–#6178** from the delegate intent (`requestId b0488417-b203-4df7-83dd-077406980a9f`,
 `delivered: true`); other seats minted their own rows this window (#6163–#6170). **The delegate asserted no row.**
 Six branches landed (`item-1779`, `item-2915`, `item-3041`, `item-6067`, `item-6082`, `item-6121` + the
 `item-6082-mig` fork); two are deliberately not landed and are named with reasons above.
@@ -170,10 +184,9 @@ Wall clock: the full suite is **47.8 s** (was 61.8 s at the old pin); a merged-t
 branch with `node --check cli.mjs` + `git merge-tree --write-tree` before spending a 47 s suite (pitfall **232**),
 and never run three full suites concurrently — contention produced two false reds this window (pitfall **235**).
 
-**Traps this window** — `docs/SELFDEV.md` **232–236** (a branch can fail to compile and still merge; `Storage.commit`
-silently refuses a version-mismatched delta; `snapshot()` returns the value not a wrapper; contention reds are not
-regressions; refs cannot be pruned while a live seat root holds them). Earlier: 227–231 (shallow clone depth, the
-`pi-schema` build order, `--update <tag>` exists, the shim is diagnostic not a migration, the two doc-cap tests).
-Grep for the symptom; the file is ~50,000 tokens.
+**Traps this window** — `docs/SELFDEV.md` **245–248** (a broker that exits on `--max-duration` cures the dark reads
+by disappearing; an ancestor ref can still hide sole-copy work in a dirty worktree; `queue --json`'s `rows` is the
+census, not the match; the 57-tree worktree release is 75 s and needs no broker, no store write, no model). The
+previous window's traps are **241–244** and **232–240**.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
