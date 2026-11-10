@@ -1,9 +1,8 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-10T18:3xZ (delegate session **N26** — the **branch-landing pass**: **68 of 82 refs are now
-ancestors of `main`**, 8 merged+free refs pruned, the three compaction-gate landings **reverted** because they took
-the whole CLI down, and `main` is proven **289/289 green in 117.7 s** (`.spike/suite-final.out`). refs **82**, worktrees
-**75** (measured at clock-out with `git branch --format='%(refname:short)' | wc -l` and `git worktree list | wc -l`);
+**Last update:** 2026-11-10T19:0xZ (delegate session **N26** — the **branch-landing + cleanup pass**: **56 refs
+pruned**, **57 worktrees released**, refs **82 → 26**, worktrees **75 → 18**, `main` proven green. The three
+compaction-gate landings are **reverted** because they took the whole CLI down. Measured with `git branch --format='%(refname:short)' | wc -l` and `git worktree list | wc -l`);
 **count it live, do not trust this number** — the fleet mints refs while you measure. Nothing was pushed; the
 delegate claimed, completed or deferred no row.)
 
@@ -21,19 +20,41 @@ policy calls (rows **#6171/#6172/#6173**), the item-5301 rework (**#6174**), the
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **landing the accumulated branches and pruning them (the branch-cleanup pass, `docs/runbooks/branch-cleanup.md`)**, with the pin move (D256) still the frame it operates in.
+**Current item:** the **branch-cleanup pass** (`docs/runbooks/branch-cleanup.md`). Its git half is **closed**: refs
+**82 → 26**, worktrees **75 → 18**, `main` green. What is left is fleet work, not git work — the **item-5301 re-cut
+(#6174)**, the uncommitted `sync-pi --no-repair` work stranded in the `item-6057` worktree (**#6060**), the four
+dirty trees named below, and the three pin-policy rows (**#6171/#6172/#6173**).
 
-**Run these first, in this order:**
+**Milestone this window worked** — **landing the accumulated branches and pruning them (the branch-cleanup pass)**,
+with the pin move (D255 → D256, ROADMAP 353–357) as the frame it operated in.
+
+**Run these first, in this order** (every number below was measured on this box; re-measure rather than trust it):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/suite.mjs --jobs 8                  # last measured 289/289 green, 117.7 s, exit 0 (.spike/suite-final.out)
-node scripts/sync-pi.mjs --check                 # pin dd30101cf tag v1.5.1, drift true, 44 behind; package.json says ^1.3.0
-git worktree list | wc -l; git branch --format='%(refname:short)' | wc -l   # 75 and 82 measured 2026-11-10T18:3xZ
-bash .spike/diagnose.sh                          # the read-only branch/worktree census probe (gitignored; promote it)
-git branch --list                                # the refs still NOT landable: item-3570, item-5301, item-5301-resolved,
-                                               # verify-5180, wip/seat-prompt-files, and the reverted item-6063/6064/6066
+node scripts/suite.mjs --jobs 8                                        # 289 demos, expect exit 0
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json          # 1.15 s — total 18: seat-root 10, live 4, dirty 4, locked 0
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed --json --no-body   # 4 claimed rows; `rows: 6423` is the CENSUS, the payload is the filtered items
+git branch --list; git worktree list | wc -l                          # 26 refs, 18 worktrees at clock-out
+node scripts/sync-pi.mjs --check                                     # pin dd30101cf tag v1.5.1, drift true
 ```
+
+**Blocker:** the broker is **DOWN, not wedged** — it exited at `2026-11-10T18:48:19Z` (`EXIT pid=3566266
+reason=max-duration passes=328`), there is no `selfdev.sqlite.broker.json` and no `genlock` slot, so every read now
+takes `readLocal` and answers fast: `node cli.mjs status --json` → `ok:true` in **2.46 s**, `cli.mjs worktree audit`
+in **1.15 s**. **Restarting it wakes 12 seats and spends model money — the operator's call.** If restarted:
+`node tools/broker-serve.mjs --dry-run`, then `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800`. Ten read intents are still spooled in
+`selfdev.sqlite.broker.inbox` and drain on the first real pass.
+
+**What the cleanup left (all measured, `cli.mjs worktree audit`)** — 18 worktrees, **0 locked**: 10 seat roots
+(`main`, `seatroot/linux` = advocate, and item trees for impl 6101, qa 6330, scribe 6216, devtools 6150, auditor
+5604, designer 5995, security 6208, architect 5631), **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty
+2, `item-5912` held, `item-6177` claimed dirty 3), and **4 dirty orphans** whose items are `done`: `item-6057`
+(2 tracked edits — a `sync-pi --no-repair` flag and its demo, **not on `main`**: `grep -c "no-repair" scripts/sync-pi.mjs`
+→ 0, while `git merge-base --is-ancestor refs/heads/item-6057 refs/heads/main` exits 0, i.e. the branch is merged and
+the work is not), `item-6290` (23 untracked solo-run logs, 45 KB), `item-6317` (3 logs), `item-6328` (1 log). Every
+residue is exported to `.spike/worktree-residue/` (gitignored, 148 KB) before anything is touched. A dirty orphan is
+refused on purpose: a seat commits it, or the operator rules it discarded.
 
 **Open decisions the operator owns:** (a) **item-6063/6064/6066** — the compaction-gate trio was reverted. Either
 re-cut it against the 1.5.1 pin and current `main`, or accept the guard and set
@@ -108,13 +129,15 @@ node cli.mjs status
    `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md` §8 and pitfall **232**. Do not land until all four close.
 3. **Close the install gap** (ROADMAP **352**, rows **#6125/#6127**): nothing at session start runs
    `tools/compaction-guard-install.mjs --check`, so a fresh clone or worktree starts unguarded with no signal.
-4. **Prune the held refs — the git side is now exhausted.** This pass deleted the only merged+free ref, `item-6082-mig`
-   (tip `6b21e36b`, proved an ancestor of `main` with `git merge-base --is-ancestor` before `-d`). Every remaining merged
-   ref is held by a worktree: seat roots (impl=1158, qa=6088, advocate=durian-dev/seatroot, scribe=4102, devtools=6082,
-   auditor=5604, designer=5995, architect=6121) and in-flight rows (6014, 6057, 6086, 6088, 6089, 6171, 6188, 816,
-   3087, 4878, 5912, 3570); `verify-5180`, `item-5301` and `wip/seat-prompt-files` are unlanded and stay by ruling
-   (ROADMAP 344, `docs/DISPOSITIONS.md` rows). Releasing them needs row terminality, which lives in the store — and the
-   store reads dark right now (pitfall **237**). Sequence per `docs/runbooks/branch-cleanup.md` / `leaked-worktrees.md`.
+4. **Resolve the four DIRTY worktrees — the merged refs are gone; this is the residue.** `cli.mjs worktree audit`
+   reports `dirty 4`: `item-6057` (2 tracked edits — `scripts/sync-pi.mjs` + `demo/syncpi.test.mjs` adding a
+   `--no-repair` flag, **#6060 work that is NOT on `main`** even though `item-6057`'s tip is an ancestor of `main`),
+   `item-6290` (23 untracked solo-run logs), `item-6317` (3), `item-6328` (1). All residue is exported to
+   `.spike/worktree-residue/` (gitignored, 148 KB). A dirty orphan is refused on purpose — a seat commits it or the
+   operator rules it discarded (`docs/runbooks/leaked-worktrees.md` §Do 2). `verify-5180`, `item-5301`,
+   `item-5301-resolved`, `item-3570`, `wip/seat-prompt-files` and the reverted `item-6063/6064/6066` stay by ruling
+   (ROADMAP 344, `docs/DISPOSITIONS.md` rows) — none of them is held by a worktree any more, so the *only* thing
+   keeping them is the ledger.
 5. **Promote the pin probes out of `.spike/`** (**#6176**): `.spike/pin-update/migrate-symbols.mjs` and
    `.spike/pin-update/signature-classify.mjs` are the instruments that made this window fast; an unpromoted probe
    is lost (ROADMAP 312).
