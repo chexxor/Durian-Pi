@@ -32,7 +32,7 @@
 // gated on MEASURED incidence (ROADMAP 100).
 //
 // usage:
-//   node scripts/land.mjs <branch> [<branch>...] [--repo <dir>] [--db <path>] [--suite | --changed-suite] [--keep] [--json]
+//   node scripts/land.mjs <branch> [<branch>...] [--repo <dir>] [--db <path>] (--suite | --changed-suite) [--docs-only] [--keep] [--json]
 //
 //   --repo <dir>   the shared repository root (default: the repo containing cwd)
 //   --db <path>    the rig store, for the genlock pre-flight (default: DURIG_DB, else the store the
@@ -44,8 +44,20 @@
 //                  `tools/what-to-test.mjs` the operator uses — no second path→test map — then
 //                  report which AREAS ran and which did NOT. It is never a green gate: a pass here
 //                  means "the derived subset is green", and if the derivation finds NO test under
-//                  the change the landing is REFUSED rather than advanced unchecked. Opt-in; the
-//                  default stays no regression check at all, and `--suite` still wins if both are given.
+//                  the change the landing is REFUSED rather than advanced unchecked. `--suite` still
+//                  wins if both are given.
+//   --docs-only    (#6090) the lighter path, used with --changed-suite when the derivation finds no
+//                  test under the change. It is an ATTESTATION CHECKED AGAINST THE DIFF: every
+//                  changed path must be prose (a root .md/.txt or something under docs/). When it
+//                  holds, the landing runs the `docs` area and the report says which areas did NOT
+//                  run. When it does not, the flag is refused and names the offending path. A flag is
+//                  never taken on its own word.
+//
+//   REQUIRED GATE (#6090): one of --suite / --changed-suite must be passed. Before #6090 the gate
+//   was opt-in and a landing (1f6f26c5, reported under #6079) advanced main with no regression check
+//   at all; the report said "not run - neither --suite nor --changed-suite was passed", which is a
+//   fact only because someone happened to write it. An optional gate is a signal, not a decision
+//   (#3575): the landing is the decision, so the decision requires the gate.
 //   --keep         keep the scratch worktree on failure, so a conflict can be resolved there
 //   --json         machine-readable report (always printed; this flag is accepted for symmetry)
 //
@@ -58,10 +70,11 @@ import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, sym
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
 import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
+import { parseGateFlags, requireGate, docsOnlyAttestation } from "../src/landinggate.mjs";
 // #4936: the CHANGED-SUITE scope report — which areas ran and which did NOT. It reads the SAME
 // area data as `scripts/test.mjs` and `tools/what-to-test.mjs`; it is a reporter, not a second
 // selector, and that is the whole point (#4922: a second mechanism is the thing that drifts).
-import { changedSuiteScope } from "../src/testareas.mjs";
+import { changedSuiteScope, selectTests } from "../src/testareas.mjs";
 // The PRIORITY reservation + the wait-with-priority claim (#1497/#1498, lead #2054 precondition
 // (c)). Imported from a deliberately DEPENDENCY-FREE module (node:fs/node:path only) so this
 // chokepoint still loads when the provider stack is broken — the #1164 Q3 rule this file's own
@@ -91,12 +104,15 @@ const option = (name) => {
 	const at = args.indexOf(name);
 	return at >= 0 ? args[at + 1] : undefined;
 };
-const wantSuite = args.includes("--suite");
-// #4936: the cheap honest path. Measured cost of the alternatives: `--suite` is ~239 tests / ~10 min,
-// and with neither flag the pass runs NOTHING and still reports ok:true. A seat under turn pressure
-// picks "run nothing" unless something cheaper than the full gate exists.
-const wantChangedSuite = args.includes("--changed-suite");
+const gateFlags = parseGateFlags(args);
+const wantSuite = gateFlags.suite;
+// #4936: the cheap honest path. Measured cost of the alternatives: `--suite` is ~239 tests / ~10 min.
+// #6090: it is no longer optional — a landing with no gate flag is refused before it touches git.
+const wantChangedSuite = gateFlags.changedSuite;
 const keepScratch = args.includes("--keep");
+// Paths the landing changes, collected for the --docs-only attestation (#6090). Filled by the
+// text-integrity loop below, which already walks the same diff.
+const gateChangedPaths = [];
 
 /** Run git and capture everything; the caller decides whether a failure is fatal. */
 function git(cwd, argv) {
@@ -367,6 +383,7 @@ if (existsSync(join(repoRoot, ".git", "MERGE_HEAD"))) {
 // The BRANCH's blobs are judged against the BASE, not the working tree.
 for (const b of branches) {
 	const paths = landingChangedPaths({ root: repoRoot, branch: b, base: "main" });
+	for (const p of paths ?? []) gateChangedPaths.push(p);
 	if (paths === null) continue; // the diff could not be read: not a reason to refuse (the merge will show it)
 	const bad = readTextIntegrity({ root: repoRoot, paths, rev: b, headRev: "main" });
 	if (bad.length > 0) {
@@ -379,6 +396,36 @@ for (const b of branches) {
 					`would take the shared tree down at import time; restore from main and re-apply the intended ` +
 					`edit — do not patch bytes.`,
 				textIntegrity: bad,
+			},
+			1,
+		);
+	}
+}
+
+/* ─────────── the required gate (#6090): no flag, no landing ───────────
+ * Placed with the other preconditions (all read-only) and BEFORE the merge, so a landing that
+ * cannot say which check ran never touches git. The substantive refusals above fire first: a
+ * branch that is ALSO corrupt is refused for the corruption, which is the more specific fact.
+ * An optional gate is a signal, not a decision (#3575); the landing is the decision. */
+const gateDecision = requireGate(gateFlags, { branches });
+if (!gateDecision.ok) {
+	report({ ok: false, command: "land", gate: gateDecision.gate, error: gateDecision.message, branches, merged: [] }, 1);
+}
+
+/* ─────────── the --docs-only attestation is checked against the DIFF (#6090) ───────────
+ * `--docs-only` asserts a fact about the landing. If the diff contradicts it, the landing is
+ * refused HERE — before any merge — rather than quietly proceeding under whatever gate the
+ * derivation happened to find. A flag that is not believed until verified is not a bypass. */
+if (gateFlags.docsOnly) {
+	const attested = docsOnlyAttestation({ flags: gateFlags, changedPaths: gateChangedPaths });
+	if (!attested.ok) {
+		report(
+			{
+				...base,
+				error: `--docs-only asserted, but the diff contradicts it: ${attested.why}. A documentation-only landing means EVERY changed path is prose; this one is not. Nothing was advanced.`,
+				docsOnly: attested,
+				branches,
+				merged: [],
 			},
 			1,
 		);
@@ -576,6 +623,18 @@ const skipSummary = () =>
 // #4936: what this pass actually covered, or null when no regression check ran. Declared out here so
 // EVERY report path — including a STOPPED mid-suite run and the final ok — carries the same statement.
 let suiteScope = null;
+// #6090: WHICH gate ran. "The suite is green" means different things for the full sweep, the
+// derived subset and the documentation area, so every report path has to say which one it is.
+let gateKind = wantSuite ? "full" : "derived";
+// Every report path says which gate ran — the stop paths as much as the success path (#6090).
+const gateReport = () => ({
+	kind: gateKind,
+	command: gateKind === "full" ? "node scripts/test.mjs --all" : suiteScope?.gate?.command ?? null,
+	statement:
+		gateKind === "full"
+			? `full gate: every demo in the scratch ran (${suiteResults.length} result(s))`
+			: `${gateKind}: ${suiteScope?.ranCount}/${suiteScope?.totalTests} test(s); areas NOT covered [${suiteScope?.areasNotRun.join(", ")}]`,
+});
 await (async () => {
 	if (wantSuite || wantChangedSuite) {
 		if (!scratchDeps.linked) {
@@ -593,6 +652,21 @@ await (async () => {
 				.sort()
 		: [];
 	let tests = allTests;
+	if (allTests.length === 0) {
+		// A gate that runs nothing is not a gate (#6090): `--suite` on a tree with no demos would
+		// otherwise report "full gate: 0 result(s)" and advance main.
+		if (!keepScratch) removeScratch();
+		report(
+			{
+				...base,
+				error: `the gate has nothing to run: no demo/*.test.mjs exists in the scratch (${demoDir}). Zero tests is not a green gate. Nothing was advanced.`,
+				merged,
+				suite: "not run — there are no demos on disk to run",
+				gate: gateReport(),
+			},
+			1,
+		);
+	}
 	if (wantChangedSuite && !wantSuite) {
 		/* ── #4936: derive the set; never invent one ── */
 		// `tools/what-to-test.mjs` is the selector (it derives from what each demo's own source
@@ -654,19 +728,63 @@ await (async () => {
 		if (suiteScope.coverage === "none") {
 			// The shape that makes this safe: a change with no mapped test under it must read as
 			// NO COVERAGE, and a landing must not advance on a gate that ran zero tests.
-			if (!keepScratch) removeScratch();
-			report(
-				{
-					...base,
-				error:
-						`--changed-suite found NO coverage for this change: none of the ${suiteScope.totalTests} tests in the area manifest names any ` +
-						`changed path (areas: ${suiteScope.areas.join(", ")}). Nothing was advanced — zero tests run is not a green gate. ` +
-						"Re-run with --suite, or land with an explicit no-regression-check note.",
-					merged,
-					suiteScope,
-					suite: "not run — the derived set was empty (no coverage, not a pass)",
-				},
-				1,
+			// #6090: the ONLY lighter path is a documentation-only change, and it is verified against
+			// the diff before it is believed. When it holds the `docs` area runs — the landing is still
+			// gated, and the report names the areas it did NOT cover.
+			const attested = docsOnlyAttestation({ flags: gateFlags, changedPaths: gateChangedPaths });
+			if (!attested.ok) {
+				if (!keepScratch) removeScratch();
+				report(
+					{
+						...base,
+						error:
+							`--changed-suite found NO coverage for this change: none of the ${suiteScope.totalTests} tests in the area manifest names any ` +
+							`changed path (areas: ${suiteScope.areas.join(", ")}). Nothing was advanced — zero tests run is not a green gate. ` +
+							"Re-run with --suite, or land a documentation-only change with --docs-only (attested: it is checked against the diff). " +
+							`Why the lighter path does not apply here: ${attested.why}`,
+						docsOnly: attested,
+						merged,
+						suiteScope,
+						suite: "not run — the derived set was empty (no coverage, not a pass)",
+					},
+					1,
+				);
+			}
+			let docsSelection = null;
+			try {
+				docsSelection = selectTests(scratch, { area: "docs" });
+			} catch (e) {
+				if (!keepScratch) removeScratch();
+				report(
+					{
+						...base,
+						error: `--docs-only landing cannot be gated: the "docs" area could not be resolved (${e.message}). Nothing was advanced.`,
+						docsOnly: attested,
+						merged,
+						suiteScope,
+					},
+					1,
+				);
+			}
+			if (docsSelection.files.length === 0) {
+				if (!keepScratch) removeScratch();
+				report(
+					{
+						...base,
+					error: `--docs-only landing has nothing to run: the "docs" area maps to zero tests. Zero tests run is not a green gate. Nothing was advanced.`,
+						docsOnly: attested,
+						merged,
+						suiteScope,
+					},
+					1,
+				);
+			}
+			suiteScope = changedSuiteScope(scratch, { selected: docsSelection.files });
+			base.suiteScope = suiteScope;
+			gateKind = "docs-area (documentation-only, attested against the diff)";
+			console.error(
+				`docs-only gate: ${attested.why} — ran the "docs" area (${suiteScope.ranCount} test(s)); ` +
+					`areas NOT RUN [${suiteScope.areasNotRun.join(", ")}] · NOT the full gate (${suiteScope.gate.command})`,
 			);
 		}
 		tests = suiteScope.ran.map((t) => t.replace(/^demo\//, ""));
@@ -772,6 +890,7 @@ await (async () => {
 					: `STOPPED: demo/${result.test} failed in the scratch worktree (exit ${result.exit}) — main was NOT advanced.`,
 				merged,
 				suite: suiteResults,
+				gate: gateReport(),
 				suiteSkips,
 				scratchDeps,
 				scratch: keepScratch ? scratch : null,
@@ -834,6 +953,7 @@ await (async () => {
 						: `STOPPED: demo/${test} failed in the scratch worktree (exit ${run.status}) — main was NOT advanced.`,
 					merged,
 					suite: suiteResults,
+					gate: gateReport(),
 					suiteSkips,
 					scratchDeps,
 					scratch: keepScratch ? scratch : null,
@@ -955,13 +1075,11 @@ report(
 		main: { before: mainBefore.out, after: mainAfter },
 		merged,
 		lock,
-		// #4436: `null` was the SILENT default — three landings reported `"suite": null` and each seat
-		// correctly refused to claim a baseline it did not have, with no way to tell WHY. The suite is
-		// OPTIONAL AND OFF BY DEFAULT (`wantSuite = args.includes("--suite")`), which is the `ok:true`
-		// shape one layer out: a landing tool whose regression gate is off reports success without
-		// checking. The default stays off (the suite runs INSIDE the lock hold, so its runtime lands in
-		// the wait), but its ABSENCE now SAYS SO, with the reason and the remedy.
-		suite: wantSuite || wantChangedSuite ? suiteResults : "not run — neither --suite nor --changed-suite was passed; the gate is opt-in, so this landing was NOT regression-checked. Re-run with --suite (the full gate) or --changed-suite (the derived subset, which is NOT the gate), or run the suite on main separately",
+		// #4436/#6090: the gate is no longer optional — a landing reaches this line only after one ran,
+		// because a landing with no gate flag is refused before it touches git. What ran is named, so a
+		// green here is never mistaken for the full sweep.
+		suite: suiteResults,
+		gate: gateReport(),
 		// #4996: the checks this tree could not judge, kept OUT of the pass count and not treated as failures.
 		// The reason names what the tree lacks, so a reader can tell "the branch is bad" from "the scratch is bare".
 		suiteSkips,
