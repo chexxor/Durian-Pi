@@ -178,6 +178,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [leaked-worktrees.md](leaked-worktrees.md) | `git status`/`git worktree list` shows stray `item-*` | maybe |
 | [tracked-files-missing-on-disk.md](tracked-files-missing-on-disk.md) | `git status` shows tracked DELETIONS nobody made; a whole directory (e.g. `scripts/`) is empty on disk while the index and `HEAD` still hold it | no |
 | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
+| [stale-held-backlog.md](stale-held-backlog.md) §Umbrella rows are pointers, never gates | **a row can never be claimed** and the scan says `gate-cancelled:#<id>`; a dependent is stuck on a container row that was cancelled; you are about to `cancel_work` an umbrella whose children are all registered | no |
 | [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
@@ -217,7 +218,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Write guard / source files | write-corruption-recovery |
 | Constitution / starter mirror | constitution-amendment |
 | Worktrees | leaked-worktrees, prepare-workspace-etarget, worktree-unlinked-deps, prepare-workspace-refused |
-| The pinned pi: the pin file, the vendored clone, tag-vs-tip policy, sparse-built packages, the schema-v2 lockout, and why a stale clone's 0 hits is not evidence | pi-pin-update, worktree-unlinked-deps, prepare-workspace-etarget, cross-clone-object-recovery |
+| The pinned pi: the pin file, the vendored clone, tag-vs-tip policy, sparse-built packages, the schema-v2 lockout, and why a stale clone's 0 hits is not evidence — **and a seat whose live progress is coarser than it used to be, or whose tool results appear only after the commit lands (the seam emits at commit cadence, never per token)** | pi-pin-update, worktree-unlinked-deps, prepare-workspace-etarget, cross-clone-object-recovery |
 | Git objects / shas cited from another machine | cross-clone-object-recovery, workspace-move |
 | Which model/quantization a provider is actually serving (variant activation, unload-by-`instance_id`, model-server lifetime vs a live run) | verifier-model-server, model-server-broker-race |
 | What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
@@ -231,6 +232,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Missing files on disk | tracked-files-missing-on-disk |
 | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
 | Queue / parked work | stale-held-backlog, block-shape-refused |
+| An umbrella (container) row used as a `blockedBy` gate — `workable()`, `gate-cancelled`, `gate-open` | stale-held-backlog §Umbrella rows are pointers, never gates |
 | The structured park (`block`): reason → constraint-kind pairing, ref shapes (`#<id>` vs `RM-<n>` vs a `window` note), `reviewBy` defaults, and why a refused send does not half-land | block-shape-refused |
 | Which reads are free and which verb is expensive; batching a brief; promoting a `.spike` probe into `tools/` | session-start-cost, verifier-serving-headroom, run-your-area |
 | Credentials / secrets | leaked-secret |
