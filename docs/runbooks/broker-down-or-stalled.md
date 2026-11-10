@@ -352,6 +352,28 @@ one held row, `DURIG_PROVIDER=faux node cli.mjs serve --max-duration 120`, then
 `grep -c 'WAKE <seat>' <db>.broker.log`: 4 before the fix, 1 after (measured 2026-11-09 on main
 f5a73c61 and on the fix branch).
 
+### Reading a seat that does NOT wake (#6101)
+Every wake decision that results in no wake writes a `SKIP` line: `SKIP <seat> reason=<reason>`
+with `reason` in `pending | busy | no-work | parked-deduped | cooldown`, plus `conv=<id> age=<s>`
+for a pending seat and `remaining=<s>` for a throttled one. Before #6101 the cooldown path was the
+one silent path - `onSuppressed` only collected a set for the revisit schedule - so a pass that woke
+nothing looked identical to a seat that had nothing to do.
+
+Measured on the same stub-harness pass (`node demo/cooldown-skip-line.test.mjs`), 2 s per-seat cooldown,
+one queued row for `impl`:
+```text
+before: SKIP idle reason=no-work / PASS 2 ms=0 woke=-          # impl is unaccounted for
+after:  SKIP idle reason=no-work
+        SKIP impl reason=cooldown remaining=1s
+        PASS 2 ms=1 woke=-                                   # the throttle is named, and the time left
+```
+`reason=cooldown remaining=Ns` is the answer to "why is this seat sitting on queued work?": the work is
+not lost - the loop schedules a revisit pass at the deadline the same number produces, and the demo's
+third pass wakes the seat again.
+
+Re-run check: `node demo/cooldown-skip-line.test.mjs` (exit 0; measured 2026-11-10 in the item-6101
+worktree, 262/283 suite with the same 21 environmentally-red live-harness demos as the baseline).
+
 ## If it fails
 - Won't start, or dies again with a storage error → `store-corruption-recovery.md`.
 - Starts but a seat still will not run → `seat-reset.md`.
