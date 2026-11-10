@@ -4,7 +4,9 @@
 **v1.5.1** is on the pin, the mechanical symbol migration is committed, the suite is **282/282 in 47.8 s**, and
 **six of the eight open branches are merged**. The fleet is **awake** and pm has minted the policy rows the
 delegate deliberately did not decide. The worktree/ref inventory is down from 20 worktrees / 27 refs to **16 worktrees, 21 refs**
-(13 refs held by live seat roots or locks). Nothing was pushed; the delegate claimed, completed or deferred no row.)
+at the prune; re-measured at 09:05Z it is **20 worktrees, 24 refs** because the fleet minted `item-3570`, `item-6089`
+and a `verify`-class ref while the pass ran — **count it live, do not trust this number**. Nothing was pushed; the
+delegate claimed, completed or deferred no row.)
 
 **Milestone this window worked** — **landing the pinned pi (D255 → D256, ROADMAP 353–357)**. D255 staged the move;
 this window executed it: pin → tag `v1.5.1`, `pi-schema` first in `packages`, the symbol migration in our source,
@@ -33,16 +35,20 @@ node scripts/test.mjs --all --jobs 8            # must read 282/282; baseline at
 node scripts/sync-pi.mjs --check                # ref "v1.5.1", refType "tag", policyGap null, drift true (a tag pin always drifts)
 node cli.mjs queue --id 6171 --id 6172 --id 6173 --id 6174   # the three policy rows + the item-5301 rework
 node tools/broker-serve.mjs --status            # broker pid is in ./selfdev.sqlite.broker.json
-node tools/rig-portability-audit.mjs            # 1 finding: seat-host-unaware (ROADMAP 217)
-git worktree list | wc -l; git branch --format='%(refname:short)' | wc -l   # 16 and 21 as of this window
+node tools/rig-portability-audit.mjs            # 1 finding: seat-host-unaware (ROADMAP 217) — will EXIT 124 while a generation is in flight
+git worktree list | wc -l; git branch --format='%(refname:short)' | wc -l   # 20 and 24 measured 2026-11-10T09:05Z
 ```
 
-**State:** `main` tip read it with `git rev-parse --short main` (this window ended at `e50cf5b6`; a pinned sha here
-goes stale by its own commits). refs **21**, worktrees **16**. Broker pid **2585214** (`--max-duration 1800`, started
-08:04:34Z, self-exits ~08:34Z) — healthy at clock-out (`heartbeat 3s ago, last pass 3s ago`); **restart it rather than
-assume it is there**; it wedged once this window with
-`PASS-FAILED Error: SqliteStorage is closed` → `HARNESS-REOPEN-CAP-EXCEEDED attempts=4` and was cleared with
-`kill -INT <pid>` → `cli.mjs resume` → restart. Store backup unchanged: `.spike/backups/20261110T0551Z/selfdev.sqlite`
+**State:** `main` tip read it with `git rev-parse --short main` (this window ended at `e3685a8f`; a pinned sha here
+goes stale by its own commits). refs **24**, worktrees **20** (measured 09:05Z with `git worktree list | wc -l` and
+`git branch --format='%(refname:short)' | wc -l`). Broker pid **2585214** is **alive but draining**: started
+`08:04:30.660Z` with `--max-duration 1800`, its last logged pass is `PASS 273 ms=12 woke=-` at `08:34:26.491Z`, the
+heartbeat is seconds old and `lastPassAt` is **31 minutes frozen** — four `selfdev.sqlite.genlock.<n>` files name that
+pid and seat `devtools`, so a generation is in flight and **do not kill it**. Consequence: `cli.mjs queue …` and
+`rig-portability-audit.mjs` both **exit 124** (reads routed to a broker that cannot answer). When it exits, restart
+with `node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800` after `--dry-run` acks. This broker
+wedged once this window with `PASS-FAILED Error: SqliteStorage is closed` → `HARNESS-REOPEN-CAP-EXCEEDED attempts=4`
+and was cleared with `kill -INT <pid>` → `cli.mjs resume` → restart (pitfall **237**). Store backup unchanged: `.spike/backups/20261110T0551Z/selfdev.sqlite`
 (617,492,480 bytes, sha256 `0996cd61…`, `cmp` exit 0).
 
 **Blocker:** none blocking a landing. Two live hazards the next session must not mistake for green: (1)
@@ -89,10 +95,13 @@ node cli.mjs status
    `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md` §8 and pitfall **232**. Do not land until all four close.
 3. **Close the install gap** (ROADMAP **352**, rows **#6125/#6127**): nothing at session start runs
    `tools/compaction-guard-install.mjs --check`, so a fresh clone or worktree starts unguarded with no signal.
-4. **Prune the held refs** — 13 refs stay because their worktrees are locked or are live seat roots
-   (impl=1158, qa=6088, advocate=durian-dev/seatroot, scribe=4102, devtools=6082, auditor=5604, designer=5995,
-   architect=6121). `verify-5180` stays by ruling (ROADMAP 344, no `git branch -D`). Sequence per
-   `docs/runbooks/branch-cleanup.md` / `leaked-worktrees.md`.
+4. **Prune the held refs — the git side is now exhausted.** This pass deleted the only merged+free ref, `item-6082-mig`
+   (tip `6b21e36b`, proved an ancestor of `main` with `git merge-base --is-ancestor` before `-d`). Every remaining merged
+   ref is held by a worktree: seat roots (impl=1158, qa=6088, advocate=durian-dev/seatroot, scribe=4102, devtools=6082,
+   auditor=5604, designer=5995, architect=6121) and in-flight rows (6014, 6057, 6086, 6088, 6089, 6171, 6188, 816,
+   3087, 4878, 5912, 3570); `verify-5180`, `item-5301` and `wip/seat-prompt-files` are unlanded and stay by ruling
+   (ROADMAP 344, `docs/DISPOSITIONS.md` rows). Releasing them needs row terminality, which lives in the store — and the
+   store reads dark right now (pitfall **237**). Sequence per `docs/runbooks/branch-cleanup.md` / `leaked-worktrees.md`.
 5. **Promote the pin probes out of `.spike/`** (**#6176**): `.spike/pin-update/migrate-symbols.mjs` and
    `.spike/pin-update/signature-classify.mjs` are the instruments that made this window fast; an unpromoted probe
    is lost (ROADMAP 312).
@@ -121,7 +130,7 @@ is not on `main`.
 
 **Cost:** spend ledger unchanged — **$0.00** this window (every call went to the loopback provider priced 0/0).
 Wall clock: the full suite is **47.8 s** (was 61.8 s at the old pin); a merged-tree gate per branch is ~47 s;
-`rig-portability-audit` 1,084 ms; the broker preflight ~4 s. **Speed-up worth adopting:** gate every candidate
+`rig-portability-audit` 1,084 ms when the store is readable; the broker preflight ~4 s. **Speed-up worth adopting:** gate every candidate
 branch with `node --check cli.mjs` + `git merge-tree --write-tree` before spending a 47 s suite (pitfall **232**),
 and never run three full suites concurrently — contention produced two false reds this window (pitfall **235**).
 
