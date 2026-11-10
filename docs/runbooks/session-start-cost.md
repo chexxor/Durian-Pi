@@ -740,6 +740,28 @@ claimed=12, queued=138`; **CLAIMABLE 150**; registered items ≥200: **150**, na
 row naming them: **96**. The last number is the one a session should not guess: roadmap intent without a queue row
 is not work, and `cli.mjs status` does not show it. (Measured 2026-11-09; pitfall **207**.)
 
+## 30. THE POINTER IS A CUT, AND THE DIGEST NOW STATES THE CUT (2026-11-10T00:5xZ, devtools, #6067; Linux, Fedora Linux 45, node v24.22.1, git 2.56.0)
+
+`pointerSection()` renders the first `## NEXT SESSION` section verbatim and nothing else — at main `09a94b4c`
+that is **lines 25-68 of 182**, so **114 lines are dropped**, and the file's own link to the verbatim history
+(`docs/NEXT-ARCHIVE.md`, line 181) sits outside that section. A digest that cuts without saying it cut leaves a
+cold session with 44 lines and no route to the rest.
+
+After the verbatim section the renderer now prints:
+
+```
+pointer tail: lines 69-182 of 182 NOT rendered; full history verbatim: Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).
+``
+
+The line is **derived from the file**, not hard-coded: strip the archive link from the source and the digest loses
+it — the demo asserts that direction too, so the check cannot go vacuous.
+
+**Verify (ran 2026-11-10; exit codes from the run):**
+```bash
+node demo/clockin-digest.test.mjs   # exit 0; RED at 09a94b4c: "the pointer still links its own archive"
+node -e "import('./scripts/clockin.mjs').then(m=>{const p=m.pointerSection(require('node:fs').readFileSync('docs/NEXT.md','utf8'));console.log(p.start,p.end,p.fileLines,'tail',p.tail)})"   # 25 68 182 tail 114
+```
+
 **The one number these do NOT give you, and the read that does.** Cache economics are not in the spend ledger —
 `selfdev.sqlite.spend.jsonl` records `cached_tokens: 0` on all 2,030 rows because a row is only written for a
 *metered* endpoint. The durable entries carry the real usage. `.spike/delegate/usage-census.mjs` reads it in about
