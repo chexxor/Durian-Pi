@@ -28,6 +28,7 @@
       "demo/coordinator-queue.test.mjs",
       "demo/ctxline.test.mjs",
       "demo/curate.test.mjs",
+      "demo/declared-window-planes.test.mjs",
       "demo/defer.test.mjs",
       "demo/dry-run.test.mjs",
       "demo/errorwording.test.mjs",
