@@ -307,6 +307,63 @@ try {
 		"the digest says which lines it read and what the cap is",
 	);
 
+	// 3b. THE CUT IS STATED (#6067). The pointer is a section of a longer file, and the file's own
+	// link to the verbatim history sits OUTSIDE that section. A session that reads only the digest
+	// must learn both what was dropped and where the full text lives - otherwise the digest quietly
+	// replaces the record it was built to point at.
+	const archiveText = [
+		"# title",
+		"",
+		"## NEXT SESSION (now)",
+		"body one",
+		"",
+		"## What this pass changed",
+		"history here",
+		"",
+		"Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md).",
+	].join("\n");
+	const pa = pointerSection(archiveText);
+	assert.equal(pa.tail, 4, "the cut counts the four lines it dropped");
+	assert.match(pa.archive, /NEXT-ARCHIVE\.md/, "the archive link is found outside the section");
+	const withArchive = renderDigest({
+		pointer: pa,
+		seats: 0,
+		attention: [],
+		broker: { detail: "NO STATE FILE" },
+		items: [],
+		counts: {},
+		config: {},
+		localEndpoint: "x",
+		selfdevLines: 1,
+		selfdevHeadings: [],
+		ms: 1,
+	});
+	assert.ok(withArchive.includes("NEXT-ARCHIVE.md"), "the digest states its own archive");
+	assert.match(
+		withArchive,
+		/pointer tail: lines 6-9 of 9 NOT rendered/,
+		"the digest names exactly the range the cut dropped",
+	);
+	// NON-VACUITY: the archive line is DERIVED from the file. Strip it from the source and the digest
+	// must lose it - a hard-coded string in the renderer would pass the assertion above forever.
+	const bareText = archiveText.replace(/Full history[^\n]*\n?/, "");
+	const na = pointerSection(bareText);
+	assert.equal(na.archive, null, "no archive pointer in the file means none in the digest");
+	const withoutArchive = renderDigest({
+		pointer: na,
+		seats: 0,
+		attention: [],
+		broker: { detail: "NO STATE FILE" },
+		items: [],
+		counts: {},
+		config: {},
+		localEndpoint: "x",
+		selfdevLines: 1,
+		selfdevHeadings: [],
+		ms: 1,
+	});
+	assert.ok(!withoutArchive.includes("ARCHIVE"), "the archive line is computed, not hard-coded");
+
 	// 4. INTEGRATION, against a store this test builds (never the live rig store).
 	const starter = JSON.parse(readFileSync(join(ROOT, "rig.starter.json"), "utf8"));
 	const rigPath = join(dir, "clockin.rig.json");
