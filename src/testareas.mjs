@@ -1,12 +1,18 @@
-// Functional-area partition of the demo suite (ROADMAP tooling, item #1558).
+// Functional-area partition of the suite (ROADMAP tooling, item #1558; the discovery defect fixed here is #6132).
 //
-// The suite is one flat directory (`demo/*.test.mjs`, ~120+ files). Running all
-// of it is the pre-landing / QA gate; a developer normally needs only their own
-// functional area, which is far cheaper. The area -> file mapping is DATA
-// (`demo/test-areas.json`), not code, so it is reviewable and diffable; and
-// `demo/test-areas.test.mjs` is the check rule that fails when the mapping rots
-// (a test file on disk that is unmapped, a mapped file that no longer exists,
-// a file mapped to two areas, or an empty area).
+// The suite was one flat directory (`demo/*.test.mjs`). Running all of it is the pre-landing / QA gate; a
+// developer normally needs only their own functional area, which is far cheaper. The area -> file mapping is
+// DATA (`demo/test-areas.json`), not code, so it is reviewable and diffable; and `demo/test-areas.test.mjs`
+// is the check rule that fails when the mapping rots (a test file on disk that is unmapped, a mapped file that
+// no longer exists, a file mapped to two areas, or an empty area).
+//
+// MEMBERSHIP IS ALSO DATA (#6132). Discovery used to be hard-wired to `demo/*.test.mjs`, which made every test
+// living elsewhere invisible to the gate that decides whether a landing passes: a seat could edit
+// `tools/compaction-guard-test.mjs`, run "the full suite", get 282 green, and the guard's own test would never
+// have executed. Suite roots are declared in the manifest under `suiteRoots`, so membership is reviewable and
+// an added root is not a quiet code change. Anything test-shaped that is NOT in a declared root is named by
+// `candidateTestsOutsideSuite()` rather than silently dropped: a signal that claims completeness has to name
+// what it left out (#3575: a cheap signal may accept, but it must not decide).
 //
 // This module is pure filesystem + data: no store, no harness, no spawning. The
 // runner (`scripts/test.mjs`) is the only place that executes tests.
@@ -14,6 +20,24 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const MANIFEST_REL = "demo/test-areas.json";
+
+/** Where the suite's tests live. Data in the manifest; these are the defaults. */
+export const DEFAULT_SUITE_ROOTS = [
+	{ dir: "demo", glob: "*.test.mjs", exclude: [] },
+	// tools/ holds instruments, and one of them is NAMED like a test without being one: what-to-test.mjs is the
+	// selector itself, and its behaviour is guarded by demo/land-changed-suite.test.mjs. The exclusion is
+	// declared rather than inferred, so it is reviewable and so a NEW test dropped in tools/ cannot hide behind
+	// it — validateManifest fires on any root file that is neither mapped nor declared excluded.
+	{ dir: "tools", glob: "*-test.mjs", exclude: ["what-to-test.mjs"] },
+];
+
+/** Never our suite: upstream clones, dependencies, scratch, per-item worktrees, git internals. */
+const NON_SUITE_DIRS = new Set(["node_modules", "vendor", ".git", ".spike", ".durig", ".worktrees", "wip", "output", "tmp", ".claude", ".codex"]);
+
+/** Minimal glob (only `*` and `?`) compiled to a anchored regex - no dependency, no surprises. */
+function globToRegex(glob) {
+	return new RegExp("^" + glob.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+}
 
 /** Absolute path to the manifest under `root`. */
 export function manifestPath(root = process.cwd()) {
@@ -27,14 +51,70 @@ export function readManifest(root = process.cwd()) {
 	return JSON.parse(readFileSync(path, "utf8"));
 }
 
-/** Every `demo/*.test.mjs` on disk, repo-relative and sorted. The coverage source of truth. */
+/** Tolerant read: discovery must work where the manifest is absent (fixtures, bare clones). */
+function readManifestSafe(root) {
+	try {
+		return readManifest(root);
+	} catch {
+		return {};
+	}
+}
+
+/** The declared suite roots: `suiteRoots` from the manifest, else the demo/tools defaults. */
+export function suiteRoots(manifest = readManifestSafe(process.cwd())) {
+	const roots = manifest?.suiteRoots;
+	if (!Array.isArray(roots) || roots.length === 0) return DEFAULT_SUITE_ROOTS;
+	return roots.filter((r) => r && typeof r.dir === "string" && typeof r.glob === "string").map((r) => ({ dir: r.dir, glob: r.glob, exclude: Array.isArray(r.exclude) ? r.exclude : [] }));
+}
+
+/**
+ * Every suite member on disk, repo-relative and sorted — the coverage source of truth. Membership is decided
+ * by the declared roots, not by which directory a test happens to sit in.
+ */
 export function discoverTests(root = process.cwd()) {
-	const dir = join(root, "demo");
-	if (!existsSync(dir)) return [];
-	return readdirSync(dir)
-		.filter((f) => f.endsWith(".test.mjs"))
-		.sort()
-		.map((f) => `demo/${f}`);
+	const found = [];
+	for (const { dir, glob, exclude } of suiteRoots(readManifestSafe(root))) {
+		const d = join(root, dir);
+		if (!existsSync(d)) continue;
+		const re = globToRegex(glob);
+		for (const f of readdirSync(d)) if (re.test(f) && !exclude.includes(f)) found.push(`${dir}/${f}`);
+	}
+	return found.sort();
+}
+
+/** Files a root declares it does NOT run, with the reason they were declared. Named, never assumed. */
+export function declaredExclusions(manifest = readManifestSafe(process.cwd())) {
+	return suiteRoots(manifest).flatMap((r) => r.exclude.map((f) => `${r.dir}/${f}`));
+}
+
+/**
+ * Test-shaped files the suite does NOT run (#6132). Discovery is a partition by declared roots, so a test
+ * written outside them is invisible to the gate; this names them instead of letting the gate assert a
+ * completeness it does not have. Upstream clones and dependency trees are excluded on purpose: swallowing them
+ * would make our gate run somebody else's suite.
+ */
+export function candidateTestsOutsideSuite(root = process.cwd()) {
+	const known = new Set(discoverTests(root));
+	const excluded = new Set(declaredExclusions(readManifestSafe(root)));
+	const out = [];
+	const walk = (dir, rel) => {
+		for (const entry of readdirSync(dir)) {
+			if (NON_SUITE_DIRS.has(entry) || entry.startsWith("item-") || entry.startsWith(".")) continue;
+			const abs = join(dir, entry);
+			const relPath = rel ? `${rel}/${entry}` : entry;
+			let isDir = false;
+			try {
+				readdirSync(abs); // a directory lists; a file throws ENOTDIR
+				isDir = true;
+			} catch {
+				isDir = false;
+			}
+			if (isDir) walk(abs, relPath);
+			else if (/(-test|\.test)\.mjs$/.test(entry) && !known.has(relPath) && !excluded.has(relPath)) out.push(relPath);
+		}
+	};
+	walk(root, "");
+	return out.sort();
 }
 
 /** Area names, sorted. */
@@ -83,6 +163,11 @@ export function validateManifest(root = process.cwd()) {
 	}
 	for (const file of onDisk) {
 		if (!mappedTo.has(file)) errors.push(`"${file}" is on disk but not mapped to any area (add it to ${MANIFEST_REL})`);
+	}
+	// A declared exclusion must be real and must be justified in the manifest note: an exclusion that rots is
+	// how a test becomes invisible again, which is the whole defect this partition exists to prevent (#6132).
+	for (const file of declaredExclusions(manifest)) {
+		if (!existsSync(join(root, file))) errors.push(`"${file}" is declared excluded from the suite but does not exist on disk`);
 	}
 	return { ok: errors.length === 0, errors: errors.sort() };
 }
