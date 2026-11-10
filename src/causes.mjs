@@ -47,6 +47,45 @@ export function spendCapNamed(text) {
 }
 
 /**
+ * The provider refused the CREDENTIAL (#6081). Raised by the wire - a 401/403 whose body talks about the key -
+ * and acted on by `src/attention.mjs` and `src/supervisor.mjs`.
+ *
+ * Why it needs its own class rather than a word in the prose: on 2026-11-10 the broker process was started
+ * without `DURIG_LOCAL_API_KEY`, every seat generation answered 401, the store filed each run as the bare
+ * category `model_error`, and the supervisor's repeated-failure guard escalated 171 queue rows to the human.
+ * A missing environment variable is not a seat that cannot make progress: the operator sets the variable, and
+ * a human has nothing to decide. Classifying it as `repeated_failure` converted an environment fault into 171
+ * parked items and a fleet that reported nothing to claim.
+ *
+ * Matching is substring-based and never anchored, for the same reason the spend matcher is: pi-ai can wrap the
+ * provider's response before it reaches a seat entry.
+ */
+export const PROVIDER_AUTH_CAUSE = "provider_auth";
+
+/** Phrases that mean "the credential was absent or wrong", in the provider bodies this rig has actually seen. */
+const PROVIDER_AUTH_MARKERS = [
+	"missing or wrong api key",
+	"invalid api key",
+	"invalid apikey",
+	"authentication_error",
+	"api key is required",
+	"no credential",
+	"unauthorized",
+	"forbidden",
+];
+
+/** Is this error message the provider refusing the credential? A spend stop is never one - the rig's own cap
+ * decision is checked first so a message naming both can only read as the money stop. */
+export function isProviderAuthStopMessage(text) {
+	if (typeof text !== "string") return false;
+	const lower = text.toLowerCase();
+	if (isSpendStopMessage(lower)) return false;
+	if (PROVIDER_AUTH_MARKERS.some((marker) => lower.includes(marker))) return true;
+	// The status code alone, bounded so "1401 tokens" is not a 401.
+	return /(^|[^0-9])(401|403)([^0-9]|$)/.test(lower);
+}
+
+/**
  * One turn MOVED more tokens than the seat's window allows (#5049, ROADMAP 208).
  *
  * This is a NOTICE, not a stop. Nothing parks, retries or escalates on it, and `src/supervisor.mjs`

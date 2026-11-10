@@ -127,6 +127,7 @@
       "demo/local-reset.test.mjs",
       "demo/malformedcall.test.mjs",
       "demo/parked-wake-dedup.test.mjs",
+      "demo/provider-auth-cause.test.mjs",
       "demo/pause-wait-bound.test.mjs",
       "demo/pause.test.mjs",
       "demo/readboundary-corrupt-live.test.mjs",
