@@ -1,11 +1,11 @@
 ---
 runbook: run-your-area
-symptom: "which tests do I run before landing? the demo suite is 238 files"
+symptom: "which tests do I run before landing? the suite is 283 files"; "I added a test and the gate never ran it"
 writes: false
 precondition: "read-only"
-last_verified: 2026-10-28
-verified_by: delegate
-evidence: "#1558 (test-area partition); re-ran Diagnose/Do/Verify on 2026-10-28 on Linux: `--list` 238 tests / manifest covers all, `--area docs` 5 tests in 0.1 s, `--all` 238/238, and the new diff-derived path `tools/what-to-test.mjs --run` over a docs-only change: 15 derived guards in 11.8 s (5 direct guards in 5.3 s) against 41.8 s for the full suite"
+last_verified: 2026-11-10
+verified_by: devtools
+evidence: "#1558 (test-area partition); #6132 (suite MEMBERSHIP is declared, not inferred). Re-ran Diagnose/Do/Verify 2026-11-10 on Linux: `--list` 283 tests / manifest covers all (roots demo/*.test.mjs + tools/*-test.mjs, one declared exclusion), `--area docs` exit 0, `--all` 283/283 in 67.5 s; falsifier: dropping `tools/zz-probe-test.mjs` in a root made `--list` exit 1 and `--all` exit 1 with `"tools/zz-probe-test.mjs" is on disk but not mapped to any area`, and the probe was then removed"
 check_rule: "demo/test-areas.test.mjs (the partition cannot silently rot)"
 ---
 
@@ -13,8 +13,11 @@ check_rule: "demo/test-areas.test.mjs (the partition cannot silently rot)"
 
 ## When to use
 You are about to land a change and want the cheap check for YOUR functional area; or you
-are QA and need the whole suite. The demo suite is one flat directory (`demo/*.test.mjs`)
-of 120+ files, and running all of it is slow.
+are QA and need the whole suite. Suite membership is **declared data**: `demo/test-areas.json`
+lists `suiteRoots` (`demo/*.test.mjs` and `tools/*-test.mjs`, with one declared exclusion) and maps
+every file the roots discover to exactly one area. Before #6132 discovery was hard-wired to
+`demo/*.test.mjs`, so a test living in `tools/` — `tools/compaction-guard-test.mjs` is the concrete
+case — was invisible: the full suite printed 282 green and never ran the guard's own test.
 
 ## Impact
 Doing nothing: a change lands on a subset that never exercised the code it touched, and a
@@ -68,13 +71,25 @@ that no longer exists, or a file listed in two areas.
 3. A hung test is bounded by `--timeout <ms>` (default 120000) and reported as `TIMEOUT`, never awaited. Slowest
    demo here is ~17s, so the bound is ~7x headroom; if you hit it, that is a real hang, not a slow machine.
 4. If you ADD a test file, map it in `demo/test-areas.json` in the SAME commit — the
-   coverage rule (`demo/test-areas.test.mjs`) fails the full gate otherwise.
+   coverage rule (`demo/test-areas.test.mjs`) fails the full gate otherwise. This now applies to
+   `tools/` too: a test in a declared root is a suite member and must be mapped. A test-shaped file
+   OUTSIDE the roots is not run by the gate at all; `--list` names it, so decide — map it, declare it
+   as an exclusion with a reason, or delete it.
 
 ## Verify
 ```bash
-node scripts/test.mjs --list           # exit 0; "manifest covers all of them"
+node scripts/test.mjs --list           # exit 0; "283 tests on disk (roots: demo/*.test.mjs, tools/*-test.mjs); manifest covers all of them"
 node scripts/test.mjs --area toolchain # exit 0 (the tooling's own area)
-node tools/what-to-test.mjs --paths=docs/NEXT.md --direct-only   # exit 0; names demo/next-pointer.test.mjs as a direct guard
+node tools/what-to-test.mjs --paths=tools/compaction-guard-test.mjs   # exit 0; selects the guard's own test as a DIRECT guard (area guard)
+node tools/what-to-test.mjs --paths=docs/NEXT.md --direct-only       # exit 0; names demo/next-pointer.test.mjs as a direct guard
+```
+
+It must be able to fail — run the falsifier, then remove the probe:
+```bash
+printf '// falsifier probe\n' > tools/zz-probe-test.mjs
+node scripts/test.mjs --list   # exit 1: "tools/zz-probe-test.mjs" is on disk but not mapped to any area
+node scripts/test.mjs --all    # exit 1: the gate cannot be green over a test it does not map
+rm tools/zz-probe-test.mjs
 ```
 
 ## If it fails
@@ -84,6 +99,9 @@ node tools/what-to-test.mjs --paths=docs/NEXT.md --direct-only   # exit 0; names
   see whose change it is.
 - `manifest ROTATED: "demo/x.test.mjs" is on disk but not mapped` → add the file to an
   area in `demo/test-areas.json`.
+- `--list` prints `N test-shaped file(s) OUTSIDE the suite roots — the gate never runs these` → that test
+  exists and nobody executes it. Put its directory in `suiteRoots` and map it, or delete it. Silence here is
+  the defect #6132 was opened for.
 - A test fails → read the tail the runner prints to stderr; the test file's own header
   says what it proves. Re-run it alone with `node demo/<name>.test.mjs`.
 - `TIMEOUT <file>` → the demo never exited; the runner killed its whole process tree (on POSIX; on Windows only
