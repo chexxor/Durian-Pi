@@ -255,7 +255,7 @@ ask "stop or not?" or "why did --suite fail?".
    rule as written; the rule was under-specified about WHICH TREE, which is why this line exists.
    To count it yourself on any candidate: `git ls-tree -r --name-only <ref> -- demo | grep '\.test\.mjs$'`
    for both refs, and compare against the manifest rows the branch would land.
-3. Land the clean set in ONE call: `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite`.
+3. Land the clean set in ONE call — **the gate flag is required** (#6090): `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite --suite` (or `--changed-suite`). Without one of the two the helper refuses before it touches git.
    Read the JSON report; `lock.reserved:true` / `lock.waitedMs` show it waited for the slots.
 4. **The `--suite` gate works again (FIXED 2026-10-19, `impl-item-2679` on `main`).** The defect was:
    `--suite` runs each demo in the helper's **detached** scratch worktree, and the `shared-tree-on-main`
@@ -266,7 +266,8 @@ ask "stop or not?" or "why did --suite fail?".
    result before it becomes `main`. **But `--suite` is a FIRST-FAILURE loop:** it stops at the first
    non-zero demo, so while `pitui` (#2412) is known-red it never reaches the tests that sort after it
    (2026-10-20: it stopped at 89 demos and never ran `test-areas`, which was the real new failure). When
-   `--suite` cannot be used, land WITHOUT it and run the FULL `node scripts/suite.mjs` on `main` — that is
+   `--suite` cannot be used, land with `--changed-suite` (the derived subset — there is NO no-gate path
+   any more, #6090) and run the FULL `node scripts/suite.mjs` on `main` afterwards — that is
    the complete check, not a spot check:
    ```bash
    node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite --suite
@@ -378,10 +379,18 @@ ask "stop or not?" or "why did --suite fail?".
    writing the same commit reported 3 red in the seat root and 7 after a worktree-local `npm ci` — two of
    those were REAL content defects, one was an environment guard and five were dependency-version
    artefacts. A landing pass that treats the delta as noise will treat the real ones as noise too.
-#### ⚠ WHEN `main` IS ALREADY RED: land WITHOUT `--suite`, then prove on `main` — AND DELETE THIS SECTION WHEN IT CLEARS
+#### ⚠ WHEN `main` IS ALREADY RED: the derived gate is the only lighter path — and proving on `main` is still required
 
-**The workaround, while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
-./selfdev.sqlite` and **no `--suite`**, then prove the result on `main` in a clean DETACHED worktree.
+**What you can do while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
+./selfdev.sqlite --changed-suite` — the derived subset runs only the tests the change itself implies, so
+unrelated known-red areas are not in the sweep. It is NOT a green gate: the report names the areas it did
+NOT run, and if the derivation finds no test at all the landing is REFUSED (zero tests is not a gate).
+Then prove the result on `main` in a clean DETACHED worktree as before.
+
+**What is no longer available (#6090):** landing with NO gate flag. That was the escape hatch for a red
+`main`; the helper now refuses before the merge and names the missing flag. `--suite` is impossible while
+`main` is red for the reason below, so `--changed-suite` is the honest lighter path — and "the change
+derives no test" is a signal to land the fix-first row, not to skip the check.
 
 **Why:** `--suite` exists to prove the MERGED result *before* `main` moves. When `main` is already
 failing, that proof cannot distinguish the landing's own breakage from the pre-existing redness — it
@@ -545,7 +554,7 @@ The helper's pre-flight, in code (the enforcement chokepoint):
    ```
 2. Land with the helper (its JSON report is always printed):
    ```bash
-   node scripts/land.mjs <branch> [<branch>...] [--repo <repo>] [--db <path>] [--suite] [--keep]
+   node scripts/land.mjs <branch> [<branch>...] [--repo <repo>] [--db <path>] (--suite | --changed-suite) [--keep]
    ```
    - `--repo <dir>` — the shared repository root (default: the repo containing cwd).
    - `--db <path>` — the rig store for the genlock pre-flight (default: `DURIAN_PI_DB`, else the store the
@@ -607,7 +616,7 @@ preflight. Loop, re-preflighting against the **moving** `main` before each one:
 for b in <branches in landing order>; do
   git rev-parse --verify --quiet "$b" >/dev/null || { echo "$b MISSING"; continue; }
   git merge-tree --write-tree main "$b" >/dev/null 2>&1 || { echo "$b CONFLICT (skip)"; continue; }
-  node scripts/land.mjs "$b" --db ./selfdev.sqlite > .spike/delegate/land-$b.out 2>&1 \
+  node scripts/land.mjs "$b" --db ./selfdev.sqlite --changed-suite > .spike/delegate/land-$b.out 2>&1 \
     && echo "$b LANDED -> $(git rev-parse --short main)" || echo "$b FAILED"
 done
 ```
