@@ -11,6 +11,12 @@
 //
 // It must remain a write-side process: a passive viewer never schedules (D11),
 // which is why this is a command and not something `watch` does.
+//
+// The wake predicate reuses the CLAIM predicate (`workable`, src/rig.mjs, #2673/#2677) rather than
+// re-deriving it from a status literal (#6189). A gate rule kept in two places is a rule that drifts
+// (#6112), and the drift here is invisible: the seat wakes, `claim_work` refuses, and the log says
+// nothing about why.
+import { workable } from "./rig.mjs";
 
 /**
  * The wake a seat is sent. A fixed string on purpose: the wake is committed as a
@@ -76,7 +82,12 @@ export function parkedSignature(items, seatName) {
 
 /**
  * Which seats to wake. A seat is woken when it has work to advance:
- *   - at least one QUEUED item addressed to it (the ride continues), or
+ *   - at least one QUEUED item addressed to it THAT THIS SEAT CAN CLAIM (the ride continues).
+ *     #6189: "queued" alone is not claimable. A queued row whose `blockedBy` gate is still open, or
+ *     whose `requires` capability the seat does not advertise, is refused by `claim_work` (#2673), so
+ *     waking for it is a no-op wake: the observed 4-wake streak on a seat whose only queued row was
+ *     gated. The SAME predicate the claim path uses decides this; the ambiguous case (a gate id naming
+ *     no row) stays WORKABLE by ruling, because a false negative starves real work.
  *   - a STALLED CLAIM - a `claimed` item whose run died: no submission already in
  *     flight (its conversation is not in `pendingConvIds`), no live generation
  *     lease (`busySeats`), and its seat's latest settled submission did NOT end in
@@ -116,7 +127,14 @@ export function selectWakes({
     // ROADMAP 131: while PAUSED, do NOT wake a seat to CLAIM new work. In-flight work
     // still settles, so the stalled-claim branch below stays open: pause gates TAKING
     // new work, never FINISHING current work.
-    const hasQueued = !paused && (items ?? []).some((it) => it.to === name && it.status === "queued");
+    // THE CLAIMABILITY GATE (#6189). `workable` is the predicate `claim_work` already uses, so the wake
+    // and the verb cannot disagree. Verdicts are kept because the SKIP line must NAME the reason: a seat
+    // that never wakes is otherwise indistinguishable from a seat with nothing in its queue.
+    const queuedVerdicts = (items ?? [])
+      .filter((it) => it.to === name && it.status === "queued")
+      .map((it) => workable(it, name, { items, capabilities: seat.capabilities ?? [] }));
+    const gatedReasons = queuedVerdicts.filter((v) => !v.workable).map((v) => v.reason);
+    const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);
     // A stalled claim: the item is claimed but nothing is advancing it (no
     // submission in flight, no live lease) and the operator did not stop the seat's
     // run (its latest submission did not settle `aborted:<reason>`).
@@ -140,7 +158,14 @@ export function selectWakes({
       onParked({ seat: name, reason: parkedUnchanged ? "deduped" : "set-changed" });
     }
     if (!hasQueued && !hasStalledClaim && !hasParked) {
-      onSkip({ seat: name, reason: parkedUnchanged ? "parked-deduped" : "no-work" });
+      // `queued-gated:<code>` is reported ahead of `no-work` so the log distinguishes "this seat has rows
+      // it cannot claim yet" from "this seat has nothing". Both were `no-work` before #6189.
+      const reason = gatedReasons.length
+        ? `queued-gated:${gatedReasons.join(",")}`
+        : parkedUnchanged
+          ? "parked-deduped"
+          : "no-work";
+      onSkip({ seat: name, reason });
       continue;
     }
     // Already advancing: a submission is in flight, or a generation lease is held.

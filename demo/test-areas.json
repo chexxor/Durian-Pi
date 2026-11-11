@@ -162,6 +162,7 @@
       "demo/stoprequest.test.mjs",
       "demo/storewrite.test.mjs",
       "demo/supervisor.test.mjs",
+      "demo/wake-claimability.test.mjs",
       "demo/wake-reason.test.mjs",
       "demo/wake-suppression-trace.test.mjs",
       "demo/wake-trace-wiring.test.mjs"
