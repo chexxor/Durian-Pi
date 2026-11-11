@@ -11779,3 +11779,37 @@ the very condition it diagnoses. Every route must print which path served the re
 **Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
+
+## D266 — (provisional; re-mint at merge by scanning this file for the next free number — the highest in this fork was D264, and D265 is provisionally held by branch `item-4879`) a competing-products research commission is not routable until it carries the iteration-architecture questions, and routability is checked by grep (architect, item #5148, 2026-11-11)
+
+**Decision.** Before a research prompt that surveys competing products is handed to the operator for
+routing, it must contain the D213 iteration-architecture questions: piece boundaries and their loop
+cost, hermetic vs live test planes, how the model is mocked or substituted, how prompt/policy text is
+regression-tested, what bounds a long agent turn, and how slow tests are quarantined. The check is a
+grep, not a judgement: `grep -ci "iteration|hermetic|mock|regression" <prompt>` returning 0 is a
+refusal to route.
+
+**Context:** intake of `docs/reviews/agent-fleet-containment-domain-map-research-prompt.md` (#5148).
+`docs/runbooks/research-request.md` Do step 1 already requires these questions for any pass over
+competing products, but nothing checks it. Measured on the prompt as it stood: `iteration=0`,
+`test plane=0`, `hermetic=0`, `mock=0`, `regression=0`, `loop cost=0`, `quarantine=0`. Meanwhile every
+other intake claim checked out — the "~27 pinned projects" claim matches `grep -c '^| ' docs/VENDOR-PINS.md`
+= 27, and all 13 projects the prompt excludes are real pins.
+
+**Alternatives considered:** (a) leave it to the reviewer's judgement — rejected, the requirement was
+written and still was not met, which is the definition of an unenforced norm; (b) add the questions
+after the report arrives as a follow-up round — rejected, it costs a whole second commission for a
+gap that was visible before routing (round 3 of the harness-tools survey exists for exactly this
+reason); (c) fold the iteration questions into each of the nine existing questions — rejected, they
+would be answered by prose rather than by a table the map can be checked against.
+
+**Consequences.** Prompts already routed without these questions stay valid as far as they go, but any
+new commission carries the addendum, and the runbook's Verify step now states the grep so a seat can
+fail a prompt before it reaches the operator. The accepted cost: a survey that cannot answer iteration
+cost is treated as incomplete even when its landscape table is excellent — that is deliberate, because
+D213 makes iteration speed an architectural requirement, and a map of containment without a map of how
+fast containment can change leaves out the half that decides our own shape.
+
+**Residual:** the intake also surfaced a gate that cannot clear — #5152 (`blockedBy 4829, 5147, 5148`)
+is gated on a `deferred` and a `held` row, both with no authored park block. That is #6880's class,
+owned by `pm`/`lead`, not decided here.

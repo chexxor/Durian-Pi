@@ -82,6 +82,8 @@ avoid, control shipped as an installable extension, and a model as the adjudicat
    implement ourselves because no shipped project provides them at our constraint set, and the places where the field's
    accepted answer is wrong for a rig that runs *twelve cooperating agents that share one durable store*.
 
+10. **How fast can the containment change?** (intake addendum, #5148, 2026-11-11 — required by `docs/runbooks/research-request.md` Do step 1 and the D213 iteration-architecture lens; the survey otherwise answers *who contains agents* without answering *how quickly they can change the containment*.) For each family in Q1, where the material exists: what are the pieces of the control plane and what is the loop cost of changing one; is the test plane hermetic or does it need a live model, a live host, or a network; how is the model mocked or substituted in tests; how are **prompt and policy-text changes regression-tested**; what bounds a long agent turn (a token cap, a turn cap, a wall-clock cap); and how are slow or flaky tests quarantined rather than run every time. Mark `not shipped` where a product ships control but no way to test a change to it cheaply — that absence is itself the finding.
+
 ## Deliverable
 
 Report to **`docs/reviews/agent-fleet-containment-domain-map-research.md`**. Each section as **one fenced block with no
@@ -101,7 +103,8 @@ narration glued to the title line** (what arrives in chat is what we commit verb
    the vendors' exact wording.
 8. **Licence map** (Q8) — mechanism · project · licence · MIT-compatible? · obligation under (a)–(d) above.
 9. **Gaps we would have to fill ourselves** (Q9) — each with the closest existing thing and why it falls short.
-10. **What this changes about our plan** — a short list of decisions the map *supports* and a short list of decisions it
+10. **Iteration-cost table** (Q10) — family · pieces of the control plane · loop cost of changing one · hermetic/live test plane · how the model is mocked · how prompt or policy text is regression-tested · what bounds a long turn · how slow tests are quarantined. One pointer per cell, same evidence classes as above.
+11. **What this changes about our plan** — a short list of decisions the map *supports* and a short list of decisions it
     *contradicts*, each tied to a row above. Do not propose our architecture; tell us where our stated constraints make
     an industry-standard option unavailable.
 
