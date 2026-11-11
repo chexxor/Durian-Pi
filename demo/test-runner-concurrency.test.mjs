@@ -30,10 +30,14 @@ mkdirSync(join(root, "src"), { recursive: true });
 try {
 	// The runner anchors discovery to its OWN location (ROOT is derived from import.meta.url), which is the
 	// right behaviour for a gate — it must not depend on the caller's cwd. To exercise it against fixtures
-	// without polluting the real suite, give the fixtures their own copy of the runner and the one module it
-	// imports. Two files, both copied verbatim, so what is under test is the real code path.
+	// without polluting the real suite, give the fixtures their own copy of the runner and everything it
+	// imports, verbatim: test.mjs -> src/testareas.mjs and src/provenance.mjs (#6196 header) ->
+	// scripts/sync-pi.mjs (the link inspection provenance reuses). Four files, all verbatim, so what is
+	// under test is the real code path.
 	copyFileSync(join(ROOT, "scripts", "test.mjs"), join(root, "scripts", "test.mjs"));
 	copyFileSync(join(ROOT, "src", "testareas.mjs"), join(root, "src", "testareas.mjs"));
+	copyFileSync(join(ROOT, "src", "provenance.mjs"), join(root, "src", "provenance.mjs"));
+	copyFileSync(join(ROOT, "scripts", "sync-pi.mjs"), join(root, "scripts", "sync-pi.mjs"));
 	const localRunner = join(root, "scripts", "test.mjs");
 	// FIXTURES: three tests that sleep ~1.5s each. Serial they cost >= 4.5s of sleep; concurrent they cost
 	// ~1.5s. The wall clock is the assertion - not a count of workers, which would pass even if the workers

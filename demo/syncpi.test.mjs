@@ -32,9 +32,11 @@ import {
 // --- arguments -------------------------------------------------------------
 assert.deepEqual(
 	parseArgs([]),
-	{ check: true, sync: false, update: false, observe: false, link: false, unlink: false, ref: null },
+	{ check: true, sync: false, update: false, observe: false, link: false, unlink: false, report: false, ref: null },
 	"no flags means a drift check",
 );
+assert.equal(parseArgs(["--report"]).report, true, "--report is a verb of its own: pin vs resolved, read-only");
+assert.equal(parseArgs(["--report"]).check, false, "--report is an action, so it is not also a drift check");
 assert.equal(parseArgs(["--sync"]).sync, true);
 assert.equal(parseArgs(["--update"]).update, true);
 assert.equal(parseArgs(["--link"]).link, true);
@@ -254,6 +256,11 @@ try {
 	mkdirSync(join(rigDir, "vendor"), { recursive: true });
 	const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 	writeFileSync(join(rigDir, "scripts", "sync-pi.mjs"), readFileSync(join(ROOT, "scripts", "sync-pi.mjs"), "utf8"));
+	// #6196: sync-pi now imports src/provenance.mjs for the dependency report, so the fixture rig needs it
+	// too - a copied tool must carry what it imports, or the fixture fails for a reason unrelated to the
+	// behaviour under test.
+	mkdirSync(join(rigDir, "src"), { recursive: true });
+	writeFileSync(join(rigDir, "src", "provenance.mjs"), readFileSync(join(ROOT, "src", "provenance.mjs"), "utf8"));
 	writeFileSync(
 		join(rigDir, "pi-main.pin.json"),
 		JSON.stringify({ repo: `file://${repo}`, branch: "main", sha: shaA, pinnedAt: "2026-11-01T00:00:00.000Z", packages: [] }, null, 2) + "\n",
