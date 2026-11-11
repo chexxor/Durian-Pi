@@ -174,6 +174,10 @@ const rows = refs.map((ref) => {
 const tally = {};
 for (const r of rows) tally[r.verdict] = (tally[r.verdict] || 0) + 1;
 
+// Every ref must be ACCOUNTED: on main, a seat root, or named in the ledger. An unaccounted ref is a
+// hole in the record, not a cleanup candidate.
+const unaccounted = rows.filter((r) => !r.merged && r.keepReason !== "seat-root" && !ledger.includes(r.ref)).map((r) => r.ref);
+
 const plan = rows
 	.filter((r) => r.verdict.startsWith("prune:") && !r.verdict.includes("needs a landing entry"))
 	.map((r) => ({
@@ -195,6 +199,7 @@ const out = {
 	refs: refs.length,
 	worktrees: (audit.worktrees || []).length,
 	tally,
+	unaccounted,
 	plan,
 	needsLanding,
 	kept,
@@ -249,6 +254,9 @@ console.log(
 				"",
 				`prune plan (${plan.length}) — refs whose work is provably on main:`,
 				...plan.slice(0, flag("--plan") ? plan.length : 12).map((p) => `  ${p.command}`),
+				"",
+				`unaccounted refs (${unaccounted.length}) — not on main, not a seat root, no ledger row:`,
+				...unaccounted.map((r) => `  ${r}`),
 				"",
 				`needs a landing decision (${needsLanding.length}) — unmerged, clean, item terminal:`,
 				...(flag("--plan") ? needsLanding : needsLanding.slice(0, 15)).map((r) => `  ${r.ref}  ahead=${r.ahead}  item=${r.item ?? "-"}  status=${r.status ?? "no row"}`),

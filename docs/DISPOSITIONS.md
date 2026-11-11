@@ -386,3 +386,33 @@ Each row's evidence is a probe actually run in the pass (`git rev-list --count`,
 | 2026-11-11 | `item-6782` | tip `e6775ebb`, 2 ahead of `main` | **OPEN — UNLANDED, no ruling** (census entry, not a disposition) | worktree `item-6782`, item #6782 status `done`, `git merge-tree main item-6782` exits 0 and its tree differs from `main` (the branch carries content not on `main`); `git branch -d` refuses it | delegate census |
 | 2026-11-11 | `item-6809` | tip `35001c3a` (= `main`) | **LAND (ref removed)** | `git merge-base --is-ancestor item-6809 main` exit 0, worktree clean; `git worktree remove` then `git branch -d`, both exit 0, no `--force` | this pass |
 | 2026-11-11 | `item-6063`, `item-6064`, `item-6066` | `6fb7b30b` / `0bfd61a5` / `bcaa6d2b` | **KEEP-HELD — re-affirmed; a prune attempt was reversed** | the first plan `-d`'d all three (a reverted merge is an ancestor of `main`, so `-d` succeeds). Each was restored with `git branch <name> <sha>` from the delete output and verified: ancestor exit 0, tip identical. Now protected by the census tool's ledger check. | this pass |
+| 2026-11-11 | `item-6101` | tip `faa20806`, 3 ahead of `main` | **OPEN — CONFLICTS — the author re-cuts; not a delegate merge** (census entry, not a ruling) | no worktree holds it; item #6101 status `no row`; `git merge-tree main item-6101` conflict | delegate census |
+| 2026-11-11 | `item-6116` | tip `a4850ac5`, 3 ahead of `main` | **OPEN — CONFLICTS — the author re-cuts; not a delegate merge** (census entry, not a ruling) | `item-6116` holds 0 uncommitted tracked change(s); item #6116 status `done`; `git merge-tree main item-6116` conflict | delegate census |
+| 2026-11-11 | `item-6162` | tip `e4fb3e50`, 4 ahead of `main` | **OPEN — CONFLICTS — the author re-cuts; not a delegate merge** (census entry, not a ruling) | no worktree holds it; item #6162 status `no row`; `git merge-tree main item-6162` conflict | delegate census |
+| 2026-11-11 | `item-6330` | tip `4696b656`, 4 ahead of `main` | **OPEN — CONFLICTS — the author re-cuts; not a delegate merge** (census entry, not a ruling) | no worktree holds it; item #6330 status `no row`; `git merge-tree main item-6330` conflict | delegate census |
+| 2026-11-11 | `item-6336` | tip `ba737a53`, 5 ahead of `main` | **OPEN — CONFLICTS — the author re-cuts; not a delegate merge** (census entry, not a ruling) | `item-6336` holds 0 uncommitted tracked change(s); item #6336 status `done`; `git merge-tree main item-6336` conflict | delegate census |
+| 2026-11-11 | `item-6429` | tip `41000315`, 0 ahead of `main` | **OPEN — DIRTY — the uncommitted work is the sole copy** (census entry, not a ruling) | `item-6429` holds 1 uncommitted tracked change(s); item #6429 status `done`; `git merge-tree main item-6429` n/a | delegate census |
+| 2026-11-11 | `item-6478` | tip `faa20806`, 3 ahead of `main` | **OPEN — CONFLICTS — the author re-cuts; not a delegate merge** (census entry, not a ruling) | `item-6478` holds 0 uncommitted tracked change(s); item #6478 status `done`; `git merge-tree main item-6478` conflict | delegate census |
+| 2026-11-11 | `item-6517` | tip `546a886e`, 3 ahead of `main` | **OPEN — UNROUTED — no queue row proves the item is terminal** (census entry, not a ruling) | no worktree holds it; item #6517 status `no row`; `git merge-tree main item-6517` clean | delegate census |
+
+### Refs minted during the pass (live fleet, re-measure before acting)
+already ruled: item-1158
+already ruled: item-3087
+already ruled: item-6057
+already ruled: item-6101
+already ruled: item-6116
+already ruled: item-6162
+already ruled: item-6290
+already ruled: item-6317
+already ruled: item-6328
+already ruled: item-6330
+already ruled: item-6336
+already ruled: item-6429
+already ruled: item-6478
+already ruled: item-6517
+already ruled: seatroot/linux
+already ruled: wip/seat-prompt-files
+
+rows: 0
+| 2026-11-11 | `item-6344` | tip `bc9fb6e0`, 2 ahead of `main` | **OPEN — UNLANDED, no ruling** (census entry, minted during the pass) | clean worktree `item-6344`, item status `done`; `git branch -d` refuses it; `git merge-tree main item-6344` clean and its tree differs from `main` | delegate census |
+| 2026-11-11 | `item-6369` | tip `339c559a`, 2 ahead of `main` | **OPEN — UNLANDED, no ruling** (census entry, minted during the pass) | clean worktree `item-6369`, item status `done`; `git branch -d` refuses it; `git merge-tree main item-6369` clean and its tree differs from `main` | delegate census |
