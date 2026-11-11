@@ -232,6 +232,53 @@ function onlyReadIntents(dbPath) {
   return true;
 }
 
+/**
+ * THE SPOOL CENSUS (#6139): what is sitting undrained in `<db>.broker.inbox`, and how long.
+ *
+ * WHY THIS IS A MEASURE AND NOT A LOG LINE. A broker that is alive-but-parked looks healthy from
+ * the outside: the heartbeat advances, `lastPassAt` freezes, and a read verb times out at its
+ * bound. The intent files are the one observable that says WHICH leg is stuck - a spool full of
+ * reads means the drain is not running, an empty spool with a frozen pass means the drain ran and
+ * the harness could not answer. Without the count and the age, "the broker did not reply" and
+ * "the broker has nothing to do" are the same sentence.
+ *
+ * Returns `{ count, reads, mutations, unreadable, oldestAt, oldestAgeMs, newestAt }` — ages in ms
+ * from `now`. An empty spool returns all zeros rather than null, so a caller can print it without
+ * branching.
+ */
+export function pendingIntentCensus(dbPath, { now = Date.now() } = {}) {
+  const files = readIntentFiles(dbPath);
+  let reads = 0;
+  let mutations = 0;
+  let unreadable = 0;
+  let oldestAt = null;
+  let newestAt = null;
+  for (const file of files) {
+    let request;
+    try {
+      request = JSON.parse(readFileSync(file, "utf8"));
+    } catch {
+      unreadable += 1;
+      continue;
+    }
+    if (requestOp(request) === "read") reads += 1;
+    else mutations += 1;
+    const at = Date.parse(request?.createdAt ?? "");
+    if (!Number.isFinite(at)) continue;
+    if (oldestAt === null || at < oldestAt) oldestAt = at;
+    if (newestAt === null || at > newestAt) newestAt = at;
+  }
+  return {
+    count: files.length,
+    reads,
+    mutations,
+    unreadable,
+    oldestAt,
+    oldestAgeMs: oldestAt === null ? null : Math.max(0, now - oldestAt),
+    newestAt,
+  };
+}
+
 /* ---------------------- closed-handle retry (#5822) ---------------------- */
 // pi-durable's Session AUTO-CLOSES its Storage when it fails (dist/storage/sqlite/storage.js:
 // `assertOpen()` -> "SqliteStorage is closed"), and the broker keeps the handle it opened until
@@ -376,7 +423,19 @@ export async function awaitIntentResult(
     // `signal` is the AbortController from src/signals.mjs; on Ctrl-C this returns in one poll
     // (200 ms) instead of running out the full bound.
     if (signal?.aborted) return { ok: false, reason: `interrupted by ${signal.reason ?? "SIGINT"}` };
-    if (now() >= deadline) return { ok: false, reason: "timed out awaiting the broker's result" };
+    if (now() >= deadline) {
+      // #6139: "timed out" alone is not a diagnosis. Name the spool: how many intents are still
+      // undrained, how many of them are reads, and how long the oldest has been waiting. That is
+      // the difference between "the broker is parked with work queued" and "the broker has nothing
+      // to do and is stuck somewhere else" - and it is what the operator needs before deciding
+      // whether to wait, restart the broker, or read the store directly.
+      const spool = pendingIntentCensus(dbPath, { now: now() });
+      return {
+        ok: false,
+        reason: `timed out awaiting the broker's result (spool: pending=${spool.count} reads=${spool.reads} mutations=${spool.mutations} oldest=${spool.oldestAgeMs ?? "unknown"}ms)`,
+        spool,
+      };
+    }
     await wait(intervalMs);
   }
 }
@@ -780,7 +839,7 @@ function consumeIntentFile(file) {
   }
 }
 
-async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage } = {}) {
+async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic, readStorage, readOnly = false } = {}) {
   if (!dbPath) return { delivered: 0, deadLettered: 0, duplicates: 0 };
   const files = readIntentFiles(dbPath);
   if (files.length === 0) return { delivered: 0, deadLettered: 0, duplicates: 0 };
@@ -799,14 +858,22 @@ async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic
       deadLettered += 1;
     }
   }
-  // The seat roster is only needed by MUTATING ops (message/configure/stop/reset/compact).
-  // An all-read spool skips it - one fewer call that can hang on a wedged handle. The snapshot is
-  // taken OUTSIDE the per-intent try on purpose: a harness that cannot answer must make the whole
-  // drain throw, so the wake loop reaches its recovery branch instead of silently dead-lettering
-  // intents it never had a chance to apply (pinned by demo/broker-hotloop-bound.test.mjs).
-  const needsSeats = parsed.some(({ request }) => requestOp(request) !== "read");
-  const seats = needsSeats ? ((await harness.snapshot(Seats, undefined, context))?.seats ?? {}) : {};
-  for (const { file, request } of parsed) {
+  // #6139: READS GO FIRST, and the roster is taken LAZILY, immediately before the first
+  // mutation. Order is not a nicety here. With the roster taken up front, ONE mutating intent in
+  // the spool - a steer to a conversation the handle cannot reach - makes `harness.snapshot` throw
+  // BEFORE any read in the same spool is served, and the out-of-band drain refused mixed spools
+  // outright. The result was a broker with a fresh heartbeat and a frozen pass whose inbox held
+  // unread reads for minutes: every operator read timed out behind one stuck mutation.
+  // A read needs neither the roster nor the harness handle, so it must never be queued behind a
+  // mutation. `readOnly: true` (the out-of-band drain) leaves mutations in the spool untouched for
+  // the real pass, which is the point: reads are served, nothing is dead-lettered by a drain that
+  // never reached them.
+  const isRead = (request) => requestOp(request) === "read";
+  const queue = readOnly
+    ? parsed.filter(({ request }) => isRead(request))
+    : [...parsed.filter(({ request }) => isRead(request)), ...parsed.filter(({ request }) => !isRead(request))];
+  let seats = null;
+  for (const { file, request } of queue) {
     const op = requestOp(request);
     const requestId = request.requestId ?? null;
 
@@ -816,6 +883,12 @@ async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic
     if (readIntentResult(dbPath, requestId)) {
       if (consumeIntentFile(file)) duplicates += 1;
       continue;
+    }
+    if (!isRead(request) && seats === null) {
+      // The snapshot is deliberately OUTSIDE the per-intent try: a harness that cannot answer must
+      // make the whole drain throw, so the wake loop reaches its recovery branch instead of
+      // dead-lettering intents it never had a chance to apply (pinned by demo/broker-hotloop-bound.test.mjs).
+      seats = (await harness.snapshot(Seats, undefined, context))?.seats ?? {};
     }
     if (!SPOOL_OPS.includes(op)) {
       deadLetterIntent(dbPath, file, `unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
@@ -1806,7 +1879,9 @@ export async function runWakeLoop({
         lastStuckLogAt = now();
         logBrokerLine(dbPath, `PASS-STUCK ms=${now() - passInFlightStartAt} pending-reads=${pending.length}`);
       }
-      if (!onlyReadIntents(dbPath)) return;
+      // #6139: the gate is "is there a READ to serve", not "is EVERYTHING a read". One stuck
+      // mutation used to hold every read behind it on this cadence.
+      if (pendingIntentCensus(dbPath).reads === 0) return;
       readDrainInFlight = true;
       const started = now();
       const bound = new Promise((resolve) => {
@@ -1814,7 +1889,7 @@ export async function runWakeLoop({
         if (typeof t.unref === "function") t.unref();
       });
       Promise.race([
-        drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: p }),
+        drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: p, readOnly: true }),
         bound,
       ])
         .then((outcome) => {
@@ -1906,17 +1981,20 @@ export async function runWakeLoop({
       // and do NOT mark dirty: a read changes nothing, so there is no wake to evaluate. Any
       // other op (a real message/pause/reset) still marks dirty and runs a full pass.
       if (dbPath && readIntentFiles(dbPath).length > 0) {
-        if (onlyReadIntents(dbPath)) {
+        const census = pendingIntentCensus(dbPath);
+        // #6139: serve the reads even when a mutation is spooled beside them. A read needs no
+        // wake pass; the mutation still waits for one.
+        if (census.reads > 0) {
           try {
-            await drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: r });
+            await drainIntentInbox(h, p, { dbPath, context, onDiagnostic, readStorage: r, readOnly: true });
           } catch (err) {
             // A failed read drain must neither kill the idle loop nor spin it: fall back to a
             // real pass, which is where a storage failure is reported and retried with backoff.
             onDiagnostic({ kind: "read-drain-failed", error: String(err?.message ?? err) });
             scheduler.markDirty();
           }
-          continue;
         }
+        if (census.mutations === 0) continue;
         // #2237: a NON-read intent must not bypass the retry backoff. `shouldRun` only checks
         // the floor + the dirty bit, so marking dirty here ran a pass NOW even while a retry
         // was already scheduled — a persistently-throwing pass plus a pending intent hot-looped

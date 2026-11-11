@@ -134,7 +134,7 @@ export async function readViaBroker(
     // Clean up OUR intent: a read nobody is waiting for is garbage in the spool, and garbage
     // in the spool is what makes `onlyReadIntents` true for a drain that has nothing to do.
     rmSync(intentPath, { force: true });
-    throw readFailure(view, awaited.reason, {
+    const failure = readFailure(view, awaited.reason, {
       path: "broker",
       cause: isStopping() ? "interrupted" : "broker_read_timeout",
       remedy:
@@ -142,6 +142,10 @@ export async function readViaBroker(
         "or restart the broker: `node cli.mjs serve --stop` then `node cli.mjs serve`. " +
         "Runbook: docs/runbooks/broker-down-or-stalled.md",
     });
+    // #6139: the timeout carries the spool census so a caller can tell "parked with reads queued"
+    // from "stuck elsewhere" without re-reading the inbox by hand.
+    if (awaited.spool) failure.spool = awaited.spool;
+    throw failure;
   }
   const record = awaited.result;
   if (record && record.ok === false) throw new Error(`read ${view}: ${record.error ?? "broker read failed"}`);
