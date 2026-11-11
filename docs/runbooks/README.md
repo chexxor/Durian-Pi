@@ -121,6 +121,19 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   `durig.config.json` is gitignored (`.gitignore:12`) so it exists only in the shared root - measured in an item
   worktree, a bare `node cli.mjs status` falls back to `./rig.sqlite` (`durig.config.default.json:2`), not to the
   rig the operator meant.
+- **Census and the machine-rule gap (#6336, measured 2026-11-11 in the `item-6336` worktree on `main 35001c3a`):**
+  `git grep -n 'DURIAN_PI_DB'` returns **128 lines across 38 files** (before this item's edits). 68 of them are the
+  verbatim archive (`docs/NEXT-ARCHIVE.md`), annotated not rewritten (#6334); the rest are dated records, the docs'
+  own trap discussions, or - until this item - live instructions. Two live runbook commands still had it
+  (`docs/runbooks/attach-a-gate.md:45,91`, `docs/runbooks/verifier-leg-unfunded.md:62`) and now name `DURIG_DB`.
+  **Nothing checks this class.** `node cli.mjs check rig.selfdev.json --json` exits 0 with 23 rules
+  (`RULES.length` in `src/checkup.mjs`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
+  and none of them compares an env name printed in a doc with the entry point that doc names; `doc-integrity-guard`
+  tests env names nowhere. The only machine-side signal is `tools/broker-serve.mjs:153` (`legacy-env-set`), which
+  fires at broker start, not on a doc. The config file is stricter than the environment: a `DURIAN_PI_*` key in
+  `durig.config.json` makes `node cli.mjs config` **exit 1** naming it (`src/config.mjs`, the #5071
+  accepted-and-ignored class) - a probe run in this worktree printed `unknown config-file key(s): DURIAN_PI_DB,
+  DURIAN_PI_PROVIDER`. The doc-side guard is requested as #6335; the naming decision is ROADMAP 191.
 
 ## Agent execution (from the research report)
 
