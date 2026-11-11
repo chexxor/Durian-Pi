@@ -59,7 +59,7 @@ node tools/verifier-arm-probe.mjs --family=VERIFIER --model=openai/gpt-oss-120b 
 
 # 2. Which seat actually settled, and with what reason? Needs the LIVE store; a fresh item worktree has no
 #    ./selfdev.sqlite (the preflight says so outright: "store: ./selfdev.sqlite (MISSING)").
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs status | grep -o 'no_model'   # hit => the leg is dark
+DURIG_DB=./selfdev.sqlite node cli.mjs status | grep -o 'no_model'   # hit => the leg is dark
 ```
 
 **Do not read the broker preflight as the diagnosis.** `tools/broker-serve.mjs` masks credential *values*

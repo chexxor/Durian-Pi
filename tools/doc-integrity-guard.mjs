@@ -13,6 +13,10 @@
 //
 // Read-only: it never writes, never opens the store, never contacts a model server.
 //
+// Checks, all deterministic: the docs/NEXT.md pointer cap; a ROADMAP item referenced in no live doc; a runbook
+// header that does not match the README index; and env-name fidelity (#6335) - a command in a live doc that still
+// sets the superseded store selector.
+//
 // Usage:  node tools/doc-integrity-guard.mjs [--soft] [--quiet]
 // Exit:   0 = no hard findings; 1 = hard findings (fix them before you report or commit).
 
@@ -133,8 +137,69 @@ for (const f of files) {
     soft.push(`SOFT HEADER   docs/runbooks/${f} front-matter runbook: key does not mirror the file stem`);
 }
 
+/* 5. Env-name fidelity (#6335). The #5911 sweep corrected the superseded store selector by hand, and a hand
+ *    sweep rots: nothing checked it, so a runbook written a week later could carry the dead name again and every
+ *    consumer - cli.mjs resolve(CFG.DURIG_DB ?? "./rig.sqlite"), src/config.mjs CONFIG_KEYS - silently falls back to
+ *    ./rig.sqlite. Measured in this tree (2026-11-11, worktree item-6335 off 35001c3a):
+ *      git grep -n DURIAN_PI_DB -- scripts/ src/ cli.mjs  -> ONE hit: scripts/clockin.mjs
+ *      `DURIAN_PI_DB=./nope.sqlite node cli.mjs status`   -> "db": "./rig.sqlite", exit 1, cause no_store
+ *    So the name is not merely deprecated: a command carrying it runs, opens the WRONG store, and reports success.
+ *    The exception is real and is named, not waved at: scripts/clockin.mjs resolves
+ *    `process.env.DURIAN_PI_DB || process.env.DURIG_DB || "./selfdev.sqlite"`, so a clockin command using the old
+ *    name is correct, and a guard that flagged it would be wrong (docs/DELEGATE-CLOCKIN.md "The store is selected by
+ *    --db, DURIAN_PI_DB or DURIG_DB").
+ *    Cited by key and symbol, never by line number - line numbers drift (see #6320). */
+const LIVE_STORE_ENV = "DURIG_DB";
+const DEAD_STORE_ENV = "DURIAN_PI_DB";
+/** The ONE entry point that genuinely honours the dead name. A line naming it is documentation, not a defect. */
+const HONOURS_DEAD_NAME = /clockin/i;
+/** Lines that REPORT what the dead name does (an outcome on the same line) are evidence about the name, not an
+ *  instruction to use it. Without this, the runbooks' own proof lines would flag and train people to ignore the guard. */
+const OUTCOME_MARKER = /→|\bno_store\b|\binert\b|\bignored\b|\bsilently\b|\bfallback\b/;
+/** Command-shaped = the assignment is the command the reader is meant to run. Written as regex literals: building
+ *  these with new RegExp() from a template string silently eats `\s` and turns `\b` into a backspace, which is how
+ *  this rule first went quietly green instead of red. */
+const COMMAND_SHAPE = [
+  /\bDURIAN_PI_DB\s*=\s*[^\s|;)]+\s+(?:node|bash|sh|pwsh|powershell)\b/,
+  /\$env:DURIAN_PI_DB\s*=/,
+  /\bexport\s+DURIAN_PI_DB=/,
+  /Remove-Item\s+Env:DURIAN_PI_DB/,
+  /\benv\s+DURIAN_PI_DB=/,
+];
+/** Live instruction surfaces. docs/NEXT-ARCHIVE.md is excluded on purpose (verbatim history, the same exemption the
+ *    citation rule uses), and docs/ROADMAP.md too: its `Applied 2026-10-11:` lines are dated records of what was run,
+ *    not commands to run. */
+const ENV_SITES = [
+	"README.md",
+	"AGENTS.md",
+	"docs/QUICKSTART.md",
+	"docs/STATUS.md",
+	"docs/FEATURES.md",
+	"docs/TUI-TESTING.md",
+	"docs/DELEGATE-CLOCKIN.md",
+	"docs/SELFDEV.md",
+	"docs/runbooks",
+];
+let deadNameHits = 0;
+for (const rel of expand(ENV_SITES)) {
+  const text = read(rel);
+  if (!text) continue;
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (!COMMAND_SHAPE.some((re) => re.test(line))) return;
+    if (HONOURS_DEAD_NAME.test(line)) return; // scripts/clockin.mjs really does read it: the named exception
+    if (OUTCOME_MARKER.test(line)) return; // the line reports what the dead name does: evidence, not an instruction
+    deadNameHits++;
+    hard.push(
+      `HARD ENV NAME  ${rel}:${i + 1} runs a command with the superseded store selector ${DEAD_STORE_ENV}. ` +
+        `The CLI resolves ${LIVE_STORE_ENV} only - cli.mjs does ` + `resolve(CFG.DURIG_DB ?? "./rig.sqlite")` + `, and ` +
+        `src/config.mjs CONFIG_KEYS carries no ${DEAD_STORE_ENV} key - so the command opens ./rig.sqlite while ` +
+        `claiming the store it names. The only entry point that honours ${DEAD_STORE_ENV} is scripts/clockin.mjs, ` +
+        `which resolves ` + `process.env.DURIAN_PI_DB || process.env.DURIG_DB || "./selfdev.sqlite"` + `. If the line means clockin, say clockin.`,
+    );
+  });
+}
 if (!quiet) {
-  console.log(`DOC INTEGRITY GUARD  (docs/ROADMAP.md registers ${items.size} items; ${files.length} runbooks)`);
+  console.log(`DOC INTEGRITY GUARD  (docs/ROADMAP.md registers ${items.size} items; ${files.length} runbooks; env-name rule scanned ${expand(ENV_SITES).length} files, found ${deadNameHits} dead-name command(s))`);
   for (const h of hard) console.log("  " + h);
   if (showSoft) for (const s of soft) console.log("  " + s);
   else if (soft.length) console.log(`  (${soft.length} soft finding(s) hidden — re-run with --soft)`);

@@ -66,7 +66,7 @@ nothing is broken.
 Everything below uses a scratch database so you cannot touch a real rig:
 
 ```powershell
-$env:DURIAN_PI_DB = "$PWD\scratch-quickstart.sqlite"
+$env:DURIG_DB = "$PWD\scratch-quickstart.sqlite"   # the CLI reads DURIG_DB; DURIAN_PI_DB is inert for cli.mjs (#6335)
 ```
 
 ## Step 2 — bootstrap the rig
@@ -215,7 +215,7 @@ working, not a leftover.
 ## Step 7 — tear down
 
 ```powershell
-Remove-Item Env:DURIAN_PI_DB          # forget the scratch db for future sessions
+Remove-Item Env:DURIG_DB              # forget the scratch db for future sessions
 Remove-Item .\scratch-quickstart.sqlite   # or keep it; it is just a file
 ```
 

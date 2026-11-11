@@ -42,7 +42,7 @@ The broker is up (routing rows is a submission). No store is opened by this proc
 Confirm the row's parties and its gate, before deciding what to mint:
 
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs show <row-id>
+DURIG_DB=./selfdev.sqlite node cli.mjs show <row-id>
 ```
 
 Expected: the row's `from`, `to`, `status`, and — if it carries one — `blockedBy`. If `blockedBy` is
@@ -88,7 +88,7 @@ authority, not by terminality (the defect); sender `hold_work` REFUSED while `ca
 Then confirm the gate landed on the row you re-minted:
 
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs show <new-row-id>
+DURIG_DB=./selfdev.sqlite node cli.mjs show <new-row-id>
 ```
 
 Expected: `blockedBy=<ids>` present, not a sentence in the body.
