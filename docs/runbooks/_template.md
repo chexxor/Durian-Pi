@@ -25,8 +25,10 @@ check_rule: null                 # optional: the check rule that re-tests this
 DURIG_DB=./selfdev.sqlite node cli.mjs status
 ```
 Name the store with the variable **the entry point you are invoking actually reads**: `cli.mjs` and
-`intent.mjs` read `DURIG_DB` (`cli.mjs:155`, `intent.mjs:105`, `src/config.mjs` `CONFIG_KEYS`); the one entry
-point that also accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:379`, and it takes it first. A command carrying a
+`intent.mjs` read `DURIG_DB` (`cli.mjs:161`, `intent.mjs:105`, `src/config.mjs` `CONFIG_KEYS`); the one entry
+point that also accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:468`, and it takes it first. Re-pinned 2026-11-11
+on `main 35001c3a` — these line numbers drift with the code, so check them before quoting (`grep -n 'CFG.DURIG_DB'
+cli.mjs`). A command carrying a
 name the entry point ignores is not a harmless typo - it silently opens the fallback store (#5911, ROADMAP 191).
 
 ## Do

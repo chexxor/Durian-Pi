@@ -108,9 +108,12 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 - **Verification recording:** the `check` provenance line reports "runbooks verified against rev X"
   (ROADMAP 86).
 - **Env-name fidelity (#5911, swept 2026-11-10 on tree `f192f543`):** every command in these runbooks must name
-  the variable **the entry point it invokes actually reads**. Measured in that tree: `cli.mjs` (`cli.mjs:155`),
-  `intent.mjs` (`intent.mjs:105`) and `scripts/land.mjs` (`scripts/land.mjs:248`) read `DURIG_DB`; 
-  `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. A command
+  the variable **the entry point it invokes actually reads**. Re-pinned 2026-11-11 on `main 35001c3a`: `cli.mjs`
+  (`cli.mjs:161`), `intent.mjs` (`intent.mjs:105`) and `scripts/land.mjs` (`scripts/land.mjs:264`) read `DURIG_DB`;
+  `scripts/clockin.mjs:468` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. (The
+  2026-11-10 pins — `cli.mjs:155`, `scripts/land.mjs:248`, `scripts/clockin.mjs:379` — were exact in tree
+  `f192f543`; `git show f192f543:cli.mjs | sed -n '155p'` still shows the `DB_PATH` line, so the numbers moved,
+  the finding did not.) A command
   carrying a name the entry point ignores is not a typo - it silently runs against the fallback store, which is how
   a wrong store gets read as a quiet rig. 31 command lines across 14 runbooks were corrected in that sweep; the
   machine-side surfacing is `tools/broker-serve.mjs:153` (`legacy-env-set`), and ROADMAP 191 is the un-built
