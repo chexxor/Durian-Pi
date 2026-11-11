@@ -11779,3 +11779,50 @@ the very condition it diagnoses. Every route must print which path served the re
 **Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
+
+## D265 — (provisional; re-mint at merge by scanning `docs/DECISIONS.md` for the next free number — this tree's highest was D264 at fork) host identity is DERIVED at one seam and never DECLARED per seat (architect, item #4879, 2026-11-11; host measured by `node tools/rig-portability-audit.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite --rig /home/chexxor/Git/Durian-Pi/rig.selfdev.json` → **linux**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, exit 1, 1 finding)
+
+**Decision.** A seat definition gets no `hostOs`, no `shell`, no per-seat host override. Host identity
+is a property of the running process, not of the role, and it is produced once per process by the
+registry seam that already decides the shell (`src/shellregistry.mjs:200 shellPlan()`, which carries
+`platform`, `name`, `programs`, `startedBy`, `degraded` and the withheld rows). Every consumer —
+tool registration, the guard, the seat prompt, the resolver, the worktree sweep, the instruments —
+reads that object or the resolver's `{root, source, kind, shape, reason}`. An operator may declare a
+host class in the **host-local** layer (`durig.config.json`, gitignored), and that declaration may
+label a divergence and set offerability (RM-306's `offeredOn`); it may never feed selection, and it
+may never gate a pass.
+
+**Context:** ROADMAP 217's second finding is that no seat definition names the host OS or the shell.
+Lead split that half out of #4849 as #4879 because availability-based selection fixed the observed
+`spawn … ENOENT` without a schema change. Measured on the fork `e01e9256`: 12 seats, field union
+`name, role, goal, constraints, capabilities, model, thinkingLevel, instructionsFile` — no host key.
+`shellPlan()` here resolves `bash` → `/usr/bin/bash`, `degraded:false`, with `powershell` withheld.
+The counterfactual is the whole argument: `shellPlan({platform:"win32"})` on this Linux box returns
+`name=powershell startedBy=null degraded:true` — a declared host feeding selection recreates the 217
+incident. Separately, `resolveSeatRoot` (`src/seatroot.mjs:28`) returns a stored cwd verbatim
+(`C:\Users\Alex\Durian-Pi` on a POSIX host) and `classifyGitRoot` then reports that phantom as
+`linked-worktree`; and three normalizers answer "same tree" three ways (`src/seatroot.mjs:36`,
+`src/broker.mjs:1094`, `tools/rig-portability-audit.mjs:53`), the instrument being the only one that
+knows the drive↔POSIX mapping. Probe: `node tools/probes/host-identity-4879.mjs` → exit 1, three
+named owed items.
+
+**Alternatives considered:** (a) add `hostOs`/`shell` to the seat spec — rejected: it puts a
+host-coupled value in the portable tracked layer (265's defect inverted) and, when read by selection,
+produces a registered tool with no startable program; (b) derive at one seam and keep any declaration
+as a labeled expectation in the host-local layer — chosen: reversible, and the shell half of it is
+already shipped; (c) do nothing beyond shell selection — rejected: 264's context half stays open and
+the seat improvises (store entry #274090: "Maybe the shell is pwsh on Linux?"), which makes
+completions unverifiable (`tools/channel-preflight.mjs` §7).
+
+**Consequences.** The accepted cost is un-enforced drift: a declared host class can sit next to a
+contradicting live host and nothing stops the pass. That is deliberate and matches the standing rule
+that store-vs-config drift is labeled, not gated (`docs/DECISIONS.md:3977`, point 5) — a gate whose
+only key is held by the operator stalls every pass and no seat may legitimately clear it. It also
+makes one consolidation mandatory: the resolver owns host-qualified normalization, and the audit and
+the sweep import it rather than re-deriving; until then the instruments can be right while the
+product is wrong, which is the D183 class of confidently wrong shell reports.
+
+**Residual (scope, not decided here):** whether the host-local layer gets a host-class key at all —
+this rig has no `durig.config.json`, so the layer is empty rather than unused — is `lead`'s call. The
+resolver's shape is impl's (263) and the prompt block is devtools' (264); the acceptance for both is
+the probe going green, not a new field appearing.
