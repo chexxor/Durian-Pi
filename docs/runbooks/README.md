@@ -173,6 +173,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [store-secret-detected.md](store-secret-detected.md) | a `secret_detected` notice: secret-shaped content is in the committed store | no |
 | [tool-result-redacted.md](tool-result-redacted.md) | a tool result shows a `[redacted by durian-pi: …]` marker instead of its text | no |
 | [store-probe-identity.md](store-probe-identity.md) | you are querying the store directly for a QUEUE item id, or a probe returned a plausible row whose namespace you have not checked | no |
+| [store-baseline-comparison.md](store-baseline-comparison.md) | you need the store's size, its distance from a backup, or an explanation of why two `sha256sum` runs of "the store" disagree; you are about to report a store hash in a report; or you are wondering whether a backup is still a restore point (measured 2026-11-11: main 706,138,112 B, `-wal` 4,214,792 B, `-shm` 32,768 B - the main-file hash covers only the checkpointed part, and a 40-hex sha printed in a tool result is redacted as secret-shaped) | no |
 | [pi-pin-update.md](pi-pin-update.md) | the pinned pi must move (an ordered update, or a release we skipped); a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned **0 hits** and you are about to conclude something is absent upstream. **A backup is the only rollback — `sync-pi --unlink` cannot open our schema-v2 store** | yes (the pin, the vendored build, `node_modules`; the store only via the backup/restore ladder) |
 
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
@@ -222,6 +223,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 |---|---|
 | Broker / `serve` | broker-down-or-stalled, broker-safe-change |
 | Store / `pi.live` | store-corruption-recovery, store-secret-detected, store-probe-identity |
+| Comparing the store to a baseline without a second writer, and why a store hash is a timestamp rather than an identity (main file vs `-wal`) | store-baseline-comparison, store-probe-identity, broker-down-or-stalled |
 | The suite gate reports a TIMEOUT for a demo that exited 0, or the failure report hides the cause | suite-red-standalone-green, slow-loop |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
