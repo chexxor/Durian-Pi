@@ -3,9 +3,9 @@ runbook: worktree-unlinked-deps
 symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-10
+last_verified: 2026-11-11
 verified_by: devtools
-evidence: "#3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
+evidence: "#6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
 check_rule: null
 ---
 
@@ -102,6 +102,37 @@ linked: null` (exit 0); the fixed one printed `buildTree` = the pinned sha with 
 you is artifact IDENTITY - two graphs can carry the same version and different bytes - so the `sha256sum`
 probe above stays the check for "is this the same build"; only the link/built probes moved into the report.
 
+### The suite header says it out loud now (#6196/#6202, measured 2026-11-11)
+
+You no longer have to ask. Every `node scripts/test.mjs` run opens with ONE line from the single emitter
+in `src/provenance.mjs` (`dependencyProvenance()` / `formatDependencyProvenance()`), and `scripts/land.mjs`
+prints the same line for the scratch it measured:
+
+```bash
+node scripts/test.mjs --area readapi
+# PROVENANCE tree=<sha> branch=<name> node=v24.22.1 host=linux … pi-durable=1.3.0 dependencySet=lockfile-released pin=main@dd30101cfc5b
+# FALLBACK: this tree is NOT running the pinned pi (main@dd30101cfc5b). … run --sync --link before treating
+#           this result as a verdict about main - it is a conditional observation about THIS tree.
+```
+
+Three facts are deliberately kept apart, because conflating them was the defect:
+
+- **the PIN** - the commit this rig is validated against (`pi-main.pin.json`);
+- **the DECLARED set** - what `package-lock.json` says will be installed (1.3.0 here);
+- **the RESOLVED set** - what `node_modules` actually points at, and *through what path* (`via=built-pin`
+  or `via=lockfile`).
+
+`FALLBACK` means the link failed or was never run: the tree is measuring the released graph. It is LOUD,
+not silent, and it is not drift. `DRIFT` means resolved differs from declared; a linked tree legitimately
+has that (1.5.1 from the pin build against a lockfile still declaring 1.3.0), so the header prints ONE
+summary line rather than one per package, and the per-package table is `node scripts/sync-pi.mjs --report`
+(read-only; exit 1 when any package drifts). `mixed` is the state to worry about: some pin packages point
+at the build, the rest at the lockfile.
+
+This is additive: nothing refuses a landing on drift yet (that is #6205, held pending the baseline count
+of unlinked worktrees), so a FALLBACK line is a fact to cite, not a gate that stops you.
+
+
 The missing build tree is the usual cause: `--link` has nothing to point at, so it exits 1 with
 `nothing built yet; run --sync before --link`, and provisioning continues on the lockfile by design.
 
@@ -152,6 +183,18 @@ node demo/worktree-deps-link.test.mjs; echo "exit=$?"
 
 Expect `exit=0` and a `PASS` line. If it is red, a failed link has gone back to being silent - stop
 and route it to impl.
+
+And the header itself is pinned (#6196/#6202):
+
+```bash
+node demo/suite-provenance.test.mjs; echo "exit=$?"   # header format, LOUD fallback, drift, built-pin
+node scripts/sync-pi.mjs --report | head -2; echo "exit=${PIPESTATUS[0]}"
+```
+
+Ran 2026-11-11 in `item-6196`: the demo exits 0 in 3.7s (5 assertions, all ok); `--report` exits 1 in a
+linked tree because the lockfile still declares 1.3.0 against the pin's 1.5.1 - the summary line names
+the packages, and the same tree before `--sync --link` printed `dependencySet=lockfile-released` with the
+FALLBACK line and exited 0.
 
 ## If it fails
 
