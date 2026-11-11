@@ -93,3 +93,44 @@ It does not decide `settings.progress.persistWithinMs` or `settings.restartLimit
 those are separate rulings and are not folded here. If the pin move to `v1.5.1` lands before this row's build
 row, the missing predicates throw — so the **minimum viable move** is to give every rig doc a predicate
 immediately, and the tuning (bound values) can follow.
+
+## 8. Addendum (2026-11-10, item #6310): the acceptance could not fail, so the probe now asserts
+
+The intake carried acceptance as "`node docs/evidence/2026-11-10-checkpoint-policy/probe.mjs` exits 0 and
+prints … `deltasSinceBase <= 200`". A printout is not a check: the probe exited 0 for every policy,
+including a bound so high it never fires. **Recovery:** the probe now carries the gate — bound holds, a
+base is actually written, the read median beats the never baseline, write cost stays inside the slack, and
+the verb-class policy is shown to be worse — and exits 1 on any violation.
+
+Run in this worktree (`item-6310`, `@earendil-works/pi-durable` **1.3.0** per the lockfile), each exit code
+named:
+
+```
+node docs/evidence/2026-11-10-checkpoint-policy/probe.mjs                      # exit 0
+  never   () => false    bases=0    deltas=2625  readMedian=9.8   ms writeTotal=381.5  ms
+  every verb (semantic)  bases=2625 deltas=0     readMedian=5.17  ms writeTotal=19431.4 ms
+  bound 50               bases=51   deltas=24    readMedian=5.16  ms writeTotal=650.7  ms
+  bound 200              bases=13   deltas=12    readMedian=5.23  ms writeTotal=440.6  ms
+  bound 1000             bases=2    deltas=623   readMedian=6.09  ms writeTotal=296.5  ms
+  semantic + bound 200   bases=13   deltas=12    readMedian=5.01  ms writeTotal=416.1  ms
+  RESULT: PASS
+
+PROBE_ITEMS=1000 PROBE_VERBS=100 node …/probe.mjs                               # exit 1
+  - never-checkpointed chain should exceed the bound 200, measured 88
+  - bound 200: no base was written, so the bound is not doing anything
+
+PROBE_ITEMS=1000 PROBE_VERBS=1000 CHECKPOINT_BOUND=5 node …/probe.mjs            # exit 1
+  - bound 5 write cost 358.1 ms exceeds 2x the never baseline 126.8 ms
+```
+
+**The principle the second failure makes explicit:** the bound is a function of the **value size**, not a
+universal number. At 1,000 rows a bound of 5 costs 2.8× the never-checkpoint baseline, because every base
+serialises the whole document; at 5,000 rows (~2 MB) bound 200 costs 1.15× for a 47% faster read. So the
+rule for a rig doc is: `() => true` only where the value is small enough that a base is cheaper than the
+replay it prevents; a numeric bound where it is not; and the gate must assert **both** legs — a bound that
+never fires is as wrong as a bound that fires every verb.
+
+**Also verified, not inferred:** all six `defineDoc` calls carry a predicate today — `src/rig.mjs:23,35,44,60,110`
+and `extensions/continuity.mjs:43`, all `() => false` and labelled provisional. So the latent-throw class
+(failure mode 3) is already closed at the seam; what is missing is the `check` rule that keeps it closed,
+which is the `impl` row (#6306), and this gate, which is the probe it can point at.
