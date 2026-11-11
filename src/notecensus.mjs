@@ -134,32 +134,39 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
         compactions: 0, via_note: 0, via_digest: 0, via_summariser: 0,
       };
       const note = notes.get(seat.conversationId);
+      const written = !!note && (note.deltas > 0 || note.base_has_content === 1);
+      const compactions = Number(stats.compactions ?? 0);
+      const compactionVia = {
+        note: Number(stats.via_note ?? 0),
+        digest: Number(stats.via_digest ?? 0),
+        summariser: Number(stats.via_summariser ?? 0),
+      };
+      const noteToolsOffered = Number(stats.note_tools_offered ?? 0);
       return {
         seat: seat.name,
         conversationId: seat.conversationId,
         ...(seat.unnamed ? { unnamed: true } : {}),
         noteDoc: !!note,
-        noteWritten: !!note && (note.deltas > 0 || note.base_has_content === 1),
+        noteWritten: written,
         noteRevisions: note?.revisions ?? 0,
         readNoteCalls: Number(stats.read_note_calls ?? 0),
         writeNoteCalls: Number(stats.write_note_calls ?? 0),
         handoffCalls: Number(stats.handoff_calls ?? 0),
         // Turns whose request DECLARED the note tools. Offered is not used: a seat can have the tools and never
         // reach for them, which is exactly the "armed, never exercised" state this census exists to expose.
-        noteToolsOffered: Number(stats.note_tools_offered ?? 0),
-        compactions: Number(stats.compactions ?? 0),
-        compactionVia: {
-          note: Number(stats.via_note ?? 0),
-          digest: Number(stats.via_digest ?? 0),
-          summariser: Number(stats.via_summariser ?? 0),
-        },
+        noteToolsOffered,
+        compactions,
+        compactionVia,
         // The seat's most recent compaction, classified: the answer to "is THIS seat on the note path now?"
         latestCompactionVia: latestCompactionSource(db, seat.conversationId),
+        // The verdict the facts add up to, and who owns the gap if there is one (#6118).
+        ...classifySeat({ noteWritten: written, compactions, compactionVia, noteToolsOffered, latestCompactionVia: latestCompactionSource(db, seat.conversationId) }),
       };
     });
 
     const totals = census.reduce(
       (acc, row) => {
+        acc.verdicts[row.verdict] = (acc.verdicts[row.verdict] ?? 0) + 1;
         acc.notes += row.noteWritten ? 1 : 0;
         acc.noteDocs += row.noteDoc ? 1 : 0;
         acc.readNoteCalls += row.readNoteCalls;
@@ -168,7 +175,7 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
         for (const key of COMPACTION_SOURCES) acc[key] += row.compactionVia[key];
         return acc;
       },
-      { seats: census.length, notes: 0, noteDocs: 0, readNoteCalls: 0, noteToolsOffered: 0, compactions: 0, note: 0, digest: 0, summariser: 0 },
+      { seats: census.length, notes: 0, noteDocs: 0, readNoteCalls: 0, noteToolsOffered: 0, compactions: 0, note: 0, digest: 0, summariser: 0, verdicts: {} },
     );
 
     return { seats: census, totals };
@@ -191,11 +198,62 @@ function latestCompactionSource(db, conversationId) {
   return compactionSource(row.record);
 }
 
+/**
+ * PROVEN or CLAIMED, per seat (#6118). "The mechanism is proven" and "this seat is carried by the mechanism"
+ * are different statements, and the fleet has been reading one as the other. A seat is PROVEN only when it
+ * wrote a note AND a compaction actually carried that note. Everything else is a claim, and the claim has four
+ * distinguishable shapes, each with a different owner:
+ *
+ *   proven        - a note the seat wrote was supplied as the summary at a boundary. Nothing to do.
+ *   seeded        - the boundary was covered, but by a seed pulled from the seat's queue, not by the seat's
+ *                   own note. The mechanism reached the seat; the seat's own durability claim is still unproven.
+ *                   Owner: the seat (it never wrote one).
+ *   claimed-only  - the tools were offered and no boundary ever carried a note. If the seat DID write a note,
+ *                   the hook failed to intercept: the compactions may predate the note, and this row cannot tell
+ *                   which - so it is reported as open, not as a defect.
+ *   not-armed     - the extension was never loaded for this conversation (0 turns declared the note tools).
+ *                   `src/extensions.mjs` has no auto-discovery, so an unlisted extension is an absent one.
+ *   not-observed  - the seat has never been compacted. Not a failure and not a proof: a non-observation, per
+ *                   docs/reviews/architecture-note-contract-closeout-2026-11-09.md section "What is NOT required".
+ *
+ * Pure: takes one census row, returns the verdict. Kept separate from the store read so a demo can pin the
+ * vocabulary without a 400 MB store.
+ */
+export function classifySeat(row) {
+  const compactions = Number(row?.compactions ?? 0);
+  const viaNote = Number(row?.compactionVia?.note ?? 0);
+  const viaSummariser = Number(row?.compactionVia?.summariser ?? 0);
+  const written = !!row?.noteWritten;
+  const offered = Number(row?.noteToolsOffered ?? 0);
+  if (compactions === 0) {
+    return { verdict: "not-observed", owner: "none", why: "never compacted - there is no boundary at which to test the note path" };
+  }
+  if (viaNote === 0) {
+    if (offered === 0) {
+      return { verdict: "not-armed", owner: "operator", why: `the note tools were declared in 0 of the turns that ran, so the extension is not loaded for this conversation (${compactions} compactions, all to the summariser)` };
+    }
+    if (written) {
+      return { verdict: "claimed-only", owner: "open", why: `a note was written but 0 of ${compactions} compactions carried it (${viaSummariser} went to the summariser); this census cannot tell whether the compactions predate the first write or the hook failed to intercept` };
+    }
+    return { verdict: "claimed-only", owner: "seat", why: `the tools were offered ${offered}x and no note was ever written; ${compactions} compactions went to the summariser` };
+  }
+  if (!written) {
+    return { verdict: "seeded", owner: "seat", why: `${viaNote} of ${compactions} compactions were covered by a seed drawn from the seat's claimed or queued item, not by a note the seat wrote (note doc exists with no write)` };
+  }
+  return {
+    verdict: "proven",
+    owner: "none",
+    why: `${viaNote} of ${compactions} compactions carried a note this seat wrote; latest boundary: ${row?.latestCompactionVia ?? "unknown"}`,
+  };
+}
+
 /** Compact human rendering: one line per seat, sorted by the thing that is most actionable. */
 export function renderCensus(census) {
   const lines = [];
+  const v = census.totals.verdicts ?? {};
   lines.push(
-    `continuity notes: ${census.totals.notes}/${census.totals.seats} seats have a written note; ` +
+    `continuity notes: PROVEN ${v.proven ?? 0} of ${census.totals.seats} seats; seeded ${v.seeded ?? 0}; claimed-only ${v["claimed-only"] ?? 0}; not-armed ${v["not-armed"] ?? 0}; not-observed ${v["not-observed"] ?? 0}. ` +
+    `${census.totals.notes}/${census.totals.seats} seats have a written note; ` +
       `${census.totals.readNoteCalls} read_note calls across ${census.totals.noteToolsOffered} turns that offered the tools; ` +
       `${census.totals.compactions} compactions -> note ${census.totals.note}, digest ${census.totals.digest}, summariser ${census.totals.summariser}`,
   );
@@ -203,7 +261,8 @@ export function renderCensus(census) {
     lines.push(
       `  ${String(row.seat).padEnd(12)} conv ${String(row.conversationId).padEnd(7)} note=${row.noteWritten ? "written" : row.noteDoc ? "empty doc" : "none"}` +
         `  read_note ${row.readNoteCalls}x (offered ${row.noteToolsOffered}x)  compactions ${row.compactions} (note ${row.compactionVia.note}, digest ${row.compactionVia.digest}, summariser ${row.compactionVia.summariser})` +
-        `  latest: ${row.latestCompactionVia ?? "no compaction"}`,
+        `  latest: ${row.latestCompactionVia ?? "no compaction"}` +
+        `  verdict=${row.verdict} owner=${row.owner} — ${row.why}`,
     );
   }
   return lines.join("\n");
