@@ -14,19 +14,22 @@
 //      emits no warning for it;
 //   3. a provisioned worktree carries the sentence that tells the SEAT, in the tool result
 //      (`prepareSeatWorkspace().dependencyNote`), naming what is stale and what to run;
-//   4. a LINKED tree says nothing (no noise), and a tree with no sync-pi script is not a failure.
+//   4. a LINKED tree says nothing (no noise), and a tree with no sync-pi script is not a failure;
+//   5. (#6278) a fresh worktree CARRIES the built pin from the checkout it was forked from; the carry
+//      is REFUSED when the pins differ, and a refusal is reported, not swallowed.
 //
 // FAILING-FIRST: on the pre-fix tree `linkWorktreeDeps` / `dependencyNoteFor` do not exist (import
 // fails), `installWorktreeDeps` returns no `dependency` field, and the link failure is a console.warn.
 // Run: node demo/worktree-deps-link.test.mjs   (exit 0 = pass)
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
+	carryBuiltPin,
 	dependencyNoteFor,
 	installWorktreeDeps,
 	linkWorktreeDeps,
@@ -168,9 +171,75 @@ try {
 		console.error(`cleanup: item-3 not removed (the temp repo is deleted anyway): ${err.message}`);
 	}
 
+	console.log("\n8. A fresh worktree CARRIES the built pin from the checkout it came from (#6278)");
+	// The defect this section pins: `vendor/pi-main` is gitignored and therefore never forked, so a
+	// worktree arrives with nothing to link to, runs the suite against the RELEASED pi, and reds demos
+	// that pass in the seat root. The remedy is to copy the build that already exists - never to build
+	// per worktree (36 s and a clone each), and never to carry a build from a different pin.
+	const SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+	const OTHER = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+	const PIN = JSON.stringify({ sha: SHA, ref: "v1.5.1", repo: "fixture/pi", packages: [{ name: "@earendil-works/pi-durable", dir: "packages/durable" }] });
+	const checkout = join(base, "checkout");
+	const wt = join(base, "fresh-worktree");
+	await mkdir(join(checkout, "vendor", "pi-main", "packages", "durable", "dist"), { recursive: true });
+	await writeFile(join(checkout, "pi-main.pin.json"), PIN);
+	await writeFile(join(checkout, "vendor", "pi-main", "packages", "durable", "package.json"), '{ "name": "@earendil-works/pi-durable", "version": "1.5.1" }\n');
+	await writeFile(join(checkout, "vendor", "pi-main", "packages", "durable", "dist", "index.js"), "export const built = 1;\n");
+	await mkdir(wt, { recursive: true });
+	await writeFile(join(wt, "pi-main.pin.json"), PIN);
+
+	const carry = carryBuiltPin(wt, checkout);
+	check("the build was carried", carry.carried === true, JSON.stringify(carry));
+	check("one package travelled", carry.packages === 1, String(carry.packages));
+	check(
+		"the built entry is really in the worktree",
+		existsSync(join(wt, "vendor", "pi-main", "packages", "durable", "dist", "index.js")),
+		join(wt, "vendor", "pi-main", "packages", "durable", "dist", "index.js"),
+	);
+	check("it left a marker naming the sha it came from", /aaaaaaaa/.test(readFileSync(join(wt, "vendor", "pi-main", ".durig-carried-pin"), "utf8")), "no marker");
+
+	const again = carryBuiltPin(wt, checkout);
+	check("carrying twice is a no-op, not a rebuild", again.carried === false && /already built/.test(again.reason), String(again.reason));
+
+	const movedPin = join(base, "moved-pin-worktree");
+	await mkdir(movedPin, { recursive: true });
+	await writeFile(join(movedPin, "pi-main.pin.json"), JSON.stringify({ sha: OTHER, packages: [{ name: "@earendil-works/pi-durable", dir: "packages/durable" }] }));
+	const refused = carryBuiltPin(movedPin, checkout);
+	check("a worktree pinned to a DIFFERENT sha is refused, not silently given someone else's build", refused.carried === false, JSON.stringify(refused));
+	check("the refusal names both shas", /bbbb/.test(refused.reason) && /aaaa/.test(refused.reason), String(refused.reason));
+	check("the refusal names the remedy", /--sync/.test(refused.reason), String(refused.reason));
+	check("nothing was copied for the refused carry", !existsSync(join(movedPin, "vendor", "pi-main", "packages", "durable", "dist", "index.js")), "the wrong build was copied anyway");
+
+	const unbuilt = join(base, "unbuilt-checkout");
+	await mkdir(unbuilt, { recursive: true });
+	await writeFile(join(unbuilt, "pi-main.pin.json"), PIN);
+	const noBuild = carryBuiltPin(join(base, "wt2"), unbuilt);
+	check("a checkout with no build is refused with the command that makes one", noBuild.carried === false && /--sync/.test(noBuild.reason), String(noBuild.reason));
+	check("no source checkout is refused, not guessed", carryBuiltPin(wt, null).carried === false, "carried from nowhere");
+
+	console.log("\n9. END TO END: provisioning with a source build LINKS the tree instead of leaving it unlinked");
+	await writeFile(join(repo, "pi-main.pin.json"), PIN);
+	const carriedInstall = await installWorktreeDeps(repo, { source: checkout });
+	check("the state is linked", carriedInstall.dependency?.state === "linked", JSON.stringify(carriedInstall.dependency));
+	check("the record says the pin was carried, and from where", carriedInstall.dependency?.carried?.sha === SHA && carriedInstall.dependency?.carried?.from === checkout, JSON.stringify(carriedInstall.dependency?.carried));
+	check("no carry reason is attached to a success", carriedInstall.dependency?.carryReason === null, String(carriedInstall.dependency?.carryReason));
+	check("and a linked tree needs no note", dependencyNoteFor(carriedInstall.dependency) === "", String(dependencyNoteFor(carriedInstall.dependency)));
+
+	console.log("\n10. A refused carry is REPORTED in the seat-facing sentence, not swallowed");
+	const unlinkedWt = join(base, "no-source-worktree");
+	await mkdir(join(unlinkedWt, "scripts"), { recursive: true });
+	await writeFile(join(unlinkedWt, "package.json"), '{ "name": "durig-deps-fixture", "version": "1.0.0", "private": true }\n');
+	await writeFile(join(unlinkedWt, "package-lock.json"), readFileSync(join(repo, "package-lock.json"), "utf8"));
+	await writeFile(join(unlinkedWt, "scripts", "sync-pi.mjs"), SYNC_PI_STUB);
+	await writeFile(join(unlinkedWt, "pi-main.pin.json"), PIN);
+	const refusedInstall = await installWorktreeDeps(unlinkedWt, {});
+	const refusedNote = dependencyNoteFor(refusedInstall.dependency);
+	check("the note says the link failed", /DEPENDENCY NOT LINKED/.test(refusedNote), refusedNote.slice(0, 300));
+	check("the note says why the pin could not be carried", /could not be carried/.test(refusedNote), refusedNote.slice(0, 300));
+
 	console.log(
 		failures === 0
-			? "\nPASS — a failed link is reported as an UNLINKED state the caller can assert, never a silent warn"
+			? "\nPASS — a failed link is reported as an UNLINKED state the caller can assert, never a silent warn, and a fresh worktree carries the built pin (or says why it cannot)"
 			: `\nFAIL — ${failures} check(s) failed`,
 	);
 } catch (err) {

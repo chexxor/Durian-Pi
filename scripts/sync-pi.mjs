@@ -61,6 +61,10 @@ const PIN_PATH = join(DURIG, "pi-main.pin.json");
 // Gitignored: a built upstream tree is reproducible from the pin, so it must
 // never become part of durig's own history.
 const BUILD_DIR = join(DURIG, "vendor", "pi-main");
+// A worktree can be provisioned with a CARRIED build - the pinned packages copied from the checkout
+// that built them, with no git history of their own (#6278). The marker names the sha they came from,
+// so a carried tree is reported as the pinned tree instead of as "no build tree".
+const CARRIED_PIN_MARKER = ".durig-carried-pin";
 
 // Every flag the tool knows. An unlisted flag is REFUSED, never ignored: an ignored
 // flag used to mean `--update v1.4.1`(typo) pinned main's tip and looked like success.
@@ -270,6 +274,15 @@ export function isShallowClone(cloneDir) {
 	return (res.stdout || "").trim() === "true";
 }
 
+/** The sha a carried build was copied from, or null when this build dir carries no marker. */
+export function readCarriedPin(buildDir) {
+	try {
+		return JSON.parse(readFileSync(join(buildDir, CARRIED_PIN_MARKER), "utf8"));
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Deepen a shallow vendored clone so the gap can actually be COUNTED (#6061).
  * A shallow clone is not an unmeasurable gap; it is one fetch away from being measurable. The report
@@ -335,6 +348,12 @@ export function behindAhead(cloneDir, pinnedSha, upstreamSha) {
 		return nulls("upstream sha unavailable (offline?) - run: node scripts/sync-pi.mjs --observe");
 	}
 	if (!existsSync(join(cloneDir, ".git"))) {
+		const carried = readCarriedPin(cloneDir);
+		if (carried && carried.sha) {
+			return nulls(
+				`this build tree was CARRIED from ${carried.from ?? "another checkout"} (built at ${carried.sha}) and carries no git history, so the gap cannot be counted here - count it where it was built: git -C ${carried.from}/vendor/pi-main rev-list --left-right --count ${pinnedSha}...${upstreamSha}`,
+			);
+		}
 		return nulls(`no vendored clone at ${cloneDir} - run: node scripts/sync-pi.mjs --sync`);
 	}
 	const count = () => run("git", ["rev-list", "--left-right", "--count", `${pinnedSha}...${upstreamSha}`], cloneDir, { allowFail: true });
@@ -604,6 +623,12 @@ function pathKey(path) {
  */
 export function inspectBuildTree(pin, buildDir = BUILD_DIR) {
 	if (!existsSync(join(buildDir, ".git"))) {
+		const carried = readCarriedPin(buildDir);
+		if (carried && carried.sha) {
+			// Carried, not cloned: the build IS the pinned one (the marker records the sha it was copied
+			// from), but it has no history to count, so `head` is the recorded sha, not a git HEAD.
+			return { present: true, head: carried.sha, atPin: carried.sha === pin.sha, carried: true, carriedFrom: carried.from ?? null };
+		}
 		return { present: false, head: null, atPin: false };
 	}
 	const res = git(buildDir, ["rev-parse", "HEAD"], { allowFail: true });

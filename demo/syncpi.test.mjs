@@ -24,6 +24,7 @@ import {
 	namePinRef,
 	parseArgs,
 	parseLsRemote,
+	readCarriedPin,
 	readPin,
 	resolveRef,
 	tagsBetween,
@@ -204,6 +205,24 @@ try {
 	assert.equal(noClone.behind, null);
 	assert.match(noClone.countsReason, /no vendored clone/);
 	assert.match(tagsBetween(join(dir, "nope"), shaA).tagsReason, /no vendored clone/);
+
+	// #6278: a worktree can be provisioned with a CARRIED build - the pinned packages copied from the
+	// checkout that built them, with no git history of their own. The report must not answer "no build
+	// tree" for a tree that IS the pinned build; the marker records the sha it came from.
+	const carriedDir = join(dir, "carried");
+	mkdirSync(join(carriedDir, "packages", "durable", "dist"), { recursive: true });
+	writeFileSync(join(carriedDir, ".durig-carried-pin"), JSON.stringify({ sha: shaA, from: join(dir, "checkout"), packages: ["a"] }));
+	const carriedTree = inspectBuildTree({ sha: shaA, packages: [] }, carriedDir);
+	assert.equal(carriedTree.present, true, "a carried build is a build tree");
+	assert.equal(carriedTree.atPin, true, "and it is the pinned one, by the sha the marker recorded");
+	assert.equal(carriedTree.carried, true, "and the report says HOW it got there");
+	const driftedCarry = inspectBuildTree({ sha: shaC, packages: [] }, carriedDir);
+	assert.equal(driftedCarry.atPin, false, "a carried build from a different pin reads as drift, not a match");
+	assert.equal(readCarriedPin(carriedDir).sha, shaA, "the marker is readable by the tool that reports it");
+	const carriedGap = behindAhead(carriedDir, shaA, shaC);
+	assert.equal(carriedGap.gap, "unknown", "the gap cannot be counted without history, so it stays a named state");
+	assert.match(carriedGap.gapReason, /CARRIED from/, "and the reason says it was carried, and where to count it");
+	assert.equal(behindAhead(join(dir, "nope"), shaA, shaC).gapReason.includes("CARRIED"), false, "an absent tree is still reported as absent");
 
 	// #6061: a SHALLOW clone is one fetch away from a number. The report used to print nulls and point
 	// at a command the reader had to run by hand; now it runs the fetch itself and counts.

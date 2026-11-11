@@ -8,7 +8,7 @@
 // nothing of the operator's is at stake.
 
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { copyFile, cp, mkdir, rm, stat } from "node:fs/promises";
 import { join, relative, resolve, dirname, isAbsolute, sep } from "node:path";
 import { promisify } from "node:util";
@@ -132,6 +132,98 @@ function installedVersion(worktreePath, name) {
 /** The pi package whose version drifts in practice, and the one the tui demos need. */
 const PINNED_PACKAGE = "@earendil-works/pi-durable";
 
+/** Where a carried build records the sha it came from. `sync-pi` reads it too, so a carried tree is
+ * reported as the pinned tree rather than as "no build tree" (#6278). */
+const CARRIED_PIN_MARKER = ".durig-carried-pin";
+
+/**
+ * Carry the ALREADY-BUILT pin from the checkout a worktree was forked from (#6278).
+ *
+ * WHY THIS EXISTS. `vendor/pi-main` is gitignored, so a fresh worktree has no vendored pi clone, so
+ * `sync-pi --link` - the step that points `node_modules` at the pinned pi build - exits 1 with
+ * "nothing built yet; run --sync before --link". The worktree is then provisioned with the RELEASED
+ * pi packages while the seat root runs the pinned ones, and the suite in that tree reds demos that
+ * pass in the seat root. Measured 2026-11-11 in worktree item-6207: the SAME commit `35001c3a` gave
+ * **279/300, exit 1** unlinked and **300/300, exit 0** with the built pin linked; all 21 failures are
+ * red standalone too, so ordering is not the cause. That suite is the landing gate, so the gate was
+ * being run against a dependency set the verdict did not name.
+ *
+ * BUILDING IN EVERY WORKTREE IS NOT AFFORDABLE: `--sync` clones and builds (measured 36 s for
+ * `--sync --link`, ~110 MB of git history per clone). The build already exists in the checkout the
+ * worktree came from, and only two things are needed from it: each pinned package's `package.json`
+ * and its `dist`. Measured 41.4 MB for the ten pinned packages; a real carry in worktree item-6238
+ * linked in **9.6 s**, reported `dependencySet: built-pin`, and the full suite in that tree came back
+ * **300/300, exit 0**.
+ *
+ * THE CARRY IS REFUSED, NEVER GUESSED: the source build is at the source checkout's pin sha. A
+ * worktree forked from a branch that moved the pin gets no carry and is told to build its own -
+ * running someone else's pi build would be exactly the silent fallback this row is about.
+ */
+export function carryBuiltPin(worktreePath, source) {
+	const buildDir = join(worktreePath, "vendor", "pi-main");
+	if (existsSync(join(buildDir, "packages", "durable", "dist", "index.js"))) {
+		return { attempted: false, carried: false, reason: "the pin is already built in this worktree" };
+	}
+	if (!source) {
+		return { attempted: false, carried: false, reason: "no source checkout was given, so there is no built pin to carry" };
+	}
+	const sourceBuild = join(source, "vendor", "pi-main");
+	if (!existsSync(join(sourceBuild, "packages", "durable", "dist", "index.js"))) {
+		return {
+			attempted: true,
+			carried: false,
+			reason: `the checkout this worktree came from has no built pin (${sourceBuild}) - run: node scripts/sync-pi.mjs --sync there first`,
+		};
+	}
+	let wtPin = null;
+	let srcPin = null;
+	try {
+		wtPin = JSON.parse(readFileSync(join(worktreePath, "pi-main.pin.json"), "utf8"));
+	} catch {
+		return { attempted: true, carried: false, reason: "this worktree has no pi-main.pin.json, so there is no pin to carry" };
+	}
+	try {
+		srcPin = JSON.parse(readFileSync(join(source, "pi-main.pin.json"), "utf8"));
+	} catch {
+		return { attempted: true, carried: false, reason: `cannot read the pin in the source checkout (${join(source, "pi-main.pin.json")})` };
+	}
+	if (!wtPin.sha || !srcPin.sha || wtPin.sha !== srcPin.sha) {
+		return {
+			attempted: true,
+			carried: false,
+			reason: `the source checkout is built at pin ${srcPin.sha}, this worktree pins ${wtPin.sha ?? "(none)"}; carrying it would run a pi this branch did not choose - build it here with: node scripts/sync-pi.mjs --sync`,
+		};
+	}
+	const packages = Array.isArray(wtPin.packages) ? wtPin.packages : [];
+	if (packages.length === 0) {
+		return { attempted: true, carried: false, reason: "pi-main.pin.json names no packages, so there is nothing to carry" };
+	}
+	const copied = [];
+	let bytes = 0;
+	for (const pkg of packages) {
+		const srcDir = join(sourceBuild, pkg.dir);
+		const dist = join(srcDir, "dist", "index.js");
+		if (!existsSync(dist) || !existsSync(join(srcDir, "package.json"))) {
+			return {
+				attempted: true,
+				carried: false,
+				reason: `the source build is incomplete: ${pkg.name} has no built dist at ${srcDir} - run: node scripts/sync-pi.mjs --sync`,
+			};
+		}
+		const dstDir = join(buildDir, pkg.dir);
+		cpSync(join(srcDir, "package.json"), join(dstDir, "package.json"));
+		cpSync(join(srcDir, "dist"), join(dstDir, "dist"), { recursive: true });
+		bytes += statSync(join(dstDir, "dist")).size + statSync(join(dstDir, "package.json")).size;
+		copied.push(pkg.name);
+	}
+	writeFileSync(
+		join(buildDir, CARRIED_PIN_MARKER),
+		`${JSON.stringify({ sha: wtPin.sha, ref: wtPin.ref ?? null, from: source, carriedAt: new Date().toISOString(), packages: copied }, null, 2)}\n`,
+		"utf8",
+	);
+	return { attempted: true, carried: true, sha: wtPin.sha, from: source, packages: copied.length, bytes };
+}
+
 /**
  * Run `node scripts/sync-pi.mjs --link` in a worktree and REPORT what happened (#3821).
  *
@@ -193,8 +285,9 @@ export function dependencyNoteFor(dependency) {
 	const want = dependency.sourceVersion
 		? `, while the seat root resolves ${dependency.sourceVersion}`
 		: "";
+	const carry = dependency.carryReason ? ` The built pin could not be carried here: ${dependency.carryReason}.` : "";
 	return (
-		`\nDEPENDENCY NOT LINKED in this worktree: the sync-pi --link step FAILED (${dependency.reason}). ` +
+		`\nDEPENDENCY NOT LINKED in this worktree: the sync-pi --link step FAILED (${dependency.reason}).${carry} ` +
 		`This tree resolves ${have}${want}. A suite run here is NOT comparable with the seat root's, so ` +
 		`state which tree and dependency set a verdict came from; run \`node scripts/sync-pi.mjs --sync\` ` +
 		`(then prepare the workspace again) if you need parity.`
@@ -245,6 +338,11 @@ export async function installWorktreeDeps(worktreePath, { source = null } = {}) 
 	// package. Provisioning still continues — a runnable tree beats none — but the
 	// outcome is now RECORDED and reported to the caller, never downgraded to a
 	// warning nobody reads.
+	// Carry the build the checkout already has, so the link step has something to link to (#6278).
+	// This runs BEFORE the link, not as a fallback after it fails: the failure is predictable (the
+	// vendored tree is gitignored and never forked), and predicting it is what makes provisioning
+	// fast instead of a 36 s build per worktree.
+	const carry = carryBuiltPin(worktreePath, source);
 	const preLink = await linkWorktreeDeps(worktreePath);
 
 	let result;
@@ -272,6 +370,8 @@ export async function installWorktreeDeps(worktreePath, { source = null } = {}) 
 		reason: link.ok === true ? null : link.reason,
 		worktreeVersion: installedVersion(worktreePath, PINNED_PACKAGE),
 		sourceVersion: source ? installedVersion(source, PINNED_PACKAGE) : null,
+		carried: carry.carried ? { sha: carry.sha, from: carry.from, packages: carry.packages, bytes: carry.bytes } : null,
+		carryReason: carry.carried ? null : carry.reason,
 	};
 	return { ok: true, worktree: worktreePath, stdout: result.stdout.trim(), dependency };
 }
