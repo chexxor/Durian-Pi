@@ -4,7 +4,8 @@
 single map of *which* refs and worktrees exist, *how* each is created and retired, and — the part that
 costs the most time — **where the authoritative answer lives** for every question the pass asks.
 
-Sibling docs: `SEAT-LIFECYCLE.md` (a seat's life), `BROKER-ARCHITECTURE.md` (the writer), and the
+Sibling docs: `SEAT-LIFECYCLE.md` (a seat's life), `BROKER-ARCHITECTURE.md` (the writer),
+`WORK-ITEM-MODEL.md` (which items get a branch at all, and how a branch reaches `staging` then `main`), and the
 procedures in `docs/runbooks/` (`land`, `branch-cleanup`, `leaked-worktrees`). This doc is the *model*;
 the runbooks are the *steps*. It exists because the steps alone repeatedly sent a maintainer to three
 places to answer one question.

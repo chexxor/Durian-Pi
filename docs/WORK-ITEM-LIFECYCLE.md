@@ -3,7 +3,9 @@
 **Authority.** This is the canonical **lifecycle** model for a queue item: its statuses, the legal
 transitions between them, the seats/tools allowed to make each move, what wakes a seat, and what makes a
 stuck item visible. It is the companion to [`WORK-ITEM-SCHEMA.md`](WORK-ITEM-SCHEMA.md), which owns the
-item's **identity** (ids, titles, `kind`, `blockedBy`); this document owns its **behaviour**.
+item's **identity** (ids, titles, `kind`, `blockedBy`), and to [`WORK-ITEM-MODEL.md`](WORK-ITEM-MODEL.md),
+which owns its **execution mode** — whether an item gets a worktree and a branch at all, and how its work
+reaches `staging` and then `main`. This document owns its **queue behaviour**.
 
 A delegate or seat arriving cold should read this file *before* trying to unstick anything: the shapes
 below explain why a row can be registered, correct, and still invisible.
