@@ -90,12 +90,14 @@ export function liveGenerationLeases(dbPath) {
 
 /** A structured read failure: `code`, `view`, `path`, `detail`, `remedy` — so a caller branches on
  * the CAUSE rather than the wording, and the operator is told what to run next. */
-export function readFailure(view, detail, { path = "broker", remedy = "", cause = "broker_read_timeout" } = {}) {
+export function readFailure(view, detail, { path = "broker", remedy = "", cause = "broker_read_timeout", fatal = null } = {}) {
   const err = new Error(`read ${view}: ${detail}`);
   err.code = cause;
   err.view = view;
   err.readPath = path;
   err.remedy = remedy;
+  // #6160: the terminal harness failure, when this read died against a broker that recorded one.
+  err.fatal = fatal;
   return err;
 }
 
@@ -255,17 +257,30 @@ export async function readData(dbPath, view, params, fn, opts = {}) {
     if (leases.length === 0) {
       console.error(
         `note: read ${view} served directly from the store - the broker (pid ${state.pid}) did not answer ` +
-          `within ${timeoutMs} ms (heartbeat ${health.hbAgeMs ?? "?"} ms old, last pass ${health.passAgeMs ?? "never"} ms old)`,
+          `within ${timeoutMs} ms (heartbeat ${health.hbAgeMs ?? "?"} ms old, last pass ${health.passAgeMs === null ? "never" : `${health.passAgeMs} ms ago`})` +
+          (health.fatal ? ` - its harness is CLOSED: ${health.reason}` : ""),
       );
       return await readLocal(dbPath, fn);
     }
-    throw readFailure(view, `${err?.message ?? err} (broker pid ${state.pid} is resident and ${leases.length} seat(s) hold live generation leases, so a direct read is not safe)`, {
-      path: "broker",
-      cause: health.state === "degraded" ? "broker_degraded" : "broker_read_timeout",
-      remedy:
-        "Wait for the seat to finish, or stop the broker and read directly: " +
-        "`node cli.mjs serve --stop` then `node cli.mjs status --local`. " +
-        "Runbook: docs/runbooks/broker-down-or-stalled.md",
-    });
+    throw readFailure(
+      view,
+      `${err?.message ?? err} (broker pid ${state.pid} is resident and ${leases.length} seat(s) hold live generation leases, so a direct read is not safe; ` +
+        `heartbeat ${health.hbAgeMs ?? "?"} ms old, last completed pass ${health.passAgeMs === null ? "never" : `${health.passAgeMs} ms ago`})`,
+      {
+        path: "broker",
+        // #6160: a broker whose harness hit the reopen cap is not "slow" - it cannot pass. Naming that
+        // cause separately from a plain timeout is what makes alive-but-dead detectable without reading
+        // `<db>.broker.log`.
+        cause: health.fatal ? "broker_harness_dead" : health.state === "degraded" ? "broker_degraded" : "broker_read_timeout",
+        fatal: health.fatal ?? null,
+        remedy: health.fatal
+          ? "The broker's harness is closed (reopen cap exceeded), so it will not answer any read: " +
+            "`node cli.mjs serve --stop` then `node cli.mjs serve`, and read the log: " +
+            "grep 'REOPEN' <db>.broker.log. Runbook: docs/runbooks/broker-down-or-stalled.md"
+          : "Wait for the seat to finish, or stop the broker and read directly: " +
+            "`node cli.mjs serve --stop` then `node cli.mjs status --local`. " +
+            "Runbook: docs/runbooks/broker-down-or-stalled.md",
+      },
+    );
   }
 }

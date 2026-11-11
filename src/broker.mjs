@@ -1755,6 +1755,9 @@ export async function runWakeLoop({
   let heartbeat = null;
   let lastPassAt = null;
   let stateSeed = null; // { pid, since, runToken } — the identity the heartbeat/progress rewrites keep
+  // #6160: the terminal harness failure this broker recorded, carried on every state write so a
+  // reader can tell "alive" from "cannot pass" without opening the log.
+  let fatalState = null;
   // A pass is IN FLIGHT from the moment it starts until it returns; the out-of-band read drain
   // below uses this to tell "the loop is resting" from "the loop is wedged", and the log line it
   // emits names a wedged pass instead of leaving the operator to infer it from a frozen PASS.
@@ -1772,9 +1775,10 @@ export async function runWakeLoop({
       // bound (default 300 s + 60 s margin) while doing nothing. `null` keeps `brokerHealth` honest:
       // "no pass has completed yet".
       lastPassAt = typeof state.lastPassAt === "number" ? state.lastPassAt : null;
+      fatalState = state.fatal ?? null;
       heartbeat = setInterval(() => {
         try {
-          writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
+          writeBrokerState(dbPath, { ...stateSeed, lastPassAt, fatal: fatalState });
         } catch (err) {
           console.error(`BROKER WARNING: heartbeat write failed: ${err?.message ?? err}`);
         }
@@ -2025,7 +2029,7 @@ export async function runWakeLoop({
       lastPassAt = now();
       if (dbPath && stateSeed) {
         try {
-          writeBrokerState(dbPath, { ...stateSeed, lastPassAt });
+          writeBrokerState(dbPath, { ...stateSeed, lastPassAt, fatal: fatalState });
         } catch (err) {
           console.error(`BROKER WARNING: progress write failed: ${err?.message ?? err}`);
         }
@@ -2087,6 +2091,15 @@ export async function runWakeLoop({
         reopenAttempts++;
         if (reopenAttempts > reopenCap) {
           logBrokerLine(dbPath, `HARNESS-REOPEN-CAP-EXCEEDED attempts=${reopenAttempts}`);
+          // #6160: the cap is recorded in the STATE too, not only in the log. A broker that has lost
+          // its harness keeps a fresh heartbeat and a frozen pass, so health said "no pass within the
+          // progress timeout" - indistinguishable from a slow broker. Recording the cause makes
+          // alive-but-dead detectable by `status`, by the read client's bound, and by a script.
+          fatalState = recordFatalHarness(dbPath, {
+            attempts: reopenAttempts,
+            cause: described.error ?? "unknown",
+            kind: isClosedStoreError(error) ? "closed-store" : isSessionFailed(error) ? "session-failed" : "unknown",
+          });
           onDiagnostic({ kind: "harness-reopen-cap-exceeded", attempts: reopenAttempts, ...described });
           stoppedBy = "session-failed";
           sessionFailedTerminal = true;
@@ -2210,10 +2223,22 @@ export async function runWakeLoop({
   // it on a wedged pass or a live seat run — bound the drain by whatever grace remains. The
   // ordinary cooperative stop keeps F11's unbounded drain, so the harness is never closed
   // over a live run.
-  if (stoppedBy === "deadline" || graceExpired()) {
-    const at = stopRequestedMs();
-    const remaining = graceMs > 0 && at !== null ? Math.max(0, graceMs - (now() - at)) : 0;
-    await settleWithin(h.waitForIdle(context), remaining);
+  // #6160: `sessionFailedTerminal` joins the BOUNDED branch. An exit because the harness is DEAD
+  // cannot park on `waitForIdle` of that dead handle: that unbounded wait is precisely what leaves a
+  // process ALIVE, heartbeating, with a frozen pass and a spool nobody drains. The bound is reported,
+  // so the post-mortem can tell "the drain settled" from "the drain never could".
+  if (stoppedBy === "deadline" || graceExpired() || sessionFailedTerminal) {
+    const boundMs = exitDrainBoundMs({
+      stoppedBy,
+      sessionFailedTerminal,
+      graceMs,
+      stopRequestedAt: stopRequestedMs(),
+      now: now(),
+    });
+    const drain = await settledWithin(h.waitForIdle(context), boundMs);
+    if (!drain.settled && !drain.noGrace) {
+      logBrokerLine(dbPath, `EXIT-DRAIN-BOUND ms=${boundMs} timed=true reason=${stoppedBy ?? "unknown"}`);
+    }
   } else {
     await h.waitForIdle(context);
   }
@@ -2334,6 +2359,26 @@ export function brokerStatePath(dbPath) {
 const BROKER_HEARTBEAT_MS = 20_000;
 const BROKER_HEARTBEAT_TIMEOUT_MS = 60_000;
 
+/** #6160: how long a broker whose harness is terminally closed may spend trying to drain it before
+ * it stops trying. Small on purpose: a dead handle never becomes idle. */
+export const EXIT_DRAIN_BOUND_MS = 15_000;
+
+/**
+ * HOW LONG THE FINAL DRAIN MAY RUN (#6160, derived from #2420's deadline rule).
+ * Pure, so the bound can be pinned without a harness:
+ *   terminal harness failure  -> max(remaining grace, EXIT_DRAIN_BOUND_MS). A dead handle never
+ *                               returns to idle, so the wait must have an end.
+ *   deadline / expired grace  -> whatever grace is left (possibly 0: do not wait at all).
+ *   ordinary cooperative stop -> null, i.e. unbounded, because a live run must not be cut off
+ *                               (F11) - unless the harness is dead, which is the case above.
+ */
+export function exitDrainBoundMs({ stoppedBy, sessionFailedTerminal = false, graceMs = 0, stopRequestedAt = null, now = Date.now() }) {
+  const remaining = graceMs > 0 && stopRequestedAt !== null ? Math.max(0, graceMs - (now - stopRequestedAt)) : 0;
+  if (sessionFailedTerminal) return Math.max(remaining, EXIT_DRAIN_BOUND_MS);
+  if (stoppedBy === "deadline") return remaining;
+  return null;
+}
+
 /** Liveness probe by signal 0, hardened against a recycled pid. */
 export function brokerAlive(state, { now = Date.now() } = {}) {
   if (!state || typeof state.pid !== "number") return false;
@@ -2393,6 +2438,20 @@ export function brokerHealth(state, { now = Date.now(), streamTimeoutMs = null }
   const progressTimeoutMs =
     (typeof streamTimeoutMs === "number" ? streamTimeoutMs : DEFAULT_PASS_TIMEOUT_MS) + BROKER_PROGRESS_MARGIN_MS;
   const passAgeMs = typeof state.lastPassAt === "number" ? now - state.lastPassAt : null;
+  // #6160: a broker that recorded a TERMINAL harness failure is degraded by definition, whatever its
+  // heartbeat looks like, and the reason names the failure rather than the symptom. The progress legs
+  // are still returned so a reader sees the frozen clock beside the cause.
+  if (state.fatal) {
+    return {
+      state: "degraded",
+      reason: `harness closed: reopen cap exceeded (${state.fatal.attempts ?? "?"} attempts, ${state.fatal.cause}) at ${state.fatal.at ?? "unknown"}`,
+      fatal: state.fatal,
+      pid: state.pid,
+      hbAgeMs,
+      passAgeMs,
+      progressTimeoutMs,
+    };
+  }
   if (passAgeMs === null || passAgeMs > progressTimeoutMs) {
     return {
       state: "degraded",
@@ -2481,8 +2540,50 @@ export function readBrokerState(dbPath) {
   }
 }
 
-export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now(), lastPassAt = null }) {
-  writeFileSync(brokerStatePath(dbPath), JSON.stringify({ pid, since, runToken, heartbeatAt, lastPassAt }));
+export function writeBrokerState(dbPath, { pid, since, runToken = randomUUID(), heartbeatAt = Date.now(), lastPassAt = null, fatal = null }) {
+  // #6160: `fatal` is the terminal harness failure, recorded where a reader can see it. It is
+  // omitted when null, so a healthy state file stays exactly {pid, since, runToken, heartbeatAt,
+  // lastPassAt} - existing readers and demos compare that shape.
+  writeFileSync(
+    brokerStatePath(dbPath),
+    JSON.stringify({ pid, since, runToken, heartbeatAt, lastPassAt, ...(fatal ? { fatal } : {}) }),
+  );
+}
+
+/**
+ * Record WHY the broker can no longer pass, in its own state file (#6160).
+ *
+ * THE HOLE THIS CLOSES: `HARNESS-REOPEN-CAP-EXCEEDED` went to `<db>.broker.log` and nowhere else.
+ * A broker that had lost its harness still held a FRESH heartbeat and a FROZEN pass, so
+ * `brokerHealth` said `degraded` with the generic reason "no pass within the progress timeout" - the
+ * same sentence as a broker that is merely slow. The CAUSE lived only in a log line nobody read
+ * before deciding what to do.
+ *
+ * Only the broker that owns the state may record it (the pid guard), and the heartbeat keeps the
+ * field, so a wedged-but-alive broker reports its own death by name.
+ */
+export function recordFatalHarness(dbPath, info) {
+  const state = readBrokerState(dbPath);
+  if (!state || state.pid !== process.pid) return null;
+  const fatal = {
+    cause: info?.cause ?? "unknown",
+    attempts: Number.isFinite(info?.attempts) ? info.attempts : null,
+    at: info?.at ?? new Date().toISOString(),
+    firstAt: state.fatal?.at ?? info?.at ?? new Date().toISOString(),
+  };
+  try {
+    writeBrokerState(dbPath, {
+      pid: state.pid,
+      since: state.since,
+      runToken: state.runToken,
+      heartbeatAt: state.heartbeatAt ?? Date.now(),
+      lastPassAt: typeof state.lastPassAt === "number" ? state.lastPassAt : null,
+      fatal,
+    });
+  } catch (err) {
+    console.error(`BROKER WARNING: fatal-state write failed: ${err?.message ?? err}`);
+  }
+  return fatal;
 }
 
 /**
