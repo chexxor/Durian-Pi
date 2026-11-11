@@ -255,6 +255,7 @@
       "demo/seat-instruction-encoding.test.mjs",
       "demo/seat-shell-wording.test.mjs",
       "demo/seatguard.test.mjs",
+      "demo/seatguard-degraded-root.test.mjs",
       "demo/seatroot-name.test.mjs",
       "demo/seattools.test.mjs",
       "demo/secretdetect.test.mjs",

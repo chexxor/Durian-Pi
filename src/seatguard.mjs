@@ -36,22 +36,62 @@ function absoluteSeatPath(root, path) {
 	return isAbsolute(normalized) ? normalized : resolveNodePath(root, normalized);
 }
 
-/** The tree a seat's writes resolve against, in the SAME chain `makeSeatEnv` and
- * harness `buildEnv` use: the seat's persisted agent cwd (what `prepare_workspace`
- * writes via `configure`), then `DURIG_SEAT_ROOT`, then this process's cwd.
- * A snapshot that cannot be served leaves the fallback — fail-open, never
- * blocking a write because the guard's own read hiccuped. */
+/**
+ * The tree a seat's writes resolve against, or `null` when the guard CANNOT name it (#6181).
+ *
+ * The chain is the one `makeSeatEnv` and the write guard already share (src/seatroot.mjs:11):
+ * the seat's persisted agent cwd — written by `prepare_workspace`'s `configure`, i.e. by broker
+ * code, not by the seat — then `DURIG_SEAT_ROOT`, then this process's cwd.
+ *
+ * WHAT THIS FUNCTION USED TO DO: when the agent-doc read hiccuped it kept that fallback and went
+ * on classifying the write against it. The fallback is the SHARED CHECKOUT, because the guard runs
+ * inside the broker/CLI process. So a degraded read made the guard check a write against exactly the
+ * tree it exists to protect, and "inside the root" read as "allowed". A BOUNDARY guard that cannot
+ * evaluate must DENY, not guess (docs/reviews/security-fail-closed-guard-decision-point.md, F1 + G2).
+ *
+ * Four states, deliberately distinct:
+ *   session + the agent cwd reads        -> that cwd.
+ *   session, no cwd recorded             -> resolveSeatRoot(): the root the harness itself runs the
+ *                                          seat's tools in. #3961 rules a never-prepared workspace out
+ *                                          of the degraded-cwd class, and that ruling is kept here.
+ *   session, the read FAILS             -> null, and the caller refuses. No env var, no process cwd.
+ *   no session (a demo or the harness calling the guard directly) -> resolveSeatRoot(). A seat cannot
+ *                                          reach this branch: every seat tool call arrives through a
+ *                                          conversation.
+ */
 async function seatGraphRoot(api, context) {
-	if (api?.conversationId !== undefined && typeof api?.snapshot === "function") {
-		try {
-			const agent = await api.snapshot(AgentDoc, api.conversationId, context);
-			if (agent?.cwd !== undefined) return agent.cwd;
-		} catch (err) {
-			// fail-open: keep the fallback root, but report the cause rather than swallow it.
-			console.error(`SEATGUARD WARNING: seat cwd snapshot failed, using fallback root: ${err?.message ?? err}`);
-		}
+	if (api?.conversationId === undefined || typeof api?.snapshot !== "function") return resolveSeatRoot().root;
+	try {
+		const agent = await api.snapshot(AgentDoc, api.conversationId, context);
+		return agent?.cwd !== undefined ? agent.cwd : resolveSeatRoot().root;
+	} catch (err) {
+		console.error(
+			`SEATGUARD: seat cwd snapshot failed (${err?.message ?? err}) — the guard will NOT guess a root; ` +
+			`the call is refused until prepare_workspace names it`,
+		);
+		return null;
 	}
-	return resolveSeatRoot().root;
+}
+
+/**
+ * #6181: the refusal for a call the guard could not classify because its root is unknown. Shaped
+ * after ROADMAP 134's minimum fields (rule, action, decision, source, remedy) in prose — the
+ * structured form is 134's work, not this row's.
+ *
+ * The #4790 escape hatch is preserved: a BARE read verb (`node cli.mjs status` / `queue`) opens
+ * nothing writable, and refusing it is what previously deadlocked an idle seat that held no claimed
+ * item and so could not run `prepare_workspace`. Everything else is denied.
+ */
+function unresolvableRootRefusal(call, command) {
+	if (typeof command === "string" && isReadOnlyCliInvocation(command)) return null;
+	return (
+		`refused by durig: the guard could not determine which tree this ${call?.name ?? "call"} runs in, ` +
+		`so it cannot decide whether the action stays inside your worktree — it is not going to guess. ` +
+		`(rule: seat-root-unresolvable; decision: not-evaluated; source: src/seatguard.mjs). The root it ` +
+		`would have used is the shared checkout, the tree this guard protects. Remedy: run \`prepare_workspace\` ` +
+		`for the item you hold, then retry. To inspect the rig meanwhile, a bare \`node cli.mjs status\` or ` +
+		`\`node cli.mjs queue\` still runs.`
+	);
 }
 
 /**
@@ -452,6 +492,13 @@ export async function beforeTool(call, api, context) {
 			const spool = refusalForSpoolPath(call.arguments?.path);
 			if (spool !== null) return { block: spool };
 		}
+		// #6181: a seat write whose root the guard cannot name is REFUSED. There is no tree to
+		// classify against, and the fallback the guard used to reach is the shared checkout.
+		const writeRoot = await seatGraphRoot(api, context);
+		if (writeRoot === null) {
+			const block = unresolvableRootRefusal(call, undefined);
+			if (block !== null) return { block };
+		}
 		// #673: writes get the same refusal channel (`block`). Two corruption
 		// shapes are checked at call time: class 2 (stray control bytes) from the
 		// payload alone, class 1 (a multi-line source collapsed to one line) from
@@ -467,10 +514,18 @@ export async function beforeTool(call, api, context) {
 			const shape = { path: call.arguments?.path, content: call.arguments?.content };
 			const refusal =
 				refusalForControlBytes(shape) ??
-				refusalForWrite({ root: await seatGraphRoot(api, context), path: shape.path, content: shape.content });
+				refusalForWrite({ root: writeRoot, path: shape.path, content: shape.content });
 			return refusal === null ? undefined : { block: refusal };
 		}
 		return undefined;
+	}
+	// #6181: the root is resolved ONCE for the whole shell path (it was read four times below), and
+	// an unresolvable root is refused BEFORE any command classification - classification against a
+	// guessed root is the fail-open this row closes. The #4790 bare-read-verb escape stays.
+	const guardRoot = await seatGraphRoot(api, context);
+	if (guardRoot === null) {
+		const block = unresolvableRootRefusal(call, command);
+		if (block !== null) return { block };
 	}
 	// #3961/#3992: a commit from the DEGRADED cwd (the shared checkout) lands ON main, bypassing the
 	// landing pass - refuse it with the precise diagnosis FIRST.
@@ -485,14 +540,13 @@ export async function beforeTool(call, api, context) {
 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
 	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)
 	// can resolve its TARGET instead of pattern-matching the verb.
-	const guardRoot = await seatGraphRoot(api, context);
 	const refusal = refusalFor(command, { root: guardRoot, cwd: guardRoot }) ?? refusalForSpoolPath(command);
 	if (refusal !== null) return { block: refusal };
 	// #4367: a shell command string that WRITES outside the seat's worktree. The containment guard
 	// exists (confine.mjs `confinedEnv`), but only structured calls reach it; this is the resolver's
 	// wiring. `unresolved` is REPORTED rather than passed silently — a form nobody could read is a
 	// form nobody checked, and its silence must not look like "nothing was wrong".
-	const shellWrite = shellWriteRefusal({ command, root: await seatGraphRoot(api, context) });
+	const shellWrite = shellWriteRefusal({ command, root: guardRoot });
 	if (shellWrite.block !== null) return { block: shellWrite.block };
 	if (shellWrite.unresolved.length > 0) {
 		console.error(
@@ -503,7 +557,7 @@ export async function beforeTool(call, api, context) {
 	}
 	// #1317: a commit lands durable, portable history — gate its staged content.
 	if (GIT_COMMIT_RE.test(command)) {
-		const block = commitSecretRefusal(await seatGraphRoot(api, context), command);
+		const block = commitSecretRefusal(guardRoot, command);
 		if (block !== null) return { block };
 	}
 	return undefined;
