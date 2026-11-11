@@ -8,7 +8,11 @@
 //      census distinguishes the two paths, not just counts entries;
 //   3. a seat that never woke is REPORTED (note=none, 0 compactions) rather than silently absent;
 //   4. the buckets are mutually exclusive: the extension's summary contains the note AND the digest, so
-//      the three source counts must sum to the compaction count, never exceed it.
+//      the three source counts must sum to the compaction count, never exceed it; and
+//   5. (#6118) the verdict each seat earns is PROVEN only when the seat WROTE the note and a compaction
+//      carried it. A seat whose boundary was covered by a queue seed is SEEDED - the mechanism reached it,
+//      its own durability claim is still unproven. A seat with no extension is NOT-ARMED. A seat that never
+//      ran is NOT-OBSERVED, not broken.
 //
 // No real model, no network, no broker: faux answers every request, and the proof of the note path is
 // still that the summariser call never happens.
@@ -28,7 +32,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 
 import { loadExtensions } from "../src/extensions.mjs";
 import { registerSeat, RigQueue, Router } from "../src/rig.mjs";
-import { compactionSource, noteStateIsEmpty, readNoteCensus, renderCensus } from "../src/notecensus.mjs";
+import { compactionSource, classifySeat, noteStateIsEmpty, readNoteCensus, renderCensus } from "../src/notecensus.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const ctx = BACKGROUND_CONTEXT;
@@ -191,6 +195,39 @@ check("nothing offered the note tools, so nothing could have used them",
   JSON.stringify({ offered: controlRow.noteToolsOffered, read: controlRow.readNoteCalls, write: controlRow.writeNoteCalls }));
 check("its compaction is attributed to the summariser", controlRow.compactionVia.summariser >= 1 && controlRow.compactionVia.note === 0,
   JSON.stringify(controlRow.compactionVia));
+
+/* ---- 6. PROVEN vs CLAIMED, per seat (#6118) ---- */
+console.log("\n=== 6. the verdict: a boundary covered by a queue seed is SEEDED, not PROVEN ===");
+const seeder = await openRig(join(dir, "seeded.sqlite"), { withContinuity: true, seatName: "seeder" });
+try {
+  const conv = await seeder.harness.conversation(seeder.conversationId, ctx);
+  await seeder.harness.commit(async (tx) => {
+    const queue = await tx.doc(RigQueue);
+    queue.items.push({ id: queue.nextId, from: "pm", to: "seeder", subject: "Classify proven vs claimed", body: "per seat", status: "queued" });
+    queue.nextId += 1;
+  }, ctx);
+  for (let i = 0; i < 20; i++) {
+    seeder.faux.setResponses([fauxAssistantMessage(fauxText(`ack-${i}`))]);
+    await (await conv.submit({ type: "input", content: `turn-${i} ${"x".repeat(2000)} marker-${i}` }, ctx)).wait(ctx);
+  }
+  const seededBefore = seeder.faux.state.callCount;
+  const seededTask = await conv.compact("fold the early turns", ctx);
+  await seeder.harness.waitForTask(seededTask, ctx);
+  check("the seed path costs zero model calls too", seeder.faux.state.callCount === seededBefore, `before=${seededBefore} after=${seeder.faux.state.callCount}`);
+} finally {
+  await seeder.harness.close(ctx);
+}
+const seededRow = readNoteCensus(join(dir, "seeded.sqlite"), { seats: [{ name: "seeder", conversationId: seeder.conversationId }] }).seats[0];
+check("the note doc exists but was never written", seededRow.noteDoc && !seededRow.noteWritten, JSON.stringify({ doc: seededRow.noteDoc, written: seededRow.noteWritten }));
+check("a compaction did carry a note-shaped summary", seededRow.compactionVia.note >= 1, JSON.stringify(seededRow.compactionVia));
+check("so the verdict is SEEDED, not PROVEN — the seat has nothing durable of its own", seededRow.verdict === "seeded" && seededRow.owner === "seat", `${seededRow.verdict} / ${seededRow.owner} — ${seededRow.why}`);
+check("the seat that wrote a note and was compacted on it is PROVEN", row.verdict === "proven" && row.owner === "none", `${row.verdict} / ${row.owner}`);
+check("the seat whose extension was never loaded is NOT-ARMED and the operator owns it", controlRow.verdict === "not-armed" && controlRow.owner === "operator", `${controlRow.verdict} / ${controlRow.owner}`);
+check("a seat that never ran is NOT-OBSERVED, not a failure", sleeping.verdict === "not-observed", `${sleeping.verdict} — ${sleeping.why}`);
+check("the header states the split before any per-seat line", renderCensus(census).split("\n")[0].startsWith("continuity notes: PROVEN 1 of 2"), renderCensus(census).split("\n")[0]);
+check("classifySeat is pure and answers without a store",
+  classifySeat({ noteWritten: true, compactions: 5, compactionVia: { note: 0, digest: 0, summariser: 5 }, noteToolsOffered: 3 }).verdict === "claimed-only",
+  "a written note with no note-carried compaction is a claim, not a proof");
 
 rmSync(dir, { recursive: true, force: true });
 

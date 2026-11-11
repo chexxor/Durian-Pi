@@ -57,8 +57,8 @@ node -e 'const j=JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));con
 
 ### Per seat: does the note exist, was it read, did compaction use it? (#6082)
 
-`status` carries a **note census** — one row per seat, three facts each. It is a direct read-only open of the
-store (`src/fleethealth.mjs`'s precedent: no harness, no ownership), so it answers even when the broker is
+`status` carries a **note census** — one row per seat, three facts each, plus a **verdict** and an **owner**
+(#6118). It is a direct read-only open of the store (`src/fleethealth.mjs`'s precedent: no harness, no ownership), so it answers even when the broker is
 wedged. `--no-notes` skips the scan; it is one pass over `entries` and costs **1.4 s** on this rig's
 424,583-entry store.
 
@@ -68,7 +68,30 @@ node cli.mjs status --json | node -e 'const j=JSON.parse(require("fs").readFileS
 node -e 'import("./src/notecensus.mjs").then(m=>console.log(m.renderCensus(m.readNoteCensus("./selfdev.sqlite"))))'
 ```
 
-Measured 2026-11-10 on this rig's `selfdev.sqlite` (exit 0):
+Measured 2026-11-11 on this rig's `selfdev.sqlite` (exit 0, 2.9 s; the seat names below come from the seat map
+`status` passes — run the module directly with no seat map and the rows are labelled `conv-<id>` instead):
+
+```
+continuity notes: PROVEN 7 of 12 seats; seeded 2; claimed-only 1; not-armed 0; not-observed 2. 10/12 seats have a written note; 24 read_note calls across 97 turns that offered the tools; 1957 compactions -> note 64, digest 0, summariser 1893
+  conv-3       conv 3       note=written  read_note 3x (offered 8x)  compactions 7 (note 4, digest 0, summariser 3)  latest: note  verdict=proven owner=none
+  conv-15      conv 15      note=written  read_note 3x (offered 13x)  compactions 571 (note 10, digest 0, summariser 561) latest: note  verdict=proven owner=none
+  conv-4936    conv 4936    note=empty doc read_note 0x (offered 8x)  compactions 353 (note 12, digest 0, summariser 341) latest: digest  verdict=seeded owner=seat
+  conv-86607   conv 86607   note=written  read_note 1x (offered 2x)  compactions 125 (note 0, digest 0, summariser 125) latest: summariser  verdict=claimed-only owner=open
+  conv-4918    conv 4918    note=written  read_note 1x (offered 1x)  compactions 0 (note 0, digest 0, summariser 0)  latest: no compaction  verdict=not-observed owner=none
+```
+
+**The verdict vocabulary (#6118)** — "the mechanism works" and "this seat is carried by the mechanism" are
+ different claims, and the fleet has been reading one as the other (`src/notecensus.mjs`, `classifySeat`):
+
+| verdict | what the store actually shows | who owns the gap |
+|---|---|---|
+| `proven` | the seat wrote a note AND a compaction carried it | nobody |
+| `seeded` | a compaction was covered, but by a seed pulled from the seat's queue (`extensions/continuity.mjs` `seededGoal`), not by the seat's own note | the seat |
+| `claimed-only` | the tools were offered and no boundary ever carried a note; if a note WAS written, either the compactions predate it or the hook missed it — the census cannot tell, so it is reported open, not as a defect | open |
+| `not-armed` | 0 turns declared the note tools: `src/extensions.mjs` has no auto-discovery, so an unlisted extension is an absent one | the operator |
+| `not-observed` | the seat has never been compacted — a non-observation, neither a failure nor a proof | nobody |
+
+The older measurement, before the verdict column existed, is kept below as the format it rendered then:
 
 ```
 continuity notes: 4/12 seats have a written note; 6 read_note calls across 21 turns that offered the tools; 1905 compactions -> note 12, digest 0, summariser 1893
