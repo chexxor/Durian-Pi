@@ -55,7 +55,12 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
 
    Five classes, and the distinction is the whole point:
    - **release-candidate** - every gate the row names is `done`/`cancelled`, no trigger text, nothing else
-     parks it. These are the orphan rows.
+     parks it. These are the orphan rows. **Read the qualifier (#6502):** if the only gate the row names is
+     `cancelled`, releasing it is REFUSED by the broker (`src/rig.mjs:1346`, "its gate names #<id>, which is
+     cancelled") and `claim_work` refuses the row with `gate-cancelled:#<id>` (`src/rig.mjs:332`). Verify
+     before acting: `node tools/probes/gate-predicate-disagreement-6502.mjs` (exit 1 = the classifier still
+     disagrees with the claim path). Until a gate-edit verb exists, the legal action for such a row is
+     `cancel_work` with a reason, not release.
    - **cancel-candidate** - the row's own work has a `merge: land item-<id>` commit on main, or the artifact
      it asks for is already in the tree and contains what it names.
    - **standing-rule** - the row's text names an EVENT it waits for (a quiet window, an operator ruling, a
