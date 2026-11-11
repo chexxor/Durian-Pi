@@ -1,11 +1,11 @@
 ---
 runbook: intent-stuck-in-inbox
-symptom: "a `cli.mjs send`/`watch` intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; or a command vanishes with no verdict and nothing in `status` explains it"
+symptom: "a `cli.mjs send`/`watch` intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; or a command vanishes with no verdict and nothing in `status` explains it; or `queue`/`status` times out with a fresh heartbeat and an inbox full of unread `read` intents (#6139)"
 writes: false                    # this procedure only reads the spool; the probe writes only its own temp dirs
 precondition: "none (the probe needs no broker and opens no store)"
-last_verified: 2026-11-10
-verified_by: architect
-evidence: "item #6185; `node docs/evidence/2026-11-10-broker-receive-path/probe-drain.mjs` exit 0 in worktree item-6185 @ 20308665; `node demo/control-plane-gate.test.mjs` exit 0"
+last_verified: 2026-11-11
+verified_by: impl
+evidence: "item #6185; `node docs/evidence/2026-11-10-broker-receive-path/probe-drain.mjs` exit 0 in worktree item-6185 @ 20308665; `node demo/control-plane-gate.test.mjs` exit 0. #6139 leg, measured 2026-11-11 in worktree item-6139 off main 580c1343 with `sync-pi --sync && --link` (dependencySet built-pin, pi-durable 1.5.1): `node demo/read-intent-starvation.test.mjs` exit 0, `node demo/intent-spool-census.test.mjs` exit 0, `node scripts/test.mjs --all` 302/302 exit 0; the RED baseline for the starvation leg ran against HEAD's broker (pre-fix copy) and failed 2 checks: `reason=timed out awaiting the broker's result; pending=2` after 4 s with both intents still in the spool"
 check_rule: null                 # nothing re-tests dead-letter reachability after the fact — see Evidence
 ---
 
@@ -31,6 +31,41 @@ Two distinct failures, and confusing them is the trap:
 
 Blast radius: one stuck payload means the drain re-visited it every pass; nothing else is corrupted,
 but the queue's counts are lying, and a fleet read through those counts under-reports refusals.
+
+## Reads queued behind one stuck mutation (#6139)
+
+**Symptom.** `node cli.mjs queue --held --with-gates --json` exits 1 with
+`read queue-census: timed out awaiting the broker's result` while the broker is ALIVE — heartbeat
+fresh, `lastPassAt` frozen — and `<db>.broker.inbox` still holds the unread `read` intents.
+
+**Why it happened.** Two gates combined. The out-of-band read drain ran only when EVERY pending
+intent was a read (`onlyReadIntents`), and `drainSpool` took the seat roster with
+`harness.snapshot(...)` before applying anything, so a single mutating intent whose handle is wedged
+made the whole drain throw **before** any read in the same spool was served. One stuck mutation held
+every read behind it, indefinitely.
+
+**What the code does now.** Reads are drained first, and the roster is taken lazily, immediately
+before the first mutation. A mutation the broker cannot apply is DELAYED — it stays in the spool for
+the real pass — and never blocks a read. The out-of-band drain runs in `readOnly` mode, so it touches
+reads only.
+
+**Read the spool instead of guessing.** The census is a file read, so it answers even while every
+broker-routed read is timing out:
+
+```bash
+node cli.mjs status --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).broker.spool))'
+# { count, reads, mutations, unreadable, oldestAt, oldestAgeMs, newestAt }
+```
+
+`count>0` with `reads>0` and a large `oldestAgeMs` means the drain is not running (this runbook). A
+frozen pass with an EMPTY spool is the other wedge — see `broker-down-or-stalled.md`. A timed-out read
+now says so in its own message: `timed out awaiting the broker's result (spool: pending=2 reads=1
+mutations=1 oldest=5401ms)`.
+
+```bash
+node demo/read-intent-starvation.test.mjs   # exit 0: a wedged handle cannot starve reads
+node demo/intent-spool-census.test.mjs      # exit 0: the census counts, ages, and rides in the timeout
+```
 
 ## Preconditions
 
