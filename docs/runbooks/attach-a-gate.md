@@ -5,7 +5,7 @@ writes: false                    # the procedure routes rows; it never opens a H
 precondition: "none"
 last_verified: 2026-11-10
 verified_by: architect
-evidence: "item #6225; `node tools/probes/revise-authority-boundary.mjs` exit 0 in worktree item-6185 @ f192f543; `node demo/queue-held-gates.test.mjs` exit 0 (42 held rows with NO recorded gate in the fixture)"
+evidence: "item #6225; `node tools/probes/revise-authority-boundary.mjs` exit 0 in worktree item-6185 @ f192f543; `node demo/queue-held-gates.test.mjs` exit 0 (42 held rows with NO recorded gate in the fixture); env name corrected to `DURIG_DB` in both commands (#6336, 2026-11-11, tree `35001c3a`: `cli.mjs:161` reads `DURIG_DB` only, so `DURIAN_PI_DB=` opened the fallback `./rig.sqlite`). The commands themselves were not re-run here - this item worktree has no `./selfdev.sqlite`."
 check_rule: null                 # nothing re-tests gate reachability after the fact — see Evidence
 ---
 
@@ -42,7 +42,7 @@ The broker is up (routing rows is a submission). No store is opened by this proc
 Confirm the row's parties and its gate, before deciding what to mint:
 
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs show <row-id>
+DURIG_DB=./selfdev.sqlite node cli.mjs show <row-id>
 ```
 
 Expected: the row's `from`, `to`, `status`, and — if it carries one — `blockedBy`. If `blockedBy` is
@@ -88,7 +88,7 @@ authority, not by terminality (the defect); sender `hold_work` REFUSED while `ca
 Then confirm the gate landed on the row you re-minted:
 
 ```bash
-DURIAN_PI_DB=./selfdev.sqlite node cli.mjs show <new-row-id>
+DURIG_DB=./selfdev.sqlite node cli.mjs show <new-row-id>
 ```
 
 Expected: `blockedBy=<ids>` present, not a sentence in the body.

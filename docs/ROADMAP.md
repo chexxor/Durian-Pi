@@ -3318,9 +3318,10 @@ store (single writer, survives a machine move), not in loose files next to the w
 
 **191. One config spelling, one mechanism, and a demo that proves the docs match the code** — measured on this
 box: the rename is **half-applied and points in opposite directions by entry point**. `src/config.mjs`
-(`CONFIG_KEYS`, used by `cli.mjs:142`) reads only `DURIG_DB` / `DURIG_SEAT_ROOT`, so `DURIAN_PI_DB=… node
-cli.mjs status` silently opens an empty `./rig.sqlite`; `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB`
-**first**, then `DURIG_DB`; and `tui.mjs:42-43` treats `DURIG_TUI_DB` as the *deprecated alias* of
+(`CONFIG_KEYS`, used by `cli.mjs:161` — the row was written against `cli.mjs:142` and `scripts/clockin.mjs:236`,
+re-pinned 2026-11-11 on `main 35001c3a`) reads only `DURIG_DB` / `DURIG_SEAT_ROOT`, so `DURIAN_PI_DB=… node
+cli.mjs status` silently opens an empty `./rig.sqlite`; `scripts/clockin.mjs:468` accepts `DURIAN_PI_DB`
+**first**, then `DURIG_DB`; and `tui.mjs:42-47` treats `DURIG_TUI_DB` as the *deprecated alias* of
 `DURIAN_PI_TUI_DB` (D103) — the reverse precedence. `docs/FEATURES.md` documents 18 `DURIAN_PI_*` names,
 `docs/DELEGATE-CLOCKIN.md` says either works. Depends on: none. Measure: a single alias resolver with one
 documented precedence, plus a failing-first demo asserting that **every environment name printed in the docs is

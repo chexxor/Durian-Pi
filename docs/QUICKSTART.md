@@ -18,43 +18,58 @@ npm install --ignore-scripts
 Offline (no key, no network; seats answer from a canned script):
 
 ```powershell
-$env:DURIAN_PI_PROVIDER = "faux"
+$env:DURIG_PROVIDER = "faux"
 ```
 
 Live (real model; needs the key in your environment):
 
 ```powershell
-$env:DURIAN_PI_PROVIDER = "deepinfra"      # the default; omit if you prefer
+$env:DURIG_PROVIDER = "deepinfra"      # the default; omit if you prefer
 $env:DEEPINFRA_API_KEY = "<your key>"  # or set it permanently in your profile
 ```
 
-Model override (optional): `$env:DURIAN_PI_MODEL = "zai-org/GLM-5.3-Flash"`.
+Model override (optional): `$env:DURIG_MODEL = "zai-org/GLM-5.3-Flash"`.
+
+**Why the `DURIG_` spelling:** the loader reads `DURIG_*` names only. Measured on `main 35001c3a`,
+`DURIAN_PI_PROVIDER=faux node cli.mjs config` reports `"DURIG_PROVIDER": "deepinfra"` (exit 0 - the variable was
+ignored), while `DURIG_PROVIDER=faux node cli.mjs config` reports `"faux"` (exit 0). The store selector behaves the
+same way: `DURIAN_PI_DB=…` is inert for `cli.mjs` and resolves `./rig.sqlite`. See "Settings can live in a config
+file instead" below.
 
 ### Settings can live in a config file instead
 
 Environment variables still win, but you can put any of these values in
-`durian-pi.config.json` (gitignored; copy `durian-pi.config.example.json`):
+`durig.config.json` (gitignored, `.gitignore:12`; copy `durig.config.example.json`):
 
 ```json
 {
-  "DURIAN_PI_DB": "./selfdev.sqlite",
-  "DURIAN_PI_PROVIDER": "deepinfra",
-  "DURIAN_PI_MODEL": "zai-org/GLM-5.3-Flash",
+  "DURIG_DB": "./selfdev.sqlite",
+  "DURIG_PROVIDER": "deepinfra",
+  "DURIG_MODEL": "zai-org/GLM-5.3-Flash",
   "DEEPINFRA_API_KEY": "put-your-key-here"
 }
 ```
 
-Discovery order: `$DURIAN_PI_CONFIG`, then `./durian-pi.config.json`, then
-`./.durian-pi/config.json`. Always confirm what is actually in effect:
+Discovery order, first existing file wins: `$DURIG_CONFIG`, then `./durig.config.json`, then
+`./.durig/config.json` (`src/config.mjs:6-8`, `DEFAULT_CONFIG_PATHS` at `src/config.mjs:19`). Always confirm
+what is actually in effect:
 
-> **Deprecated aliases (D103):** the old `DURIG_*` env vars and `durig.config.json` still load as
-> deprecated aliases; the new `DURIAN_PI_*` name wins when both are set.
+> **The vocabulary the code reads is `DURIG_*`.** D103 intended `DURIAN_PI_*` as the new spelling, but the loader
+> implements `DURIG_*` only. Measured on `main 35001c3a`: `CONFIG_KEYS` (`src/config.mjs:116-219`) lists `DURIG_*`
+> names and `src/config.mjs` has no alias resolver, so `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` resolves
+> `./rig.sqlite` (exit 1, `cause: no_store`) while `DURIG_DB=./nope-b.sqlite …` resolves the path given (exit 1,
+> `cause: no_store`). A config file carrying a `DURIAN_PI_*` key is not quietly ignored either: a `durig.config.json`
+> holding `DURIAN_PI_DB`/`DURIAN_PI_PROVIDER` makes `node cli.mjs config` **exit 1** with `unknown config-file
+> key(s): DURIAN_PI_DB, DURIAN_PI_PROVIDER … no code reads these, so they are silently ignored (the #5071
+> accepted-and-ignored class)`. The one entry point that still accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:468`,
+> and it takes it **first** (`DURIAN_PI_DB` → `DURIG_DB` → `./selfdev.sqlite`). ROADMAP 191 is the un-built single
+> alias resolver that would remove the discrepancy at the source.
 
 ```powershell
 node cli.mjs config     # source file + resolved DB/provider/model + key set/unset
 ```
 
-This matters because a command run without `DURIAN_PI_DB` silently uses
+This matters because a command run without `DURIG_DB` silently uses
 `./rig.sqlite` — a different database than the rig you meant to steer.
 
 durian-pi now defends against that: `ps`, `status`, `watch` and a failed write verb
@@ -66,7 +81,7 @@ nothing is broken.
 Everything below uses a scratch database so you cannot touch a real rig:
 
 ```powershell
-$env:DURIAN_PI_DB = "$PWD\scratch-quickstart.sqlite"
+$env:DURIG_DB = "$PWD\scratch-quickstart.sqlite"
 ```
 
 ## Step 2 — bootstrap the rig
@@ -140,7 +155,7 @@ nobody has picked up, and durian-pi says so instead of hiding it.
 ## Step 5 — watch it live (second terminal)
 
 Open a second terminal in the same directory with the SAME environment
-variables (`$env:DURIAN_PI_PROVIDER`, `$env:DURIAN_PI_DB`), then:
+variables (`$env:DURIG_PROVIDER`, `$env:DURIG_DB`), then:
 
 ```powershell
 node cli.mjs watch
@@ -215,7 +230,7 @@ working, not a leftover.
 ## Step 7 — tear down
 
 ```powershell
-Remove-Item Env:DURIAN_PI_DB          # forget the scratch db for future sessions
+Remove-Item Env:DURIG_DB          # forget the scratch db for future sessions
 Remove-Item .\scratch-quickstart.sqlite   # or keep it; it is just a file
 ```
 
