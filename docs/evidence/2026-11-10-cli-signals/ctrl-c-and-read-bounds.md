@@ -222,7 +222,7 @@ verb never failed on its own.
 | `degraded` (fresh heartbeat, no pass) | 10,000 ms | the same bound the read client uses |
 | `down` (no resident broker) | 0 ms | nothing will apply it — say so now |
 
-`intentWaitBoundMs` (`src/broker.mjs:2410`) is pure — state + `now` in, bound out — and `awaitIntentResult` re-reads
+`intentWaitBoundMs` (`src/broker.mjs:2422`) is pure — state + `now` in, bound out — and `awaitIntentResult` re-reads
 it every poll, so a broker that recovers mid-wait is not cut off. The failure names pid, health state, heartbeat
 age, last-pass age, live generation leases and `docs/runbooks/broker-down-or-stalled.md`; the intent stays in the
 spool rather than being silently discarded.
@@ -305,3 +305,31 @@ theirs 11,676 = base + one entry). Union is therefore the only correct resolutio
 
 **Correction to §H:** §H counted 43 refs / 35 worktrees at 23:5xZ. After this pass it is **32 refs / 25 worktrees**, 8
 refs still ahead of `main`, all of them in the table above.
+
+## L. Re-measured at `e7713ac5` (2026-11-11T01:1xZ), same host
+
+Host measured with the measurement: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1,
+`git version 2.56.0`.
+
+```bash
+git for-each-ref --format='%(refname:short)' refs/heads/ | while read r; do [ "$r" != main ] && \
+  [ "$(git rev-list --count main..$r)" -gt 0 ] && echo "$r ahead"; done
+# -> item-3570, item-5301, item-5301-resolved, item-6101, item-6162, item-6330, wip/seat-prompt-files  (7, not 8)
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json   # total 25: seat-root 7, non-item 1, live 4, reapable 9, dirty 4, locked 0
+DURIG_DB=./selfdev.sqlite node cli.mjs status >/dev/null       # exit 0, 2.45 s
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --no-body  # exit 0, 0.92 s
+DURIG_DB=./selfdev.sqlite node cli.mjs watch --once --json     # exit 0, 1.10 s
+DURIG_DB=./selfdev.sqlite node cli.mjs ps >/dev/null           # exit 0, 0.28 s
+```
+
+No broker is resident: `grep EXIT selfdev.sqlite.broker.log | tail -1` → `2026-11-11T00:33:26.032Z EXIT pid=562329
+reason=max-duration passes=36`; no `selfdev.sqlite.broker.json`, no genlock. `intentWaitBoundMs(readBrokerState("./selfdev.sqlite"))`
+→ `{boundMs: 0, health: {state: "down"}}`, so every mutating verb fails immediately rather than waiting.
+
+**Two instruments corrected by re-measurement.** (a) `cli.mjs queue --id 6381 --json` *does* return the row — keys
+`ids, rows, counts, attention, narrowed, items`, with `items.length === 1` and `narrowed: "payload"`; the trap is the
+`rows: 6494` header, which is the census (pitfall 258, rewritten). (b) `pgrep node | wc -l` → `0` on this box with four
+`cli.mjs serve` processes alive; `cat /proc/524238/comm` → `MainThread`, so name-matched pgrep is blind to node here and
+only `pgrep -f "cli.mjs serve"` (5 hits) works (pitfall 260). Four such orphan serve processes are still running
+(524238, 526388, 526934, 529245, ~5 h elapsed) with no broker state file — deliberately not killed; killing another
+actor's process is the operator's call.

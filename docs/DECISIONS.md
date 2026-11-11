@@ -11719,7 +11719,7 @@ exposed: `STOP-REQUESTED` is written at the top of the wake loop (`src/broker.mj
 no receipt line — the audit logged `EXIT reason=signal` and nothing else.
 
 **Decision.**
-- **The mutating bound is derived, not configured.** `intentWaitBoundMs` (`src/broker.mjs:2410`) returns
+- **The mutating bound is derived, not configured.** `intentWaitBoundMs` (`src/broker.mjs:2422`) returns
   900,000 ms for an advancing broker (a compaction is real work), 10,000 ms for a degraded one (the same
   bound the read client uses), 0 when no broker is resident. It is re-read every poll, so a broker that
   recovers mid-wait is not cut off. The failure names pid, health, heartbeat age, pass age, live generation

@@ -68,7 +68,7 @@ git worktree prune
 answers or fails fast against a team running or stopped, no 120 s silence, and Ctrl-C actually terminates the verb."
 All legs are on `main`: the signal seam (`src/signals.mjs`, `src/cli-seam.mjs`), bounded reads (`src/readclient.mjs`),
 the read-only shim (`src/readonlystore.mjs`), the out-of-band read drain in `runWakeLoop`, the **mutating-verb** bound
-(`intentWaitBoundMs`, `src/broker.mjs:2410`: 900 s advancing / 10 s frozen pass / 0 no broker — `cli.mjs pause --wait`
+(`intentWaitBoundMs`, `src/broker.mjs:2422`: 900 s advancing / 10 s frozen pass / 0 no broker — `cli.mjs pause --wait`
 against a 658 MB store with no resident broker answered in **349 ms**), and the stop-receipt legs (`src/broker.mjs:1851`,
 `:1889`, `:2192`). Measured live at 00:4xZ with the broker DOWN: `status` 2.394 s, `queue --json --no-body` 0.888 s,
 `watch --once --json` 1.110 s, `ps` 0.254 s — all exit 0. **One regression was found and closed:** the new
