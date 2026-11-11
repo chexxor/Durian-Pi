@@ -15,9 +15,12 @@
 // ahead of any new generation, which is what "wait-with-priority" means.
 //
 // FAIL-OPEN is the safety property that makes this shippable: a reservation whose holder is
-// dead, or older than RESERVATION_STALE_MS, is IGNORED (and reclaimable), so a crashed lander
-// can never wedge the rig — a wedged rig cannot generate at all, which is far worse than a
-// stalled landing. Only a LIVE reservation held by another process blocks anything.
+// CONFIRMED dead (ESRCH), or one older than RESERVATION_STALE_MS, is IGNORED (and reclaimable), so
+// a crashed lander can never wedge the rig — a wedged rig cannot generate at all, which is far
+// worse than a stalled landing. Only a LIVE reservation held by another process blocks anything.
+// Since #6182 an owner the record cannot name is treated as ALIVE, not dead: "no pid" is not
+// evidence that anyone is gone, and reading it as death admitted a second writer the moment the
+// file was parsed.
 //
 // This module is DELIBERATELY dependency-free (node:fs/node:path only). scripts/land.mjs is the
 // enforcement chokepoint and must keep loading when the provider stack is broken (#1164 Q3,
@@ -36,27 +39,66 @@ export function reservationPath(dbPath) {
 }
 
 /**
- * Liveness of a record's pid. signal 0 only; ESRCH means gone, and anything else (EPERM on
- * Windows, an unknown error) is treated as ALIVE — wrongly reclaiming a live holder is the
- * failure mode that breaks the cap, so the rule fails closed here and fail-open only via the
- * age fallback. This mirrors src/genlock.mjs's `holderAlive` on purpose.
+ * Liveness of a record's owner as THREE states instead of two (#6182).
+ *   "absent"  - there is no record. Absence is not a lease, so it blocks nobody.
+ *   "dead"    - the OS confirms the owner is gone (ESRCH on signal 0).
+ *   "alive"   - the probe succeeded, or EPERM (the process exists but we may not signal it,
+ *               the Windows integrity-level case), or any other error.
+ *   "unknown" - the record names no usable owner: missing, null, NaN, zero, negative, a string.
+ *               A record that says nothing about its owner is NOT evidence that anyone is gone.
+ *
+ * ONLY "dead" releases a lease. This mirrors the landed liveness finding #3743 (only ESRCH is
+ * dead; UNKNOWN returns ALIVE) and it is the fix for the single-writer hole: the old two-state
+ * rule read an unresolvable owner as dead, so a reservation with no pid admitted a second writer
+ * immediately - the 2026-10-16 second-writer crash in docs/runbooks/resume-while-broker-runs.md is
+ * this rig's live precedent for what that costs.
  */
-export function recordAlive(record) {
-	if (!record || typeof record.pid !== "number") return false;
+export function ownerState(record) {
+	if (!record) return "absent";
+	const pid = record.pid;
+	if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return "unknown";
 	try {
-		process.kill(record.pid, 0);
-		return true;
+		process.kill(pid, 0); // signal 0 = liveness probe only, never delivered
+		return "alive";
 	} catch (err) {
-		return err?.code !== "ESRCH";
+		return err?.code === "ESRCH" ? "dead" : "unknown";
 	}
 }
 
-/** A record is stale when its holder is dead, or it has aged past the stale window. */
-export function recordIsStale(record, now = Date.now()) {
+/**
+ * ALIVE means "not confirmed dead" — an unresolvable owner counts as alive here. Kept under its
+ * old name so the two callers (scripts/land.mjs and src/genlock.mjs's rule) do not have to change.
+ */
+export function recordAlive(record) {
+	const state = ownerState(record);
+	return state === "alive" || state === "unknown";
+}
+
+/**
+ * A record is stale when its owner is CONFIRMED dead, or when it has aged past the stale window.
+ *
+ * The age window is the deliberate, documented fail-open (a crashed lander must not wedge the rig:
+ * a wedged rig cannot generate at all, which is worse than a stalled landing). When the owner is
+ * UNKNOWN *and* the record has aged, the release is reported loudly rather than happening silently,
+ * because "we could not identify the owner" and "the owner is gone" are different claims and the
+ * second one is what justifies admitting a writer.
+ */
+export function recordIsStale(record, now = Date.now(), where = null) {
 	if (!record) return true;
-	if (!recordAlive(record)) return true;
+	const state = ownerState(record);
+	if (state === "dead") return true;
 	const age = typeof record.since === "string" ? now - Date.parse(record.since) : Infinity;
-	return age > RESERVATION_STALE_MS;
+	if (age > RESERVATION_STALE_MS) {
+		if (state === "unknown") {
+			console.error(
+				`GENLOCK WARNING: ${where ?? "a reservation"} has an UNRESOLVABLE owner (pid ${record.pid ?? "missing"}) ` +
+				`and has aged past ${RESERVATION_STALE_MS} ms, so the age fallback releases it. That admits a second ` +
+				`writer without evidence the holder is gone - it is the documented fail-open, not a liveness finding.`,
+			);
+		}
+		return true;
+	}
+	return false;
 }
 
 /** Parse a record file; null when absent, torn or unreadable (never evidence of a live holder). */
@@ -109,7 +151,7 @@ export function reserveSlots(dbPath, me) {
 				renewReservation(dbPath, me); // ours already: keep it fresh
 				return { claimed: true, holder: { ...me, priority: true } };
 			}
-			if (recordIsStale(held)) {
+			if (recordIsStale(held, Date.now(), path)) {
 				try {
 					unlinkSync(path); // a dead or wedged lander must not hold the queue
 				} catch (unlinkErr) {
@@ -158,11 +200,10 @@ export function releaseReservation(dbPath, me) {
 	}
 }
 
-/** A slot file may be stolen when its holder is dead or has aged out. */
+/** A slot file may be stolen when its holder is CONFIRMED dead or has aged out (#6182: an owner
+ * the record cannot name is not evidence of death). */
 export function slotIsStale(holder, now = Date.now()) {
-	if (!recordAlive(holder)) return true;
-	const age = typeof holder.since === "string" ? now - Date.parse(holder.since) : Infinity;
-	return age > RESERVATION_STALE_MS;
+	return recordIsStale(holder, now, "a genlock slot");
 }
 
 /** Synchronous sleep — scripts/land.mjs is a sync script, so its acquire loop must block. */
