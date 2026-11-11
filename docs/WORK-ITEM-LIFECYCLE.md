@@ -79,7 +79,8 @@ Three facts a reader must internalise:
 1. **`held` has exactly two exits: `release_work` → `queued`, or `cancel_work` → `cancelled`.** There is
    no automatic exit and no other tool. A held row nobody releases is a held row forever.
 2. **`deferred` is not stuck in the same way.** A `deferredTo: <seat>` deferral *enqueues a `QUESTION`
-   item* to that seat, which the driver wakes (`defer_work`, `src/rig.mjs:663-713`). A
+   item* to that seat, which the driver wakes (`defer_work`, `src/rig.mjs:1125`, the `QUESTION` enqueue at
+   `:1194-1198`). A
    `deferredTo: human` deferral enqueues nothing but is surfaced by attention (§5).
 3. **Changing a row's *status* and changing a row's *content* are different authorities.** The table above
    governs status. Content splits three ways, and only two of them have a verb
@@ -88,16 +89,16 @@ Three facts a reader must internalise:
 
 | Field class | Verb | Who may write | When |
 |---|---|---|---|
-| intent — `subject`, `body` | `revise_work` | `from` **or** `to` only | `queued` only (`src/rig.mjs:1291`, `:1297`) |
-| constraint — `blockedBy`, `requires`, `tier`, `block` | **none after mint** | the minting seat, at `enqueueItem` (`src/rig.mjs:441`, reached only from `send_work` at `:737`) | mint time only |
+| intent — `subject`, `body` | `revise_work` | `from` **or** `to` only | `queued` only (`src/rig.mjs:1373`, checks at `:1391`, `:1395`) |
+| constraint — `blockedBy`, `requires`, `tier`, `block` | **none after mint** | the minting seat, at `enqueueItem` (`src/rig.mjs:427`, reached from `send_work` at `:816`) | mint time only |
 | outcome — `resultSummary`, `evidence`, `cancelReason` | the verb that made the move | the actor | — |
 
 So a gate discovered *after* a row is minted has nowhere to go. Writing it into the body is not a gate:
-`workable()` reads `item.blockedBy` (`src/rig.mjs:310`), never a sentence. The operating rule is
+`workable()` reads `item.blockedBy` (`src/rig.mjs:327`), never a sentence. The operating rule is
 **mint the row that carries the gate, or ask a party to** — see
 [`runbooks/attach-a-gate.md`](runbooks/attach-a-gate.md). Two defects are registered against this model:
-`hold_work` is recipient-only (`src/rig.mjs:1212`) while `release_work`/`cancel_work` are party-wide
-(`:1257`, `:1339`), so a seat can cancel its own row but cannot park it; and `revise_work`/`cancel_work`
+`hold_work` is recipient-only (`src/rig.mjs:1251`, the check at `:1268`) while `release_work`/`cancel_work`
+are party-wide (`:1326`, `:1439`), so a seat can cancel its own row but cannot park it; and `revise_work`/`cancel_work`
 check authority **before** terminality, so a `done` row answers "not yours to revise" — the misreading
 `release_work` fixed for itself in #5778 (`src/rig.mjs:1316`).
 
@@ -134,7 +135,7 @@ confirm against the store before the defect is written as "terminal rows can be 
 
 `held` was added so a "registered, do not start" **backlog/roadmap registration** could sit in the queue
 *without* starving a working seat: it is unclaimable, and it never takes the seat's oldest-first claim
-slot (`src/rig.mjs:338-349`). It does still generate a wake — the `parked` one (§4) — so the seat learns
+slot (`selectOldestWorkable`, `src/rig.mjs:348-351`). It does still generate a wake — the `parked` one (§4) — so the seat learns
 the row exists instead of polling for it. That is the correct tool for a genuine backlog row. It is the wrong tool for
 "waiting on a thing that will finish by itself", because:
 
@@ -152,7 +153,7 @@ See [`incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md`](incidents/20
 
 ## 4. Liveness — what actually wakes a seat
 
-The driver wakes a seat for three conditions (`selectWakes`, `src/driver.mjs:71-130`):
+The driver wakes a seat for three conditions (`selectWakes`, `src/driver.mjs:102-186`):
 
 - **`hasQueued`** — a `queued` item addressed to it (suppressed while `paused`), or
 - **`hasStalledClaim`** — a `claimed` item it holds with no in-flight submission, no live lease, and no
@@ -163,11 +164,14 @@ The driver wakes a seat for three conditions (`selectWakes`, `src/driver.mjs:71-
 
 Each reason carries its own FIXED wake body so the seat is never told to do something its queue refuses:
 `WAKE_CONTENT` (queued), `WAKE_CONTENT_STALLED` (stalled claim), `WAKE_CONTENT_PARKED` (parked rows only)
-— `src/driver.mjs:21-56`. They are constants, not per-item strings, because the wake is committed as a
+— `src/driver.mjs:27-61`. They are constants, not per-item strings, because the wake is committed as a
 user entry and a varying body would zero the prompt cache (ROADMAP 33).
 
-**Known wording gap, not fixed here:** the `send_work` tool descriptions in `src/rig.mjs` still say a held
-item is "unclaimable and un-waking" (`src/rig.mjs:635`) and "unclaimable and no wake" (`src/rig.mjs:686`).
+**Known wording gap, not fixed here:** the `send_work` description in `src/rig.mjs` still says a held item is
+"unclaimable and no wake" (`src/rig.mjs:735`). Re-measured 2026-11-11 on `main 35001c3a`: `grep -n
+"unclaimable" src/rig.mjs` returns five hits (106, 472, 735, 850, 1254); the one that still disagrees with
+`selectWakes` above is the tool description at `:735` — the second sentence this doc used to pin
+("unclaimable and un-waking", `:635`) no longer exists.
 Those two sentences disagree with `selectWakes` above, and the code wins: a held row is unclaimable but does
 produce the `parked` wake. Correcting the tool text is a `rig.mjs` change, so it is routed to the seat that
 owns that file rather than patched in a docs commit.
@@ -264,6 +268,13 @@ PY
 **Read the result as a lead, not as proof.** A cited gate can be a false positive: a row legitimately
 gated on the *operator* (e.g. `#994` quiet window) or on a roadmap intent may cite a terminal item
 incidentally. Confirm each candidate against its body before releasing.
+
+**Terminal is not the same as satisfied.** The scan above counts `done` and `cancelled` together, because
+`derivePark` uses `TERMINAL_QUEUE_STATUSES = {"done", "cancelled"}` (`src/queue-lifecycle.mjs:426`, `:448`).
+The claim predicate is stricter: a gate naming a `cancelled` id is DEAD, not met — `workable` returns
+`gate-cancelled:#<id>` (`src/rig.mjs:332`), `deadGateId` names it (`:312`), and `release_work` refuses to
+un-park a row whose gate is cancelled (`:1346-1347`). So a row whose only gate is cancelled is not waiting:
+releasing it makes it claimable-but-broken. Re-gate it or cancel it; do not release it.
 
 ### 7a. The RECORDED park class (#6150) - filter on structure, never on wording
 
@@ -387,11 +398,17 @@ grep -nE 'name: "(send_work|claim_work|complete_work|defer_work|resume_work|hold
 # 2. held has exactly two exits: release -> queued, cancel -> cancelled
 grep -nE 'item.status = "(queued|held|deferred|claimed|done|cancelled)"' src/rig.mjs
 
-# 3. release_work is sender-or-recipient, held-only
-sed -n '781,800p' src/rig.mjs
+# 3. release_work: party OR coordinating seat, held-only, refused on a cancelled gate
+sed -n '1326,1349p' src/rig.mjs
+
+# 7. a cancelled row is terminal and never wakes; the cancellation mints a claimable notice row
+node demo/curate.test.mjs                 # exit 0: "a cancelled item never wakes its seat"
+node demo/cancel-notifies-sender.test.mjs # exit 0: the CANCELLED #<id> notice is enqueued
+node demo/wake-claimability.test.mjs      # exit 0: "cancelled gate: 0 wakes"
+node demo/pm-release-authority.test.mjs   # exit 0: deadGateId + gate-cancelled + coordinator release
 
 # 4. what wakes a seat (queued, stalled claim, or parked rows - expect all three branches)
-sed -n '71,130p' src/driver.mjs
+sed -n '102,186p' src/driver.mjs
 grep -n 'WAKE_CONTENT' src/driver.mjs   # three fixed bodies, one per wake reason
 node demo/held-item.test.mjs            # exit 0; asserts the parked wake and its reason
 
