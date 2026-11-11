@@ -11793,3 +11793,21 @@ nor whether a wedged broker should be self-healed by the supervisor; both are sc
 **Consequences.** `requires` becomes binding in both paths (a seat pointed at a row it cannot do now gets a named reason instead of a claim it cannot fulfil). Any future path into claiming must use `workable()` or the class reopens. Demos `race.test.mjs:84`, `rearmclaim.test.mjs:132`, `defer.test.mjs:228` must stay green.
 
 **Residual (lead):** if forcing a claim by id is meant to be an operator escape hatch, that is a scope decision, and the code comment must be corrected either way.
+
+## D267 (PROVISIONAL - mint at land) — coordinator standing is a RECORDED field that must be RE-VALIDATED at the verb, bounded to depth 1, and undoable by whoever added the gate (architect review of lead's #6532 ruling, item #6532, review `docs/reviews/architecture-coordinator-standing-6532.md`, 2026-11-11)
+
+**Status:** adopted in direction (lead chose (b)); this ADR records the four conditions the ruling left open.
+
+**Context.** `coordinatedBy` does not exist in `src/rig.mjs` today; the only non-party grant is `release_work` (`:1332`), which derives standing at call time from `seatIsCoordinator` (`src/seattools.mjs:292`), a predicate over a closed four-entry list `WORKING_CAPABILITIES = ["implement","code","verify","review"]` (`:262`). Measured by `tools/probes/coordinator-standing-surface.mjs` (exit 1): 0 recorded field, 1 unbounded non-party grant, 0 sites that clear a gate, and `seatIsCoordinator({capabilities:["design"]}) = true`.
+
+**Decision.** Four conditions, all falsifiable:
+1. `coordinatedBy` is set at mint (to `from` when `seatIsCoordinator(from)`), never mutated, never inferred from forwarding history.
+2. Authority is additive on gate/constraint fields only (`blockedBy`, `reviewBy`), never subject, body, tier, status or cancellation, and never after the row is claimed.
+3. The verb checks BOTH the record and the predicate: `item.coordinatedBy === me && seatIsCoordinator(seats[me])`, and the refusal names which half failed. Standing that cannot lapse is a latent grant.
+4. Scope is depth 1: `coordinatedBy === me` or a gate naming a row whose `from === me`. "The gate chain" is not a bound. And additive authority includes removal of the edges that same actor added, recorded per edge.
+
+**Options considered.** (a) no coordinator standing — cheap, leaves sequencing in prose (#3570). (b) standing without re-validation — rejected: a recorded snapshot plus a predicate that flips means two truths about one seat. Chosen: (b) narrowed as above; the trade-off accepted is one extra field and one graph-depth computation per gate write.
+
+**Consequences.** Capability vocabulary becomes load-bearing: a seat whose capabilities are spelled outside the four-entry list currently reads as a coordinator, so unknown capability strings must be reported by `check` rather than silently granting standing. Removal becomes part of the same seam as addition — #6508 and #6530 are one contract, not two rows that meet in the middle.
+
+**Residual (lead):** whether `design`/`architecture`/`docs` count as working capabilities, and whether a coordinator may gate a row it neither minted nor is party to at all. Both are scope, not design.
