@@ -30,9 +30,20 @@ resolves against the worktree's cwd, and no store is tracked in the repo (`git l
 → `0`). See `store-probe-identity.md` §"WHICH selfdev.sqlite".
 
 ## Diagnose (read-only)
+Run these in the **shared repo root**, not in an item worktree (see the Preconditions section):
+
 ```bash
-cd /home/chexxor/Git/Durian-Pi            # the shared checkout, not an item worktree
+node cli.mjs status --json
 DURIG_DB=./selfdev.sqlite node cli.mjs queue > .spike/delegate/queue-audit.json
+```
+
+The first line exits 0 and its `db` field names the store THIS cwd resolves to; the second dumps every
+row so the snippet below can pick out the notice rows.
+
+Then pull the notice rows out of that dump (a multi-line construct, so CI reports it as a gap rather
+than running it):
+
+```bash
 python - <<'PY'
 import json, io
 d = json.load(io.open('.spike/delegate/queue-audit.json', encoding='utf-8'))
