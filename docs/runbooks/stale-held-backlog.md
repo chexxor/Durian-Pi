@@ -3,9 +3,9 @@ runbook: stale-held-backlog
 symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so; ALSO: a queued row can NEVER be claimed and the scan says `gate-cancelled:#<id>""
 writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
 precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
-last_verified: 2026-11-10        # the tool below was run against the live store; see Evidence
-verified_by: devtools
-evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"
+last_verified: 2026-11-11        # the tool below was run against the live store; see Evidence
+verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry)
+evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Re-run 2026-11-11 by scribe (#6315) in the `item-6315` worktree with UNLINKED deps (pi-durable **1.3.0** from the lockfile): live store exit **0** `rows=6502 held=434`, `git landing commits read: 153`; a worktree-local copy exit **0** `rows=6501 held=434`, same 153. The schema-version refusal did NOT fire in that tree — see If it fails. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"
 check_rule: demo/held-gate-audit.test.mjs
 ---
 
@@ -178,7 +178,15 @@ container adds a wake and a claim slot without adding work. `lead` released it (
 **The counter-example, live at the time of writing.** #6123 (`pm` -> `scribe`) carries
 `blockedBy:[6122]`, and #6122 is `cancelled` - so the scan reports `gate-cancelled:#6122` and that row is
 never claimable. Same family, same failure: `docs/reviews/security-5269-landing-correction.md` §5 names
-#3747 (gate naming a cancelled/superseded id) and #3863 (gate bound to a cancelled twin).
+#3747 (gate naming a cancelled/superseded id) and #3863 (gate bound to a cancelled twin). Verified again
+2026-11-11 (#6315): the queue document records **no status transition** for #6123 since creation, so it is
+still `queued` behind the cancelled #6122.
+
+**The git-ref variant of the same starvation.** A row parked on "<a branch> lands" is unsatisfiable once the
+ref is gone: measured 2026-11-11 in the `item-6315` worktree, `git rev-parse item-5211` exits **128** and
+`git rev-parse refs/heads/item-5211` exits **128**. `blockedBy` gates see queue-item ids only, never git refs,
+so the predicate cannot detect this; the audit's **standing-rule** class is what names the real condition
+(`docs/WORK-ITEM-LIFECYCLE.md`), and Diagnose step 5 is the git check that proves it.
 
 **Unverified, stated as a gap:** there is **no `check` rule** that detects this shape today. The rule was
 registered as #3747 ("check rule for a NON-TERMINAL item whose `blockedBy` names a CANCELLED/SUPERSEDED
@@ -189,7 +197,20 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
 ## Verify
 
 - The audit exits 0 and prints `git landing commits read: <n>` (the git pass ran) and per-seat totals that
-  add up to `held`.
+  add up to `held`. Re-run 2026-11-11 (#6315), exit **0**:
+
+  ```bash
+  node tools/held-gate-audit.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite --limit 3; echo "exit=$?"
+  ```
+
+  header `rows=6502 held=434`, line `git landing commits read: 153`. State which tree and which pi-durable
+  produced the verdict: this was an UNLINKED worktree (lockfile 1.3.0), and the same tool on a copy inside
+  that worktree also exited 0 (`rows=6501 held=434`).
+- **The schema-version entry is reachable from the symptom index**, not only from the rule text (run 2026-11-11, exit 0):
+
+  ```bash
+  grep -n "newer than supported version 1" docs/runbooks/README.md; echo "exit=$?"
+  ```
 - The rules are pinned by `node demo/held-gate-audit.test.mjs` (exit 0): a gate-cleared row, a still-open
   gate, a standing rule with no recorded gate, a branch-landing gate, a satisfied artifact and a
   file-exists-but-content-missing row are each classified differently. A classifier that flagged all of
@@ -252,6 +273,20 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
   (the broker may have partially applied it) — use a fresh id and note the original.
 - **The broker is down** (`state` missing/stale) → no layer can apply a transition; recover the broker
   first ([`broker-down-or-stalled.md`](broker-down-or-stalled.md)).
+- **`cannot open <db>: Durable SQLite schema version 2 is newer than supported version 1`** → a dependency
+  failure, not a store failure and not a wedged broker. `src/readclient.mjs:187` tries `openReadOnlyStore`
+  (`src/readonlystore.mjs`: a `node:sqlite` `readOnly: true` open that claims no ownership and migrates
+  nothing) FIRST; only if that throws does it fall through to `openNodeSqliteStorage` (`src/readclient.mjs:207`),
+  which migrates and refuses a store whose `durable_schema.version` exceeds what the installed package
+  supports. Both halves measured 2026-11-11: `node_modules/@earendil-works/pi-durable/dist/storage/sqlite/migrations.js`
+  declares exactly one migration, `version: 1`, and the live store's `durable_schema` row reads
+  `{singleton: 1, version: 2}`. The remedy is the pin/build ladder in [`pi-pin-update.md`](pi-pin-update.md),
+  **not** a store repair. Keep it separate from the broker shape (`read queue-census: timed out awaiting the
+  broker's result`) — both currently read as "cannot read the store" and need different responses; naming the
+  observed and supported versions is what turns it into a diagnosis (registered as **#6314**, devtools, gated
+  on **#6175** — that half is still OPEN). Measured state as measured: in the `item-6315` worktree the refusal
+  did **not** fire; the audit read both the live store and a worktree-local copy at exit 0. Anyone who hits it
+  must name the tree and the pi-durable version, per [`worktree-unlinked-deps.md`](worktree-unlinked-deps.md).
 
 ## Escalate to
 
