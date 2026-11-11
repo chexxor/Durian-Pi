@@ -27,6 +27,11 @@
 //                                                the pin (what makes drift checkable offline later)
 //   node scripts/sync-pi.mjs --link              point node_modules at the built tree
 //   node scripts/sync-pi.mjs --unlink            restore the released packages
+//   node scripts/sync-pi.mjs --report            the three sets side by side: the PIN (the commit this rig
+//                                                is validated against), the DECLARED versions in
+//                                                package-lock.json, and what node_modules RESOLVES - with a
+//                                                LOUD FALLBACK line when the tree is not running the pin
+//                                                build. Read-only: no fetch, no install, no build (#6196/#6202).
 //
 // `--unlink` is NOT a rollback (#5093): it restores the RELEASED packages, and a released package
 // cannot open a store migrated past the schema it understands. Rollback is a restored backup.
@@ -54,6 +59,9 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+// One provenance emitter, shared with the suite runner and `cli status` (#6196). The import is safe in both
+// directions: src/provenance.mjs calls dependencySet()/readPin() only at run time, never at load time.
+import { dependencyProvenance, formatDependencyProvenance } from "../src/provenance.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DURIG = resolve(HERE, "..");
@@ -64,7 +72,7 @@ const BUILD_DIR = join(DURIG, "vendor", "pi-main");
 
 // Every flag the tool knows. An unlisted flag is REFUSED, never ignored: an ignored
 // flag used to mean `--update v1.4.1`(typo) pinned main's tip and looked like success.
-export const FLAGS = ["--check", "--sync", "--update", "--observe", "--link", "--unlink"];
+export const FLAGS = ["--check", "--sync", "--update", "--observe", "--link", "--unlink", "--report"];
 
 export function parseArgs(argv) {
 	const known = new Set(FLAGS);
@@ -93,7 +101,7 @@ export function parseArgs(argv) {
 		ref = bare[0];
 	}
 	const flags = new Set(argv.map((a) => a.split("=")[0]).filter((a) => a.startsWith("--")));
-	const acting = flags.has("--sync") || flags.has("--update") || flags.has("--observe") || flags.has("--link") || flags.has("--unlink");
+	const acting = flags.has("--sync") || flags.has("--update") || flags.has("--observe") || flags.has("--link") || flags.has("--unlink") || flags.has("--report");
 	if (ref !== null && !flags.has("--update") && !flags.has("--observe")) {
 		throw new Error(`sync-pi: a ref belongs to --update or --observe, not to the flags given (${[...flags].join(", ") || "none"}).`);
 	}
@@ -104,6 +112,7 @@ export function parseArgs(argv) {
 		observe: flags.has("--observe"),
 		link: flags.has("--link"),
 		unlink: flags.has("--unlink"),
+		report: flags.has("--report"),
 		ref,
 	};
 }
@@ -703,6 +712,21 @@ function main(argv) {
 		}
 		writeFileSync(PIN_PATH, `${JSON.stringify(pin, null, 2)}\n`);
 		pinWritten = true;
+	}
+
+	if (args.report) {
+		// #6196/#6202: the PIN, the DECLARED set (package-lock) and the RESOLVED set (what node_modules
+		// actually points at) are three different things, and a verdict is only readable against the third.
+		// Read-only: no fetch, no install, no build.
+		const prov = dependencyProvenance(DURIG);
+		console.log(formatDependencyProvenance(prov));
+		for (const r of prov.resolved) {
+			console.log(
+				`  ${r.name.padEnd(32)} pin=${prov.pinRef ?? "none"} declared=${prov.declared[r.name] ?? "-"} resolved=${r.resolved ?? "absent"} via=${r.via}`,
+			);
+		}
+		process.exitCode = prov.drift.length ? 1 : 0;
+		return;
 	}
 
 	if (args.observe) {

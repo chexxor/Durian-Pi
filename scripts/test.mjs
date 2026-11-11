@@ -22,6 +22,7 @@ import { availableParallelism, cpus, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { areaNames, candidateTestsOutsideSuite, declaredExclusions, discoverTests, filesForArea, readManifest, selectTests, suiteRoots, validateManifest } from "../src/testareas.mjs";
+import { dependencyProvenance, formatDependencyProvenance } from "../src/provenance.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -219,6 +220,10 @@ async function main(argv) {
 	if (sel.files.length === 0) throw new UsageError("no tests selected");
 
 	const label = sel.area ? `area "${sel.area}"` : "the full suite";
+	// #6196: a suite number without its tree and dependency set is not a measurement. The same tree forked
+	// from main, run unlinked (the lockfile release) and linked to the pinned build, differs by 21 tests.
+	const provenance = dependencyProvenance(ROOT);
+	process.stdout.write(`${formatDependencyProvenance(provenance)}\n`);
 	process.stdout.write(`running ${sel.files.length} test(s) in ${label} (jobs=${opts.jobs}, timeout=${opts.timeoutMs}ms)\n`);
 	const started = Date.now();
 	const results = await runAll(sel.files, opts.jobs, opts.timeoutMs);
@@ -237,6 +242,7 @@ async function main(argv) {
 		slowest,
 		ms: Date.now() - started,
 		coverage: coverage.errors,
+		provenance,
 	};
 
 	if (opts.json) {
