@@ -3700,217 +3700,18 @@ input and `superviseOnce` must resolve it per seat (the resolver already exists)
 (no number is reserved here; D113/D114 landed via scribe-item-3167). Evidence: the code citations above; no
 implementation is claimed.
 
-## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
+**Duplicate block retired (`scribe`, item #6326, 2026-11-11).** D115 through D120 had landed twice: the block
+above (the D115–D120 headings) and this one were byte-identical, entry for entry — verified by comparing the
+text between headings, six pairs, all identical. One entry per D-number is the rule, so this copy is removed
+and nothing is renumbered; the canonical entries above stand in their own words. This duplication is part of
+why the "D134/D137/D166" pin was unresolvable: a reader following a number found a void reservation, and a second
+copy of the same reservation, instead of the verifier-family rule (corrected in D257's provenance section).
 
-**Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
-record) makes claimability a function, not an item property. Architect F12 (review @5c50f34; escalations
-`#3001` + `#3010`) flagged that `#2673`'s `workable(item, seat)` (oldest-WORKABLE claim selection) is the
-SAME seam as the redesign's "claimability", and that a stage-level "claimable" is unsound because
-claimability is seat-relative (per-seat `requires`, `src/rig.mjs:393`, is not persisted).
-
-**Decision.** There is ONE predicate, not two — name it `workable(item, seat)`; the redesign's
-"claimability" is NOT a second predicate, it is the seat-projection of the same one:
-
-1. **Single source of truth.** Exactly one definition of "can seat s claim item i right now", in one module,
-   consumed by BOTH (a) `claim_work`'s oldest-workable selection (`#2673`) and (b) the broker WAKE selection
-   (`#2712`). No second implementation of "claimable".
-2. **Claimability is a projection, not a stage.** "Item i is claimable" is DEFINED as: ∃ eligible seat s such
-   that `workable(i, s)`. It must NOT be a stage of the item state machine — F1 shows why: claimability is
-   seat-relative, so any stage-level "claimable" is unsound.
-3. **Inputs are persisted, never live-only.** The predicate reads `stage` + `held` + the structured gate
-   fields (`blockedBy` dependency, `requires` capability) + the seat's advertised capabilities. Persisting
-   `requires`/`blockedBy` via the EXISTING enqueue path is `#2951`'s job, so `#2951` is a PREREQUISITE:
-   until it lands, §1's partition is genuinely false (F1) and must not be claimed.
-4. **`deferred` is its own stage**, not `active`-with-block. §1(b) forbids active-with-block; encoding
-   deferred that way would make parked work look claimable — a seat could claim work whose blocking question
-   is unanswered. SAFETY WINS: `deferred` is non-claimable by construction.
-5. **Ownership.** The single `workable(item, seat)` is OWNED by `#2673` — `#2673` implements it (predicate +
-   failing-first demo). The redesign CONSUMES it: it must not define a second predicate and must not restate
-   the predicate body. Division: the REDESIGN owns the stage model (incl. the §2 fix, `deferred` as its own
-   stage); `#2673` owns the predicate that reads those stages plus the persisted gate fields.
-6. **Not independent.** The two must NOT land independently. Ordering: `#2951` (persist gate fields) →
-   `#2673` (predicate + demo) → `#2712` (wake consumes) → only THEN may the redesign assert its §1
-   partition. The redesign may land its read-only parts early (OQ5 phase 1), but its claimability / §1
-   invariant may not land before `#2673`.
-7. **Safety (explicit).** The `requires` / fault clauses are NOT implementable today because `requires` is
-   not persisted on any item (`src/rig.mjs:393`). Landing them anyway would ship a predicate that silently
-   MIS-SELECTS — starvation of a claimable item, or a claim on un-claimable work. Safety wins: no landing of
-   the `requires` / fault clauses until `#2951` persists the field.
-
-**Why.** `#2673` and the redesign answer the same question ("can this be claimed?"). Two predicates drift,
-and drift is exactly the starvation / never-woken bug class `#2673`/`#2712` exist to fix. One predicate with
-a seat parameter keeps the claim path and the wake path in agreement, and makes §1's partition true once the
-gate fields are persisted.
-
-**Alternatives rejected.** (a) Two predicates (redesign-owned + `#2673`) — rejected: the same seam with two
-definitions drifts into the starvation/never-woken class; (b) claimability as an item stage — rejected:
-claimability is seat-relative (per-seat `requires`), so a stage-level "claimable" is unsound (F1);
-(c) `deferred` folded into `active`-with-block — rejected: parked work would look claimable (safety).
-
-**Status.** RULED by `lead` (2026-10-19, item #3031, escalations #3001/#3010; supersedes cancelled #3003).
-Recorded by `scribe` in the R1b serialized pass (#3089). Consistency: the structured gate field is D53
-(#2952/#2918), one field, no prose parsing. Enforcement: `#2673`'s failing-first demo must include a
-CROSS-CONSUMER AGREEMENT case — for the same item and seat, claim-selection and wake-selection return the
-same verdict. No implementation is started by this entry. D-number minted at land time.
-
-## D116 — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046)
-
-**Context.** The queue-lifecycle redesign v2 was ACCEPTED as design of record. Its open questions were ruled
-by `lead` (#3002 OQ5, #3044 M1 split, #3008 OQ2). The accepted model has two orthogonal axes
-(`stage`/`block`), typed `block`s with a mandatory `resolver` and a `reviewBy` (unless self-clearing or
-`backlog`), and queue-scoped attention kinds. The build must not land the axis change before the read-only
-half, and `reviewBy` defaults must bound the `parked-review-due` firehose.
-
-**Decision.** Three rulings, recorded as one decision family (they govern the same build):
-
-1. **OQ5 — sequencing chain (Phase 1 lands now).** Phase 1 (can land now): READ-ONLY check rules (on AUTHORED
-   blocks only) + queue-scope attention — additive, no write path, independently verifiable. Phase 2:
-   `#2951` — persist the gate fields via the EXISTING enqueue path (prerequisite for the predicate axis).
-   Phase 3: the reliability cluster `#2420`/`#2483`. Phase 4: the `rig.mjs`/`driver.mjs` AXIS change (stage
-   machine + the single `workable` predicate, `#2673` then `#2712`), reconciled per F12 (#3031). ONE writer
-   per seam at a time; the fence is safety-conservative — do not move the claim/wake axis while the
-   reliability cluster is in flight.
-2. **M1 SPLIT — field-early vs axis-fenced.** M1 is split: **M1a (field-early)** persists the structured
-   gate field (`block`/`blockedBy`/`requires`) via the EXISTING enqueue path — this is `#2951`'s slice,
-   landable at Phase 2, no new write path, no parallel store (D53), no mapping/predicate. **M1b
-   (axis-fenced)** is the `effectiveStage`/`effectiveBlock` mapping pair — lands at Phase 4, fenced behind
-   the reliability cluster (`#2420`/`#2483`), and the single `workable` is `#2673`'s ONE predicate (F12,
-   #3031), implemented once; `#2712`'s wake consumes the same one. No second definition. **Dependency
-   direction: M1b → M1a, never the reverse** — M1a (the field) is the prerequisite M1b (the mapping) reads.
-3. **OQ2 — `reviewBy` defaults with one fire per epoch.** Defaults: `operator` 3 d, `schedule` 14 d,
-   `resource` 3 d, `manual` 7 d, `dependency`/`roadmap-gate` 7 d, `backlog` none, `question` n/a (v1's
-   `manual` 1 d is withdrawn — it floors the median-16 h population into immediate nag). Monotone in
-   urgency/volatility: operator (3 d) and resource (3 d) shortest (they block a human decision / stall a
-   seat); manual + dependency/gate 7 d middle; schedule 14 d longest (inherently far-horizon); backlog none
-   (explicitly parked, must not nag); question n/a (already surfaced by the `waiting` derivation). **One
-   fire per (item, `reviewBy` epoch)** — a notice fires ONCE per epoch, re-armed only when `reviewBy` is
-   explicitly bumped; a re-scan does not re-fire (idempotent, replayable); the durable attention surface
-   carries the state, so the notices are a snapshot, not a stream.
-
-**Why.** The sequencing prevents a red `check` across the unmigrated store from stopping every landing
-(CR-1): enforcement judges AUTHORED blocks only, so the read-only half (Phase 1) ships before the axis
-migration without turning the store red. The M1 split lets the structured field land early (M1a) without
-prematurely committing to the axis model (M1b), and keeps one `workable` (F12/#3031) with a clear
-dependency direction. The `reviewBy` defaults bound the `parked-review-due` firehose over the ~160-row
-legacy population (F10/CR-2); one-fire-per-epoch keeps the surface a state snapshot, not a nag stream.
-
-**Alternatives rejected.** (a) Ship the axis change before the read-only half — rejected: a red `check`
-blocks every landing (`land.md --suite` runs `check`); (b) a single monolithic M1 — rejected: it couples the
-field persistence to the axis mapping and can't ship the gate field early; (c) tighter `reviewBy` defaults
-(manual 1 d) — rejected: it floors the measured median-16 h population into immediate nag.
-
-**Status.** RULED by `lead` (2026-10-19, item #3046, from #3002/#3044/#3008; supersedes cancelled #3012).
-Recorded by `scribe` in the R1b serialized pass (#3089). Implementation items M1a (#3062, impl-item-3062
-@eb3b337), M1b (#3063, impl-item-3056 @6ddf538 — `workable` removed), M3 (#3019), M4 (#3020), M5 (#3021),
-M6 (#3022), M7 (#3023) are registered; OQ2 defaults fold into M1/M4 (#3050). D-number minted at land time.
-
-## D117 — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4)
-
-**Context.** Operator ruling 2026-10-19 asked that the ACCEPTANCE SHAPE for the queue-lifecycle v2 work be
-citable and NOT reconstructed from memory. R4 records it: the shape is "accepted as recommended" + the
-`#2788`/`#2789`/`#2804`/ADR chain — i.e. the operator's ruling on the design, plus the build items and the
-`waiting`-derivation ADR that implement it.
-
-**Decision.** The ACCEPTANCE SHAPE for the queue-lifecycle v2 work is: the operator's "accepted as
-recommended" ruling (on `docs/reviews/queue-lifecycle-redesign.md` v2) + the `#2788`/`#2789`/`#2804` chain
-(the `waiting` view, the `answer` spool op, and the render rule) + the `waiting`-derivation ADR
-(`impl-item-2744` = the D113 entry). This is the acceptance shape; it is queue-citable at `#2955` and does NOT
-require the operator to re-state prose. `#2698` (advocate ETARGET review) stands with a one-line re-verify.
-
-**Status.** Recorded by `scribe` in the R1b serialized pass (#3089, R4). D-number minted at land time.
-
-## D118 — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex)
-
-**Context.** Operator acceptance `operator-accepts-r1-r7-2026-10-19-1` (21:52:23Z) accepted R1–R7 in full,
-making them OPERATOR RULINGS (not delegate recommendations). R1 (landing window OPEN, delegate drives), R1b
-(DECISIONS.md writers serialize as ONE scribe pass, minting free numbers at land time), R2 (`#2797` KEEP +
-CONSOLIDATE, `#2806` CANCEL), R3 (`#2630` stays HELD until `#2797` lands), R4 (the `#2955` acceptance
-shape), R5 (`#2949` CLOSED by evidence), R6 (`#2598` RELEASE and RE-QUEUE), R7 (six stale escalations
-consumed and closed).
-
-**Decision.** R1–R7 are ACCEPTED OPERATOR RULINGS (operator, 2026-10-19) and bind the queue-lifecycle v2
-work and the land/hold rulings as the same decision family. In particular: the landing window is OPEN and the
-DELEGATE drives (`land.mjs` waits for generation slots, broker stays UP); the DECISIONS.md writers
-serialize as ONE scribe pass minting free numbers at land time in issue order; `#2797` is kept + consolidated
-(re-pointed to `e4fd338`), `#2806` cancelled; `#2630` stays HELD until `#2797` lands; the `#2955` acceptance
-shape is citable; `#2949` is closed by evidence (scripts/ restored, `node --check scripts/land.mjs` exit 0);
-`#2598` is released and re-queued behind M1a; the six stale escalations (`#2942`/`#2943`/`#2947`/`#2948`/
-`#2673`/`#2797`) are closed.
-
-**Status.** Recorded by `scribe` in the R1b serialized pass (#3089 annex). No fresh D-number for this entry
-per the R1b rule (it records the same decision family; the design-of-record and land/hold rulings share the
-family). D-number minted at land time.
-
-## D119 — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089)
-
-**Context.** R1b required a pre-check on D113 before minting: its reservation (scribe-item-2219, #2284)
-rests on commit `fd4c233`. The pre-check result: `fd4c233` is a REAL commit but DANGLING — it is
-unreachable from any branch (`git branch -a --contains fd4c233` is empty) and does NOT merge cleanly onto
-`main` (merge-tree exit 1, conflict in docs/DECISIONS.md). The live branch `scribe-item-2219` exists at
-`a822bbf` holding the D113 entry, but IT ALSO conflicts against `main` (merge-tree exit 1).
-
-**Decision.** D113 is NOT reserved — the reservation is VOID (a dangling commit cannot hold a number).
-`#2284`'s recoverability decides whether the D113 entry lands, not the number: `fd4c233` still dangling →
-**re-branch** `scribe-item-2219` (at `a822bbf`) and land it (after a non-force rebase to clear the
-DECISIONS.md conflict); if the branch were gone → re-author the entry docs-only. D113 does NOT block the
-other DECISIONS entries (#3011/#3031/#3035/#3046) — they mint the next free numbers in issue order.
-
-**Status.** Pre-check run by `scribe` (item #3089, R1b). D113 remains void until #2284 is re-branched and
-re-landed. D-number minted at land time.
-
-## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
-
-**Context.** The queue can orphan work because a parked item is not required to name a machine-readable
-reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
-`docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md` is the live instance: held rows whose
-cited queue gates all cleared stayed parked forever (`#2630`, gated on the non-terminal `#2797`/`#2806`).
-The proposal `docs/reviews/queue-lifecycle-redesign.md` (v1) was reviewed independently by `architect`
-(`#2984`, `docs/reviews/architecture-queue-lifecycle-redesign-review.md`, 4 blockers + 13 CRs) and
-`advocate` (`#2985`, `docs/reviews/advocate-queue-lifecycle-redesign.md`, 8 CRs); the reviews found real
-defects in v1 (F1/F2/F3/F4/F7/F8/F9/F11, CR-1/CR-3/CR-6 — substantive design corrections, not polish).
-
-**Decision.** v2 of `docs/reviews/queue-lifecycle-redesign.md` (commit `defbc34`; acceptance recorded at
-`e788668`) is ACCEPTED as the **design of record** — it incorporates every review finding with a stated
-disposition in §13, and where v1 and v2 disagree, v2 wins. The operator ruled (2026-10-19) that this
-redesign **leads capability work** (defect fixes and the prerequisites it depends on are not capability
-work and land first). The accepted model in substance:
-
-1. **Two orthogonal axes** replace the status soup: `stage` (`open`/`active`/`closed`) and a nullable
-   `block`. `held`/`deferred` stop being statuses and become `block` shapes; a block cannot exist without
-   a `resolver`.
-2. **Blocks are typed, sourced, and multi-constraint.** `block.source: declared|legacy`; a block may
-   carry several `constraints`; the one automatic action (auto-open) fires only for a _declared_
-   `dependency` whose every constraint is a completed queue gate — legacy prose gates are never promoted
-   to a dependency by inference.
-3. **Every block has a trigger**, including a stuck gate: `gate-cleared-unreleased` and `gate-stalled`
-   (queue-scoped attention kinds), plus `parked-review-due` and `orphan-no-progress`.
-4. **`check` rules enforce well-formedness on authored blocks only** — never on the read-mapping of
-   legacy rows, so enforcement can never turn `check` red across the unmigrated store and stop landings.
-
-Gate-completion is an event (the closing commit, `complete_work`/`cancel_work`, with a broker-pass
-backstop) that atomically releases declared dependents whose every queue constraint is done. The
-migration is additive and lazy: the read-only half (check rules + queue-scope attention) ships first; the
-`rig.mjs`/`driver.mjs` axis change is sequenced behind the standing reliability cluster (`#2420`/`#2483`).
-
-**Scope questions still open for `lead` (the decision does not answer them).** (a) F12 — `#2673`'s
-lead-ratified `workable(item, seat)` is the same seam as this design's claimability, and its
-`requires`/fault clause is not implementable because `requires` is not persisted; one predicate or two —
-the redesign should own one `workable` or the two must not land independently. (b) F11 — there is no
-landed decision behind the `waiting` derivation; either land the architect's draft ADR with the `block`
-model as its source, or the proposal stops citing it (v1's D114 citation is withdrawn).
-
-**Alternatives rejected** (each with the review's reason): add a `parked-review-due` attention to today's
-`held` (treats the symptom, leaves reason/gate in prose); add more statuses (`blocked`,
-`waiting-operator`, `backlog` — the two-axis model carries the same information); a background unsticker
-that releases anything whose prose cites a done item (proven unsafe by the measured 59 candidates, mostly
-landing-list/backlog/do-not-start); a maintained reverse index of dependents (a second source of truth
-that drifts).
-
-**Status.** ACCEPTED — design of record (operator ruling, 2026-10-19). Recorded by `scribe` (item
-#3035). The design doc already marks the acceptance at `docs/reviews/queue-lifecycle-redesign.md`
-(commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
-the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
-record, not an implementation claim — no code change accompanies it.
+**Census at this edit** (`grep -o "^## D[0-9]+ —" docs/DECISIONS.md | sort | uniq -c | sort -rn`): D91 three
+times; D111, D112, D113, D114, D258 and D259 twice each, with **different bodies** under one number. Those are
+numbering collisions, not copy-paste, and resolving them is `pm`'s call, not docs housekeeping. Detection is
+a guard gap: neither `tools/doc-integrity-guard.mjs` nor `src/checkup.mjs` has a duplicate-heading rule, so the
+ledger can silently re-issue a number. Routed to `impl`.
 
 ## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268; amended per lead #3280)
 
@@ -4515,7 +4316,8 @@ bought the run at the price of the invariant the rig verifies with. `node cli.mj
 immediately reports **`single-model-rig`, severity fix-now**: "all 12 seats resolve to local/iq3_s, so a shared
 blind spot is systemic; per-seat models are already supported". The server serves one model and
 `src/providers/local.mjs` builds one provider from one base URL, so the cross-family author/verifier rule
-(D48/D119) is unmeetable while the rig is single-model. That is a ruling to make, not a gap to paper over: an
+(D134/D137/D166; the rule `check` reports as `single-model-rig`, `src/checkup.mjs:81`) is unmeetable while the rig
+is single-model. That is a ruling to make, not a gap to paper over: an
 author seat and its verifier sharing a family is the blind spot the check names, and it is the same objection
 the memory follow-up report raises about testing a memory system with the model that wrote it.
 
@@ -8556,7 +8358,8 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   weights test and puts two engines on a card already 91 % occupied, the configuration under which the kernel
   executed `strata-host` in the 2026-10-29 OOM incident.
 - **D-5025.2 — Therefore verification is binary, and both arms are named.** (a) the local seat model — honest but
-  same-family, `check` reports `single-model-rig` **fix-now**, and D48/D119 says a same-family verifier cannot
+  same-family, `check` reports `single-model-rig` **fix-now**, and the cross-family rule (D134/D137/D166;
+  `single-model-rig`, `src/checkup.mjs:81`) says a same-family verifier cannot
   confirm a defect (it reproduces the author's error and its agreeable verdict is worthless); or (b) **metered
   verification under D-5015's cap**, which is the operator's own ruling (D193). Option (c) — pointing verifier seats
   at the author model to clear the red — is rejected: it clears a signal by destroying what the signal was for.
@@ -9867,7 +9670,7 @@ owner before spending more verifier family.
 
 **Ruling 1 — the ecosystem gap is a product gap, so it goes on the base seam, not the extension plane.** The question "does Pi configuration reach a Durian-Pi seat?" was answered by measurement rather than argument, and the answer is **split**: the *substrate* is already pi's (`package.json` carries `pi-ai`, `pi-durable`, `pi-coding-agent@1.3.0`, `pi-tui`, `chord`; the seat harness is pi-durable's `Harness.open` at `cli.mjs:474`; the provider is pi-ai's `createProvider({id, baseUrl, api, auth:{apiKey:{resolve: ctx.env(…)}}})` at `cli.mjs:349-357`), but the *configuration* is a parallel plane: exactly one file imports the coding-agent package (`src/tui/durable/imports.mjs`), `SettingsManager`/`ModelRegistry` appear in exactly one file (`src/tui/durable/adapter.mjs`), and the seat's settings come from `DURIG_*` through `cli.mjs:487` (`streamSettings` at `src/config.mjs:317`, `compactionSettings` at `src/config.mjs:432`). Nothing in `~/.pi/agent/settings.json` or `~/.pi/agent/models.json` reaches a seat. Registered as **ROADMAP 332** with four named seams (S1 settings, S2 model registry, S3 credentials, S4 visibility + pin currency) and **331 as slice 1 of S1**, because 331 is the one seam half already measured end-to-end with a free probe. This is a **D212 base seam**, not a customization: a seat's config *input* is not an extension, and per D212 the fact that it cannot be expressed as an extension is evidence the base is missing the seam.
 
-**Ruling 2 — the drift between the two planes is already measurable, and it is not cosmetic.** Same model, two planes: the seat plane sets `DURIG_LOCAL_CONTEXT = 200000` (`durig.config.json:5`) while pi's registry says `strata/qwen3.8-flash-next-iq3_s contextWindow 204800, maxTokens 32768` and `strata-server/… 131072 / 24576` — **three context windows for one model name**, and that integer feeds the compaction threshold (331), the `compact` report's `declaredContextWindow` (`cli.mjs:1595`) and the spend math (141, 326). Thinking level is duplicated the same way (`defaultThinkingLevel: "medium"` in pi vs `"thinkingLevel": "high"` in `rig.selfdev.json`). The verifier family exists on **one** plane only — pi's `models.json` has no DeepInfra/`verifier` provider — so "just read pi's registry" would delete the cross-family author/verifier invariant `src/providers/local.mjs:9-34` exists to protect (D48/D119). And seat turns are invisible to pi's surfaces: `~/.pi/agent/sessions` holds 6 entries, 0 naming a seat worktree.
+**Ruling 2 — the drift between the two planes is already measurable, and it is not cosmetic.** Same model, two planes: the seat plane sets `DURIG_LOCAL_CONTEXT = 200000` (`durig.config.json:5`) while pi's registry says `strata/qwen3.8-flash-next-iq3_s contextWindow 204800, maxTokens 32768` and `strata-server/… 131072 / 24576` — **three context windows for one model name**, and that integer feeds the compaction threshold (331), the `compact` report's `declaredContextWindow` (`cli.mjs:1595`) and the spend math (141, 326). Thinking level is duplicated the same way (`defaultThinkingLevel: "medium"` in pi vs `"thinkingLevel": "high"` in `rig.selfdev.json`). The verifier family exists on **one** plane only — pi's `models.json` has no DeepInfra/`verifier` provider — so "just read pi's registry" would delete the cross-family author/verifier invariant `src/providers/local.mjs:9-34` exists to protect (D134/D137/D166). And seat turns are invisible to pi's surfaces: `~/.pi/agent/sessions` holds 6 entries, 0 naming a seat worktree.
 
 **Ruling 3 — no Windows seats for a long time. What that parks, and what it pointedly does not.** Parked: the Windows-side *observation* work — **#5278** (`qa`, "verify 311(ii) from a Windows host") stays `held` and is **no longer on the critical path**, and the Windows worktree-audit ask (**#5285**) is parked. Consequence for the roadmap: **311 must close as `verified-partial`** with the NTFS-junction half explicitly unverified, and the row must say which half is unverified rather than pretending Linux evidence covers it — that was already the operator's answer in D222, and this ruling makes it permanent rather than temporary. NOT parked, and arguably raised: the Linux-side seat gaps **186** ("seat personas hard-code the Windows shell") and **217** ("on Linux a seat has no shell at all: the seat shell is PowerShell by construction, and pi refuses PowerShell off Windows") — with no Windows seats coming, a Linux seat that cannot shell is the constraint's own precondition, not a side issue.
 
@@ -9882,7 +9685,7 @@ owner before spending more verifier family.
 
 **Method, so the coverage is auditable.** Read the upstream-read surface (runbook `competitor-review.md`), never a secondary report: **ten clones** read at their measured pins (`vendor/pi-main @ 2ec55d80` — note: **not** under `vendor/eval/`; `vendor/eval/{oh-my-pi 6f3fbc94, openhands 6354932e, codex d373d649, goose 775b3958, claude-code-docs 58d6da1e, cline 51f63e4f, crewai f3d0099d, pi-subagents 31208242, prime-agent 815e64b5}`; every HEAD re-measured with `git -C … rev-parse --short=8 HEAD` **in the same turn as this sentence**), plus two vendor docs (`spire` concepts, `litellm-models` proxy) **labelled `advertised-elsewhere`** and not credited as clone evidence. `node tools/vendor-pins.mjs --check` → **PIN CHECK PASS, 27 clones** (it also audits reviews: a review naming a present clone cites its HEAD and has a `docs/COMPETITORS.md` entry). Evidence: `docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md` (mechanisms M1–M12, coverage matrix, per-mechanism adopt/adapt/reject), decision rows in `docs/COMPETITORS.md`, options in `docs/reviews/credential-architecture-options-2026-11-07.md`, follow-up prompt in `docs/reviews/credentials-secret-brokerage-followup-research-prompt.md`.
 
-**Ruling 1 — the fork (ROADMAP 333) is NOT taken, and the research strengthens the objection to option (b) with a mechanism, not a vibe.** pi's resolver states the precedence (`vendor/pi-main/packages/ai/src/auth/resolve.ts:28-35`): *"A stored credential owns the provider: ambient/env is consulted only when nothing is stored. No silent env fallback after a failed refresh."* So if durian-pi read pi's store, `DURIG_VERIFIER_API_KEY` would be **ignored, not overridden** — a seat would authenticate as whatever the human logged in as, `selfdev.sqlite.spend.jsonl`'s `authKeyEnv` attribution would go false, and a rotation would stay invisible (326). The role→family guarantee (D48/D119) and the loopback-only `local` rule (325) both depend on durian-pi choosing the credential per **role**, which a shared store cannot express.
+**Ruling 1 — the fork (ROADMAP 333) is NOT taken, and the research strengthens the objection to option (b) with a mechanism, not a vibe.** pi's resolver states the precedence (`vendor/pi-main/packages/ai/src/auth/resolve.ts:28-35`): *"A stored credential owns the provider: ambient/env is consulted only when nothing is stored. No silent env fallback after a failed refresh."* So if durian-pi read pi's store, `DURIG_VERIFIER_API_KEY` would be **ignored, not overridden** — a seat would authenticate as whatever the human logged in as, `selfdev.sqlite.spend.jsonl`'s `authKeyEnv` attribution would go false, and a rotation would stay invisible (326). The role→family guarantee (D134/D137/D166) and the loopback-only `local` rule (325) both depend on durian-pi choosing the credential per **role**, which a shared store cannot express.
 
 **Ruling 2 — the measured hole is not the fork; it is reachability, and it exists today.** All 12 seats are conversations inside one broker process (`cli.mjs:474`, `cli.mjs:479`) and their shells are its children, same uid. `src/confine.mjs` strips credential-named env from the child env it builds (measured: 0 key-shaped names cross; canary `demo/confine.test.mjs` PASS 0.37 s), **but** a seat-shaped shell printed **92 env names from `/proc/<pid>/environ`, including `DURIG_VERIFIER_API_KEY` and `DURIG_LOCAL_API_KEY`**, and `refusalFor("cat /proc/$PPID/environ")` returned **no refusal** (probe: `.spike/delegate-20261107/envprobe/procfs-canary.mjs`, ~6 s, canary values, names only). Our value classifier would likely not report the leak either: `looksLikeSecret` (`src/config.mjs:73-82`) needs a known prefix **or** ≥40 chars **and** a digit (measured: 32-char alnum → `false`). **Therefore the current control is "a seat doesn't think to ask", which is not a control** — and it is fixable for $0 without waiting for the fork (rows **336**, **337**).
 
@@ -11305,14 +11108,22 @@ claimed by me in this row" — is preserved here. The green guards lead reports 
 findings 142 → 136 with `single-model-rig` pass/0) are the operator's, **not** re-checked by lead or pm. The only numbers
 in this entry produced by the writing seat are the roster count and the commands named above, each with its exit code.
 
-**A pin that is wrong in three places, recorded rather than papered over.** This row names the suspended rule
-"D48/D119", and the pairing repeats at `docs/DECISIONS.md:4417` and in `rig.selfdev.json`'s own `_readme`. The headings at
-`docs/DECISIONS.md:1292` (D48) and `docs/DECISIONS.md:3423` / `:3813` (D119, the identical heading twice) are about
-worktree recovery / shared-tree safety and about a void ADR-number reservation — not about verifier families. The
-cross-family author/verifier decisions in the log are **D137** (`docs/DECISIONS.md:4667`) and **D166**
-(`docs/DECISIONS.md:6363`), and the code-side split is `src/providers/local.mjs`, which `demo/deepinfra-catalog.test.mjs:81`
-calls "D166's cross-family author/verifier split". The ruling stands in its own words; the citation does not match it.
-Whoever owns the numbering should re-pin it, and no seat should read this entry as a reopen of D48 or D119.
+**A pin that was wrong, corrected (`scribe`, item #6326, 2026-11-11).** This row cited the suspended rule as
+**"D48/D119"**, and that pairing appeared in thirty places across the tree — `cli.mjs:453`, `src/providers/local.mjs:9`,
+`rig.selfdev.json`'s own `_readme`, ROADMAP, SELFDEV, COMPETITORS and eight review notes, as well as four places in
+this ledger. It is not the verifier-family rule: **D48** is *Recover the lost worktree, and make shared-tree safety
+structural*, and **D119** is a *void ADR-number reservation* whose heading appeared twice — six entries (D115–D120)
+had landed as a byte-identical duplicate block, now retired. The decisions that actually carry the cross-family
+author/verifier rule are **D134** (the second local provider — the split that was built), **D137** (a verifier that
+fails the seeded-bug gate is worse than no verifier) and **D166** (both local verifier candidates measured and
+rejected); **D214** restored the metered canary, and this entry records the suspension. The enforceable form is the
+`no-verifier-seat` and `single-model-rig` rules (`src/checkup.mjs:76,81`) over the `local`/`verifier` provider split
+in `src/providers/local.mjs`; `demo/deepinfra-catalog.test.mjs:81` still names it "D166's cross-family author/verifier
+split". Verify the sweep: `grep -rn "D48/D119" .` → 6 hits, four of them in `docs/NEXT-ARCHIVE.md` (a dated snapshot,
+deliberately left as written) and the two in this paragraph, quoting the bad pin in order to record it. **Cite the
+rule by its rule name and its code symbol, not by a number** — the ledger's line numbers drift: when the defect was
+first recorded here, D137 sat at `:4667` and D166 at `:6363`; at this edit they are `:4569` and `:6265`. The ruling itself is untouched, nothing is renumbered, and no
+seat should read this as a reopen of D48, D119, D134, D137 or D166.
 
 **Scope limit.** This entry opens **no** second-model acquisition row: GPU headroom is operator-owned. It does not re-open
 D48, D119, D137 or D166 — an entry that reads as a reopen invites a seat to start work that cannot run.
