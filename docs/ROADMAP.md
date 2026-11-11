@@ -3326,7 +3326,18 @@ cli.mjs status` silently opens an empty `./rig.sqlite`; `scripts/clockin.mjs:468
 `docs/DELEGATE-CLOCKIN.md` says either works. Depends on: none. Measure: a single alias resolver with one
 documented precedence, plus a failing-first demo asserting that **every environment name printed in the docs is
 honored by the entry point the doc names** — the class of defect is docs teaching a variable the code ignores,
-which is undetectable by reading either side. Note for whoever takes it: the delegate's own `AGENTS.md` clock-in
+which is undetectable by reading either side. **Recorded 2026-11-11 by the docs pass (#6336):** the census —
+`git grep -n 'DURIAN_PI_DB'` on `main 35001c3a` returned **128 lines in 38 files** before the sweep and **135 lines
+in 37 files** after it; 68 of those lines are the verbatim archive `docs/NEXT-ARCHIVE.md` (annotated, not rewritten,
+#6334), and every remaining occurrence outside it is a counterexample inside a discriminating probe, a dated record,
+or the code's own exception at `scripts/clockin.mjs:468`. And **nothing enforces this class**: `cli.mjs check` runs
+23 rules (`RULES.length` in `src/checkup.mjs`) and none compares an env name printed in a doc with the entry point
+that doc names; `tools/doc-integrity-guard.mjs` checks counts, dates and citations but never an env name. The
+machine-side guard is requested as #6335. One asymmetry the resolver has to settle: an unknown **environment** name
+is silently ignored, while an unknown key in `durig.config.json` **fails** — measured in the `item-6336` worktree,
+`node cli.mjs config` exits 1 with `unknown config-file key(s): DURIAN_PI_DB, DURIAN_PI_PROVIDER … no code reads
+these, so they are silently ignored (the #5071 accepted-and-ignored class)`.
+Note for whoever takes it: the delegate's own `AGENTS.md` clock-in
 line carried the wrong spelling for multiple sessions, which is how an empty store gets mistaken for a quiet rig.
 
 **192. The rig's compaction policy is not configurable, and its default threshold sits ~8k below a hard 400**
