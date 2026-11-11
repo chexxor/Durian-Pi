@@ -269,3 +269,39 @@ check, so the signal is noticed at the idle/post-pass leg — and the log closed
 
 Lesson, recorded as pitfall 257: a demo that is red only under concurrency is not automatically "the box, not the
 code" (pitfall 254). Read the artifact the assertion is missing and find which path skipped writing it.
+## K. The landing pass, 2026-11-11T00:4xZ (`main` 14ae744a, refs 43 -> 32, worktrees 35 -> 25)
+
+Preflighted every ref against current `main` with `git merge-tree --write-tree main <ref>`, then landed the clean
+set one at a time with the enforcement chokepoint, gate required:
+
+```bash
+for b in item-6381 item-6393 item-6363 item-6361 item-6176 verify-5180 item-6112 item-6466 item-6310 item-6223 item-6155 item-6365; do
+  git merge-tree --write-tree main "$b" >/dev/null 2>&1 || { echo "$b CONFLICT"; continue; }
+  node scripts/land.mjs "$b" --db ./selfdev.sqlite --changed-suite   # ok:true; gate = derived subset
+done
+git merge-base --is-ancestor <ref> main   # exit 0 for every one, checked individually
+git worktree remove <path>; git branch -d <ref>      # 12 clean unlocked trees, nothing forced
+```
+
+**Proof the merged result is green, not the branch tip:** after the pass,
+`node scripts/test.mjs --all --jobs 4` → **299/299 in 115.0 s** (Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64,
+node v24.22.1, git 2.56.0).
+
+**One branch needed a resolution, and it was provably mechanical.** `item-6402` conflicted only in `docs/DECISIONS.md`;
+the three merge stages show the base is a **prefix of both sides** (base 11,640 lines; ours 11,744 = base + D262 + D263;
+theirs 11,676 = base + one entry). Union is therefore the only correct resolution, and the branch's own entry said
+"the mint number is assigned at land" — it landed as **D264**. `git rerere` recorded the resolution.
+
+**Not landable by a delegate, with the measurement that says so:**
+
+| ref | conflict | why it is a re-cut, not a merge |
+|---|---|---|
+| item-5301, item-5301-resolved | `cli.mjs` | the import union is mechanical, but the branch's own `demo/worktree-reap.test.mjs` exits 1 on the merged tree: it asserts `dry.candidates`, and `reapWorktrees` (`src/broker.mjs:1333`) returns `reaped/counts/refusedSoleCarrier/kept` |
+| item-6101 | `cli.mjs`, `src/rig.mjs`, `demo/test-areas.json` | its hold/release model collides with #6112/#6150 already on `main` — semantic |
+| item-6162 | `docs/runbooks/stale-held-backlog.md`, `src/rig.mjs` | same collision with landed release-authority code |
+| item-3570 | `docs/runbooks/stale-held-backlog.md` | front matter and body both edited; not a pure append on either side |
+| item-6330 | `demo/runbook-diagnose.test.mjs` | it REMOVES skip-list entries `main` just added; a union would undo landed work |
+| wip/seat-prompt-files | `cli.mjs`, `prompts/*` | dispositioned SUPERSEDED (#6178) |
+
+**Correction to §H:** §H counted 43 refs / 35 worktrees at 23:5xZ. After this pass it is **32 refs / 25 worktrees**, 8
+refs still ahead of `main`, all of them in the table above.

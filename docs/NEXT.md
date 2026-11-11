@@ -1,10 +1,9 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-10T23:5xZ (delegate session **N27** — the **Ctrl-C + read-bound pass**: every CLI verb
-now answers or fails fast, and Ctrl-C ends the verb with exit **130**. Commits `41000315`, `c32557cb`, `fd09f919`
-and `f897ea8a` on `main`; suite **294/294** (`--jobs 4`, 126.7 s). Refs and worktrees: **count it live, do not trust
-any number here** — the fleet mints refs while you measure (**43 refs / 35 worktrees** at 23:5xZ, up from 26/18 an
-hour earlier). Nothing was pushed; the delegate claimed, completed or deferred no row.)
+**Last update:** 2026-11-11T00:5xZ (delegate session **N28** — the **landing pass on top of the Ctrl-C + read-bound
+pass**: 13 branches landed onto `main` (`main` = `14ae744a`), the mutating-verb bound closed, refs **43 → 32** and
+worktrees **35 → 25**, suite **299/299** (`--all --jobs 4`, 115.0 s). Nothing was pushed; the delegate claimed,
+completed or deferred no row. **Count refs/worktrees live** — the fleet mints them while you measure.)
 
 **Milestone this window worked** — **no 120 s silence, and Ctrl-C actually stops the verb (ROADMAP **314**,
 row **#6160**, decision **D262**)**. Baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
@@ -64,13 +63,14 @@ node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/wt.json","utf8"))
 git worktree prune
 ```
 
-**Goal in flight (implementation complete, record closed):** "every CLI verb answers or fails fast against a team
-that is running or stopped, no 120 s silence, and Ctrl-C actually terminates the running command." All six legs are
-on `main`: the signal seam (`src/signals.mjs`, `src/cli-seam.mjs`), bounded reads (`src/readclient.mjs`), the
-read-only shim (`src/readonlystore.mjs`), the out-of-band read drain in `runWakeLoop`, and the demos that pin them.
-Measured live at 23:3xZ with the broker resident and degraded: `status` 4.071 s, `queue --json --no-body` 2.525 s,
-`watch --once --human` 2.452 s, `ps` 0.960 s, `log pm 5` 1.934 s, `status --local --json` 3.344 s — all exit 0; a
-resident `watch --follow` interrupted at 3 s exits **130 in 52 ms**. **One regression was found and closed:** the new
+**Goal: implementation complete, completion re-request pending the audit's two objections closed.** "Every CLI verb
+answers or fails fast against a team running or stopped, no 120 s silence, and Ctrl-C actually terminates the verb."
+All legs are on `main`: the signal seam (`src/signals.mjs`, `src/cli-seam.mjs`), bounded reads (`src/readclient.mjs`),
+the read-only shim (`src/readonlystore.mjs`), the out-of-band read drain in `runWakeLoop`, the **mutating-verb** bound
+(`intentWaitBoundMs`, `src/broker.mjs:2410`: 900 s advancing / 10 s frozen pass / 0 no broker — `cli.mjs pause --wait`
+against a 658 MB store with no resident broker answered in **349 ms**), and the stop-receipt legs (`src/broker.mjs:1851`,
+`:1889`, `:2192`). Measured live at 00:4xZ with the broker DOWN: `status` 2.394 s, `queue --json --no-body` 0.888 s,
+`watch --once --json` 1.110 s, `ps` 0.254 s — all exit 0. **One regression was found and closed:** the new
 1 s read-drain timer shifted the wake loop by a fraction of a millisecond and
 `demo/cooldown-skip-line.test.mjs` went 4/12 red (bisected: 0/12 with `readDrainMs = 0`); it is now driven by an
 injected virtual clock and runs 0/15 red in **0.193 s** — pitfall **255**, §F of
@@ -95,21 +95,21 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out:** refs **43**, worktrees **35** (`git branch --format='%(refname:short)' | wc -l`,
-`git worktree list | wc -l`) — the fleet minted 17 refs after the cleanup pass, so count it live. Queue census
-6,423 rows — 4,365 done, 901 cancelled, 542 deferred, 435 held, 176 queued, 4 claimed. Store backup unchanged:
-`.spike/backups/20261110T0551Z/selfdev.sqlite` (617,492,480 bytes, sha256 `0996cd61…`, `cmp` exit 0).
+**State at clock-out (measured 00:5xZ):** refs **32** (8 still unlanded), worktrees **25**, `main` `14ae744a`.
+Landed this pass by `scripts/land.mjs … --changed-suite`: **item-6381, 6393, 6363, 6361, 6176, verify-5180, 6112,
+6466, 6310, 6223, 6155, 6365, 6402** (6402 union-resolved in `docs/DECISIONS.md`, its provisional entry minted **D264**);
+the 12 merged refs were pruned with `git branch -d`, their clean unlocked worktrees removed — nothing forced. Queue
+census 6,494 rows — 4,403 done, 908 cancelled, 536 deferred, 434 held, 210 queued, 3 claimed.
 
-**Hazards the next session must not mistake for green:** (1) **`item-5301` and `item-5301-resolved` are not
-landable** — re-measured 23:5xZ, `git merge-tree --write-tree main item-5301-resolved` exits non-zero with
-`CONFLICT (content): Merge conflict in cli.mjs` (the signal seam moved `cli.mjs` after the branch was cut), and the
-branch's own demo was red in the prior window (`git show item-5301-resolved:demo/worktree-reap.test.mjs` asserts
-`dry.counts`/`dry.candidates`/`dry.refusedSoleCarrier` while `reapWorktrees` returns a bare array → TypeError, exit
-1; not re-run here). (2) **`item-3570` is not landable as-is** — its demo needs the 1.5.1 `documentState`→`snapshot`
-migration AND asserts a refusal message (`blockedBy.0: must be integer`) that is absent from the installed pi-durable
-1.5.1 (grep exit 1). (3) **`item-6063/6064/6066` are ancestors of `main` with reverted content** — `git branch -d`
-would succeed; do not prune them, they are input to the re-cut. Full per-ref merge disposition (43 refs, clean vs
-conflicting, named files) is in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §H.
+**Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
+(1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
+`demo/worktree-reap.test.mjs` is **red on the merged tree** (run in a scratch: `dry.candidates` is undefined —
+`reapWorktrees` returns `reaped/counts/refusedSoleCarrier`, not `candidates`; exit 1). (2) **`item-6101`** conflicts in
+`cli.mjs`, `src/rig.mjs` and `demo/test-areas.json`: its hold/release code collides with the now-landed #6112/#6150 —
+semantic, needs the author's re-cut. (3) **`item-6330`** conflicts in `demo/runbook-diagnose.test.mjs` by *removing*
+entries from the skip list main added — a union would undo landed work. (4) **`item-3570`** and **`item-6162`** conflict
+in `docs/runbooks/stale-held-backlog.md`; `item-6162` also in `src/rig.mjs`. (5) `wip/seat-prompt-files` is dispositioned
+SUPERSEDED (#6178). Full disposition: evidence doc §H.
 
 ## The pinned-pi thread — v1.5.1 LANDED (ROADMAP 353–357)
 
@@ -129,7 +129,7 @@ provisional `checkpointWhen` — is VERBATIM in [docs/NEXT-ARCHIVE.md](NEXT-ARCH
 cd /home/chexxor/Git/Durian-Pi
 node demo/cli-sigint-exits.test.mjs                   # the Ctrl-C proof: 130 within ~130 ms of the signal (4.97 s)
 node demo/cooldown-skip-line.test.mjs                 # 0.193 s — the demo the read-drain timer broke; run it 10x, not once
-node scripts/test.mjs --all --jobs 4                  # 294/294 in 126.7 s
+node scripts/test.mjs --all --jobs 4                  # 299/299 in 115.0 s at `14ae744a`
 node demo/next-pointer.test.mjs                       # the pointer cap: NEXT.md must stay <= 200 counted lines
 node tools/broker-serve.mjs --status                  # broker state; the 61 dead-letters are explained in the evidence doc §G
 DURIG_DB=./selfdev.sqlite node cli.mjs status         # must answer in under 10 s, or name the cause and remedy
