@@ -134,8 +134,10 @@ e.g. `READ-DRAIN served=1 dead=0 dup=0 ms=792`, and the read spool was empty aft
 
 ## E. The gates that now pin this
 
+Measured at `6cc13740` (Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0):
+
 ```bash
-node scripts/test.mjs --all --jobs 4        # 294/294 in 117.6 s
+node scripts/test.mjs --all --jobs 4        # 295/295 in 123.0 s
 node scripts/test.mjs --all --jobs 8        # 293/294 in 85.1 s — demo/checkup-citation.test.mjs red,
                                           #   green standalone (exit 0); SwapFree 72 kB: contention,
                                           #   see docs/runbooks/suite-red-standalone-green.md
@@ -205,3 +207,65 @@ seam and the read-bound work moved `cli.mjs` after that branch was cut, so `git 
 `CONFLICT (content): Merge conflict in cli.mjs`. Four of the seven conflicts are in `cli.mjs` for exactly that reason:
 anything a seat branched off `cli.mjs` before 17:54Z must be re-cut against the seam. None of these branches touch the
 signal seam, so nothing in this goal depends on landing them — landing them is the PM/lead's routing call.
+
+## I. The mutating verbs got the same bound (2026-11-11T00:2xZ, `6cc13740`)
+
+The audit of the first completion request found the one hole the goal did not close: reads were bounded,
+spool **writes** were not. `awaitIntentResult` (`cli.mjs:2007`) defaulted `timeoutMs = 15 * 60_000`, and
+`pause --wait` (`cli.mjs:1982`) and `compactViaSpool` (`cli.mjs:1610`) called it with no progress check. Against a
+broker resident but frozen inside a pass that is a 900 s silence — Ctrl-C rescued it via `stoppableSleep`, but the
+verb never failed on its own.
+
+| broker state | bound | why |
+|---|---|---|
+| `up` (advancing) | 900,000 ms | a compaction is real work |
+| `degraded` (fresh heartbeat, no pass) | 10,000 ms | the same bound the read client uses |
+| `down` (no resident broker) | 0 ms | nothing will apply it — say so now |
+
+`intentWaitBoundMs` (`src/broker.mjs:2410`) is pure — state + `now` in, bound out — and `awaitIntentResult` re-reads
+it every poll, so a broker that recovers mid-wait is not cut off. The failure names pid, health state, heartbeat
+age, last-pass age, live generation leases and `docs/runbooks/broker-down-or-stalled.md`; the intent stays in the
+spool rather than being silently discarded.
+
+The live value, read without pausing the fleet (read-only store open, no config load — `loadConfig()` with no
+`readFile` argument throws `TypeError: readFile is not a function`, `src/config.mjs:314`):
+
+```bash
+node --input-type=module -e 'import {readBrokerState, intentWaitBoundMs} from "./src/broker.mjs"; console.log(intentWaitBoundMs(readBrokerState("./selfdev.sqlite")))'
+# -> {boundMs: 10000, health: {state: "degraded", reason: "no pass within the progress timeout",
+#     pid: 562329, hbAgeMs: 17863, passAgeMs: 11209263, progressTimeoutMs: 360000}}
+```
+
+Pin: `node demo/mutate-intent-bound.test.mjs` — **PASS, 2.0 s** in the suite, no key, no network, no model. Three
+legs: the pure bound function, the live `pause --wait` verb against a forged resident-but-frozen broker (non-zero
+exit inside the bound, message names heartbeat age / "last completed pass never" / the runbook, request still in
+`selfdev.sqlite.broker.inbox`), and the control that an advancing broker is NOT cut short — Ctrl-C there exits 130.
+
+**Fresh wedge re-measurement at `6cc13740`** (`.spike/wedge-after.mjs`, 139,264 B store, forged resident-but-unanswered
+broker, SIGINT at 1.5 s): `watch --once --json` 1707 ms → **130**, 203 ms after the signal; `status --json` 1709 ms →
+**130**, 208 ms after; `queue --json --no-body` 1518 ms → **130**, 17 ms after.
+
+**The NEXT.md cap, closed the honest way:** the record commit `c2c390e4` pushed `docs/NEXT.md` to 203 counted lines,
+which tripped `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (both assert the enforced 200-line cap).
+The pointer is now **195 lines** and the pinned-pi detail was moved **verbatim** to `docs/NEXT-ARCHIVE.md` (14,296 lines)
+rather than deleted — the cap is met without losing the record.
+
+## J. The stop audit had a leg that never wrote its receipt (2026-11-11T00:3xZ)
+
+Re-running the broker area found a #2322 hole the read drain's timing exposed. `runWakeLoop` can see a stop in
+three places, and only two of them wrote the receipt:
+
+| leg | line | before | after |
+|---|---|---|---|
+| top of the loop | `src/broker.mjs:1851` | `STOP-REQUESTED source=signal` | unchanged |
+| idle leg | `:1882` file / `:1889` signal | file only — a signal set `stoppedBy="signal"` with **no line** | receipt written for both |
+| post-pass leg | `:2185` file / `:2192` signal | file only — same hole | receipt written for both |
+
+Symptom: `node demo/broker-stop-audit.test.mjs` was **1/6 red** under `node scripts/test.mjs --area broker --jobs 4`
+and **0/12 red** standalone. Under contention the pass in flight finishes before the loop reaches the top-of-loop
+check, so the signal is noticed at the idle/post-pass leg — and the log closed with `EXIT reason=signal` and no
+`STOP-REQUESTED`, i.e. a signalled broker indistinguishable from a crash. After writing the receipt on every leg:
+**0/6 red** (re-measured with the same 6-run loop), **0/12** standalone.
+
+Lesson, recorded as pitfall 257: a demo that is red only under concurrency is not automatically "the box, not the
+code" (pitfall 254). Read the artifact the assertion is missing and find which path skipped writing it.

@@ -1881,6 +1881,12 @@ export async function runWakeLoop({
           // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
           logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
           clearStopRequest(dbPath);
+        } else {
+          // #2322 too: a SIGNAL noticed here (not at the top of the loop) is still a request,
+          // and the audit is only worth having if it names it. Without this leg the log reads
+          // `EXIT reason=signal` with no `STOP-REQUESTED` — a signalled broker indistinguishable
+          // from a crash. `demo/broker-stop-audit.test.mjs` asserts exactly this.
+          logBrokerLine(dbPath, `STOP-REQUESTED source=signal pid=${process.pid}`);
         }
         stoppedBy = expired ? "deadline" : idleStop;
         break;
@@ -2178,6 +2184,12 @@ export async function runWakeLoop({
         // #2322: record the receipt so the log names the REQUEST, not just the graceful EXIT.
         logBrokerLine(dbPath, `STOP-REQUESTED source=file pid=${process.pid}`);
         clearStopRequest(dbPath);
+      } else {
+        // Same #2322 hole on the post-pass leg: F35 deliberately honours a stop AFTER the pass
+        // in flight settles, so a signal often lands HERE rather than at the top of the loop.
+        // Under CPU contention the loop never reaches the top check before the pass finishes, and
+        // the audit was `EXIT reason=signal` with no receipt — measured 1/6 red at --jobs 4.
+        logBrokerLine(dbPath, `STOP-REQUESTED source=signal pid=${process.pid}`);
       }
       stoppedBy = expired ? "deadline" : postStop;
       break;

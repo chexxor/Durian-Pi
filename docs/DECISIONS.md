@@ -11702,3 +11702,43 @@ without touching the store.
 TTY); `tui.mjs` registers no handler and is unmapped beyond `--help`. Whether `run --watch`'s own
 clean drain should report 130 or 0 when it stops on a signal is a naming question the team can
 close; today it reports 130 because the signal arrived while it was working.
+
+## D263 — 2026-11-11T00:3xZ: **a bound is only real if the verb that took it can be PROVEN to take it — and a stop is not audited until the receipt is written on every leg that can notice it** (delegate rework after the completion audit rejected the first request; host measured with the measurement: **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**Status:** landed on `main` as `6cc13740` + this commit; nothing pushed.
+
+**Context.** The audit of the first completion request measured the behavior on the live rig and still
+rejected it on two grounds: (1) the record commit `c2c390e4` pushed `docs/NEXT.md` to 203 counted lines,
+tripping `demo/next-pointer.test.mjs` and `demo/clockin-digest.test.mjs` (both assert the enforced 200-line
+cap), so the gate the goal claimed ("294/294") was false against the delivered artifact; (2) the read path
+was bounded but the spool-**mutating** verbs were not — `awaitIntentResult` (`cli.mjs:2007`) defaulted to
+`timeoutMs = 15 * 60_000` and `pause --wait` (`cli.mjs:1982`) / `compactViaSpool` (`cli.mjs:1610`) called it
+with no progress check. Separately, re-running the broker area found a #2322 hole the read drain's timing
+exposed: `STOP-REQUESTED` is written at the top of the wake loop (`src/broker.mjs:1851`) and at the
+`.stop`-file legs, but a signal noticed at the **idle** or **post-pass** leg set `stoppedBy="signal"` with
+no receipt line — the audit logged `EXIT reason=signal` and nothing else.
+
+**Decision.**
+- **The mutating bound is derived, not configured.** `intentWaitBoundMs` (`src/broker.mjs:2410`) returns
+  900,000 ms for an advancing broker (a compaction is real work), 10,000 ms for a degraded one (the same
+  bound the read client uses), 0 when no broker is resident. It is re-read every poll, so a broker that
+  recovers mid-wait is not cut off. The failure names pid, health, heartbeat age, pass age, live generation
+  leases and `docs/runbooks/broker-down-or-stalled.md`; the intent stays in the spool.
+- **The cap is met by archiving, not deleting.** The pinned-pi detail was moved **verbatim** to
+  `docs/NEXT-ARCHIVE.md` (14,296 lines); `docs/NEXT.md` is 195 lines and keeps the heading plus the stop rule
+  with a pointer into the archive.
+- **Every leg that can notice a stop writes the receipt.** Both the idle leg and the post-pass leg now write
+  `STOP-REQUESTED source=signal` when the stop came from a signal, so a signalled broker is never
+  indistinguishable from a crash.
+
+**Evidence.** `node scripts/test.mjs --all --jobs 4` → **295/295**; `node demo/mutate-intent-bound.test.mjs`
+→ PASS 2.0 s (three legs: the pure bound, the live verb against a forged frozen broker, the advancing-broker
+control that Ctrl-C still exits 130). `node demo/broker-stop-audit.test.mjs` → 0/12 red standalone, and the
+`--area broker --jobs 4` loop that was **1/6 red** before the receipt fix is **0/6 red** after it. Live-rig bound,
+read without pausing the fleet: `{boundMs: 10000, health: {state: "degraded", pid: 562329, hbAgeMs: 17863,
+passAgeMs: 11209263}}`.
+
+**Consequences.** A mutating verb now fails in the same shape as a read: fast, with a named cause and a
+runbook, and never silently discarding the request. The general rule this goal established: **a bound you
+cannot demonstrate with a mocked-plane demo is not a bound** — every bound added here got a `demo/` gate that
+runs in under 5 s with no key and no network.
