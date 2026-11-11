@@ -6,7 +6,7 @@
 // provider and no paid API is needed for a local one.
 //
 // THERE ARE NOW TWO OF THEM, AND THAT IS THE POINT (2026-10-27). All 12 seats moved to one local model to
-// get off a 402, which made the cross-family author/verifier invariant (D48/D119) unmeetable - `check`
+// get off a 402, which made the cross-family author/verifier invariant (D134/D137/D166) unmeetable - `check`
 // reports `single-model-rig`, fix-now: "all 12 seats resolve to local/iq3_s, so a shared blind spot is
 // systemic". A second family is now served on the second GPU, so author seats run `local/<id>` and verifier
 // seats run `verifier/<id>`.

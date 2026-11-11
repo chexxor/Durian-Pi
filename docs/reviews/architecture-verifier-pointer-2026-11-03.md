@@ -210,7 +210,7 @@ untouched, and the red recorded** — which is what this row asks `pm`/`lead` to
 
 Lead's binary (#5025: "bind or retire"). **Ruling: BIND the pointer as one validated record, and RETIRE the
 free-provider assumptions that come with the `verifier` id.** Retiring the id outright is the reversible option
-and it is *worse* here: the rig has five seats and a cross-family invariant (D48/D119) that need a second
+and it is *worse* here: the rig has five seats and a cross-family invariant (D134/D137/D166) that need a second
 provider, and renaming them onto `local/iq3_s` would buy a green signal that means nothing. What must be retired
 is the module header's promise — "**free context, cheap reset, no paid API**" — applied to a non-loopback
 endpoint. That classification is #5015's (D-5015.3) and is not re-decided here; this row decides what the
