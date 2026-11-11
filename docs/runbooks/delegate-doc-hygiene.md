@@ -1,12 +1,12 @@
 ---
 runbook: delegate-doc-hygiene
-symptom: "an edit reported success but the text is not in the file; the NEXT pointer went red on its line cap; a citation check flags findings you did not make; a commit sha you quoted turns out not to exist; a `cat >> file <<'EOF'` executed part of its own body as shell; you added a runbook and nothing noticed"
+symptom: "an edit reported success but the text is not in the file; the NEXT pointer went red on its line cap; a citation check flags findings you did not make; a commit sha you quoted turns out not to exist; a `cat >> file <<'EOF'` executed part of its own body as shell; you added a runbook and nothing noticed; a doc states a count (`check` runs eight rules) that nobody can re-check"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-09
+last_verified: 2026-11-10
 verified_by: scribe
-evidence: "PARTIAL re-run 2026-11-09 by scribe (item #6080): the INTENDED-vs-RESOLVED section added under #6077/#6080 was checked with `node tools/doc-integrity-guard.mjs`, `node demo/next-pointer.test.mjs` and `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md` in the item-6080 worktree at main `503ff096` (each exit code recorded in the completion); the corpus scan `awk '/^\| *[0-9]+ *\|/ {rows++; if (/[0-9]{3}/ && !/INTENDED|RESOLVED/) bad++} END{print rows, bad}' docs/ROADMAP.md` → `49 48`, exit 0. **Re-measured 2026-11-10 by devtools (item #6110) on `main f192f543`: the same awk → `54 52`, exit 0; `node tools/doc-integrity-guard.mjs` → exit 0 (`0 hard, 0 soft`, 357 registered items, 54 runbooks); `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md docs/runbooks/README.md` → exit 0 (0 failing of 41 findings). SCOPED: those three legs plus the README index row were re-run; the older sha-citation and heredoc legs were not. Also measured on the same tree: `node scripts/test.mjs --all --jobs 6` → 282/282, exit 0, in a worktree whose `sync-pi --link` succeeded (`dependencySet: built-pin`, pi-durable 1.5.1)." Earlier legs (2026-11-06, delegate): `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
-check_rule: "not yet — see docs/ROADMAP.md **262**: `check` reports `runbook-front-matter` as SKIPPED, and `scripts/clockin.mjs:123` skips any runbook with no front matter, so a header-less runbook is currently invisible to both"
+evidence: "PARTIAL re-run 2026-11-09 by scribe (item #6080): the INTENDED-vs-RESOLVED section added under #6077/#6080 was checked with `node tools/doc-integrity-guard.mjs`, `node demo/next-pointer.test.mjs` and `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md` in the item-6080 worktree at main `503ff096` (each exit code recorded in the completion); the corpus scan `awk '/^\| *[0-9]+ *\|/ {rows++; if (/[0-9]{3}/ && !/INTENDED|RESOLVED/) bad++} END{print rows, bad}' docs/ROADMAP.md` → `49 48`, exit 0. **Re-measured 2026-11-10 by devtools (item #6110) on `main f192f543`: the same awk → `54 52`, exit 0; `node tools/doc-integrity-guard.mjs` → exit 0 (`0 hard, 0 soft`, 357 registered items, 54 runbooks); `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md docs/runbooks/README.md` → exit 0 (0 failing of 41 findings). SCOPED: those three legs plus the README index row were re-run; the older sha-citation and heredoc legs were not. Also measured on the same tree: `node scripts/test.mjs --all --jobs 6` → 282/282, exit 0, in a worktree whose `sync-pi --link` succeeded (`dependencySet: built-pin`, pi-durable 1.5.1)." Re-measured 2026-11-10 by devtools (item #6155) in the item-6155 worktree: `node cli.mjs check rig.selfdev.json --json` → exit 0, `doc-count-drift: pass` (23 rules declared, 2 doc claims read, all consistent); the same command with `docs/WORKFLOWS.md` deliberately set to "eight rules" → exit 0, `summary.fix-now: 1`, finding `docs/WORKFLOWS.md:293 claims check has 8 rules; the code declares 23`; `node demo/doc-count-drift.test.mjs` → exit 1 with the wrong count, exit 0 with the right one. Earlier legs (2026-11-06, delegate): `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
+check_rule: "doc-count-drift (#6155) for the declared-set counts section below; `runbook-front-matter` still reports UNKNOWN from `cli.mjs check` — see docs/ROADMAP.md **262**"
 ---
 
 # When your own doc edit does not land, or a pointer/citation check turns red on you
@@ -185,6 +185,32 @@ on the day it is enabled.
 devtools on `main f192f543` (exit 0): **`54 52`**. Five rows were added and four of them carry an untagged 3+ digit
 number. Between `503ff096` and `f192f543` the corpus moved, which is exactly why the rule cannot be armed from a
 remembered number.
+
+## A COUNT of a set the code declares is a claim the code can re-check (#6155)
+
+`docs/WORKFLOWS.md` said `check` runs "eight rules". Nobody had counted `src/checkup.mjs`'s `RULES`; the
+real number was 22, and by the time this section was written it was 23. A bare number in prose is authority
+without a source: it reads as fact, drifts silently as rules are added, and nothing catches it — the same
+failure mode as a threshold nobody can reproduce.
+
+The rule is now structural, not advisory:
+
+```bash
+node cli.mjs check rig.selfdev.json --json   # doc-count-drift: status pass, or a finding naming both numbers
+node demo/doc-count-drift.test.mjs           # exit 0 green; exit 1 if a docs/*.md count disagrees
+```
+
+What the rule reads: `` `check` (N rules) `` and `` `metrics` (N measures) `` in **top-level** `docs/*.md`
+(reviews and evidence are dated records, not live capability statements), compared against
+`DECLARED_COUNTS` in `src/checkup.mjs` — `RULES.length` and `Object.keys(MEASURES).length`. Spelled numbers
+("eight") parse; "a few rules" is reported as a claim nobody can verify. Severity is `fix-now`, so `check`
+prints it but still exits 0; the demo suite is what goes red, and the landing gate runs the suite.
+
+Write the count with its source, not as a bare assertion:
+
+> `check` (23 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
+
+Or drop the number entirely and name the declaring export. Either is honest; a number without a source is not.
 
 ## If it fails
 

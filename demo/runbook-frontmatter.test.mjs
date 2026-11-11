@@ -160,8 +160,12 @@ const noneCheck = none.checks.find((c) => c.id === "runbook-front-matter");
 assert.equal(noneCheck.status, "unknown", "without runbook data the rule is UNKNOWN, never a pass and never a plain skip (#5767)");
 assert.ok(noneCheck.why, "the unknown says why");
 assert.ok(
-	none.checks.filter((c) => c.status === "unknown").length === 3,
-	"all three runbook rules report unknown together — one absent input, three judged nothing",
+	none.checks.filter((c) => c.status === "unknown").length === 4,
+	"four rules report unknown together: the three runbook rules plus doc-count-drift (#6155) — one absent input each, nothing judged",
+);
+assert.ok(
+	none.checks.find((c) => c.id === "doc-count-drift")?.status === "unknown",
+	"doc-count-drift is UNKNOWN when the caller read no docs, never a silent pass (#6155)",
 );
 assert.match(
 	formatCheck(none, { color: false, seats: 1, storeReason: "absent" }),

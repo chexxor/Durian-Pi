@@ -288,6 +288,7 @@
       "demo/checkup-citation.test.mjs",
       "demo/commit-message-encoding.test.mjs",
       "demo/duplicate-item.test.mjs",
+      "demo/doc-count-drift.test.mjs",
       "demo/metrics.test.mjs",
       "demo/ownership.test.mjs",
       "demo/provenance.test.mjs",

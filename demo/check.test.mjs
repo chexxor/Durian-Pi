@@ -111,6 +111,10 @@ try {
     // #5049 rule RUNS and passes here rather than skipping. `null` would mean "not read" and skip it —
     // that distinction is pinned in demo/context-over-window.test.mjs.
     contextBySeat: {},
+    // #6155: an EMPTY claim list is the honest "this fixture's docs state no declared-set counts", so
+    // the doc-count rule RUNS and passes here. Omitting it reports UNKNOWN (nothing was judged) - the
+    // distinction is pinned in demo/doc-count-drift.test.mjs.
+    docCounts: [],
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);
