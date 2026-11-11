@@ -1,11 +1,11 @@
 ---
 runbook: suite-red-standalone-green
-symptom: "a demo exits 0 on its own but the suite reports it FAIL or TIMED OUT"
+symptom: "a demo exits 0 on its own but the suite reports it FAIL or TIMED OUT; OR the inverse - it is red standalone AND red in the suite, yet green in a tree built a different way"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-10
-verified_by: qa
-evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10"
+last_verified: 2026-11-11
+verified_by: devtools
+evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10. The inverse shape, measured 2026-11-11 (#6207): the SAME tree main `35001c3a` in two dependency sets - unlinked (`dependencySet: lockfile-released`, pi-durable **1.3.0** from the lockfile, `dist/index.js` sha256 `467d9cf6b27c…`) gives **279/300, exit 1, 134.5 s**, and every one of the 21 failures is ALSO red standalone (`node demo/<f>.test.mjs` exit 1 each; `demo/broker.test.mjs` hangs to the 120 s kill); the identical tree with the pin built and linked (`dependencySet: built-pin`, **1.5.1**) gives **300/300, exit 0, 89.7 s** (item-6200). Signatures: 4 broker demos `SessionFailed: Session failed after a storage error; close and reopen it`, 4 `TypeError: Cannot read properties of undefined (reading 'id')`, 5 tui-durable assertion mismatches, and `demo/commit-discipline-personas.test.mjs` dying with `ERR_MODULE_NOT_FOUND: @earendil-works/pi-schema` - a workspace package that only exists when the pin is built. All 21 are dependency-graph artefacts, not content defects."
 check_rule: null
 ---
 
@@ -23,6 +23,24 @@ order-dependent" — DECISIONS.md; "running the suite while a seat run is live m
 241/244 with `seat-turn-shape` + `broker-stop-audit` red, both green standalone 40 s later" —
 NEXT-ARCHIVE.md). The reason nobody could pin it is the report itself: the runner printed only the
 **last 8 lines** of a failing test, and for a crash the cause sits above the tail.
+
+## The inverse shape: red standalone too, but green in the other dependency set
+
+If the demo is red on its own as well, ordering and load are not the cause - the **dependency set** is.
+Ask the tree which pi it is running before blaming the code:
+
+```bash
+node scripts/sync-pi.mjs                  # dependencySet: built-pin | lockfile-released | mixed
+node scripts/test.mjs --all --jobs 6      # the count, and (since #6196/#6202) a PROVENANCE header naming the tree and the set
+```
+
+`lockfile-released` means the vendored pin build was never linked, so the tree measures the released npm
+package. `mixed` - some pin packages linked, the rest from the lockfile - is the state to be suspicious of,
+because a demo can straddle two graphs in one run.
+
+Do not call a red "environmental" until you have compared like with like: run the same demo in a tree where
+`node scripts/sync-pi.mjs --sync --link` has run. If it turns green there, the red belongs to the graph, and
+the citation has to say which graph (`node demo/<name>.test.mjs -> exit 1 in <worktree>, dependencySet=lockfile-released`).
 
 ## Preconditions
 None: every command here reads. The suite writes only to its own `/tmp` scratch.
@@ -58,6 +76,12 @@ Read the exit code the report prints, and classify it:
    back 260/282, the other 261/282; the extra red was `demo/init.test.mjs` (exit 1, `ENOENT ...
    open 'rig.json'` on its own `mkdtemp` directory). Demos that write in the shared working tree,
    or that spawn a broker, contend with each other.
+4. **Red standalone AND red in the suite, but green in a tree built from the pin** — the cause is the
+   dependency graph, not the code. `node scripts/sync-pi.mjs` prints `dependencySet: built-pin | lockfile-released | mixed`.
+   Measured 2026-11-11 (#6207) on the same main `35001c3a` in two sets: unlinked (**1.3.0** from the
+   lockfile) **279/300, exit 1**, with all 21 failures also red standalone; with the pin built and linked
+   (**1.5.1**) **300/300, exit 0**. The same tree can therefore be red and green, and the verdict is only
+   meaningful if it names the set it ran in.
 
 ## Do
 1. [judgement] A red is a defect only if it survives a **single, quiet** run: `node scripts/test.mjs
@@ -86,9 +110,13 @@ does not end in "Error" (`SessionFailed`) is still a named cause.
 ```bash
 node demo/test-runner-concurrency.test.mjs   # exit 0, prints TEST-RUNNER-CONCURRENCY TEST PASS
 node demo/suite-signature.test.mjs           # exit 0, prints SUITE-SIGNATURE TEST PASS
+node scripts/sync-pi.mjs                     # exit 0; read "dependencySet" in the JSON
 ```
 Measured 2026-11-10: both exit 0. And the verdict change is provably verdict-neutral on real failures:
 `node scripts/test.mjs --all` → exit 1, `261/282 passed`, the same 21 reds before and after.
+The dependency-set check was run 2026-11-11 on the same main `35001c3a` in two worktrees: unlinked
+(`dependencySet: lockfile-released`, `built: 0 linked: 0`) → **279/300, exit 1**; after
+`node scripts/sync-pi.mjs --sync --link` (36 s, 10 packages) → **300/300, exit 0**.
 
 ## If it fails
 If the leak fixture reports TIMEOUT again, `runOne` has gone back to waiting on `close`; restore the
