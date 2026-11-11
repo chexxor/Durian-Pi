@@ -84,10 +84,18 @@ const item = async (id) => (await harness.snapshot(RigQueue, undefined, ctx)).it
 try {
   await harness.commit(
     async (tx) => {
-      for (const [name, role] of [["pm", "program manager"], ["impl", "implementation engineer"], ["devtools", "dev-tools maintainer"]]) {
+      for (const [name, role, capabilities] of [
+        ["pm", "program manager", ["route", "plan"]],
+        ["impl", "implementation engineer", ["implement", "code"]],
+        ["devtools", "dev-tools maintainer", ["implement"]],
+      ]) {
         const c = await tx.createConversation({ ownership: { kind: "ownerless" } });
         await configure(tx, c.id, { model: { provider: "faux", modelId: "faux-seat" } });
         await registerSeat(tx, name, c.id, role);
+        // #6112: the release authority is decided by DECLARED CAPABILITIES, so a fixture that declares
+        // nothing now reads as a coordinator. The capabilities here mirror rig.selfdev.json so this demo
+        // tests the seat it claims to test: devtools is a working seat, hence still refused by authority.
+        (await tx.doc(Seats)).seats[name].capabilities = capabilities;
       }
     },
     ctx,
@@ -130,9 +138,17 @@ try {
   // ─── 3. THE REFUSAL SURVIVES FOR A GENUINELY PARKED ROW ───
   await call("devtools", "release_work", { itemId: foreignHeld });
   const r3 = await toolReply("devtools", "release_work");
-  check("a held row that is neither mine nor mine to send is still refused by authority", /only the sender or recipient/i.test(r3.text), r3.text);
+  check("a held row that is neither mine nor mine to send is still refused by authority", /only the sender, the recipient, or a coordinating seat/i.test(r3.text), r3.text);
   check("and the refusal names the status it is refusing on", /held/i.test(r3.text) || (await item(foreignHeld)).status === "held", r3.text);
   check("the foreign held row is NOT released", (await item(foreignHeld)).status === "held", JSON.stringify(await item(foreignHeld)));
+
+  // #6112: the coordinator class IS allowed to release, but only with a stated reason — a different
+  // refusal shape, and it must not be confused with the authority one above.
+  await call("pm", "release_work", { itemId: foreignHeld });
+  const r3b = await toolReply("pm", "release_work");
+  check("a coordinating non-party is refused for a DIFFERENT reason: no reason given", /must carry a reason/i.test(r3b.text), r3b.text);
+  check("...and that refusal is not the authority refusal", r3b.text !== r3.text, `authority: "${r3.text}" | reason: "${r3b.text}"`);
+  check("...and the row is still held after both refusals", (await item(foreignHeld)).status === "held", JSON.stringify(await item(foreignHeld)));
 
   // ─── 4. THE REAL PATH STILL WORKS: the sender releases its parked row ───
   await call("pm", "release_work", { itemId: myHeld });

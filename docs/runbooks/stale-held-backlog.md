@@ -5,7 +5,7 @@ writes: false                 # read-only audit + an intent spool to pm (never o
 precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
 last_verified: 2026-11-10        # the tool below was run against the live store; see Evidence
 verified_by: devtools
-evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below"
+evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"
 check_rule: demo/held-gate-audit.test.mjs
 ---
 
@@ -113,7 +113,10 @@ to `pm`; `pm` issues the transition. For each candidate:
    legitimately gated on the operator (`#994` quiet window), a provider, or a roadmap intent that merely
    cites a terminal item.
 2. **Decide the correct action:**
-   - gate cleared, still right to do → `release_work(<id>)` (sender or recipient);
+   - gate cleared, still right to do → `release_work(<id>, reason)` (sender or recipient; since **#6112** a
+     **coordinating** seat - one declaring no working capability, in this rig `pm` and `lead` - may release a
+     parked row it did not mint, and must state the reason. Release is delegable because it is reversible;
+     cancel and revise are not, and stay with the parties);
    - no longer worth doing → `cancel_work(<id>, reason)`;
    - genuinely still blocked → leave it, but ask `pm` to record `blockedBy` so it is queryable
      ([`WORK-ITEM-SCHEMA.md`](../WORK-ITEM-SCHEMA.md) R5) rather than prose.
@@ -212,6 +215,17 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
 
   Its assertion reads `a gate on a CANCELLED item is NOT workable (terminal != done)` and
   `...reason is gate-cancelled` (`demo/workable-claim.test.mjs:74-75`).
+- **The release authority is pinned by a demo** (run 2026-11-10, exit 0, #6112):
+
+  ```bash
+  node demo/pm-release-authority.test.mjs; echo "exit=$?"   # exit 0
+  ```
+
+  It asserts all four shapes separately: a coordinator release with a reason succeeds and records
+  `releasedBy=<seat> reason=<why>` in the queue line; a coordinator release without a reason is refused and
+  leaves the row held; a non-party working seat is refused by authority; and a release whose gate names a
+  CANCELLED row is refused. Falsifier: on HEAD (`git archive HEAD src` into a scratch tree) the same
+  coordinator release answers "only the sender or recipient may release it" and the row stays `held`.
 - **The entry is reachable from the symptom index, not only from the rule text** (run 2026-11-10, exit 0):
 
   ```bash
@@ -223,8 +237,11 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
 
 ## If it fails
 
-- **`release_work` is refused** ("not held", "not yours") → the row was already moved or the wrong party
-  is acting; re-read its `status` and `to`/`from`.
+- **`release_work` is refused** ("not held", "not yours", "must carry a reason") → the row was already moved,
+  the wrong party is acting, or a coordinator released without saying why; re-read its `status` and `to`/`from`.
+  If it refuses with "its gate names #<id>, which is cancelled", the row is not stale-held - it is the
+  umbrella-as-gate failure below: fix the gate (or close the container) before un-parking it, otherwise you
+  un-park a row that cannot be claimed.
 - **The gate id does not resolve** → the row's gate is prose referring to an item that never existed under
   that number; treat it as `manual` and hand it to `pm`.
 - **Structure and prose disagree on most rows** → expected while the population is unmigrated: prose-only

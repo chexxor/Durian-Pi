@@ -145,6 +145,7 @@
       "demo/parked-wake-dedup.test.mjs",
       "demo/pause-wait-bound.test.mjs",
       "demo/pause.test.mjs",
+      "demo/pm-release-authority.test.mjs",
       "demo/provider-auth-cause.test.mjs",
       "demo/queue-compat-args.test.mjs",
       "demo/queue-filter-attention.test.mjs",

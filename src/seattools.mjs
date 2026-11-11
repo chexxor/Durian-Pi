@@ -277,6 +277,24 @@ export function toolRemovalsFor(seat) {
 }
 
 /**
+ * Is this seat a COORDINATOR - a seat that neither produces nor checks an artifact?
+ *
+ * Derived from the seat's DECLARED CAPABILITIES, never from its name, because the name is the
+ * form that decays: a rig that renames `pm` to `coordinator` would silently change who holds the
+ * authority if the predicate read a string. This is the SAME rule `toolRemovalsFor` uses to strip
+ * a coordinator's working tools (F9), so the two cannot disagree about who the coordinator is.
+ *
+ * It is also the predicate that decides whether the ONE delegable queue verb - release - is open
+ * to a seat that is neither the sender nor the recipient of a row (#6112, ruling #6097): a
+ * coordinator sees the whole queue and is the seat that notices a parked row nobody can un-park,
+ * so release is within its role, while doing or closing work is not.
+ */
+export function seatIsCoordinator(seat) {
+	const capabilities = (seat?.capabilities ?? []).map((c) => String(c).toLowerCase());
+	return !capabilities.some((c) => WORKING_CAPABILITIES.includes(c));
+}
+
+/**
  * Does this seat keep the read tool? A coordinator (no working capability) loses it
  * (`COORDINATOR_REMOVALS`), so an over-threshold tool result must arrive INLINE or the item is
  * unreadable to it (lead #144 B, reconciled with #124 b: a seat that can dereference gets the
