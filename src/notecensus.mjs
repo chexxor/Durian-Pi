@@ -27,6 +27,12 @@
 //      item; either way NO model call), the deterministic DIGEST (extension armed, nothing to render), or a
 //      SUMMARISER call (the extension did not intercept). A seat whose compactions are all summariser output is
 //      a seat the mechanism has never reached, whatever the config says.
+//   4. (#6161) ERA - every compaction is also classified by WHEN it happened relative to the first entry in
+//      that conversation that declared the note tools: `predatesArming` or `afterArming`. Without it the third
+//      fact is read wrong. Measured on this rig 2026-11-11 (`node cli.mjs status --json`, exit 0): 1,973
+//      compactions, 1,893 recorded before the conversation was ever armed, 82 after - and of those 82, ZERO
+//      went to the summariser (67 note, 15 digest). The store-level "1,893 summariser" headline is a history
+//      artifact, not a failure rate; only the after-arming bucket can ever be a mechanism defect.
 
 import { DatabaseSync } from "node:sqlite";
 
@@ -73,7 +79,7 @@ export function noteStateIsEmpty(content) {
  * Read the census. `seats` is [{name, conversationId}]; when it is missing the rows are labelled by
  * conversation id and `unnamed: true`, rather than inventing a name (the fleet-health rule).
  */
-export function readNoteCensus(dbPath, { seats = null } = {}) {
+export function readNoteCensus(dbPath, { seats = null, queue = null } = {}) {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
     // ONE pass over entries answers facts 2 and 3 for every conversation at once. TWO traps the first version
@@ -85,29 +91,49 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
     //   - the three compaction buckets must be mutually exclusive: the extension's summary contains the note AND
     //     the digest beneath it, so a row matching both markers would be counted twice.
     const rows = db.prepare(
-      `select conversation_id,
-              sum(case when json_extract(record, '$.kind') = 'pi.assistant'
-                        and record like '%"type":"toolCall"%' and record like ? then 1 else 0 end) as read_note_calls,
-              sum(case when json_extract(record, '$.kind') = 'pi.assistant'
-                        and record like '%"type":"toolCall"%' and record like ? then 1 else 0 end) as write_note_calls,
-              sum(case when json_extract(record, '$.kind') = 'pi.assistant'
-                        and record like '%"type":"toolCall"%' and record like ? then 1 else 0 end) as handoff_calls,
-              sum(case when json_extract(record, '$.kind') = 'pi.system' and record like ? then 1 else 0 end) as note_tools_offered,
-              sum(case when record like ? then 1 else 0 end) as compactions,
-              sum(case when record like ? and record like ? then 1 else 0 end) as via_note,
-              sum(case when record like ? and record not like ? and record like ? then 1 else 0 end) as via_digest,
-              sum(case when record like ? and record not like ? and record not like ? then 1 else 0 end) as via_summariser
-         from entries
+      `with flagged as (
+          select conversation_id,
+                 id,
+                 (record like ?) as is_compaction,
+                 (record like ?) as via_note,
+                 (record like ?) as via_digest,
+                 (record like ?) as declares_note_tools,
+                 (json_extract(record, '$.kind') = 'pi.assistant' and record like '%"type":"toolCall"%' and record like ?) as read_note_call,
+                 (json_extract(record, '$.kind') = 'pi.assistant' and record like '%"type":"toolCall"%' and record like ?) as write_note_call,
+                 (json_extract(record, '$.kind') = 'pi.assistant' and record like '%"type":"toolCall"%' and record like ?) as handoff_call,
+                 min(case when record like ? then id end) over (partition by conversation_id) as armed_at,
+                 min(case when json_extract(record, '$.kind') = 'pi.assistant' and record like '%"type":"toolCall"%' and record like ? then id end) over (partition by conversation_id) as first_note_write_at
+            from entries
+        )
+        select conversation_id,
+               max(armed_at) as armed_at,
+               sum(read_note_call) as read_note_calls,
+               sum(write_note_call) as write_note_calls,
+               sum(handoff_call) as handoff_calls,
+               sum(case when declares_note_tools then 1 else 0 end) as note_tools_offered,
+               sum(case when is_compaction then 1 else 0 end) as compactions,
+               sum(case when is_compaction and via_note then 1 else 0 end) as via_note,
+               sum(case when is_compaction and not via_note and via_digest then 1 else 0 end) as via_digest,
+               sum(case when is_compaction and not via_note and not via_digest then 1 else 0 end) as via_summariser,
+               sum(case when is_compaction and (armed_at is null or id < armed_at) then 1 else 0 end) as predates_arming,
+               sum(case when is_compaction and armed_at is not null and id >= armed_at then 1 else 0 end) as after_arming,
+               sum(case when is_compaction and armed_at is not null and id >= armed_at and via_note then 1 else 0 end) as after_arming_note,
+               sum(case when is_compaction and armed_at is not null and id >= armed_at and not via_note and via_digest then 1 else 0 end) as after_arming_digest,
+               sum(case when is_compaction and armed_at is not null and id >= armed_at and not via_note and not via_digest then 1 else 0 end) as after_arming_summariser,
+               sum(case when is_compaction and first_note_write_at is not null and id < first_note_write_at then 1 else 0 end) as predates_first_write,
+               sum(case when is_compaction and first_note_write_at is not null and id >= first_note_write_at and not via_note and not via_digest then 1 else 0 end) as after_first_write_summariser
+          from flagged
          group by conversation_id`,
     ).all(
+      `%${COMPACTION_KIND}%`,
+      `%${NOTE_MARKER}%`,
+      `%${DIGEST_MARKER}%`,
+      '%"name":"read_note"%',
       '%"name":"read_note"%',
       '%"name":"write_note"%',
       '%"name":"continue_from_note"%',
       '%"name":"read_note"%',
-      `%${COMPACTION_KIND}%`,
-      `%${COMPACTION_KIND}%`, `%${NOTE_MARKER}%`,
-      `%${COMPACTION_KIND}%`, `%${NOTE_MARKER}%`, `%${DIGEST_MARKER}%`,
-      `%${COMPACTION_KIND}%`, `%${NOTE_MARKER}%`, `%${DIGEST_MARKER}%`,
+      '%"name":"write_note"%',
     );
     const byConv = new Map(rows.map((r) => [r.conversation_id, r]));
 
@@ -132,14 +158,35 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
       const stats = byConv.get(seat.conversationId) ?? {
         read_note_calls: 0, write_note_calls: 0, handoff_calls: 0, note_tools_offered: 0,
         compactions: 0, via_note: 0, via_digest: 0, via_summariser: 0,
+        armed_at: null, predates_arming: 0, after_arming: 0, after_arming_note: 0, after_arming_digest: 0, after_arming_summariser: 0,
+        first_note_write_at: null, predates_first_write: 0, after_first_write_summariser: 0,
       };
       const note = notes.get(seat.conversationId);
       const written = !!note && (note.deltas > 0 || note.base_has_content === 1);
+      // #6161: a note the RIG wrote is not a note the seat wrote. Since the wake seed is durable, "the doc has
+      // content" can no longer mean "this seat kept a continuity note" - only a `write_note` call proves that.
+      const authored = Number(stats.write_note_calls ?? 0) > 0;
+      const heldWork = (queue ?? []).filter((item) => item.to === seat.name && (item.status === "claimed" || item.status === "queued"));
       const compactions = Number(stats.compactions ?? 0);
       const compactionVia = {
         note: Number(stats.via_note ?? 0),
         digest: Number(stats.via_digest ?? 0),
         summariser: Number(stats.via_summariser ?? 0),
+      };
+      const compactionEra = {
+        armedAt: stats.armed_at ?? null,
+        predatesArming: Number(stats.predates_arming ?? 0),
+        afterArming: Number(stats.after_arming ?? 0),
+        afterArmingVia: {
+          note: Number(stats.after_arming_note ?? 0),
+          digest: Number(stats.after_arming_digest ?? 0),
+          summariser: Number(stats.after_arming_summariser ?? 0),
+        },
+        // A note written at entry N cannot be carried by a compaction at entry N-1. Without this second era the
+        // census cries "defect" at compactions that simply predate the note (#6161).
+        firstNoteWriteAt: stats.first_note_write_at ?? null,
+        predatesFirstWrite: Number(stats.predates_first_write ?? 0),
+        afterFirstWriteSummariser: Number(stats.after_first_write_summariser ?? 0),
       };
       const noteToolsOffered = Number(stats.note_tools_offered ?? 0);
       return {
@@ -148,6 +195,7 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
         ...(seat.unnamed ? { unnamed: true } : {}),
         noteDoc: !!note,
         noteWritten: written,
+        noteAuthored: authored,
         noteRevisions: note?.revisions ?? 0,
         readNoteCalls: Number(stats.read_note_calls ?? 0),
         writeNoteCalls: Number(stats.write_note_calls ?? 0),
@@ -157,10 +205,13 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
         noteToolsOffered,
         compactions,
         compactionVia,
+        compactionEra,
+        heldWork: heldWork.length,
+        heldClaimed: heldWork.filter((item) => item.status === "claimed").length,
         // The seat's most recent compaction, classified: the answer to "is THIS seat on the note path now?"
         latestCompactionVia: latestCompactionSource(db, seat.conversationId),
-        // The verdict the facts add up to, and who owns the gap if there is one (#6118).
-        ...classifySeat({ noteWritten: written, compactions, compactionVia, noteToolsOffered, latestCompactionVia: latestCompactionSource(db, seat.conversationId) }),
+        // The verdict the facts add up to, and who owns the gap if there is one (#6118, #6161).
+        ...classifySeat({ noteWritten: written, noteAuthored: authored, compactions, compactionVia, noteToolsOffered, latestCompactionVia: latestCompactionSource(db, seat.conversationId), compactionEra, heldWork: heldWork.length }),
       };
     });
 
@@ -168,14 +219,20 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
       (acc, row) => {
         acc.verdicts[row.verdict] = (acc.verdicts[row.verdict] ?? 0) + 1;
         acc.notes += row.noteWritten ? 1 : 0;
+        acc.authoredNotes += row.noteAuthored ? 1 : 0;
         acc.noteDocs += row.noteDoc ? 1 : 0;
         acc.readNoteCalls += row.readNoteCalls;
         acc.noteToolsOffered += row.noteToolsOffered;
         acc.compactions += row.compactions;
+        acc.predatesArming += row.compactionEra.predatesArming;
+        acc.afterArming += row.compactionEra.afterArming;
+        acc.afterArmingNote += row.compactionEra.afterArmingVia.note;
+        acc.afterArmingDigest += row.compactionEra.afterArmingVia.digest;
+        acc.afterArmingSummariser += row.compactionEra.afterArmingVia.summariser;
         for (const key of COMPACTION_SOURCES) acc[key] += row.compactionVia[key];
         return acc;
       },
-      { seats: census.length, notes: 0, noteDocs: 0, readNoteCalls: 0, noteToolsOffered: 0, compactions: 0, note: 0, digest: 0, summariser: 0, verdicts: {} },
+      { seats: census.length, notes: 0, authoredNotes: 0, noteDocs: 0, readNoteCalls: 0, noteToolsOffered: 0, compactions: 0, note: 0, digest: 0, summariser: 0, predatesArming: 0, afterArming: 0, afterArmingNote: 0, afterArmingDigest: 0, afterArmingSummariser: 0, verdicts: {} },
     );
 
     return { seats: census, totals };
@@ -199,22 +256,27 @@ function latestCompactionSource(db, conversationId) {
 }
 
 /**
- * PROVEN or CLAIMED, per seat (#6118). "The mechanism is proven" and "this seat is carried by the mechanism"
- * are different statements, and the fleet has been reading one as the other. A seat is PROVEN only when it
- * wrote a note AND a compaction actually carried that note. Everything else is a claim, and the claim has four
- * distinguishable shapes, each with a different owner:
+ * The per-seat verdict (#6118, #6161). "The mechanism is proven" and "this seat is carried by the mechanism"
+ * are different statements, and the fleet has been reading one as the other. Each verdict names the owner of
+ * the gap, and every one of them is decided by the four store facts, not by prose.
  *
- *   proven        - a note the seat wrote was supplied as the summary at a boundary. Nothing to do.
- *   seeded        - the boundary was covered, but by a seed pulled from the seat's queue, not by the seat's
- *                   own note. The mechanism reached the seat; the seat's own durability claim is still unproven.
- *                   Owner: the seat (it never wrote one).
- *   claimed-only  - the tools were offered and no boundary ever carried a note. If the seat DID write a note,
- *                   the hook failed to intercept: the compactions may predate the note, and this row cannot tell
- *                   which - so it is reported as open, not as a defect.
- *   not-armed     - the extension was never loaded for this conversation (0 turns declared the note tools).
- *                   `src/extensions.mjs` has no auto-discovery, so an unlisted extension is an absent one.
- *   not-observed  - the seat has never been compacted. Not a failure and not a proof: a non-observation, per
- *                   docs/reviews/architecture-note-contract-closeout-2026-11-09.md section "What is NOT required".
+ *   proven           - a note the seat wrote was supplied as the summary at a boundary. Nothing to do.
+ *   seeded           - the boundary was covered, but by a rig seed drawn from the seat's claimed or queued item,
+ *                      not by the seat's own note. Owner: the seat (it never called write_note).
+ *   path-not-reached - compactions recorded AFTER the conversation was armed still went to the summariser. This
+ *                      is the only shape that is a real mechanism defect. Owner: the mechanism.
+ *   predates-arming  - every compaction in this conversation happened before the extension was ever loaded into
+ *                      it. History, not a failure rate. Owner: history (nobody). #6161 exists because this state
+ *                      was being counted as "1,893 compactions went to the summariser".
+ *   digest-only      - armed compactions carried neither a note nor a seed: nothing written, nothing held.
+ *                      Owner: the seat.
+ *   not-armed        - the extension was never loaded for this conversation (0 turns declared the note tools).
+ *                      `src/extensions.mjs` has no auto-discovery, so an unlisted extension is an absent one.
+ *   idle             - the seat holds no claimed or queued item, so it can never reach a window boundary. Owner:
+ *                      pm (it is a routing gap). #6161: eight seats were being counted as coverage failures when
+ *                      the store says they had nothing to do.
+ *   not-observed     - the seat holds work but has never been compacted. Not a failure, not a proof: a
+ *                      non-observation, per docs/reviews/architecture-note-contract-closeout-2026-11-09.md.
  *
  * Pure: takes one census row, returns the verdict. Kept separate from the store read so a demo can pin the
  * vocabulary without a 400 MB store.
@@ -222,28 +284,55 @@ function latestCompactionSource(db, conversationId) {
 export function classifySeat(row) {
   const compactions = Number(row?.compactions ?? 0);
   const viaNote = Number(row?.compactionVia?.note ?? 0);
-  const viaSummariser = Number(row?.compactionVia?.summariser ?? 0);
-  const written = !!row?.noteWritten;
   const offered = Number(row?.noteToolsOffered ?? 0);
+  const authored = !!row?.noteAuthored;
+  const heldWork = Number(row?.heldWork ?? 0);
+  const era = row?.compactionEra ?? {
+    armedAt: null,
+    predatesArming: 0,
+    afterArming: compactions,
+    afterArmingVia: { note: viaNote, digest: Number(row?.compactionVia?.digest ?? 0), summariser: Number(row?.compactionVia?.summariser ?? 0) },
+    firstNoteWriteAt: null,
+    predatesFirstWrite: 0,
+    afterFirstWriteSummariser: Number(row?.compactionVia?.summariser ?? 0),
+  };
+  const afterNote = Number(era.afterArmingVia?.note ?? 0);
+  const afterSummariser = Number(era.afterArmingVia?.summariser ?? 0);
+
   if (compactions === 0) {
-    return { verdict: "not-observed", owner: "none", why: "never compacted - there is no boundary at which to test the note path" };
-  }
-  if (viaNote === 0) {
-    if (offered === 0) {
-      return { verdict: "not-armed", owner: "operator", why: `the note tools were declared in 0 of the turns that ran, so the extension is not loaded for this conversation (${compactions} compactions, all to the summariser)` };
+    // #6161: the two zero-compaction states are different. Eight seats read as coverage failures were simply
+    // holding nothing - a seat with no claimed or queued item can never reach a window boundary, so the gap is
+    // routing (pm's), not mechanism.
+    if (heldWork === 0) {
+      return { verdict: "idle", owner: "pm", why: "the seat holds no claimed or queued item, so no boundary can ever occur - a routing gap, not a mechanism failure" };
     }
-    if (written) {
-      return { verdict: "claimed-only", owner: "open", why: `a note was written but 0 of ${compactions} compactions carried it (${viaSummariser} went to the summariser); this census cannot tell whether the compactions predate the first write or the hook failed to intercept` };
-    }
-    return { verdict: "claimed-only", owner: "seat", why: `the tools were offered ${offered}x and no note was ever written; ${compactions} compactions went to the summariser` };
+    return { verdict: "not-observed", owner: "open", why: `the seat holds ${heldWork} item(s) but has never been compacted - there is no boundary at which to test the note path yet` };
   }
-  if (!written) {
-    return { verdict: "seeded", owner: "seat", why: `${viaNote} of ${compactions} compactions were covered by a seed drawn from the seat's claimed or queued item, not by a note the seat wrote (note doc exists with no write)` };
+  if (offered === 0) {
+    return { verdict: "not-armed", owner: "operator", why: `the note tools were declared in 0 of the turns that ran, so the extension is not loaded for this conversation (${compactions} compactions, all to the summariser)` };
+  }
+  // #6161: era before anything else. A summariser compaction recorded before the conversation was ever armed
+  // is history, not a defect, and must never be counted as one.
+  if (era.afterArming === 0) {
+    return { verdict: "predates-arming", owner: "history", why: `all ${compactions} compactions predate the first entry declaring the note tools (armed at entry ${era.armedAt ?? "never"}); nothing has been compacted since the extension was loaded, so this row proves nothing about the path either way` };
+  }
+  if (afterSummariser > 0) {
+    // Post-arming compactions went to the summariser. Are they a defect or are they simply older than the note?
+    if (authored && era.afterFirstWriteSummariser === 0) {
+      return { verdict: "claimed-only", owner: "open", why: `${afterSummariser} post-arming compactions went to the summariser, but all of them predate the seat's first note write (entry ${era.firstNoteWriteAt}); this row cannot prove a defect, only a gap in observation` };
+    }
+    return { verdict: "path-not-reached", owner: "mechanism", why: `${era.afterFirstWriteSummariser || afterSummariser} of the ${era.afterArming} compactions recorded AFTER this conversation was armed still went to the summariser - that is the path failing, not history` };
+  }
+  if (afterNote === 0) {
+    return { verdict: "digest-only", owner: "seat", why: `${era.afterArming} post-arming compactions carried neither a note nor a seed: nothing was written and nothing was held at the boundary` };
+  }
+  if (!authored) {
+    return { verdict: "seeded", owner: "seat", why: `${afterNote} of ${era.afterArming} post-arming compactions were covered by a rig seed drawn from the seat's claimed or queued item; the seat never called write_note, so its own durability is unproven` };
   }
   return {
     verdict: "proven",
     owner: "none",
-    why: `${viaNote} of ${compactions} compactions carried a note this seat wrote; latest boundary: ${row?.latestCompactionVia ?? "unknown"}`,
+    why: `${afterNote} of ${era.afterArming} compactions after arming carried a note this seat wrote; latest boundary: ${row?.latestCompactionVia ?? "unknown"}`,
   };
 }
 
@@ -252,15 +341,17 @@ export function renderCensus(census) {
   const lines = [];
   const v = census.totals.verdicts ?? {};
   lines.push(
-    `continuity notes: PROVEN ${v.proven ?? 0} of ${census.totals.seats} seats; seeded ${v.seeded ?? 0}; claimed-only ${v["claimed-only"] ?? 0}; not-armed ${v["not-armed"] ?? 0}; not-observed ${v["not-observed"] ?? 0}. ` +
-    `${census.totals.notes}/${census.totals.seats} seats have a written note; ` +
+    `continuity notes: PROVEN ${v.proven ?? 0} of ${census.totals.seats} seats; seeded ${v.seeded ?? 0}; path-not-reached ${v["path-not-reached"] ?? 0}; digest-only ${v["digest-only"] ?? 0}; predates-arming ${v["predates-arming"] ?? 0}; not-armed ${v["not-armed"] ?? 0}; idle ${v.idle ?? 0}; not-observed ${v["not-observed"] ?? 0}. ` +
+    `${census.totals.notes}/${census.totals.seats} seats have a note in the store, ${census.totals.authoredNotes} written by the seat itself; ` +
       `${census.totals.readNoteCalls} read_note calls across ${census.totals.noteToolsOffered} turns that offered the tools; ` +
-      `${census.totals.compactions} compactions -> note ${census.totals.note}, digest ${census.totals.digest}, summariser ${census.totals.summariser}`,
+      `${census.totals.compactions} compactions -> note ${census.totals.note}, digest ${census.totals.digest}, summariser ${census.totals.summariser}. ` +
+      `By era (#6161): ${census.totals.predatesArming} of those compactions predate the extension being armed in the conversation, ${census.totals.afterArming} came after (note ${census.totals.afterArmingNote}, digest ${census.totals.afterArmingDigest}, summariser ${census.totals.afterArmingSummariser})`,
   );
   for (const row of census.seats) {
     lines.push(
-      `  ${String(row.seat).padEnd(12)} conv ${String(row.conversationId).padEnd(7)} note=${row.noteWritten ? "written" : row.noteDoc ? "empty doc" : "none"}` +
-        `  read_note ${row.readNoteCalls}x (offered ${row.noteToolsOffered}x)  compactions ${row.compactions} (note ${row.compactionVia.note}, digest ${row.compactionVia.digest}, summariser ${row.compactionVia.summariser})` +
+      `  ${String(row.seat).padEnd(12)} conv ${String(row.conversationId).padEnd(7)} note=${row.noteAuthored ? "written by seat" : row.noteWritten ? "rig seed" : "none"}` +
+        `  holds ${row.heldWork} (${row.heldClaimed} claimed)  read_note ${row.readNoteCalls}x (offered ${row.noteToolsOffered}x)  compactions ${row.compactions} (note ${row.compactionVia.note}, digest ${row.compactionVia.digest}, summariser ${row.compactionVia.summariser})` +
+        `  era pre-arm ${row.compactionEra.predatesArming} / post-arm ${row.compactionEra.afterArming}` +
         `  latest: ${row.latestCompactionVia ?? "no compaction"}` +
         `  verdict=${row.verdict} owner=${row.owner} — ${row.why}`,
     );

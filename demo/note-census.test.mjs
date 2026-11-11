@@ -218,16 +218,42 @@ try {
   await seeder.harness.close(ctx);
 }
 const seededRow = readNoteCensus(join(dir, "seeded.sqlite"), { seats: [{ name: "seeder", conversationId: seeder.conversationId }] }).seats[0];
-check("the note doc exists but was never written", seededRow.noteDoc && !seededRow.noteWritten, JSON.stringify({ doc: seededRow.noteDoc, written: seededRow.noteWritten }));
+check("the wake seed makes the doc have content, but it is the RIG writing, not the seat",
+  seededRow.noteDoc && seededRow.noteWritten && !seededRow.noteAuthored && seededRow.writeNoteCalls === 0,
+  JSON.stringify({ doc: seededRow.noteDoc, written: seededRow.noteWritten, authored: seededRow.noteAuthored, writeCalls: seededRow.writeNoteCalls }));
 check("a compaction did carry a note-shaped summary", seededRow.compactionVia.note >= 1, JSON.stringify(seededRow.compactionVia));
-check("so the verdict is SEEDED, not PROVEN — the seat has nothing durable of its own", seededRow.verdict === "seeded" && seededRow.owner === "seat", `${seededRow.verdict} / ${seededRow.owner} — ${seededRow.why}`);
+check("the seed was written at the wake, so the era shows the conversation armed before the compaction",
+  seededRow.compactionEra.armedAt !== null && seededRow.compactionEra.predatesArming === 0,
+  JSON.stringify(seededRow.compactionEra));
+check("so the verdict is SEEDED, not PROVEN - the seat has nothing durable of its own", seededRow.verdict === "seeded" && seededRow.owner === "seat", `${seededRow.verdict} / ${seededRow.owner} - ${seededRow.why}`);
 check("the seat that wrote a note and was compacted on it is PROVEN", row.verdict === "proven" && row.owner === "none", `${row.verdict} / ${row.owner}`);
 check("the seat whose extension was never loaded is NOT-ARMED and the operator owns it", controlRow.verdict === "not-armed" && controlRow.owner === "operator", `${controlRow.verdict} / ${controlRow.owner}`);
-check("a seat that never ran is NOT-OBSERVED, not a failure", sleeping.verdict === "not-observed", `${sleeping.verdict} — ${sleeping.why}`);
+check("a seat that never ran AND holds nothing is IDLE, owned by routing, not a coverage failure",
+  sleeping.verdict === "idle" && sleeping.owner === "pm" && sleeping.heldWork === 0,
+  `${sleeping.verdict} / ${sleeping.owner} — ${sleeping.why}`);
+const heldButUncompacted = readNoteCensus(join(dir, "seeded.sqlite"), {
+  seats: [{ name: "never-woke", conversationId: 9999 }],
+  queue: [{ id: 1, to: "never-woke", status: "claimed" }],
+}).seats[0];
+check("a seat that holds work but has never been compacted is NOT-OBSERVED, not idle",
+  heldButUncompacted.verdict === "not-observed" && heldButUncompacted.heldWork === 1,
+  `${heldButUncompacted.verdict} — ${heldButUncompacted.why}`);
+check("the era splits compactions, so a pre-arming summariser is never read as a defect",
+  controlRow.compactionEra.predatesArming === 1 && controlRow.compactionEra.afterArming === 0 && controlRow.verdict === "not-armed",
+  JSON.stringify({ era: controlRow.compactionEra, verdict: controlRow.verdict }));
 check("the header states the split before any per-seat line", renderCensus(census).split("\n")[0].startsWith("continuity notes: PROVEN 1 of 2"), renderCensus(census).split("\n")[0]);
 check("classifySeat is pure and answers without a store",
-  classifySeat({ noteWritten: true, compactions: 5, compactionVia: { note: 0, digest: 0, summariser: 5 }, noteToolsOffered: 3 }).verdict === "claimed-only",
-  "a written note with no note-carried compaction is a claim, not a proof");
+  classifySeat({ noteWritten: true, noteAuthored: true, compactions: 5, compactionVia: { note: 0, digest: 0, summariser: 5 }, noteToolsOffered: 3, compactionEra: { armedAt: 10, predatesArming: 5, afterArming: 0, afterArmingVia: { note: 0, digest: 0, summariser: 0 }, firstNoteWriteAt: 40, predatesFirstWrite: 5, afterFirstWriteSummariser: 0 } }).verdict === "predates-arming",
+  "compactions that predate the extension being armed are history, not a failure rate");
+check("post-arming summariser compactions after the note existed are a mechanism defect",
+  classifySeat({ noteWritten: true, noteAuthored: true, compactions: 5, compactionVia: { note: 0, digest: 0, summariser: 3 }, noteToolsOffered: 3, compactionEra: { armedAt: 10, predatesArming: 2, afterArming: 3, afterArmingVia: { note: 0, digest: 0, summariser: 3 }, firstNoteWriteAt: 20, predatesFirstWrite: 0, afterFirstWriteSummariser: 3 } }).verdict === "path-not-reached",
+  "the only shape that is a real defect");
+check("post-arming summariser compactions that all predate the first note write stay OPEN, not a defect",
+  classifySeat({ noteWritten: true, noteAuthored: true, compactions: 5, compactionVia: { note: 0, digest: 0, summariser: 3 }, noteToolsOffered: 3, compactionEra: { armedAt: 10, predatesArming: 2, afterArming: 3, afterArmingVia: { note: 0, digest: 0, summariser: 3 }, firstNoteWriteAt: 60, predatesFirstWrite: 3, afterFirstWriteSummariser: 0 } }).verdict === "claimed-only",
+  "the row cannot prove a defect, only a gap in observation");
+check("an armed compaction that carried neither a note nor a seed is DIGEST-ONLY, owned by the seat",
+  classifySeat({ noteWritten: false, noteAuthored: false, compactions: 4, compactionVia: { note: 0, digest: 4, summariser: 0 }, noteToolsOffered: 2, heldWork: 0, compactionEra: { armedAt: 5, predatesArming: 0, afterArming: 4, afterArmingVia: { note: 0, digest: 4, summariser: 0 }, firstNoteWriteAt: null, predatesFirstWrite: 0, afterFirstWriteSummariser: 0 } }).verdict === "digest-only",
+  "nothing written, nothing held at the boundary");
 
 rmSync(dir, { recursive: true, force: true });
 
