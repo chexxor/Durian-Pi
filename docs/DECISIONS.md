@@ -2291,7 +2291,7 @@ the trigger is the part that fires when a situation arrives.
 **Status:** committed (`fa4b22f`). The `constitution.txt` change is pending live application to seats via
 a broker-safe `up --refresh` (dry-run confirms `constitution.changed=true`); recorded in `docs/NEXT.md`.
 
-## D91 — The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
+## STUB OF D91 — the heading was duplicated by the serialized pass; no decision text sits under it, the record is the D91 entry immediately below (marked by #6352) The `security` seat's standing surface is runbook-only, and the external `security.sec` consult is on-escalation (lead #1297, revised by lead #1316; recorded by scribe #1301/#1323, 2026-10-17)
 
 ## D91 — The `security` seat's standing surface is a runbook (not a standing review set), and the external `security.sec` consult is on-escalation (lead #1297, recorded by scribe #1301, 2026-10-17)
 
@@ -2327,7 +2327,7 @@ review method; ties #828/#837; no standing `security-*.md` review set); #1301 �
 FOR OPERATOR: the compliance caveat — name a mandated independent external review and it becomes a standing
 (non-discretionary) `security.sec` trigger rather than an escalation.
 
-## D91 — A standing `security` seat, not only an external consult (delegate, 2026-10-17)
+## D265 — A standing `security` seat, not only an external consult (delegate, 2026-10-17) — number minted at land time by #6352; it landed colliding with D91, whose record is the entry at line 2296
 
 **Decision.** durig declares a 10th seat, `security` (GLM-5.3-Flash), owning threat models, trust
 boundaries and secret hygiene. It is deliberately **not** a verifier — its name/role avoid `checkup`'s
@@ -2813,7 +2813,7 @@ routing; acceptance is a demo proving a local-provider seat gets a `pi.reset` bo
 consecutive work items while a non-local seat does not, plus `node --check`, the full suite, and a
 non-author verify.
 
-## D111 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127; SOURCE pinned 2026-10-19 by #2962)
+## D266 — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127; SOURCE pinned 2026-10-19 by #2962) — number minted at land time by #6352; it landed as D111, which belongs to the read-spool entry at line 3127
 
 **Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
 UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
@@ -3184,7 +3184,7 @@ this gate.
 **Status.** Ruled by lead #2215 (answering pm #2208; extends lead #1952 Finding A / item #1966);
 recorded 2026-10-18. Implementation tracked at #1966; the as-is gap is documented at #2186.
 
-## D112 — Broker failures are SCOPE-CLASSIFIED and the process has ONE storage connection; a stop is only "stopped" when the pid is gone (architect, item #2520, 2026-10-19)
+## D267 — Broker failures are SCOPE-CLASSIFIED and the process has ONE storage connection; a stop is only "stopped" when the pid is gone (architect, item #2520, 2026-10-19) — number minted at land time by #6352; it landed as D112, whose record is the ui.mjs-retirement entry at line 2870
 
 **Context.** The broker review (`docs/reviews/architecture-broker-review.md`, item #2520) found the
 live reliability cluster (repeated `PASS-FAILED SessionFailed … cause=Error: database is locked`) is not
@@ -3235,7 +3235,7 @@ rules scope if the failure-scope policy conflicts with scheduled work. Evidence 
 grep/`node --check`/demo baseline and the version probe (see the review's Evidence section). No
 implementation is claimed here.
 
-## D### — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+## DUPLICATE OF D268 (the record is line 3525) — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19) — the same decision recorded twice by the pass; cite D268, not this copy (#6352)
 
 **Context.** The CARRY/teardown collision (incident
 `docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
@@ -3264,9 +3264,9 @@ and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path
 LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
 re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
 
-## D114 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
+## STUB OF D114 BELOW — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19) — the heading was duplicated by the pass; the decision text sits under the entry immediately below, now numbered D114 at line 3269 (#6352)
 
-## D113 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19)
+## D114 — "Waiting on the operator" reuses the existing defer representation; visibility is a read-only derivation and the answer is one spool op (architect, item #2700, 2026-10-19) — renumbered by #6352: this file cross-references D114 as "the waiting view" (lines 3999, 4039); it landed as D113, whose record is the control-plane entry at line 3166
 
 **Context.** The operator backlog asks that "waiting on the operator" be **visible and answerable**
 (operator-directives-2026-10-19-2 §3). The state already exists: `defer_work` (and the supervisor's
@@ -3522,7 +3522,7 @@ that drifts).
 the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
 record, not an implementation claim — no code change accompanies it.
 
-## D114 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19)
+## D268 — CARRY is an opt-in for direct callers; a seat's item worktree is a CLEAN HEAD checkout (lead #2648, 2026-10-19) — number minted at land time by #6352; it landed as D114, which belongs to the waiting-view entry at line 3269
 
 **Context.** The CARRY/teardown collision (incident
 `docs/incidents/2026-10-19-worktree-carry-teardown-collision.md`): `createWorktree`'s CARRY (#506 /
@@ -3551,7 +3551,7 @@ and `demo/broker-dirty-fork.test.mjs` updated to the explicit `carry: true` path
 LANDING NOTE: D-number assigned at LAND TIME — D113 is taken (spool-op authorization, scribe-item-2219);
 re-derive the next FREE D-number by scanning `docs/DECISIONS.md` at merge (do not hard-code).
 
-## D### — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127)
+## DUPLICATE OF D266 (the record is line 2816) — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never fabricated or stale `$` (operator re-scope, 2026-10-18; lead/design per #1127) — recorded twice by the serialized pass; cite D266 (#6352)
 
 **Decision.** TUI cost/spend pricing is supplied by a per-provider pricing EXTENSION. A price is
 UNAVAILABLE unless an extension supplies it; the former blocker — an operator-supplied vendor price
@@ -3570,7 +3570,7 @@ unscheduled. Owner is lead (mechanism); implementation routes to impl once sched
 cost the product did not measure. The unavailable path keeps the UI honest under any staleness or
 absence condition.
 
-## D### — The `architect` seat: DESIGNS + RECORDS the system shape; lead RULES scope, qa/auditor VERIFY (operator grant, lead #2503; 2026-10-19)
+## D269 — The `architect` seat: DESIGNS + RECORDS the system shape; lead RULES scope, qa/auditor VERIFY (operator grant, lead #2503; 2026-10-19) — number minted at land time by #6352; this entry landed with a D### placeholder
 
 **Decision.** Add an `architect` seat to the selfdev rig — model `deepseek-ai/DeepSeek-V4.1-Flash`,
 `thinkingLevel: high`, capabilities `design` + `review` — owning the `architecture` ownership class
@@ -3641,7 +3641,7 @@ faux reply) and asserts the legible refusal, that nothing is committed, and that
 tracked at held item #1135. No pricing extension exists yet, so the surface currently renders
 unavailable by this rule.
 
-## D### — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18)
+## DUPLICATE OF D112 (the record is line 2870) — durable-tui: `ui.mjs` / `npm run ui` is the FALLBACK surface and is to be RETIRED (operator, 2026-10-18) — recorded twice; cite D112 (#6352)
 
 **Decision.** `ui.mjs` / `npm run ui` is the FALLBACK (not a co-existing surface); the poller stays as
 last resort. `ui.mjs` will eventually be RETIRED once the durable TUI proves the multi-seat surface.
@@ -3655,7 +3655,7 @@ resort). RULED and recorded (operator, 2026-10-18, relayed via lead #2197).
 
 LANDING NOTE: D-numbers assigned at LAND TIME — re-derive the next FREE D-numbers by scanning `docs/DECISIONS.md` at merge (do not hard-code; the source items are #2199 / #2239).
 
-## D-<mint> — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19)
+## DUPLICATE OF D123 (the record is line 4085) — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19) — same decision recorded twice; cite D123 (#6352)
 
 **Context.** The devtools small-local-model decay review (`docs/reviews/architecture-devtools-decay-review.md`,
 item #2730) found that the POST-SETTLEMENT degeneration guard uses an ABSOLUTE context bound —
@@ -3700,7 +3700,7 @@ input and `superviseOnce` must resolve it per seat (the resolver already exists)
 (no number is reserved here; D113/D114 landed via scribe-item-3167). Evidence: the code citations above; no
 implementation is claimed.
 
-## D115 — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031)
+## DUPLICATE COPY OF D115 (the record is line 3313) — F12: ONE seat-relative `workable(item, seat)` predicate, OWNED by #2673; claimability is its seat-projection, NOT a stage; `deferred` is its own stage (lead, 2026-10-19; recorded by scribe, item #3031) — byte-identical second copy from the serialized pass (#6352); cite the entry above. The copy is MARKED, not deleted, on purpose: 51 external and internal DECISIONS.md line-pins sit downstream of it, and removing lines would silently move every one of them
 
 **Context.** The queue-lifecycle redesign v2 (`docs/reviews/queue-lifecycle-redesign.md`, ACCEPTED as design of
 record) makes claimability a function, not an item property. Architect F12 (review @5c50f34; escalations
@@ -3753,7 +3753,7 @@ Recorded by `scribe` in the R1b serialized pass (#3089). Consistency: the struct
 CROSS-CONSUMER AGREEMENT case — for the same item and seat, claim-selection and wake-selection return the
 same verdict. No implementation is started by this entry. D-number minted at land time.
 
-## D116 — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046)
+## DUPLICATE COPY OF D116 (the record is line 3366) — Redesign v2 build rulings: OQ5 sequencing chain, M1 SPLIT (field-early / axis-fenced), OQ2 `reviewBy` defaults with one fire per epoch (lead, 2026-10-19; recorded by scribe, item #3046) — byte-identical second copy from the serialized pass (#6352); cite the entry above. The copy is MARKED, not deleted, on purpose: 51 external and internal DECISIONS.md line-pins sit downstream of it, and removing lines would silently move every one of them
 
 **Context.** The queue-lifecycle redesign v2 was ACCEPTED as design of record. Its open questions were ruled
 by `lead` (#3002 OQ5, #3044 M1 split, #3008 OQ2). The accepted model has two orthogonal axes
@@ -3804,7 +3804,7 @@ Recorded by `scribe` in the R1b serialized pass (#3089). Implementation items M1
 @eb3b337), M1b (#3063, impl-item-3056 @6ddf538 — `workable` removed), M3 (#3019), M4 (#3020), M5 (#3021),
 M6 (#3022), M7 (#3023) are registered; OQ2 defaults fold into M1/M4 (#3050). D-number minted at land time.
 
-## D117 — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4)
+## DUPLICATE COPY OF D117 (the record is line 3417) — R4 acceptance shape: the `#2955` chain is the ACCEPTANCE SHAPE for the queue-lifecycle v2 work (operator, 2026-10-19; recorded by scribe, item #3089 / R4) — byte-identical second copy from the serialized pass (#6352); cite the entry above. The copy is MARKED, not deleted, on purpose: 51 external and internal DECISIONS.md line-pins sit downstream of it, and removing lines would silently move every one of them
 
 **Context.** Operator ruling 2026-10-19 asked that the ACCEPTANCE SHAPE for the queue-lifecycle v2 work be
 citable and NOT reconstructed from memory. R4 records it: the shape is "accepted as recommended" + the
@@ -3819,7 +3819,7 @@ require the operator to re-state prose. `#2698` (advocate ETARGET review) stands
 
 **Status.** Recorded by `scribe` in the R1b serialized pass (#3089, R4). D-number minted at land time.
 
-## D118 — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex)
+## DUPLICATE COPY OF D118 (the record is line 3432) — R1–R7 are ACCEPTED OPERATOR RULINGS for the queue-lifecycle v2 and land/hold work (operator, 2026-10-19; recorded by scribe, item #3089 annex) — byte-identical second copy from the serialized pass (#6352); cite the entry above. The copy is MARKED, not deleted, on purpose: 51 external and internal DECISIONS.md line-pins sit downstream of it, and removing lines would silently move every one of them
 
 **Context.** Operator acceptance `operator-accepts-r1-r7-2026-10-19-1` (21:52:23Z) accepted R1–R7 in full,
 making them OPERATOR RULINGS (not delegate recommendations). R1 (landing window OPEN, delegate drives), R1b
@@ -3841,7 +3841,7 @@ shape is citable; `#2949` is closed by evidence (scripts/ restored, `node --chec
 per the R1b rule (it records the same decision family; the design-of-record and land/hold rulings share the
 family). D-number minted at land time.
 
-## D119 — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089)
+## DUPLICATE COPY OF D119 (the record is line 3454) — D113 pre-check (R1b): the reservation is VOID — a dangling commit cannot hold a number; #2284 must be re-branched or re-authored (scribe, item #3089) — byte-identical second copy from the serialized pass (#6352); cite the entry above. The copy is MARKED, not deleted, on purpose: 51 external and internal DECISIONS.md line-pins sit downstream of it, and removing lines would silently move every one of them
 
 **Context.** R1b required a pre-check on D113 before minting: its reservation (scribe-item-2219, #2284)
 rests on commit `fd4c233`. The pre-check result: `fd4c233` is a REAL commit but DANGLING — it is
@@ -3858,7 +3858,7 @@ other DECISIONS entries (#3011/#3031/#3035/#3046) — they mint the next free nu
 **Status.** Pre-check run by `scribe` (item #3089, R1b). D113 remains void until #2284 is re-branched and
 re-landed. D-number minted at land time.
 
-## D120 — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035)
+## DUPLICATE COPY OF D120 (the record is line 3471) — Queue lifecycle redesign v2 is ACCEPTED as the design of record; it LEADS capability work (operator, 2026-10-19; recorded by scribe, item #3035) — byte-identical second copy from the serialized pass (#6352); cite the entry above. The copy is MARKED, not deleted, on purpose: 51 external and internal DECISIONS.md line-pins sit downstream of it, and removing lines would silently move every one of them
 
 **Context.** The queue can orphan work because a parked item is not required to name a machine-readable
 reason it is parked, nor who or what clears it, nor a date by which someone must look again. The incident
@@ -3974,7 +3974,7 @@ documented in `docs/SELFDEV.md`. The switch is DIRECTED but NOT YET IN EFFECT (s
 store refresh is the open step tracked at `#3274`. A tip verified against qwen36/poly is still
 unverified for swift-1.5/strata until the refresh is observed, regardless of how ratified the config is.
 
-## D### — Provider/model configuration is OPERATOR-LEVEL; store-vs-config drift is LABELED, not GATED (lead ruling from #3242, adjudicated 2026-10-20; reissues #3246, point 7 added after the #3249 adjudication)
+## D270 — Provider/model configuration is OPERATOR-LEVEL; store-vs-config drift is LABELED, not GATED (lead ruling from #3242, adjudicated 2026-10-20; reissues #3246, point 7 added after the #3249 adjudication) — number minted at land time by #6352 (next FREE after D264, in pass order); this entry landed with a D### placeholder
 
 **Mint note (#3075).** The heading carries a `D###` PLACEHOLDER on purpose: derive the next FREE number by
 scanning `docs/DECISIONS.md` at merge. The highest at this branch's fork point `f192f543` is **D256**, so
@@ -8432,7 +8432,7 @@ for, with the exact commands, rather than taken.
   (`cli.mjs worktree prune-branch item-4898`, `patchEquivalent: 1`, recovery `git branch item-4898 9beb1ae3…`).
   Six locked item worktrees were kept on purpose, including `item-4997` kept one cycle as the landing audit trail.
 
-## D-5015 — a metered provider without a cost ledger is a system that cannot answer "how much did that cost", and the cap goes at the provider seam (2026-11-03, architect, Linux `chexxor@ThinkStation-P3`, item worktree `item-5015` off `main a65ba431`)
+## D271 — a metered provider without a cost ledger is a system that cannot answer "how much did that cost", and the cap goes at the provider seam (2026-11-03, architect, Linux `chexxor@ThinkStation-P3`, item worktree `item-5015` off `main a65ba431`) — number minted at land time by #6352; the entry was recorded under the item-keyed label D-5015 and its five clauses keep that label
 
 **Full review, the numbers and the probes: `docs/reviews/architecture-spend-cap-2026-11-03.md`.** Acceptance
 instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tools/model-probes/spend-cap-acceptance.mjs --snapshot .spike/5015/catalog-2026-11-03.json` → **exit 1, 2/10 claims hold, 8 RED** (the failing-first record; the build is done when it exits 0). Spends nothing: a loopback stub answers every request.
@@ -8538,7 +8538,7 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   `import` of it runs the gate and spends GPU/API; the guard demo is now `demo/probe-metered-ledger.test.mjs:398-403`
   (landed `84edff3c`), so the "cleanest harness" no longer needs to shell out.
 
-## D-5025 — the `verifier/` pointer names a model no provider serves, on a dead socket, with a window below the review need; nothing local fits, so verification is local-same-family or metered-under-cap (2026-11-03, architect; decision, **no config edited, nothing loaded**)
+## D272 — the `verifier/` pointer names a model no provider serves, on a dead socket, with a window below the review need; nothing local fits, so verification is local-same-family or metered-under-cap (2026-11-03, architect; decision, **no config edited, nothing loaded**) — number minted at land time by #6352; the entry was recorded under the item-keyed label D-5025, which its clauses still use
 
 **Full review with the measurements: `docs/reviews/architecture-verifier-pointer-2026-11-03.md`.**
 
@@ -11307,7 +11307,7 @@ in this entry produced by the writing seat are the roster count and the commands
 
 **A pin that is wrong in three places, recorded rather than papered over.** This row names the suspended rule
 "D48/D119", and the pairing repeats at `docs/DECISIONS.md:4417` and in `rig.selfdev.json`'s own `_readme`. The headings at
-`docs/DECISIONS.md:1292` (D48) and `docs/DECISIONS.md:3423` / `:3813` (D119, the identical heading twice) are about
+`docs/DECISIONS.md:1292` (D48) and `docs/DECISIONS.md:3454` and the copy at `:3844` (D119, the identical heading twice — the second is now MARKED "DUPLICATE COPY OF D119" by #6352) are about
 worktree recovery / shared-tree safety and about a void ADR-number reservation — not about verifier families. The
 cross-family author/verifier decisions in the log are **D137** (`docs/DECISIONS.md:4667`) and **D166**
 (`docs/DECISIONS.md:6363`), and the code-side split is `src/providers/local.mjs`, which `demo/deepinfra-catalog.test.mjs:81`
@@ -11543,7 +11543,7 @@ quo and let late constraints live in bodies — rejected: measured failure, 42 h
 **Status:** adopted as a ruling on the boundary; the verb, the asymmetry fix and the ordering fix are
 routed, not implemented here.
 
-## D258 — 2026-11-10T13:5xZ: **enforcement at the receive path is structural admission; the audit sink is broker-written evidence, never a decision input; and a deny whose record cannot be written is a STUCK payload, not a dead-letter** (architect ruling on pm's row #6185, "what may enforce on the broker receive path, and who may write the audit sink"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**)
+## D273 — 2026-11-10T13:5xZ: **enforcement at the receive path is structural admission; the audit sink is broker-written evidence, never a decision input; and a deny whose record cannot be written is a STUCK payload, not a dead-letter** (architect ruling on pm's row #6185, "what may enforce on the broker receive path, and who may write the audit sink"; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**) — number minted at land time by #6352; it landed colliding with D258, whose record is the entry at line 11364
 
 **The why.** The receive path is the one place a payload arrives from outside the broker, and every
 control decision made there has to be both enforceable and legible. `authorizeSpoolRequest`
@@ -11588,7 +11588,7 @@ function of broker-held state rather than of a file any seat process can append 
 doctrine `authorizeSpoolRequest` already carries: `from` is producer-stamped, all seats share one OS
 user, so same-user forgeability is a KNOWN RESIDUAL and must never be described as prevented.
 
-## D259 — The fault signal is ONE seat-scoped marker written by the code that RAISES the cause, read as four states, and UNKNOWN never means "no fault" (2026-11-10)
+## D274 — The fault signal is ONE seat-scoped marker written by the code that RAISES the cause, read as four states, and UNKNOWN never means "no fault" (2026-11-10) — number minted at land time by #6352; it landed colliding with D259, whose record is the entry at line 11417
 
 **Status:** ruling issued (schema, not code); implementation routed and gated on this row.
 
