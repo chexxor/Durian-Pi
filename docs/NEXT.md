@@ -31,22 +31,23 @@ with the pin move (D255 → D256, ROADMAP 353–357) as the frame it operated in
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/suite.mjs --jobs 8                                        # 294 demos; one can redden on contention
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json          # 1.1 s — seat-root 10, live 4, reapable 17, dirty 4
+node scripts/suite.mjs --jobs 8                                        # 299 tests on disk; one can redden on contention
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json          # 1.1 s — total 25: seat-root 7, non-item 1, live 4, reapable 9, dirty 4, locked 0
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed --json --no-body   # 4 claimed rows; `rows: 6423` is the CENSUS, the payload is the filtered items
-git branch --list; git worktree list | wc -l                          # COUNT IT LIVE: 43 refs / 35 worktrees at 23:5xZ
+git branch --list; git worktree list | wc -l                          # COUNT IT LIVE: 32 refs / 25 worktrees at f3ffce0e (2026-11-11T00:5xZ)
 node scripts/sync-pi.mjs --check                                     # pin dd30101cf tag v1.5.1, drift true
 ```
 
-**Blocker:** the broker is **DOWN, not wedged** — it exited at `2026-11-10T18:48:19Z` (`EXIT pid=3566266
-reason=max-duration passes=328`), there is no `selfdev.sqlite.broker.json` and no `genlock` slot, so every read now
-takes `readLocal` and answers fast: `node cli.mjs status --json` → `ok:true` in **2.46 s**, `cli.mjs worktree audit`
-in **1.15 s**. **Restarting it wakes 12 seats and spends model money — the operator's call.** If restarted:
+**Blocker:** the broker is **DOWN, not wedged** — the last resident one exited at `2026-11-11T00:33:26Z` (`grep EXIT
+selfdev.sqlite.broker.log | tail -1` → `EXIT pid=562329 reason=max-duration passes=36`), there is no
+`selfdev.sqlite.broker.json` and no `genlock` slot, so every read now takes `readLocal` and answers fast: `node
+cli.mjs status --json` → exit 0 in **2.45 s**, `queue --json --no-body` **0.92 s**, `watch --once --json` **1.10 s**,
+`ps` **0.28 s**, `cli.mjs worktree audit --json` **1.1 s** — all re-measured at `f3ffce0e`. **Restarting it wakes 12 seats and spends model money — the operator's call.** If restarted:
 `node tools/broker-serve.mjs --dry-run`, then `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800`. The spool is now empty (0 pending);
 61 dead-letters are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
 
-**What the cleanup left** (measured 23:5xZ, `cli.mjs worktree audit --json`, 1.1 s) — 35 worktrees, **0 locked**:
-10 seat roots, **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty 2, `item-5912` held, `item-6177`
+**What the cleanup left** (re-measured at `f3ffce0e`, `cli.mjs worktree audit --json`, 1.1 s) — 25 worktrees, **0 locked**:
+7 seat roots + 1 non-item, **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty 2, `item-5912` held, `item-6177`
 claimed dirty 3), **17 reapable**, and **4 dirty orphans** whose items are `done`: `item-6057`
 (2 tracked edits — a `sync-pi --no-repair` flag and its demo, **not on `main`**: `grep -c "no-repair" scripts/sync-pi.mjs`
 → 0, while `git merge-base --is-ancestor refs/heads/item-6057 refs/heads/main` exits 0, i.e. the branch is merged and
@@ -153,9 +154,10 @@ DURIG_DB=./selfdev.sqlite node cli.mjs status         # must answer in under 10 
    `item-5301-resolved`, `item-3570`, `wip/seat-prompt-files` and the reverted `item-6063/6064/6066` stay by ruling
    (ROADMAP 344, `docs/DISPOSITIONS.md` rows) — none of them is held by a worktree any more, so the *only* thing
    keeping them is the ledger.
-5. **Promote the pin probes out of `.spike/`** (**#6176**): `.spike/pin-update/migrate-symbols.mjs` and
-   `.spike/pin-update/signature-classify.mjs` are the instruments that made this window fast; an unpromoted probe
-   is lost (ROADMAP 312).
+5. **Promote the probes out of `.spike/`** (**#6176**): `.spike/pin-update/migrate-symbols.mjs`,
+   `.spike/pin-update/signature-classify.mjs` (ROADMAP 312), plus the landing-pass probes `.spike/union-resolve.mjs`
+   (union-merge where both sides are tail appends — how 6402 landed), `.spike/merge-broker-import.mjs`,
+   `.spike/wedge-after.mjs` (forged frozen broker), `.spike/row-status.mjs` — an unpromoted probe is lost.
 6. **Broker alive-but-dead** (**#6160**): heartbeat advances, pass clock freezes, every broker-routed read times
    out. The bound is now health-derived (120 s advancing / 10 s degraded, `src/readclient.mjs:40`, `:43`) and reads
    drain on the heartbeat cadence — the follow-up is the exit-path spool accounting, rows **#6391/#6390**.
