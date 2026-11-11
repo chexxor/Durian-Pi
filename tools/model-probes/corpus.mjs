@@ -20,8 +20,8 @@
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
 const PAD = Number(process.env.CAL_PAD || 34); // lines of real code around the changed hunk
 const SPIKE = process.env.CAL_SPIKE || ".spike/gate";
@@ -294,6 +294,20 @@ function mutate(text, m) {
   return text.replace(m.find, m.replace);
 }
 
+/**
+ * A mutant is written into the spike dir, not into `src/`, so any RELATIVE import in the source resolves
+ * against the spike dir and the mutant dies with ERR_MODULE_NOT_FOUND before the proof probe can run.
+ * Measured 2026-11-11: #6189 landed `import { workable } from "./rig.mjs"` into `src/driver.mjs`, and
+ * `.spike/gate/M3-pause-still-claims.mjs` then failed to load — `demo/gate-clean-scorer.test.mjs` went red
+ * on the INSTRUMENT, not on the branch. Rewrite every relative import to the absolute path of the real
+ * file in this repo, so the mutant sees exactly the siblings the real module sees.
+ */
+function absolutizeImports(text, sourceFile) {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const srcDir = dirname(resolve(repoRoot, sourceFile));
+  return text.replace(/from\s+"(\.[^"]*)"/g, (_m, rel) => `from "${pathToFileURL(resolve(srcDir, rel)).href}"`);
+}
+
 // ---------------------------------------------------------------------------------------------
 // ITEMS. `groups` = mechanism concepts; a HIT needs `need` of them in the answer. `phantoms` are
 // answers known to be wrong (observed here, or refuted by running the claim) — pre-registered, so a
@@ -436,9 +450,13 @@ export const ITEMS = [
     id: "M3-pause-still-claims",
     kind: "mut",
     file: "src/driver.mjs",
-    anchor: "const hasQueued = !paused && (items ?? []).some((it) => it.to === name && it.status === \"queued\");",
-    find: "const hasQueued = !paused && (items ?? []).some((it) => it.to === name && it.status === \"queued\");",
-    replace: "const hasQueued = (items ?? []).some((it) => it.to === name && it.status === \"queued\");",
+    // RE-ANCHORED 2026-11-11 after #6189 (the wake predicate became the CLAIM predicate, `workable`,
+    // src/driver.mjs). The invariant is unchanged: the mutant deletes the `!paused` guard, so a paused
+    // rig still wakes a seat to claim. Anchors are pinned to `main`'s TEXT, so every merge that touches
+    // the guarded line must re-anchor this entry — `buildCorpus` throws `anchor not on main` otherwise.
+    anchor: "const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);",
+    find: "const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);",
+    replace: "const hasQueued = queuedVerdicts.some((v) => v.workable);",
     truth:
       "The `!paused` guard is gone, so a PAUSED rig still wakes seats with the 'call claim_work' prompt and they take new work while paused — pause is supposed to gate TAKING work while letting in-flight work settle.",
     groups: [
@@ -498,7 +516,7 @@ export async function buildCorpus({ outDir = SPIKE } = {}) {
     }
     const main = gitShow("main", it.file);
     if (!main.includes(it.find)) throw new Error(`${it.id}: anchor not on main — the mutant is stale`);
-    const mutText = mutate(main, { id: it.id, find: it.find, replace: it.replace });
+    const mutText = absolutizeImports(mutate(main, { id: it.id, find: it.find, replace: it.replace }), it.file);
     const patched = `${resolve(outDir)}/${it.id}.mjs`;
     writeFileSync(patched, mutText, "utf8");
     const anchorLine = it.anchor.split("\n")[0];
