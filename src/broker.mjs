@@ -2395,6 +2395,26 @@ export function brokerHealth(state, { now = Date.now(), streamTimeoutMs = null }
 }
 
 /**
+ * HOW LONG A MUTATING VERB MAY WAIT for the broker to apply its spooled request.
+ * Before this, `pause --wait` and `compact` polled for 15 minutes with NO health check at all:
+ * against a resident broker whose pass clock is frozen that is a 900 s silence, which is the same
+ * failure class the read path closed (#314 / #2321 / #6160). The bound is derived from the SAME two
+ * legs the read client uses:
+ *   ADVANCING  -> the long bound. A compaction is real work and can take minutes.
+ *   DEGRADED   -> the short bound. A fresh heartbeat with no pass is not going to apply anything.
+ *   DOWN       -> 0. Nothing will apply it; say so now rather than after the deadline.
+ * Pure (state + `now` in, bound out) so a demo can pin all three legs without a fleet.
+ */
+export const MUTATE_INTENT_TIMEOUT_MS = 15 * 60_000;
+export const DEGRADED_MUTATE_TIMEOUT_MS = 10_000;
+export function intentWaitBoundMs(state, { now = Date.now(), streamTimeoutMs = null } = {}) {
+  const health = brokerHealth(state, { now, streamTimeoutMs });
+  if (health.state === "up") return { boundMs: MUTATE_INTENT_TIMEOUT_MS, health };
+  if (health.state === "degraded") return { boundMs: DEGRADED_MUTATE_TIMEOUT_MS, health };
+  return { boundMs: 0, health };
+}
+
+/**
  * Raw pid liveness: does this pid exist right now? No heartbeat gate.
  *
  * `brokerAlive` ALSO requires a fresh heartbeat, so a broker wedged inside a pass — one

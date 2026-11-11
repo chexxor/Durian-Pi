@@ -113,19 +113,12 @@ conflicting, named files) is in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and
 
 ## The pinned-pi thread — v1.5.1 LANDED (ROADMAP 353–357)
 
-Pin: tag `v1.5.1` = `dd30101cfc5b0609411dd80b6f93adbc14db14cf`; `pi-schema` **first** in the pin's `packages`
-(chord fails `TS2307` otherwise); 10 built packages all 1.5.1. `--check` reports `policyGap: null` and
-`drift: true / behind 14` against upstream tip `b2aabe029…` — **a tag pin can never satisfy `drift: false`, so the
-contract's `drift: false` is mis-specified** (register the fix; do not chase it). The live store still reads
-`durable_schema = [{singleton:1,version:2}]`: the move **migrated nothing**.
-
-Migration, in our source (no upstream patching): `Type` → `pi-schema` builders (closed by default — `src/rig.mjs`'s
-`Type.Object({}, {additionalProperties: true})` sites need `{ open: true }`); `documentState` → `snapshot`, which
-returns the **value**, not a wrapper; `watchEvents` → `src/livewatch.mjs` `watchLive()`; `subscribeCommits` →
-`src/commitstream.mjs` `followCommits()` over `Session.observeCommits`; `Storage.commit(batches, receive, ctx)`;
-and `checkpointWhen: () => false` on the 6 rig docs, **provisional** (ROADMAP 355, rows #6171–#6173). Both seams are
-documented as approximations: turn boundaries come from the generation attempt, not a turn record; tool results are
-synthesised from committed `pi.tool-result` entries, not streamed.
+Pin tag `v1.5.1` = `dd30101cfc5b0609411dd80b6f93adbc14db14cf`; `pi-schema` **first** in the pin's `packages` (the chord
+fails `TS2307` otherwise); 10 built packages all 1.5.1. `--check` reports `policyGap: null` and `drift: true / behind 14`
+against upstream tip `b2aabe029…` — **a tag pin can never satisfy `drift: false`**, so the contract is mis-specified
+(register the fix, do not chase it). The live store still reads `durable_schema = [{singleton:1,version:2}]`: the move
+**migrated nothing**. The full landed detail — the symbol migration, the `livewatch`/`commitstream` seams and the
+provisional `checkpointWhen` — is VERBATIM in [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md), section "The pinned-pi thread".
 
 **Stop rule that still applies:** `--unlink` is NOT a rollback — the live store is schema v2 and released pi-durable
 ≤ 1.3.0 cannot open it. Procedure: `docs/runbooks/pi-pin-update.md`; pitfalls **227–236**.

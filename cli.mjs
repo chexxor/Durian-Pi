@@ -76,7 +76,7 @@ import {
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { followCommits } from "./src/commitstream.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -93,7 +93,7 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
-import { readData, setLocalReads } from "./src/readclient.mjs";
+import { readData, setLocalReads, liveGenerationLeases } from "./src/readclient.mjs";
 import { installSignalHandlers, isStopping, stopSignalName, stoppableSleep } from "./src/signals.mjs";
 import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -2004,16 +2004,44 @@ async function cmdPause(paused, { wait = false, reason = undefined } = {}) {
 /** Poll the broker's intent result file until it appears (the applied/refused outcome).
  * #314: a Ctrl-C returns here in one poll, and the report says which request was left in the
  * spool — a mutating verb that dies silently leaves work the next pass will do anyway. */
-async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, pollMs = 100 } = {}) {
+async function awaitIntentResult(dbPath, requestId, { timeoutMs = null, pollMs = 100 } = {}) {
   const path = join(intentResultDir(dbPath), `${requestId}.json`);
-  const deadline = Date.now() + timeoutMs;
+  // #314 / #6160: the bound is HEALTH-derived, not a fixed 15 minutes. `pause --wait` and `compact`
+  // polled 900 s with no progress check — the same silence the read path closed. An ADVANCING broker
+  // keeps the long bound (a compaction is real work); a resident broker with a frozen pass gets the
+  // degraded bound and a failure that NAMES the cause and the remedy. `DURIG_INTENT_WAIT_MS` overrides
+  // it so a demo can exercise the leg in milliseconds.
+  const envOverride = parseInt(process.env.DURIG_INTENT_WAIT_MS, 10);
+  const override = Number.isFinite(envOverride) && envOverride > 0 ? envOverride : null;
+  const streamTimeoutMs = streamSettings(CFG).stream?.timeoutMs ?? null;
+  const startedAt = Date.now();
+  const why = (health) =>
+    `heartbeat ${health.hbAgeMs ?? "unknown"} ms old, last completed pass ` +
+    `${health.passAgeMs === null ? "never" : `${health.passAgeMs} ms ago`}, ` +
+    `${liveGenerationLeases(dbPath).length} generation lease(s) live`;
   for (;;) {
     try {
       return JSON.parse(readFileSync(path, "utf8"));
     } catch {
       // Not yet written (or mid-write); keep polling until the deadline.
     }
-    if (Date.now() >= deadline) fail(`${requestId}: timed out waiting for the broker to apply the request`);
+    const state = readBrokerState(dbPath);
+    const { boundMs, health } = intentWaitBoundMs(state, { streamTimeoutMs });
+    const bound = override ?? boundMs;
+    if (bound === 0) {
+      fail(
+        `${requestId}: no broker is resident to apply the request (${health.reason}). It is spooled in ` +
+        `${intentInboxDir(dbPath)} and will be applied by the next pass. Remedy: ` +
+        `node tools/broker-serve.mjs --start (docs/runbooks/broker-down-or-stalled.md).`,
+      );
+    }
+    if (Date.now() - startedAt >= bound) {
+      fail(
+        `${requestId}: the broker (pid ${state?.pid}, ${health.state}: ${health.reason ?? "no progress"}) did not ` +
+        `apply the request within ${bound} ms — ${why(health)}. Remedy: read ${dbPath}.broker.log and follow ` +
+        `docs/runbooks/broker-down-or-stalled.md. Ctrl-C ends this wait in one poll.`,
+      );
+    }
     if (await stoppableSleep(pollMs)) {
       fail(
         `${requestId}: interrupted (${stopSignalName()}) while the broker was applying it; ` +

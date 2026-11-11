@@ -14278,3 +14278,19 @@ DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit
 
 The git verdict from N17 still holds: worktrees **9**, refs **12** (`git worktree list | wc -l`, `git branch
 --format='%(refname:short)' | wc -l`); read the live tip with `git rev-parse --short main`.
+
+## The pinned-pi thread — v1.5.1 LANDED (cut VERBATIM out of `docs/NEXT.md` on 2026-11-10 by the delegate signal-seam pass, which hit the 200-line pointer cap; the live file keeps the heading and the stop rule only)
+
+Pin: tag `v1.5.1` = `dd30101cfc5b0609411dd80b6f93adbc14db14cf`; `pi-schema` **first** in the pin's `packages`
+(chord fails `TS2307` otherwise); 10 built packages all 1.5.1. `--check` reports `policyGap: null` and
+`drift: true / behind 14` against upstream tip `b2aabe029…` — **a tag pin can never satisfy `drift: false`, so the
+contract's `drift: false` is mis-specified** (register the fix; do not chase it). The live store still reads
+`durable_schema = [{singleton:1,version:2}]`: the move **migrated nothing**.
+
+Migration, in our source (no upstream patching): `Type` → `pi-schema` builders (closed by default — `src/rig.mjs`'s
+`Type.Object({}, {additionalProperties: true})` sites need `{ open: true }`); `documentState` → `snapshot`, which
+returns the **value**, not a wrapper; `watchEvents` → `src/livewatch.mjs` `watchLive()`; `subscribeCommits` →
+`src/commitstream.mjs` `followCommits()` over `Session.observeCommits`; `Storage.commit(batches, receive, ctx)`;
+and `checkpointWhen: () => false` on the 6 rig docs, **provisional** (ROADMAP 355, rows #6171–#6173). Both seams are
+documented as approximations: turn boundaries come from the generation attempt, not a turn record; tool results are
+synthesised from committed `pi.tool-result` entries, not streamed.
