@@ -24,7 +24,9 @@ three actors straight is the whole job:
    runbook (which team, which store, which worktree, the loop) **plus** 20 dated `## Operational pitfalls` blocks. Read the
    runbook sections plus the pitfalls for the symptom you have — grep for the symptom, do not read it whole.
 3. `git status --short -- .` — know what is already uncommitted before you touch anything.
-4. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work. Use
+4. **Check the instruments before improvising a procedure**: `ls tools/` and `ls .agents/skills/` (see *Instruments*
+   below). A measured tool already exists for most of the recurring work on this rig.
+5. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work. Use
    `DURIG_DB` for the **CLI**: `src/config.mjs` (`CONFIG_KEYS`, `cli.mjs:142`) reads only `DURIG_*`, so
    `DURIAN_PI_DB` there silently opens an empty `./rig.sqlite`. The rename is half-applied and points the
    other way in other entry points — `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB` first, and `tui.mjs:42`
@@ -85,6 +87,49 @@ work, or launch it detached (`nohup … > .spike/x.out 2> .spike/x.err`) and rea
 Conventions that keep this true: `--jobs 4` for the full suite, `timeout 300` on a suite, `timeout 60` on a CLI verb,
 `timeout 30` on a git verb. **If a call hits its timeout, that is a measurement** — record the number, shrink the unit
 of work, and re-run; do not answer by raising the number.
+
+## Instruments: skills and tools — build one when a procedure costs steps (operator directive 2026-11-11)
+
+The rig's iteration speed is the sum of its instruments. A procedure retyped by hand every session is a defect in the
+product, not a cost of doing business. **When a task has sub-steps where you could err or would spend many manual
+commands — research, planning, information-gathering, a census, a diagnosis — turn it into an instrument you will reuse.**
+
+**Two kinds, and they are not interchangeable:**
+
+- **Tool** (`tools/<name>.mjs`) — a mechanical measurement or decision rule: deterministic input, printed evidence, an
+  exit code. It answers *what is the number*. It must be runnable in one bounded call and must state its own cost in
+  seconds. If the answer needs judgement, it is not a tool.
+- **Skill** (`.agents/skills/<name>/SKILL.md`) — the procedure a session follows when the symptom appears: which runbook,
+  which tool, which order, what the judgement calls are. Its `description` names the **symptom or task** so the skill
+  loads at the right moment; a skill no trigger matches is dead weight.
+
+**The rule, in order:**
+
+1. **Look before you write.** `ls tools/`, `ls .agents/skills/`, `docs/runbooks/README.md`, grep `docs/DECISIONS.md`.
+   If an instrument covers it, use it — and if its numbers or steps are stale, *fix it in place* rather than writing a
+   competing one.
+2. **Build only what you predict you will reuse.** A one-off probe belongs in gitignored `.spike/`. An unpromoted probe
+   is lost next session (this rule already exists for cheap state reads; it now covers skills and tools too).
+3. **Promote with a trigger, a proof and a cost.** Every tool/skill names: the symptom that triggers it, the exact
+   command to run, the measured wall clock, the host line it was measured on (OS + distro + kernel + node, never a
+   hostname), and a `last_verified:` date with the command that verified it.
+4. **Make it checkable.** A tool that should always be true gets a **check rule** so `cli.mjs check` fails when it is
+   broken, and a demo in the suite (`node demo/<name>.test.mjs`, mocked `fauxProvider` plane where possible). A tool with
+   no reader drifts silently; the drift reads as truth.
+5. **Improve it on contact.** If a session finds a tool's numbers, flags or steps wrong, correct the tool and append a
+   dated addendum — do not write a second tool for the same question. New traps go into the next `## Operational pitfalls`
+   block of `docs/SELFDEV.md`; new cheap state reads into `docs/runbooks/session-start-cost.md`.
+6. **Research is an instrument too.** When a decision needs outside evidence, write the prompt to
+   `docs/reviews/<topic>-research-prompt.md` per `docs/runbooks/research-request.md` (context, numbered questions,
+   deliverable path, verbatim quote + URL + fetch date), hand it to the operator, and register the accepted findings in
+   `docs/ROADMAP.md` when the report lands.
+7. **Never bolt an instrument into the base** if it can live on the extension plane (D212). `tools/` and
+   `.agents/skills/` are the delegate/team plane; a missing capability that no extension can reach means the base is
+   missing a **seam** — grow the seam.
+
+**Worked example (this session):** the branch census below was run by hand across 95 worktrees, so it became
+`tools/branch-census.mjs` plus the skill `.agents/skills/branch-and-worktree-lifecycle/SKILL.md`. If a future session
+classifies refs and worktrees again, it runs the tool instead of re-deriving the rule.
 
 ## Clock out (before you stop)
 
