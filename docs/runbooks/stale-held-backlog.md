@@ -93,6 +93,16 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
 
 And three rows' **structured** `blockedBy` names a *cancelled* id — #3452→#3274, #3456→#3455, #3663→#3660 — so releasing them un-parks a row no seat can ever claim. Read the umbrella table below before touching any of them.
 
+**`deferred` is a second parked population the audit does not see — measured 2026-11-11 (item #6389).** The tool classifies `held` rows only. Run the other read alongside it:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --status deferred --no-body
+```
+
+On this rig that returned **524 rows**, and every one of them was parked by the supervisor: each row's `transitions` ends with `{"event":"deferred","by":"supervisor","to":"human"}` and a date. **0 of the 524 carry a structured `reason` field** — the cause is only the boilerplate in `question` — so a row parked by an environment fault and a row parked by a seat that genuinely cannot progress are indistinguishable in the record. That is the #6313 defect, with a measured population.
+
+Two consequences for a hygiene pass: `release_work` is a `held` exit and **refuses** a deferred row (`item #5598 is not held (status=deferred)`, observed 2026-11-11), and the only un-park verb for a deferred row is the **recipient's** `resume_work`, which has no precondition and wakes the seat for each row it takes back. So a fleet-wide escalation is cleaned up one seat at a time, by that seat — no seat can do it for another, and there is no bulk verb.
+
 3. **For an effort you know by name, ask the pointed question** (the durable-TUI case):
 
    ```bash
