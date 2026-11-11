@@ -1,0 +1,18 @@
+{
+  "_note": "#6322 non-vacuity fixture. This is rig.selfdev.json's roster with auditor re-pointed from verifier/openai/gpt-oss-120b to verifier/qwen3.8-flash-next-q2_0 - the SAME served model every author seat uses, reached through the other prefix. Both provider prefixes still appear, so a tally of prefixes says green; the family assertion says red. Run: DURIG_RIG=demo/fixtures/rig-one-family.json node demo/deepinfra-catalog.test.mjs -> exit 1. The real roster is NOT changed by this file; it exists only as an input that proves the guard can fail for the right reason.",
+  "version": 2,
+  "seats": [
+    { "name": "pm", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "impl", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "qa", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "qa2", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "lead", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "advocate", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "scribe", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "devtools", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "auditor", "model": "verifier/qwen3.8-flash-next-q2_0" },
+    { "name": "designer", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "security", "model": "local/qwen3.8-flash-next-q2_0" },
+    { "name": "architect", "model": "local/qwen3.8-flash-next-q2_0" }
+  ]
+}
