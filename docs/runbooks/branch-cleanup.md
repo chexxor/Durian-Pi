@@ -94,7 +94,9 @@ or RESOLVED, and name the tree it was measured on" ("minting a DECISIONS entry t
 recorded ruling") and `docs/NEXT-ARCHIVE.md` ("the scribe should fold rather than mint a second entry").
 **Why the source is the text and not the id:** the ruling is **#5568**, a DONE queue row, and a done row has no
 read path (#3486) — an id-only citation is a dead pin, the same class as the dangling citation in #4169 and the
-dead dependency path in #6077. The rule runs from this runbook; the id is provenance.
+dead dependency path in #6077. The rule's home is `docs/runbooks/delegate-doc-hygiene.md` § "A ruling the record
+already holds is referenced, not restated" (#6332); this step is where it is applied at mint time. The id is
+provenance.
 
 The pre-mint check:
 
@@ -260,7 +262,7 @@ git show main:docs/DECISIONS.md | grep -oE '^## D[0-9]+' | sort | uniq -d       
 **The fold rule is readable without a queue read (Step 0e, #6111):**
 ```bash
 grep -n 'RELAYS a ruling' docs/runbooks/branch-cleanup.md                          # >= 1 — the rule is in the doc, not only in a closed row
-git grep -n 'duplicate a recorded ruling' docs/runbooks/delegate-doc-hygiene.md    # exit 0 — the retrievable source it names
+grep -n 'referenced, not restated' docs/runbooks/delegate-doc-hygiene.md    # exit 0 — the rule's home is retrievable text
 ```
 
 **The three disposition rules (Step 0b / Step 0c / Step 0d) are present:**
