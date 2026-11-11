@@ -63,6 +63,29 @@ an **opt-in lane with a declared budget** (smaller/faster models are legitimate 
 iteration — a key, a network, a model server, a sleep, a 20-minute turn — **isolate it behind a seam and state its cost in
 seconds** on the row that adds it. Diagnose with `docs/runbooks/slow-loop.md`.
 
+## Tool-call timeouts — every call is bounded, ≤ 10 minutes (operator directive 2026-11-11)
+
+Every `bash` call carries an explicit `timeout`. Leaving it unset means **no bound**, which is how a session spends
+20 minutes on one probe. The discipline is two steps:
+
+1. **Guess the wall clock before you run it.** Take the number from a doc or from your own last measurement of that
+   exact command on this box, not from a vague sense of "fast".
+2. **Set the timeout a little above the guess** — round up to the next convenient step, never below the guess. A
+   timeout tighter than the estimate produces a false failure that looks like a defect in the rig.
+
+Reference timings measured on this box (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git
+2.56.0) — re-measure rather than trust them, but use them as the starting guess: `cli.mjs ps` 0.7 s; `status --json`
+5.9 s; `queue --json --no-body` 2 s; `worktree audit --json` 1 s; `fleet-health.mjs` 0.2 s; a single demo 0.2–40 s
+(the slowest this session was `demo/runbook-diagnose.test.mjs` at 40.0 s); one test area 1.2–40 s; the **full** suite
+299 tests **121.3 s** at `7afd549c` (`--all --jobs 4`); `scripts/land.mjs` with a derived gate 82–106 s; broker start
+and stop 1–10 s; git merge-tree / branch / worktree operations under 1 s.
+
+**Hard ceiling 600 s.** Anything that genuinely needs more is not one tool call: run the area that matters, split the
+work, or launch it detached (`nohup … > .spike/x.out 2> .spike/x.err`) and read the artifact with a bounded `tail`.
+Conventions that keep this true: `--jobs 4` for the full suite, `timeout 300` on a suite, `timeout 60` on a CLI verb,
+`timeout 30` on a git verb. **If a call hits its timeout, that is a measurement** — record the number, shrink the unit
+of work, and re-run; do not answer by raising the number.
+
 ## Clock out (before you stop)
 
 1. Update **`docs/NEXT.md`**: the current item, its queue id, the exact next command, and any
