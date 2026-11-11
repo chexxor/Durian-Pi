@@ -1,9 +1,9 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-11T06:4xZ (delegate session **N30** — the **third landing pass + the parked-broker fix**: two
-more branches landed (`item-6118`, `item-6189`; `main` = `46cd5234`), refs **38 → 33** and worktrees **32 → 23**, suite
-**300/300** in **113.7 s** (`--all --jobs 4`, exit 0, unpiped), the parked broker reaped with `kill -TERM` and the
-fleet restarted (pid **2658110**). Nothing was pushed; the delegate claimed, completed or deferred no row.
+**Last update:** 2026-11-11T08:2xZ (delegate session **N31** — the **completion-audit rework**: both auditor objections
+closed, `main` = **`580c1343`**, suite **300/300** in **113.4 s** (`--all --jobs 4`, exit 0, unpiped), refs **33 → 38** and
+worktrees **23 → 28** (the fleet mints them — count live), a parked broker (pid **2658110**, 1 h 32 m past its bound) reaped
+with `kill -TERM` and the fleet restarted (pid **2876055**). Nothing was pushed; the delegate claimed, completed or deferred no row.
 **Count refs/worktrees live** — the fleet mints them while you measure.)
 
 **Milestone this window worked** — **no 120 s silence, and Ctrl-C actually stops the verb (ROADMAP **314**,
@@ -39,15 +39,12 @@ cd /home/chexxor/Git/Durian-Pi
 node scripts/suite.mjs --jobs 8                                        # 299 tests on disk; one can redden on contention
 DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json          # 1.1 s — total 25: seat-root 7, non-item 1, live 4, reapable 9, dirty 4, locked 0
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed --json --no-body   # 4 claimed rows; `rows: 6423` is the CENSUS, the payload is the filtered items
-git branch --list; git worktree list | wc -l                          # COUNT IT LIVE: 32 refs / 25 worktrees at f3ffce0e (2026-11-11T00:5xZ)
-node scripts/sync-pi.mjs --check                                     # pin dd30101cf tag v1.5.1, drift true
+git branch --list; git worktree list | wc -l; node scripts/sync-pi.mjs --check   # COUNT IT LIVE: 38 refs / 28 worktrees at 580c1343; pin dd30101cf tag v1.5.1, drift true
 ```
 
-**Broker status:** resident pid **2658110** (`--max-duration 3600`, started 06:35Z): `status --json` 6.0 s, `queue --json --no-body` 2.1 s, `watch --once --json` 2.0 s, `ps` 1.3 s — all exit 0. **The bound is not a hard bound**: a broker whose wake loop broke at `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1856`) with **no stop request**, so `graceExpired()` (`:1713`) is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded leg, `:2216 settleWithin(...)`, fires only on `deadline`).
-The force timer (`cli.mjs:2247`) arms only in `onSignal`, so `serve --stop` is invisible to a parked broker — three this window (pids 2066240, 2201485, 2390935) lingered 34–93 min past their bound until `kill -TERM <pid>` fired the fallback (`EXIT reason=deadline passes=-`).
-Preflight **blocks falsely** on local2: the 20 s probe at `tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0 blocking) and verify seats actually generate.
-Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`.
-Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
+**Broker status:** resident pid **2876055** (`--no-probe --max-duration 7200 --yes-pm-wakes`, started 08:13Z): `status --json` 10.1 s, `queue --json --no-body` 2.0 s, `watch --once --json` 1.9 s, `ps` 0.5 s, `log pm 5` 1.3 s — all exit 0; SIGINT on `watch --follow --json` exits **130** 353 ms after the signal, `log pm --follow` 130 in 175 ms. **The bound is not a hard bound**: a broker whose wake loop broke at `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1856`) with **no stop request**, so `graceExpired()` (`:1713`) is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded leg, `:2216 settleWithin(...)`, fires only on `deadline`).
+The force timer (`cli.mjs:2247`) arms only in `onSignal`, so `serve --stop` is invisible to a parked broker — four this
+window (pids 2066240, 2201485, 2390935, 2658110) lingered 34 min – 1 h 32 m past their bound until `kill -TERM <pid>` fired the fallback (`EXIT reason=deadline passes=-`). Preflight **blocks falsely** on local2: the 20 s probe at `tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0 blocking) and verify seats generate. Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`. Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
 
 **What the cleanup left** (re-measured at `f3ffce0e`, `cli.mjs worktree audit --json`, 1.1 s) — 25 worktrees, **0 locked**:
 7 seat roots + 1 non-item, **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty 2, `item-5912` held, `item-6177`
@@ -67,14 +64,16 @@ node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/wt.json","utf8"))
 git worktree prune
 ```
 
-**Goal: implementation complete, completion re-request pending the audit's two objections closed.** "Every CLI verb
+**Goal: implementation complete — the audit's two objections are closed; completion re-requested.** "Every CLI verb
 answers or fails fast against a team running or stopped, no 120 s silence, and Ctrl-C actually terminates the verb."
 All legs are on `main`: the signal seam (`src/signals.mjs`, `src/cli-seam.mjs`), bounded reads (`src/readclient.mjs`),
 the read-only shim (`src/readonlystore.mjs`), the out-of-band read drain in `runWakeLoop`, the **mutating-verb** bound
 (`intentWaitBoundMs`, `src/broker.mjs:2422`: 900 s advancing / 10 s frozen pass / 0 no broker — `cli.mjs pause --wait`
 against a 658 MB store with no resident broker answered in **349 ms**), and the stop-receipt legs (`src/broker.mjs:1851`,
-`:1889`, `:2192`). Measured live at 00:4xZ with the broker DOWN: `status` 2.394 s, `queue --json --no-body` 0.888 s,
-`watch --once --json` 1.110 s, `ps` 0.254 s — all exit 0. **One regression was found and closed:** the new
+`:1889`, `:2192`). Re-measured 08:1xZ, broker resident: `status --json` 10.1 s, `queue --json --no-body` 2.0 s, `watch --once --json` 1.9 s,
+`ps` 0.5 s, unknown verb `verify --json` exit 2 in 304 ms. Objection 1 (NEXT.md over the cap) is closed — 197 lines, the
+pointer test green. Objection 2 (mutating verbs defaulting to 15 min) is closed — `cli.mjs:2008` defaults `timeoutMs = null`
+and derives the bound from `intentWaitBoundMs` (`src/broker.mjs:2422`), pinned by `demo/mutate-intent-bound.test.mjs`. **One regression was found and closed:** the new
 1 s read-drain timer shifted the wake loop by a fraction of a millisecond and
 `demo/cooldown-skip-line.test.mjs` went 4/12 red (bisected: 0/12 with `readDrainMs = 0`); it is now driven by an
 injected virtual clock and runs 0/15 red in **0.193 s** — pitfall **255**, §F of
@@ -99,9 +98,11 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live, re-count before trusting): refs **33** (7 conflicted, all routed to `pm`),
-worktrees **23**, `main` `46cd5234`, queue census **6,581 rows** — 4,444 done / 912 cancelled / 434 held / 536 deferred
-/ 246 queued / 9 claimed. Nothing is landable by a delegate: every mergeable ref is either already an ancestor of
+**State at clock-out** (measured live, re-count before trusting): refs **38**, worktrees **28**, `main` `580c1343`, queue
+census **6,624 rows** — 4,467 done / 915 cancelled / 433 held / 535 deferred / 265 queued / 9 claimed. Minted to `pm` this
+window: **#6604** (bound the max-duration exit drain), **#6600/#6601** (`EXIT … passes=-`), **#6548** (`status` mislabels a
+bound-exit drain), **#6598/#6599** (probe-corpus anchor guard), plus intent `3c779f4a-5e23-4b96-a0f2-66f9c705fc4b` (suite
+`spawn`s `send` children nobody reaps: two ran 13 h after their fixture store was deleted; SIGINT reaped them in 254–502 ms). Nothing is landable by a delegate: every mergeable ref is either already an ancestor of
 `main` or held by a live seat root.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
