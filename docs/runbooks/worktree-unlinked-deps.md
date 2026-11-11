@@ -3,9 +3,9 @@ runbook: worktree-unlinked-deps
 symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-10
+last_verified: 2026-11-11
 verified_by: devtools
-evidence: "#3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
+evidence: "#6278 (2026-11-11, native Windows host, node v24.22.1): the SAME commit `35001c3a` in the SAME item worktree `item-6207` measured **279/300 exit 1** on the lockfile graph and **300/300 exit 0** once the pinned build was present; the carry that fixes it is pinned by `node demo/worktree-deps-link.test.mjs` (exit 0) and its reporting by `node demo/syncpi.test.mjs` (exit 0). #3821 - the link step's failure is recorded and reported instead of console.warned. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees."
 check_rule: null
 ---
 
@@ -105,10 +105,39 @@ probe above stays the check for "is this the same build"; only the link/built pr
 The missing build tree is the usual cause: `--link` has nothing to point at, so it exits 1 with
 `nothing built yet; run --sync before --link`, and provisioning continues on the lockfile by design.
 
+## What provisioning now does: the CARRY (#6278)
+
+`vendor/pi-main` is gitignored, so it is never forked into an item worktree - the worktree arrives with
+nothing to link to. Building it per worktree is not affordable: `--sync` clones and builds, measured
+**36 s** plus ~110 MB of git history, across the 50 live worktrees measured on 2026-11-11.
+
+So `installWorktreeDeps` **carries the build that already exists in the checkout the worktree was forked
+from**: each pinned package's `package.json` and `dist` (measured **41.4 MB** for the ten pinned
+packages), then links. Measured in worktree `item-6238`: the carry linked in **9.6 s**, `sync-pi` reported
+`dependencySet: "built-pin"`, and the full suite in that tree came back **300/300, exit 0** - the same tree
+that had been 279/300.
+
+The carry is **refused, never guessed**, and the refusal is reported in the same sentence:
+
+- the worktree's `pi-main.pin.json` sha differs from the checkout's - a branch that moved the pin must
+  build its own; running someone else's pi build would be the silent fallback this row is about;
+- the source checkout has no built pin at all (`--sync` there first);
+- the source build is incomplete (a pinned package has no `dist`).
+
+A carried tree has no git history, so `sync-pi` reports `buildTree` as the sha recorded in
+`vendor/pi-main/.durig-carried-pin` with `carried: true`, and the drift `gap` stays `"unknown"` with a
+reason that says it was carried and where to count it. That is the honest shape: the tree IS the pinned
+build, and the gap has to be measured where it was built.
+
 ## Do
 
-1. If you need parity with the seat root (a verifier measuring the landing, or any suite verdict you
-   will report), build the pinned tree in YOUR worktree, then re-prepare:
+1. **Do nothing in the normal case.** Provisioning carries the pinned build from the checkout the
+   worktree came from, and a linked tree produces no note at all. If you see no `DEPENDENCY NOT LINKED`
+   line, `node scripts/sync-pi.mjs` in your own worktree should answer `dependencySet: "built-pin"`.
+
+2. If the note names a **refused carry** ("the built pin could not be carried here: …"), the refusal IS
+   the finding: either the branch moved the pin, or the checkout has no build. Then build it in YOUR
+   worktree and re-prepare:
 
    ```bash
    node scripts/sync-pi.mjs --sync
@@ -152,6 +181,20 @@ node demo/worktree-deps-link.test.mjs; echo "exit=$?"
 
 Expect `exit=0` and a `PASS` line. If it is red, a failed link has gone back to being silent - stop
 and route it to impl.
+
+The carry and its refusals are pinned by the same demo (sections 8-10), verified 2026-11-11: a built
+checkout carries; a DIFFERENT pin is refused with both shas named and nothing copied; an end-to-end
+`installWorktreeDeps` given a source reports `state: "linked"` with `carried.sha`; a refused carry still
+produces the seat-facing sentence.
+
+```bash
+node demo/syncpi.test.mjs; echo "exit=$?"   # expect 0: a carried build reports buildTree = the sha it was
+                                           # copied from, carried: true, and gap "unknown" with the reason
+node scripts/sync-pi.mjs                    # in a carried worktree: dependencySet "built-pin"
+```
+
+Both ran 2026-11-11 in worktree `item-6238`: `node demo/syncpi.test.mjs` exit 0; `node scripts/sync-pi.mjs`
+exit 0 printing `dependencySet: "built-pin"`, `built: 10`, `linked: 10`.
 
 ## If it fails
 
