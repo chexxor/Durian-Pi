@@ -1,9 +1,10 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-11T00:5xZ (delegate session **N28** — the **landing pass on top of the Ctrl-C + read-bound
-pass**: 13 branches landed onto `main` (`main` = `14ae744a`), the mutating-verb bound closed, refs **43 → 32** and
-worktrees **35 → 25**, suite **299/299** (`--all --jobs 4`, 115.0 s). Nothing was pushed; the delegate claimed,
-completed or deferred no row. **Count refs/worktrees live** — the fleet mints them while you measure.)
+**Last update:** 2026-11-11T04:5xZ (delegate session **N29** — the **broker-restart + second landing pass**: four
+orphan `cli.mjs serve` processes reaped, the fleet's branches landed (`item-6114`, `item-6315`, `item-6516`; `main`
+= `7afd549c`), refs **42 → 34** and worktrees **35 → 28**, suite **299/299** (`--all --jobs 4`, 121.3 s). Nothing was
+pushed; the delegate claimed, completed or deferred no row. **Count refs/worktrees live** — the fleet mints them
+while you measure.)
 
 **Milestone this window worked** — **no 120 s silence, and Ctrl-C actually stops the verb (ROADMAP **314**,
 row **#6160**, decision **D262**)**. Baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
@@ -27,6 +28,10 @@ dirty trees named below, and the three pin-policy rows (**#6171/#6172/#6173**).
 **Milestone this window worked** — **landing the accumulated branches and pruning them (the branch-cleanup pass)**,
 with the pin move (D255 → D256, ROADMAP 353–357) as the frame it operated in.
 
+**Blocker:** none in git — every remaining branch is either conflicted (a seat re-cut, not a delegate merge) or held
+by ruling. The only operator-grant blocker is the verifier leg: `DURIG_VERIFIER_API_KEY` spend is capped and `local2`
+is a shared LAN box whose 20 s preflight probe false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
+
 **Run these first, in this order** (every number below was measured on this box; re-measure rather than trust it):
 
 ```bash
@@ -38,13 +43,13 @@ git branch --list; git worktree list | wc -l                          # COUNT IT
 node scripts/sync-pi.mjs --check                                     # pin dd30101cf tag v1.5.1, drift true
 ```
 
-**Blocker:** the broker is **DOWN, not wedged** — the last resident one exited at `2026-11-11T00:33:26Z` (`grep EXIT
-selfdev.sqlite.broker.log | tail -1` → `EXIT pid=562329 reason=max-duration passes=36`), there is no
-`selfdev.sqlite.broker.json` and no `genlock` slot, so every read now takes `readLocal` and answers fast: `node
-cli.mjs status --json` → exit 0 in **2.45 s**, `queue --json --no-body` **0.92 s**, `watch --once --json` **1.10 s**,
-`ps` **0.28 s**, `cli.mjs worktree audit --json` **1.1 s** — all re-measured at `f3ffce0e`. **Restarting it wakes 12 seats and spends model money — the operator's call.** If restarted:
-`node tools/broker-serve.mjs --dry-run`, then `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --yes-pm-wakes --max-duration 1800`. The spool is now empty (0 pending);
-61 dead-letters are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
+**Broker status:** resident pid **2390935** (started 04:31Z, `--max-duration 1800`), `status --json` → `{"state":"up","hbAgeMs":172,"passAgeMs":172}`. **The bound is not a hard bound**: a broker whose wake loop has exited parks in the
+unbounded exit drain (`src/broker.mjs:2218 await h.waitForIdle(context)`) and `serve --stop` is invisible to it — two
+brokers (pids 2066240, 2201485) each lingered 33+ min past `--max-duration` until `kill -TERM <pid>` fired the force
+fallback (`cli.mjs:2247`, `EXIT reason=deadline passes=-`). Preflight **blocks falsely** on local2: the 20 s probe at
+`tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0
+blocking) and verify seats actually generate. Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 1800`.
+Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
 
 **What the cleanup left** (re-measured at `f3ffce0e`, `cli.mjs worktree audit --json`, 1.1 s) — 25 worktrees, **0 locked**:
 7 seat roots + 1 non-item, **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty 2, `item-5912` held, `item-6177`
@@ -96,11 +101,9 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out (measured 00:5xZ):** refs **32** (8 still unlanded), worktrees **25**, `main` `14ae744a`.
-Landed this pass by `scripts/land.mjs … --changed-suite`: **item-6381, 6393, 6363, 6361, 6176, verify-5180, 6112,
-6466, 6310, 6223, 6155, 6365, 6402** (6402 union-resolved in `docs/DECISIONS.md`, its provisional entry minted **D264**);
-the 12 merged refs were pruned with `git branch -d`, their clean unlocked worktrees removed — nothing forced. Queue
-census 6,494 rows — 4,403 done, 908 cancelled, 536 deferred, 434 held, 210 queued, 3 claimed.
+**State at clock-out** (measured live, re-count before trusting): refs **34** (7 conflicted, 2 landable), worktrees
+**30**, `main` `b6e8b851`, queue census **6,571 rows** — 4,437 done / 912 cancelled / 434 held / 536 deferred / 243
+queued / 9 claimed. `cli.mjs worktree audit --json` → total 30: seat-root 11, non-item 2, live 6, dirty 6, reapable 5.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
@@ -173,9 +176,7 @@ census **6,423 rows** measured 2026-11-10T19:0xZ with no broker resident: 4,365 
 Six branches landed (`item-1779`, `item-2915`, `item-3041`, `item-6067`, `item-6082`, `item-6121` + the
 `item-6082-mig` fork); two are deliberately not landed and are named with reasons above.
 
-**Blocker (operator grants only):** the verifier leg is armed but `DURIG_VERIFIER_API_KEY` spend is capped, and
-`local2` is a shared LAN box — `broker-serve --dry-run` BLOCKed once on `provider-local2-completion-failed: timeout
-after 20s` while a direct curl answered in **1.6 s**. Retry the preflight rather than reconfiguring.
+**Blocker (operator grants only):** verifier-leg spend cap + the `local2` shared-box preflight false-block (see the pointer's `**Blocker:**` line). Retry `--dry-run` rather than reconfiguring.
 
 **Unverified:** (1) live TUI streaming is coarser at the new pin because it rides `pi.live`'s throttled partial
 commits — plausible, not measured; the probe that would close it is a `latency-budget` run comparing entry cadence
