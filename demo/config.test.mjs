@@ -247,8 +247,15 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	const cliSource = readFileSync(join(durigDir, "cli.mjs"), "utf8");
 	assert.match(
 		cliSource,
-		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\)\s*\}/,
-		"openHarness must pass BOTH streamSettings(CFG) and compactionSettings(CFG) as the harness settings (#4898)",
+		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\),\s*\.\.\.runControlSettings\(CFG\)\s*\}/,
+		"openHarness must pass streamSettings(CFG), compactionSettings(CFG) and runControlSettings(CFG) as the harness settings (#4898, #6173)",
+	);
+	// #6173: the restart limit is set at ONE seam. A second assembly site is the drift class this rig
+	// keeps hitting, and here it is invisible - the seat just runs pi-durable's default of 5.
+	assert.equal(
+		(cliSource.match(/\.\.\.runControlSettings\(CFG\)/g) ?? []).length,
+		1,
+		"exactly one Harness.open settings site may spread runControlSettings(CFG)",
 	);
 	// #491 C6: the shipped defaults must be in the REAL load path (wiring, not just
 	// exports): the cli anchors the shipped file to its own install directory.
