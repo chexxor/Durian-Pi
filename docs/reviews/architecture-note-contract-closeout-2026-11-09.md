@@ -126,6 +126,18 @@ sed -n 2967,2978p docs/DECISIONS.md                      -> the #4645 topic-file
 sed -n 10489,10495p docs/DECISIONS.md                    -> the #5549/D240 store-doc rule, quoted above
 ```
 
+**Re-verified against the merged tree 2026-11-10 (item #6114, worktree forked from `main`, dependencySet
+built-pin at the `v1.5.1` pin).** All three conditions hold; the line citations above have drifted and the
+positions on the merged tree are: the doc `defineDoc({ kind: "durig.notes", scope: "conversation",
+history: "rewindable", fork: "asOf" })` at `extensions/continuity.mjs:43-51`; `mirrorNote` defined at `:214`
+and called at `:350`, `:381`, `:417`; `beforeCompact` at `:397`, reading the seat's own doc at `:405`, falling
+back to the queue seed at `:411`, then the cut-message digest at `:418`. `node demo/continuity-note.test.mjs`
+-> exit 0. There is no second note doc, path or writer in the base: `src/rig.mjs` defines only `Seats`,
+`Edges`, `Constitution`, `RigControl` and `RigQueue`, and the only `note` field in the queue schema
+(`src/rig.mjs:720`) is free text on a park `constraints` entry, not a continuity doc. `docs/notes/` does not
+exist in the tree, so the probe in section 4 that looks for a second writer to it is satisfied vacuously -
+it cannot be falsified until a topic file is actually created there.
+
 The live-fleet counts (6 / 32 / 35 / 10-of-12) are as reported by `pm` in the intake and are consistent
 with `docs/MILESTONES.md:107`; they were not re-derived against the live store from this worktree, and
 this ruling does not depend on them — it depends on which evidence class counts.
