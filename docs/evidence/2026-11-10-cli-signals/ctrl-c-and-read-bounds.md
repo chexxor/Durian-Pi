@@ -333,3 +333,34 @@ reason=max-duration passes=36`; no `selfdev.sqlite.broker.json`, no genlock. `in
 only `pgrep -f "cli.mjs serve"` (5 hits) works (pitfall 260). Four such orphan serve processes are still running
 (524238, 526388, 526934, 529245, ~5 h elapsed) with no broker state file — deliberately not killed; killing another
 actor's process is the operator's call.
+
+## Addendum 2026-11-11T08:2xZ (delegate, completion-audit rework, `main` = `16c95b20`)
+
+The completion audit disapproved on two grounds; both are closed and re-measured here.
+
+**1. The gate was red at HEAD.** `docs/NEXT.md` was 203 counted lines against the 200-line cap enforced by
+`demo/next-pointer.test.mjs`. It is now **198 `wc -l` lines** (199 counted split lines — pitfall 261), and
+`node demo/next-pointer.test.mjs` and `node demo/clockin-digest.test.mjs` both exit 0. The suite, run unpiped with the
+exit captured, is **300/300 in 120.3 s, exit 0** at `16c95b20` (`.spike/suite-final3.out`; 113.4 s at the prior HEAD
+`580c1343`). Host measured with the measurement: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
+node v24.22.1, `git version 2.56.0`.
+
+**2. Spool-mutating verbs still defaulted to 15 minutes.** `cli.mjs awaitIntentResult` now defaults `timeoutMs = null`
+and derives the bound from health on every poll via `intentWaitBoundMs` (`src/broker.mjs:2422` — 900 s for an advancing
+broker, 10 s for a resident broker with a frozen pass, 0 for no broker), with `DURIG_INTENT_WAIT_MS` as the demo
+override. `demo/mutate-intent-bound.test.mjs` pins all three legs: a forged frozen pass makes `pause --wait` **exit 1 in
+678 ms** naming the cause and the remedy, and the advancing-broker control is not cut short (Ctrl-C → **130**).
+
+**Live verb table at 08:1xZ, broker pid 2876055 resident and advancing** (`--no-probe --max-duration 7200 --yes-pm-wakes`,
+started 08:13Z): `status --json` 10.129 s, `queue --json --no-body` 2.000 s, `watch --once --json` 1.938 s, `ps` 0.477 s,
+`log pm 5` 1.273 s, unknown verb `verify --json` exit 2 in 0.304 s — all exit 0. SIGINT: `watch --follow --json` →
+**exit 130, 353 ms** after the signal; `log pm --follow` → **130 in 175 ms**. The same probe reaped two 13-hour-orphaned
+suite processes in 254–502 ms (pitfall 268).
+
+**Still open, minted to `pm`:** #6604 (bound the exit drain when `--max-duration` expires), #6600/#6601 (`EXIT …
+passes=-` reports a dash instead of the pass count), #6548 (`status` labels a bound-exit drain "degraded" on pass age
+alone), #6598/#6599 (a check rule that fails when a `tools/model-probes/corpus.mjs` anchor is absent from `main`), and
+intent `3c779f4a-5e23-4b96-a0f2-66f9c705fc4b` (reap suite-spawned CLI children). Measured again this window: broker pid
+2658110 (`--max-duration 3600`) ran **1 h 32 m** past its bound; `serve --stop` answered "did not exit within the stop
+grace; no forced kill"; `kill -TERM` produced `EXIT pid=2658110 reason=deadline passes=-` at 08:12:55Z and cleared the
+state file.
