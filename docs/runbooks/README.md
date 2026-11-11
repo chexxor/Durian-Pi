@@ -121,14 +121,15 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   `durig.config.json` is gitignored (`.gitignore:12`) so it exists only in the shared root - measured in an item
   worktree, a bare `node cli.mjs status` falls back to `./rig.sqlite` (`durig.config.default.json:2`), not to the
   rig the operator meant.
-- **Census and the machine-rule gap (#6336, measured 2026-11-11 in the `item-6336` worktree on `main 35001c3a`):**
-  `git grep -n 'DURIAN_PI_DB'` returned **128 lines across 38 files** before this item's edits and returns
-  **135 lines across 37 files** after them - `docs/TUI-TESTING.md` is the only file cleared, and the extra lines are
-  the docs' own explanations naming the inert spelling as a counterexample. 68 of the lines are the verbatim archive
-  (`docs/NEXT-ARCHIVE.md`), annotated not rewritten (#6334). Two live runbook commands still had it
+- **Census and the machine-rule gap (#6336, measured 2026-11-11):** `git grep -n 'DURIAN_PI_DB'` on `main 35001c3a`
+  returned **128 lines in 38 files** before this item's edits; on the `item-6336` branch after them it returns
+  **137 lines in 37 files** - `docs/TUI-TESTING.md` is the only file cleared, and the extra lines are the docs naming
+  the inert spelling as a counterexample. 68 of the lines are the verbatim archive `docs/NEXT-ARCHIVE.md` (the
+  disposition header that flags the stale form lives on branch `item-6334`, #6334, not yet landed, and adds 5 more
+  matching lines there - a plain recount on that branch reads 73). Two live runbook commands still had it
   (`docs/runbooks/attach-a-gate.md:45,91`, `docs/runbooks/verifier-leg-unfunded.md:62`) and now name `DURIG_DB`.
-  Everything left outside the archive is a dated record, a trap discussion, or the code's one documented exception
-  (`scripts/clockin.mjs:468`).
+  Everything left outside the archive is a dated record, a trap discussion, a demo fixture, or the code's own
+  exception at `scripts/clockin.mjs:468`.
   **Nothing checks this class.** `node cli.mjs check rig.selfdev.json --json` exits 0 with 23 rules
   (`RULES.length` in `src/checkup.mjs`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
   and none of them compares an env name printed in a doc with the entry point that doc names; `doc-integrity-guard`
@@ -136,7 +137,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   fires at broker start, not on a doc. The config file is stricter than the environment: a `DURIAN_PI_*` key in
   `durig.config.json` makes `node cli.mjs config` **exit 1** naming it (`src/config.mjs`, the #5071
   accepted-and-ignored class) - a probe run in this worktree printed `unknown config-file key(s): DURIAN_PI_DB,
-  DURIAN_PI_PROVIDER`. The doc-side guard is requested as #6335; the naming decision is ROADMAP 191.
+  DURIAN_PI_PROVIDER`. The machine-side guard is routed to `impl` as #6821 (2026-11-11); the naming decision is ROADMAP 191.
 
 ## Agent execution (from the research report)
 
