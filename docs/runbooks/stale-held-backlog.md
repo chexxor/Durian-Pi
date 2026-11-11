@@ -85,6 +85,14 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
    only 43 have an event park in their structure, and 239 rows disagree. The disagreement is the finding -
    do not resolve it by editing wording.
 
+**What the classes get wrong — measured 2026-11-11 (item #6369).** Of the 34 rows the tool flagged as release- or cancel-candidate on this rig (`rows=6870 held=430`, exit 0), **25 were mislabelled**. Three shapes, each checkable in one command:
+
+- **Gate arithmetic ignores the recorded park.** Two release-candidates carry `block: {reason: "operator", resolver: "operator"}` — #4269 and #5517. Every gate they name is terminal; the human is the blocker. A row parked on a person must never be released by a seat.
+- **"The named file exists" is not "the work is done".** Four cancel-candidates are defect rows whose named file still contains the defect: `grep -n '0 of ${items.length}' tools/channel-preflight.mjs` matches at line 484, and `src/commitstream.mjs` calls `harness.observeCommits({advance, end})` with no version branch (its own header says "measured at the pin we landed on, v1.5.1"). Run the check the row describes, not a file-existence test.
+- **A landing row is settled by ancestry, not by a ref name.** Eight of the release-candidates were landing entries whose tip is already an ancestor of main (`git merge-base --is-ancestor <sha> main` → exit 0), and five were parked on refs that no longer exist (`git rev-parse refs/heads/impl-item-1609` → exit 128; only 14 `*-item-*` refs remain, all under `refs/remotes/win/` or `refs/rescued/`).
+
+And three rows' **structured** `blockedBy` names a *cancelled* id — #3452→#3274, #3456→#3455, #3663→#3660 — so releasing them un-parks a row no seat can ever claim. Read the umbrella table below before touching any of them.
+
 3. **For an effort you know by name, ask the pointed question** (the durable-TUI case):
 
    ```bash
