@@ -11779,3 +11779,21 @@ the very condition it diagnoses. Every route must print which path served the re
 **Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
+
+## D265 (PROVISIONAL - mint at land; D258 and D259 already collide, re-check the number) — a gate is validated where it is WRITTEN, never where it is read; and an additive gate verb is not shippable without a removal path and a graph check (architect, item #6517, review `docs/reviews/architecture-gate-verb-decomposition-6517.md`, 2026-11-11)
+
+**Status:** proposed, ready to adopt with the #6508-#6516 tranche.
+
+**Context.** `blockedBy` is created only in `send_work` (`src/rig.mjs:778`) and normalized by shape alone (`:391-404`); there is **no** code path that clears it (probe `tools/probes/gate-verb-decomposition-gaps.mjs` at HEAD `560db92e`: 0 removal sites, exit 1). `workable()` (`:319`) is the single predicate both claim selection and wake selection read. pm's #6473 decomposition mints `gate_work` as an additive verb with a 2-cycle check (#6512). Measured at HEAD: a self-gate is accepted and makes the row permanently unworkable; a 3-cycle makes all three rows unworkable and the reason each seat reads names only the parent id; a held row whose gate names a cancelled row can be neither released nor un-gated, leaving `cancel_work` (terminal, party-scoped) as the only exit. `docs/WORK-ITEM-SCHEMA.md:188` already declares a `blockedBy-resolves` error rule that `src/checkup.mjs` does not implement.
+
+**Decision.** Three rules, in this order:
+1. **Strict at write, conservative at read.** `gate_work` and `send_work` refuse a gate id that is unknown, self-referential, or part of a cycle; `workable()` keeps its conservative "unknown means workable" default so legacy rows do not retroactively starve.
+2. **The validator sees the whole graph, inside the commit.** The combined set (every row's existing `blockedBy` plus the proposed edge) is checked for reachability-before-self before the mutation is allowed, on **both** write paths.
+3. **A verb that can add a gate must be able to remove one, and the authority is a closed set** — the seat recorded in the add transition, the row's `from`/`to`, or the operator — with the removal recorded in `transitions` the same way the add is. Removal is the *recovery path* for a gate whose parent is cancelled.
+4. Observability, not enforcement: implement the schema's `blockedBy-resolves` rule as a check finding; if it is not implemented, delete it from the schema.
+
+**Options considered.** (a) Enforce in `workable()` at read time: cheapest, retroactive, and it silently starves the 249 prose-gated and legacy rows on a rule they never agreed to, while leaving the bad write invisible. (b) Enforce at write, observe at read: a refused verb call is legible and retryable; a starved row is neither. Chosen: **(b)** — the reversible one, because a refusal can be retried and a starvation cannot be seen.
+
+**Consequences.** Gate writes get slower (one graph walk per write over the queue doc) and two verbs must share one validator or they drift. Rows gated by a cancelled parent stop being a dead end only once the removal path exists — until then they remain starvable, and the check rule is the only way anyone learns. The 2-cycle assertion in #6512 is insufficient as written and must be widened to self-gate, 3-cycle, and "a refused write leaves the row byte-identical".
+
+**Residual (scope for `lead`):** whether `blockedBy-resolves` is an error-severity rule that blocks landing or an advisory finding, and whether a parked row whose parent is itself parked must carry a mandatory `reviewBy`. Neither is decided here.
