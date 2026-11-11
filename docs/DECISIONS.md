@@ -11833,15 +11833,17 @@ yet satisfy, and a reader must not take the entry as a description of shipped be
 - **There is no broker-authoritative run probe, and no handoff verb.** `grep -n "reassign\|acquire" cli.mjs`
   → 0 hits; acquisition is `prepare_workspace` refusing, not a transfer being granted. Clause 1 is
   therefore, today, clause 2 only.
+- **The refusal is only half actionable** in the sense clause 3 demands: it names the item, the branch and
+  the holder's worktree path, but NOT the holder's seat, the holder's item status, or the literal command
+  that releases the ref. Verified in the emitted text quoted above and in the test's assertions
+  (`demo/prepare-workspace.test.mjs:289-291`, which can only match the item id, the branch and the path).
+- **Clause 4 (runbook fidelity) was unmet and is now met at the wording level:** before this item,
+  `docs/runbooks/prepare-workspace-refused.md:80-82` quoted only two fragments (`checked out by another
+  worktree`, `another seat's item branch`). It now carries both full refusal sentences verbatim, with the
+  `src/worktree.mjs` line numbers, and names what the message leaves out — the holder's SEAT, its item
+  status, and any literal command (`grep -rni "never steal" docs/` had zero hits before this commit).
 - **Clause 3's off-ramp has not been exercised:** nobody has measured whether a cheap, honest probe is
   possible, so the withdrawal condition is untested rather than resolved.
-- **The refusal is only half actionable.** It names the item, the branch and the holder's worktree path,
-  but NOT the holder's seat, the holder's item status, or the literal command that releases the ref.
-  Verified in the emitted text quoted above and in the test's assertions (`:289-291`, which can only match
-  the item id, the branch and the path).
-- **Clause 4 (runbook fidelity) is unmet:** `grep -rn "refusing to prepare item" docs/` returns no hit outside
-  this entry. No runbook quotes the code's wording, so an operator meeting the message has no document to
-  recognise it from. The verbatim strings above are what a runbook must copy.
 - **The path half of clause 4 is not implemented.** The path is `join(worktreeRoot, "item-<id>")`
   (`src/worktree.mjs:968-969`; `prepareSeatWorkspace` itself is `:966`), with **no seat component**; `git
   worktree list` on the live rig shows `item-1158`, `item-3087`, `item-3094`, `item-4758` — none seat-suffixed.
