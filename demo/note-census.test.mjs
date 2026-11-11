@@ -167,6 +167,9 @@ check("a naive scan overcounts (declarations read as calls); the census does not
 check("fact 3: the compaction used the NOTE, not the summariser",
   row.compactionVia.note >= 1 && row.compactionVia.summariser === 0 && row.latestCompactionVia === "note",
   JSON.stringify(row.compactionVia));
+check("the era records WHEN the note was first written, so a compaction older than it is never read as a defect",
+  row.compactionEra.armedAt !== null && row.compactionEra.firstNoteWriteAt !== null && row.compactionEra.afterArming === 1 && row.compactionEra.afterFirstWriteSummariser === 0,
+  JSON.stringify(row.compactionEra));
 check("the source buckets sum to the compaction count (no double counting)",
   row.compactionVia.note + row.compactionVia.digest + row.compactionVia.summariser === row.compactions,
   `note ${row.compactionVia.note} + digest ${row.compactionVia.digest} + summariser ${row.compactionVia.summariser} vs ${row.compactions}`);

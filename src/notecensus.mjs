@@ -107,6 +107,7 @@ export function readNoteCensus(dbPath, { seats = null, queue = null } = {}) {
         )
         select conversation_id,
                max(armed_at) as armed_at,
+               max(first_note_write_at) as first_note_write_at,
                sum(read_note_call) as read_note_calls,
                sum(write_note_call) as write_note_calls,
                sum(handoff_call) as handoff_calls,
