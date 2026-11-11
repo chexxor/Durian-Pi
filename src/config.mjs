@@ -469,9 +469,19 @@ export function declaredContextWindow(config, modelKey = null) {
  *   DURIG_COMPACTION_KEEP_RECENT_TOKENS    what the summary keeps verbatim (the selection budget)
  *   DURIG_COMPACTION_BACKGROUND_TOKENS     the blocking threshold input
  *   DURIG_COMPACTION_MODEL_OVERRIDES       JSON: "provider/modelId" -> any of the fields above
- * The verifier class (window 24,576) wants `4096 / 8192 / 8192`; the local class (window 200,000) is
- * LEFT ON THE DEFAULTS on purpose - 20,000 kept tokens is affordable there, and inventing a number for
- * a class that was never measured is how a policy becomes folklore.
+ * THE HEADROOM RULE (#6064), stated as arithmetic because nothing enforces it: a family's reserve must be
+ * at least as large as that family's declared output budget, and `keepRecentTokens + summaryBudget` must fit
+ * inside the window, where `summaryBudget = min(floor(0.8 * reserveTokens), model.maxTokens)`.
+ * `4096 / 8192 / 8192` - the triple #6063 proposed - fails it on the verifier class (window 24,576,
+ * `DURIG_VERIFIER_MAX_TOKENS` 6,000 on this rig): a 4,096 reserve funds a summary of only 3,276 tokens, below
+ * the 6,000 the family declares. `3072 / 6144 / 3072` fails the same test (3,072 < 6,000). The example that
+ * passes is `16384 / 8192 / 4096`: 16,384 >= 6,000; 8,192 + 6,000 = 14,192 <= 24,576; background threshold
+ * (24,576 - 16,384) - 4,096 = 4,096 >= 0. The pi-durable defaults (16384/20000/32768) pass the reserve test
+ * but fail the fit test: 20,000 + 6,000 = 26,000 against a 24,576 window, and their background threshold is
+ * 8,192 - 32,768 = -24,576, i.e. it can never fire. **The gate that used to refuse an incoherent policy
+ * (#6063/#6064) was reverted out of main at `22c397a1` - this rule is currently checked by a human, not by the rig.**
+ * The local class (window 200,000) is LEFT ON THE DEFAULTS on purpose - 20,000 kept tokens is affordable there,
+ * and inventing a number for a class that was never measured is how a policy becomes folklore.
  *
  * A key may name a FAMILY (`"verifier/*"`) instead of a model id. pi-durable matches `modelOverrides` by
  * the exact `provider/modelId` string (dist/harness/compaction.js:197), so an entry keyed on a model id is
