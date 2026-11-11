@@ -11779,3 +11779,17 @@ the very condition it diagnoses. Every route must print which path served the re
 **Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
+
+## D266 (PROVISIONAL - mint at land; DECISIONS.md already collides at D258/D259, re-check the number) — there is ONE claim-admission predicate: every path into `claim_work` runs `workable()`, and the refusal keeps `NO_QUEUED_WORK` as a stable prefix (architect, item #6531, review `docs/reviews/architecture-claim-by-id-6531.md`, 2026-11-11)
+
+**Status:** proposed, awaiting lead's scope ruling on whether the by-id bypass is intentional.
+
+**Context.** `claim_work` has two paths. The oldest path runs `selectOldestWorkable` -> `workable()` (status, `requires`, every `blockedBy` gate). The by-id path filters `it.id === args.itemId && it.to === me && it.status === "queued"` and its comment claims the whitelist is "IDENTICAL to the oldest path". Measured at HEAD `9ae345df` (`tools/probes/claim-by-id-gate-bypass.mjs`, exit 1): the by-id branch contains no `workable`, no `blockedBy`, no `requires`; a row the predicate refuses with `gate-open:#5001(queued)` is admitted by the filter, and a row `requires: design` is admitted for a seat with no `design` capability.
+
+**Decision.** Both paths call the same predicate. The refusal is `NO_QUEUED_WORK - #<id> is <status> (<predicate reason>); <remedy verb>` — the prefix stays stable because three demos and the driver's wake documentation match on it, and the detail is appended, exactly as the oldest path already does at `src/rig.mjs:958`. "No such row" is reserved for an id that does not exist.
+
+**Options considered.** (a) Fix only the message and leave the bypass: cheapest, behaviour-stable, and it leaves a documented predicate the verb does not honour. (b) One predicate: makes the by-id path refuse rows it currently admits, which is a behaviour change on a verb every seat uses. Chosen: **(b)** — a refusal is retryable once the gate closes; work started before its prerequisite lands is not.
+
+**Consequences.** `requires` becomes binding in both paths (a seat pointed at a row it cannot do now gets a named reason instead of a claim it cannot fulfil). Any future path into claiming must use `workable()` or the class reopens. Demos `race.test.mjs:84`, `rearmclaim.test.mjs:132`, `defer.test.mjs:228` must stay green.
+
+**Residual (lead):** if forcing a claim by id is meant to be an operator escape hatch, that is a scope decision, and the code comment must be corrected either way.
