@@ -3,9 +3,9 @@ runbook: store-probe-identity
 symptom: "you are about to answer a QUEUE question with a direct SQL probe, and a bare id matched the wrong namespace (or a field 'did not exist')"
 writes: false
 precondition: "read-only"
-last_verified: unverified
-verified_by: qa
-evidence: "item #4334 / #4347 — the four-row probe that returned two HARNESS tasks; the equality-vs-LIKE probe measured on this store"
+last_verified: 2026-11-11
+verified_by: scribe
+evidence: "item #4334 / #4347 — the four-row probe that returned two HARNESS tasks; the equality-vs-LIKE probe measured on this store. 2026-11-11, worktree `item-6339` off `main 35001c3a`: the store-location legs below were re-run (bare `node cli.mjs status` exit 1 `cause: no_store`, `db` `…/item-6339/rig.sqlite`; `DURIG_DB=./selfdev.sqlite …` exit 1, `db` `…/item-6339/selfdev.sqlite`; `git ls-files | grep -c sqlite` = 0). The namespace legs (the `PRAGMA table_info(tasks)` and equality-vs-LIKE probes) were NOT re-run in this pass — they still carry the #4334/#4347 measurement."
 check_rule: null
 ---
 
@@ -15,6 +15,29 @@ check_rule: null
 **Symptom index:** you are querying `selfdev.sqlite` directly to answer a question about a QUEUE item
 (`#1234`), and you are about to write `WHERE id = 1234` — or you already did, and the answer looked
 plausible but was about something else.
+
+## First: WHICH `selfdev.sqlite` — the tree you are standing in
+
+Before the namespace question, settle the file. Every store is **untracked** (`.gitignore:2` `*.sqlite`;
+`git ls-files | grep -c sqlite` → `0`), so only the shared operator checkout has them:
+`/home/chexxor/Git/Durian-Pi/{selfdev,rig,session}.sqlite`. An **item worktree has no store at all** — a
+relative path in a command resolves against that worktree's cwd (`cli.mjs:161`:
+`resolve(CFG.DURIG_DB ?? "./rig.sqlite")`), and the fallback value comes from
+`durig.config.default.json:2` (`"DURIG_DB": "./rig.sqlite"`).
+
+Measured 2026-11-11 in the item worktree `item-6339` (forked from `main 35001c3a`), each line's `db` field
+being the discriminator, not the exit code:
+
+| command (in the worktree) | `db` it reports | exit | cause |
+|---|---|---|---|
+| `node cli.mjs status` | `…/item-6339/rig.sqlite` | 1 | `no_store` |
+| `DURIG_DB=./selfdev.sqlite node cli.mjs status` | `…/item-6339/selfdev.sqlite` | 1 | `no_store` |
+| with a worktree-local `durig.config.json` pinning `"DURIG_DB": "./selfdev.sqlite"` | `…/item-6339/selfdev.sqlite` | 1 | `no_store` |
+
+So "the rig is quiet" read from a worktree is a property of the **tree**, not of the rig (#6196). Run store
+work from the shared checkout, or name the absolute path (`--db /home/chexxor/Git/Durian-Pi/selfdev.sqlite`
+or `DURIG_DB=<abs>`), and write the path into the finding so the next reader knows which store the number
+came from.
 
 ## Impact
 The store holds SEVERAL id spaces in one file, and a bare integer matches more than one of them:
