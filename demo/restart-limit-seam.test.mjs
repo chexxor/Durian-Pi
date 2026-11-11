@@ -83,7 +83,11 @@ try {
     const others = ["src/broker.mjs", "src/rig.mjs", "src/driver.mjs", "src/readclient.mjs", "src/tui/durable/adapter.mjs"];
     return others.every((f) => !/restartLimit\s*[:=]/.test(readFileSync(new URL(`../${f}`, import.meta.url), "utf8")));
   })());
-
+  // A second OPEN site exists - the interactive TUI host. The honest assertion about it is that it invents
+  // NO value of its own (it inherits the library default). That is the residual the runbook names: a human
+  // at `cli.mjs tui` still gets 5. Seats do not go through it.
+  const adapterSrc = readFileSync(new URL("../src/tui/durable/adapter.mjs", import.meta.url), "utf8");
+  check("the TUI host passes settings through and defines no second value", /settings:\s*options\.settings/.test(adapterSrc) && !/restartLimit/.test(adapterSrc));
   /* ---- 5. never 0, never a silently-ignored knob ---- */
   check("the limit is a positive integer, not 0", Number.isInteger(SEAT_RESTART_LIMIT) && SEAT_RESTART_LIMIT >= 1, String(SEAT_RESTART_LIMIT));
   check("there is no config knob to set it back to 5 or 0", runControlSettings({ DURIG_RESTART_LIMIT: "9" }).restartLimit === 3, "the value is code, not configuration");
