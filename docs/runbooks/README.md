@@ -118,6 +118,20 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   `durig.config.json` is gitignored (`.gitignore:12`) so it exists only in the shared root - measured in an item
   worktree, a bare `node cli.mjs status` falls back to `./rig.sqlite` (`durig.config.default.json:2`), not to the
   rig the operator meant.
+- **Env-name fidelity is now a machine rule (#6335, 2026-11-11, tree `1dc05f8b`):** `tools/doc-integrity-guard.mjs`
+  scans the live instruction surfaces (`README.md`, `AGENTS.md`, `docs/QUICKSTART.md`, `docs/STATUS.md`,
+  `docs/FEATURES.md`, `docs/TUI-TESTING.md`, `docs/DELEGATE-CLOCKIN.md`, `docs/SELFDEV.md`, every runbook) and
+  HARD-fails on a command-shaped line that sets `DURIAN_PI_DB` for an entry point that does not read it. Two named
+  exceptions, both measured: a line naming `clockin` (that entry point resolves `DURIAN_PI_DB` first) and a line that
+  REPORTS the outcome of running the dead name (`→`, `no_store`, `ignored`, `silently`, `fallback`) — those are evidence
+  about the name, not an instruction to use it. `docs/NEXT-ARCHIVE.md` and `docs/ROADMAP.md` are out of scope: they are
+  dated history, not commands to run. **Verify it fires, don't assume it:** `node demo/doc-integrity-env-name.test.mjs`
+  → exit 0 (it drives a stale fixture, the clockin fixture and the real tree); `node tools/doc-integrity-guard.mjs`
+  → `found 0 dead-name command(s)`, exit 0. The first run of the rule on this tree found FIVE live stale commands
+  (`docs/QUICKSTART.md` ×2, `docs/runbooks/attach-a-gate.md` ×2, `docs/runbooks/verifier-leg-unfunded.md` ×1) six days
+  after the #5911 sweep — which is the rot a hand sweep cannot prevent. The rule judges TEXT only; a shell that still
+  carries the dead name at runtime is a different check (`tools/broker-serve.mjs`'s `legacy-env-set`, which is a NOTE
+  and does not affect its exit code).
 
 ## Agent execution (from the research report)
 
