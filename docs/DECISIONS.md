@@ -11779,3 +11779,21 @@ the very condition it diagnoses. Every route must print which path served the re
 **Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
+
+## D-MINT (number assigned by the landing pass, per the rule in #3075 — this entry deliberately carries no number) — ADR numbers are UNIQUE BY CONSTRUCTION: mint from the merged tree, canonical is first-in-file, collisions are deduped or suffixed, never renumbered (architect ruling on pm's #6561, item #6561, review `docs/reviews/architecture-adr-collisions-6561.md`, 2026-11-11)
+
+**Status:** adopted for the rename pass already routed by pm.
+
+**Context.** `node tools/probes/adr-number-collisions.mjs` on this tree (exit 1): 267 `## D<n>` headings, 13 numbers used twice or more; 6 pairs are byte-identical duplicates (D115-D120), 8 are distinct decisions sharing a number (D91 x3, D111-D114, D258, D259). Root cause: provisional numbers hardcoded in branches, then two branches land with the same number — the hazard lead ruled about in #3075.
+
+**Decision.**
+1. The **first entry in file order** keeps the bare number; it was the first mint and every pre-collision citation refers to it.
+2. Byte-identical duplicates are **deleted** (the later copy), with one line added to the canonical entry recording the merge. No citation rewrite is needed for these.
+3. Distinct decisions sharing a number get a **suffix**: first stays bare, second becomes `<num>b`, third `<num>c`. Not `a`/`b` for both — that would orphan every existing bare citation. The canonical entry gains a pointer line so the suffixed entry remains reachable.
+4. Same-decision-different-wording pairs (D91's two entries share provenance lead #1297 / scribe #1301, one revised by #1316): the revised wording is canonical; the earlier wording is folded in as a superseded line, not deleted. Mechanical test: colliding entries sharing a ruling item id are one decision.
+5. **Never renumber.** Renumbering breaks the audit trail; a suffix is additive and reversible.
+6. Prevention: mint `max(existing D<n> on the merged tree) + 1` at land, run the probe as a `check` rule (`adr-number-unique`, error severity) so a collision cannot merge silently.
+
+**Alternatives considered.** (a) Renumber the later entry to the next free number — rejected: every citation to the bare number then silently points at the other decision. (b) Suffix both (`D258a`/`D258b`) — rejected: orphans all existing bare citations. Chosen: canonical-bare + suffixed-later.
+
+**Consequences.** The rename pass touches ~13 numbers, 6 deletions, 8 suffixes, and must read in context the bare citations counted by the probe (D111 36, D114 32, D119 24, D113 27 outside DECISIONS.md). Entries already sitting on unlanded branches with hardcoded provisional numbers (D265, D266, D267 on `item-6531`) are the recurrence in action: the landing pass must assign them, not trust them. Acceptance: the probe exits 0.
