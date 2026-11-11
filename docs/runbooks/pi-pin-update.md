@@ -162,6 +162,21 @@ node demo/read-no-create-store.test.mjs
 node scripts/test.mjs --area broker             # the subscribeCommits deferral lands here
 ```
 
+When a run is red, classify it before attributing it. The runner's `--- <file> (exit N) ---` blocks are
+machine-readable, so a red set is a set of CAUSES, not a list of filenames:
+
+```bash
+node scripts/test.mjs --all --jobs 8 > .spike/suite.out 2> .spike/suite.err
+node tools/suite-signature.mjs .spike/suite.err    # exit 0 with reds, 1 with none, 2 on bad usage
+```
+
+Measured 2026-11-10 on a real capture from an un-linked worktree: **22 reds, 18 distinct causes**, the largest
+group being four broker demos sharing `SessionFailed at util.js:56:69`. Merging those four is correct. Merging
+eight different causes into one line is what the scratch classifier in `.spike/pin-update/signature-classify.mjs`
+did during the 1.5.1 move — its key was the first line matching `AssertionError|Error:|TIMEOUT`, else
+`"(no stderr line)"`. `demo/suite-signature.test.mjs` runs the promoted tool and that predecessor against the
+same capture and asserts the tool separates more causes than the predecessor did.
+
 plus the broker/liveness set (`broker`, `broker-liveness`, `broker-intent-wake`, `broker-wake-return`,
 `broker-cooldown-revisit`, `scheduler`) and the TUI set (`tui-conversation-header`, `viewmodel`, `chatlog`,
 `streamview`, `watchview`). Name demos that exist: the delta doc's "`chatview`" is **not** a demo in `demo/` — the
@@ -171,6 +186,20 @@ at the previous pin/tree **in the same load window** before calling it the branc
 
 **5. Accommodate, don't just bump.** The symbol migration and the feature ledger are delta §4/§5; a pin bump that
 leaves `documentState`/`viewState`/`AgentEvent*`/pi-ai's `Type`/`checkpointWhen` un-migrated is a half-done change.
+The sweep is a tool now, not a scratch file (measured 2026-11-10, #6176):
+
+```bash
+node tools/pi-symbol-migration.mjs --dry-run --json   # what would change, and what needs a human
+node tools/pi-symbol-migration.mjs                    # write it
+```
+
+`snapshot()` returns the VALUE, not a `DocumentState` wrapper, so the rename is only half of it: every `.value`
+read on a snapshot has to go too. The tool scans `src/`, `cli.mjs`, `scripts/`, `tools/`, `extensions/`, `demo/`
+for `documentState`, and prints `residue` — lines its regexes cannot reach (a nested call) — and exits 1, so a
+half-migrated tree cannot be reported as done. Done means `grep -rlE documentState src cli.mjs` returns empty.
+`demo/pi-symbol-migration.test.mjs` pins the four shapes plus the negative control: a `.value` belonging to
+something other than a snapshot must survive untouched.
+
 Two config decisions must be **in config and named by a demo**, never in prose:
 
 - `settings.restartLimit = 3` — never 0, never an unconfigured default (1.4.0 parks a task after repeated
@@ -219,7 +248,8 @@ write half is verified by the stage it is first used in (#5095/#5096) — then b
   v2 store. It is how you get into the lockout, not out of it.
 - **Suite red at a boundary:** re-run at the previous pin in the same load window (#5080) and name which tree your
   verdict came from; the known load-sensitive flake is `broker-stop-audit` (#5056) — re-run it standalone before
-  chasing it.
+  chasing it. Group the reds by cause before writing the brief (`node tools/suite-signature.mjs <capture>`):
+  "8 pre-existing reds" is a claim nobody can check; "18 causes, four of them one storage error" is.
 - **A tool result shows `[redacted by durian-pi: secret-shaped value]`** because a 40-hex sha passed through it:
   print shas as 8-char prefixes (`${sha:0:8}`) or quote them in report text — [tool-result-redacted.md](tool-result-redacted.md).
 - Escalate a store that will not open under **either** build to [store-corruption-recovery.md](store-corruption-recovery.md).

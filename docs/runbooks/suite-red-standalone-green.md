@@ -65,12 +65,29 @@ Read the exit code the report prints, and classify it:
 2. Compare the two exit codes (alone vs in the gate). If the gate says TIMEOUT and the file exits 0,
    the demo left a child alive — fix the demo's cleanup, not the timeout.
 3. Quote the `full output:` path in the ticket, not the tail.
+4. **Group the reds by cause before you write anything down.** The runner's `--- <file> (exit N) ---`
+   blocks are machine-readable, so a red set is a set of causes, not a list of filenames:
+
+```bash
+node scripts/test.mjs --all --jobs 8 > .spike/suite.out 2> .spike/suite.err
+node tools/suite-signature.mjs .spike/suite.err    # exit 0 with reds, 1 with none, 2 on bad usage
+```
+
+Measured 2026-11-10 on a real capture from an un-linked worktree: **22 reds, 18 distinct causes**; the largest
+group was four broker demos sharing `SessionFailed at util.js:56:69` ("Session failed after a storage error").
+Merging those four into one line is correct. The scratch classifier used during the pi 1.5.1 move merged eight
+different causes into one line — its key was the first line matching `AssertionError|Error:|TIMEOUT`, else
+`"(no stderr line)"` — and the resulting brief said "8 pre-existing reds", which no one could check. The tool
+prints a `MERGED:` note whenever it groups, so a merge is always a claim you can dispute. It also distinguishes
+what the old one could not: a killed test reports `exit null` (SIGKILL has no code), and a thrown class that
+does not end in "Error" (`SessionFailed`) is still a named cause.
 
 ## Verify
 ```bash
 node demo/test-runner-concurrency.test.mjs   # exit 0, prints TEST-RUNNER-CONCURRENCY TEST PASS
+node demo/suite-signature.test.mjs           # exit 0, prints SUITE-SIGNATURE TEST PASS
 ```
-Measured 2026-11-10: exit 0. And the verdict change is provably verdict-neutral on real failures:
+Measured 2026-11-10: both exit 0. And the verdict change is provably verdict-neutral on real failures:
 `node scripts/test.mjs --all` → exit 1, `261/282 passed`, the same 21 reds before and after.
 
 ## If it fails
@@ -86,4 +103,7 @@ path; it is not fixed here.
 ## Evidence
 Item 6104, 2026-11-10. Old-vs-new pair, one command each: `node scripts/old-test.mjs --area leak
 --timeout 5000` → exit 1, `TIMEOUT demo/linger.test.mjs (60.1s)`; `node scripts/test.mjs --area leak
---timeout 5000` → exit 0, `PASS demo/linger.test.mjs (0.0s)`.
+--timeout 5000` → exit 0, `PASS demo/linger.test.mjs (0.0s)`. The cause classifier is #6167/#6176: it was
+built after the 1.5.1 pin move flattened eight distinct failures into one bucket, and `demo/suite-signature.test.mjs
+runs it and the predecessor on the same nine-fixture capture (9 signatures vs 6 buckets, 4 of them in the
+catch-all).
