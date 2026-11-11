@@ -1,11 +1,11 @@
 ---
 runbook: prepare-workspace-refused
-symptom: "prepare_workspace returned PREPARE_WORKSPACE_ERROR, or refused with 'refusing to create a worktree on branch'"
+symptom: "prepare_workspace returned PREPARE_WORKSPACE_ERROR, or refused with 'refusing to create a worktree on branch'; or a write/shell call is refused with 'the guard could not determine which tree this call runs in' (#6181)"
 writes: false
 precondition: "read-only"        # the refusal is a read of the tree; the remedies below are the writing part
-last_verified: 2026-10-21
+last_verified: 2026-11-11
 verified_by: impl
-evidence: "impl-item-3807 (the base-not-honoured refusal); demo/prepare-workspace-create-base.test.mjs"
+evidence: "impl-item-3807 (the base-not-honoured refusal); demo/prepare-workspace-create-base.test.mjs; #6181: node demo/seatguard-degraded-root.test.mjs exit 0 on branch item-6181, exit 1 (10 failed checks) running the SAME file against main 35001c3a in a scratch worktree"
 check_rule: null
 ---
 
@@ -92,12 +92,33 @@ the first sha, not the base you asked for.
 5. `which does not resolve to a commit here`: the `base=` value is not a branch, tag or commit in this
    repo. Re-read it (`git -C "$REPO" branch --all`), or drop `base` to accept the branch as it is.
 
+## A write or shell call refused with "the guard could not determine which tree this runs in" (#6181)
+
+That refusal means the guard could not read the seat's agent cwd — usually a store read that failed
+(`SQLITE_BUSY`, a locked DB) — and since #6181 it **denies** instead of falling back to
+`DURIG_SEAT_ROOT` / `process.cwd()`, which is the shared checkout. Before that, a degraded read made
+the boundary check classify the write against the shared tree, and "inside the root" read as
+"allowed".
+
+What to do, in order:
+1. **Run `prepare_workspace` for the item you hold** — the remedy the refusal names, and the only way
+   to re-establish a root the guard can read.
+2. If the store is locked, the broker may be running: `resume-while-broker-runs.md` and
+   `store-corruption-recovery.md` before retrying.
+3. Inspecting the rig is not blocked: a bare `node cli.mjs status` or `node cli.mjs queue` still runs
+   under a broken read (#4790's idle-seat hatch). A chain, a pipe or a redirect is not.
+
+Where the rule stops, pinned by the demo: a session whose cwd READS fine is untouched; a session with
+NO recorded cwd (a seat that never prepared a workspace) is #3961's "not our case" and is not denied;
+only a read that FAILS is.
+
 ## Verify
 
 The refusal contract is pinned by a demo; run it, and expect exit 0:
 
 ```bash
 node demo/prepare-workspace-create-base.test.mjs; echo "exit=$?"
+node demo/seatguard-degraded-root.test.mjs;     echo "exit=$?"   # #6181: the denial, its rule/decision/remedy wording, the read-verb hatch, and the three states that stay distinct
 ```
 
 It asserts the four facts that matter: an unhonourable base is REFUSED with both shas named and
