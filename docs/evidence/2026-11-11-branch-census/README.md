@@ -31,3 +31,16 @@ whose status is already `done`/`cancelled`/`deferred`, and none of them is redun
 the work-item lifecycle is meant to remove: an item closes, its branch stays. A prune pass cannot fix it
 — deleting them destroys unlanded work — so they are listed as **OPEN** in the ledger, and the landing
 verb (task-4) is what makes them disappear.
+
+**Coverage proof, run at `aa1771e5`.** `timeout 240 node tools/branch-census.mjs` prints
+`unaccounted refs (0) — not on main, not a seat root, no ledger row`. Before the rows were appended it
+printed 2 (`item-6344`, `item-6369`, both minted by the fleet *during* the pass). At the pass boundary
+the 77-ref picture was: 45 clean-unmerged-terminal (all **OPEN** in the ledger), 10 seat roots,
+7 dirty trees, 7 refs conflicting with `main`, 9 refs protected by an existing ledger ruling,
+1 locked, 1 merged-and-removed.
+
+**Counts are point-in-time.** Between two runs of the same command the fleet minted refs 77 → 80 and
+worktrees 69 → 74. Any prune plan must be regenerated in the same breath as it is executed.
+
+**Suite at this HEAD:** `node scripts/test.mjs --all --jobs 4` → **300/300 passed in 119.8 s**, exit 0
+(`.spike/suite-task1.out`).
