@@ -37,7 +37,7 @@ A queue item is a document in `RigQueue` (`src/rig.mjs`) with the fields listed 
 ## 2. The state machine
 
 Six statuses. **Terminal** means `done` **or** `cancelled` (both are invisible to the driver and to any
-"non-terminal work" view — `isTerminalItem`, `src/rig.mjs:181`).
+"non-terminal work" view — `isTerminalItem`, `src/rig.mjs:275`).
 
 ```
                  send_work
@@ -71,7 +71,7 @@ Six statuses. **Terminal** means `done` **or** `cancelled` (both are invisible t
 | `claimed` | `deferred` | `defer_work` | the claimer (sets `question` + `deferredTo`) |
 | `deferred` | `claimed` | `resume_work` | the claimer (once answered) |
 | `claimed` | `held` | `hold_work` | the claimer |
-| `held` | `queued` | `release_work` | **the sender or the recipient** (`src/rig.mjs:783`) |
+| `held` | `queued` | `release_work` | the sender, the recipient, **or a coordinating seat** (a seat that declares no working capability) — the latter must carry a `reason`, and the release is REFUSED if the row's gate names a cancelled row (`src/rig.mjs:1293-1347`) |
 | any non-terminal | `cancelled` | `cancel_work` | the sender or the recipient |
 
 Three facts a reader must internalise:
@@ -99,7 +99,36 @@ So a gate discovered *after* a row is minted has nowhere to go. Writing it into 
 `hold_work` is recipient-only (`src/rig.mjs:1212`) while `release_work`/`cancel_work` are party-wide
 (`:1257`, `:1339`), so a seat can cancel its own row but cannot park it; and `revise_work`/`cancel_work`
 check authority **before** terminality, so a `done` row answers "not yours to revise" — the misreading
-`release_work` fixed for itself in #5778 (`src/rig.mjs:1254`).
+`release_work` fixed for itself in #5778 (`src/rig.mjs:1316`).
+
+4. **A cancellation mints a second row, and that row is live.** `cancelItem` (`src/rig.mjs:204-233`) sets
+   the work row to `cancelled`, then `enqueueItem`s a notice to the other party (`src/rig.mjs:217-224`):
+   subject `CANCELLED #<id>: <subject>`, `notice: true`, status `queued`. `cancelled` is terminal **for the
+   work row only**; the message about it wakes its recipient and can be claimed (#3470,
+   `demo/cancel-notifies-sender.test.mjs`, exit 0). Completing a notice emits a `DONE #<id>` notice
+   (`isDoneNotice`, `src/rig.mjs:238`; `isCancellationNotice`, `:247`), and a notice can never spawn a
+   notice (`isNoticeItem`, `:258`). Read a row whose subject starts `CANCELLED #<id>:` as a MESSAGE about
+   another row: it moves `queued → claimed → done` like any row, and the terminal state lives in the id
+   named in the subject, not in the notice itself.
+
+**Claiming a `cancelled` row: what the code does, and what was actually seen (#6251, routed #6342).** Both
+claim paths require `status === "queued"` — oldest-first (`src/rig.mjs:351`) and by-id (`src/rig.mjs:856`) —
+and the wake gate uses the same predicate (`src/driver.mjs:134`), so a `cancelled` row is not a candidate at
+all. Measured on `main 35001c3a` on 2026-11-11:
+
+```bash
+node --input-type=module -e "import {selectOldestWorkable} from './src/rig.mjs';
+  const items=[{id:6092,to:'scribe',status:'cancelled',subject:'the dropped work'},
+               {id:6093,to:'scribe',status:'queued',subject:'CANCELLED #6251: notice'}];
+  console.log(selectOldestWorkable(items,'scribe'))"
+```
+
+→ exit 0: the pick is `#6093`; the `cancelled` row appears in neither the pick nor `skipped` (it is filtered
+before the verdict). `demo/curate.test.mjs` (exit 0) asserts `isTerminalItem({status:"cancelled"}) === true`
+and that "a cancelled item never wakes its seat". **Not proven here:** `#6092` and `#6093` themselves —
+this worktree carries no store, so their `transitions` cannot be read. The only route in the code by which
+a row *labelled* `CANCELLED` is claimable is the notice path above, so that is the shape impl (#6342) must
+confirm against the store before the defect is written as "terminal rows can be claimed".
 
 ## 3. Why `held` exists at all (and why it is the orphan shape)
 
