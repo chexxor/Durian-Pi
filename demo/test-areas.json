@@ -58,6 +58,7 @@
       "demo/instruction-files.test.mjs",
       "demo/notices.test.mjs",
       "demo/note-census.test.mjs",
+      "demo/note-wake-seed.test.mjs",
       "demo/optimizer.test.mjs",
       "demo/peekqueue.test.mjs",
       "demo/persistence.test.mjs",
