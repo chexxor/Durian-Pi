@@ -40,9 +40,14 @@ const ENVIRONMENTAL_STDERR_RE = /STATUS_COMMITMENT_LIMIT|C000012D|commitment lim
  *
  * @returns {{kind:"pass"|"environmental"|"fail", code:number|null, reason:string}}
  */
-export function classifyDemoResult({ exitCode, signal = null, stderr = "" } = {}) {
+export function classifyDemoResult({ exitCode, signal = null, stderr = "", timedOut = false } = {}) {
   const code = Number.isFinite(exitCode) ? Number(exitCode) : null;
   if (code === 0) return { kind: "pass", code: 0, reason: "exit 0" };
+  // A demo the RUNNER killed because it hung is a real failure, not an OS abort. Without this
+  // clause the SIGKILL the runner sends hits ENVIRONMENTAL_SIGNALS below and a hung demo is read
+  // as "environmentally blocked" - which says "retry when the box recovers" when the truth is
+  // "this demo does not terminate" (#6268).
+  if (timedOut) return { kind: "fail", code: code ?? 124, reason: `timed out (killed at the suite timeout, exit ${code ?? 124})` };
   if (signal && ENVIRONMENTAL_SIGNALS.has(signal)) {
     return { kind: "environmental", code, reason: `aborted by ${signal}` };
   }
