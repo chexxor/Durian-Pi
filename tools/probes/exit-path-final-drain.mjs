@@ -17,7 +17,9 @@
          broker must NOT apply it.
 
    No live store is opened. Scratch dirs are created in the seat root and removed.
-   Run: node tools/probes/exit-path-final-drain.mjs   (exit 0; the FAIL lines are the findings)
+   Run: node tools/probes/exit-path-final-drain.mjs   exits 1 while any assertion fails: it is a
+   gate, not a report. A probe that prints FAIL lines and exits 0 cannot be wired into `check`, so
+   the exit path would look verified while nothing re-tests it.
 */
 import { spawn } from "node:child_process";
 import { mkdtempSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -61,6 +63,7 @@ async function waitForLog(db, pattern, ms) {
 
 const scratch = mkdtempSync(join(process.cwd(), "probe-exit-drain-"));
 const db = join(scratch, "store.sqlite");
+let failures = 0;
 
 try {
 	console.log("probe: broker exit path and the spool  tree:", process.cwd());
@@ -105,11 +108,11 @@ try {
 	const afterReplay = dirOf(db, "").length;
 	const replayResults = dirOf(db, ".out").length;
 	console.log(`  replay arm: after a second broker, inbox=${afterReplay} dead-lettered=${dirOf(db, ".error").length} result rows=${replayResults}`);
-	check("A3b residue is terminal at exit (the next run does not replay it)", residue.length === 0 ? true : afterReplay > 0,
-		residue.length > 0 && afterReplay === 0 ? `the exit left ${residue.length} file(s) and the next run consumed them: requeued, not dead-lettered` : "");
+	check("A3b the exit accounted for every intent (nothing is handed to the next run)", residue.length === 0 && deadLettered.length + resultRows.length >= beforeStop,
+		`intents before stop=${beforeStop}, dead-lettered=${deadLettered.length}, result rows=${resultRows.length}, residue=${residue.length}; the second broker consumed ${afterReplay === 0 ? beforeStop : 0} file(s) and produced ${replayResults} result row(s) - a verdict the original caller is no longer waiting for`);
+	check("A4 the exit line reports the residue and its class", /residue=/.test(exitLine), exitLine);
 
-	let failures = 0;
-	for (const r of rows) {
+		for (const r of rows) {
 		console.log(`  ${r.ok ? "PASS" : "FAIL"}  ${r.label}${r.ok ? "" : `  -- ${r.detail}`}`);
 		if (!r.ok) failures += 1;
 	}
@@ -118,4 +121,4 @@ try {
 	rmSync(scratch, { recursive: true, force: true });
 	console.log("scratch removed:", readdirSync(process.cwd()).filter((n) => n.startsWith("probe-exit-drain")).length === 0 ? "yes" : "NO");
 }
-process.exit(0);
+process.exit(failures ? 1 : 0);
