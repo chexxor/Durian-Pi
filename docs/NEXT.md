@@ -1,10 +1,10 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-11T04:5xZ (delegate session **N29** — the **broker-restart + second landing pass**: four
-orphan `cli.mjs serve` processes reaped, the fleet's branches landed (`item-6114`, `item-6315`, `item-6516`; `main`
-= `7afd549c`), refs **42 → 34** and worktrees **35 → 28**, suite **299/299** (`--all --jobs 4`, 121.3 s). Nothing was
-pushed; the delegate claimed, completed or deferred no row. **Count refs/worktrees live** — the fleet mints them
-while you measure.)
+**Last update:** 2026-11-11T06:4xZ (delegate session **N30** — the **third landing pass + the parked-broker fix**: two
+more branches landed (`item-6118`, `item-6189`; `main` = `46cd5234`), refs **38 → 33** and worktrees **32 → 23**, suite
+**300/300** in **113.7 s** (`--all --jobs 4`, exit 0, unpiped), the parked broker reaped with `kill -TERM` and the
+fleet restarted (pid **2658110**). Nothing was pushed; the delegate claimed, completed or deferred no row.
+**Count refs/worktrees live** — the fleet mints them while you measure.)
 
 **Milestone this window worked** — **no 120 s silence, and Ctrl-C actually stops the verb (ROADMAP **314**,
 row **#6160**, decision **D262**)**. Baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
@@ -43,12 +43,10 @@ git branch --list; git worktree list | wc -l                          # COUNT IT
 node scripts/sync-pi.mjs --check                                     # pin dd30101cf tag v1.5.1, drift true
 ```
 
-**Broker status:** resident pid **2390935** (started 04:31Z, `--max-duration 1800`), `status --json` → `{"state":"up","hbAgeMs":172,"passAgeMs":172}`. **The bound is not a hard bound**: a broker whose wake loop has exited parks in the
-unbounded exit drain (`src/broker.mjs:2218 await h.waitForIdle(context)`) and `serve --stop` is invisible to it — two
-brokers (pids 2066240, 2201485) each lingered 33+ min past `--max-duration` until `kill -TERM <pid>` fired the force
-fallback (`cli.mjs:2247`, `EXIT reason=deadline passes=-`). Preflight **blocks falsely** on local2: the 20 s probe at
-`tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0
-blocking) and verify seats actually generate. Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 1800`.
+**Broker status:** resident pid **2658110** (`--max-duration 3600`, started 06:35Z): `status --json` 6.0 s, `queue --json --no-body` 2.1 s, `watch --once --json` 2.0 s, `ps` 1.3 s — all exit 0. **The bound is not a hard bound**: a broker whose wake loop broke at `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1856`) with **no stop request**, so `graceExpired()` (`:1713`) is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded leg, `:2216 settleWithin(...)`, fires only on `deadline`).
+The force timer (`cli.mjs:2247`) arms only in `onSignal`, so `serve --stop` is invisible to a parked broker — three this window (pids 2066240, 2201485, 2390935) lingered 34–93 min past their bound until `kill -TERM <pid>` fired the fallback (`EXIT reason=deadline passes=-`).
+Preflight **blocks falsely** on local2: the 20 s probe at `tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0 blocking) and verify seats actually generate.
+Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`.
 Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
 
 **What the cleanup left** (re-measured at `f3ffce0e`, `cli.mjs worktree audit --json`, 1.1 s) — 25 worktrees, **0 locked**:
@@ -101,9 +99,10 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live, re-count before trusting): refs **34** (7 conflicted, 2 landable), worktrees
-**30**, `main` `b6e8b851`, queue census **6,571 rows** — 4,437 done / 912 cancelled / 434 held / 536 deferred / 243
-queued / 9 claimed. `cli.mjs worktree audit --json` → total 30: seat-root 11, non-item 2, live 6, dirty 6, reapable 5.
+**State at clock-out** (measured live, re-count before trusting): refs **33** (7 conflicted, all routed to `pm`),
+worktrees **23**, `main` `46cd5234`, queue census **6,581 rows** — 4,444 done / 912 cancelled / 434 held / 536 deferred
+/ 246 queued / 9 claimed. Nothing is landable by a delegate: every mergeable ref is either already an ancestor of
+`main` or held by a live seat root.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own

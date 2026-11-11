@@ -575,6 +575,21 @@ grep INTENT selfdev.sqlite.broker.log | tail -1          # the spool drains only
 check), the honest options are to wait for the runs to settle, or to accept the abort. This delegate chose to wait
 and report, not to kill.
 
+**The third shape: a broker parked by its own `--max-duration` (measured 2026-11-11, Linux, node v24.22.1, pid 2390935).**
+A bound is not a stop request: the loop breaks with `stoppedBy = "max-duration"` (`src/broker.mjs:1856`), `graceExpired()`
+(`:1713`) is false because no stop file/signal ever landed, so the drain takes the **unbounded** `await h.waitForIdle(context)`
+(`:2218`) while the bounded leg (`:2216`) never runs. The force timer (`cli.mjs:2247`) arms only on a signal. So the process
+sits — heartbeat fresh, no PASS — for as long as a seat run refuses to settle (93 min measured here), and `serve --stop`
+can do nothing about it. Prove it in two independent reads, then reap it:
+```bash
+node tools/broker-serve.mjs --status                       # "degraded pid=... heartbeat 8s ago last pass 5298s ago"
+timeout 30 node cli.mjs serve --stop                       # expect: "did not exit within the grace"
+kill -TERM <pid>; sleep 8; ps -o pid,etime -p <pid>        # gone
+grep EXIT <db>.broker.log | tail -1                        # EXIT pid=<pid> reason=deadline passes=-
+ls <db>.broker.json                                        # must be absent — the state file is cleared on exit
+```
+Note `passes=-` on that line is the CLI-side force path writing a hard-coded value; do not read it as a pass count (ROADMAP 328).
+
 ## The ladder, exercised successfully at 2026-11-08 23:30Z
 
 Sequence that worked on Linux/Fedora 45, node v24.22.1, with one seat mid-run:
