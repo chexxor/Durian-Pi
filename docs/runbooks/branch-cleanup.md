@@ -33,6 +33,18 @@ authoritative for each question) is `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md`; thi
 procedure.
 
 ## Diagnose (read-only)
+
+**Step 0a — run the census, not a `git branch` loop.** `timeout 240 node tools/branch-census.mjs --plan`
+(`tools/branch-census.mjs`) joins `worktree audit`, the queue, per-ref git facts and **this ledger**, then
+prints the tally and the exact prune commands. Measured 2026-11-11 at `e01e9256` (Linux, Fedora Linux 45,
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): 77 refs / 69 worktrees in ~25-35 s, plan = 1.
+It encodes two things a hand-rolled loop gets wrong: (i) it **will not plan a delete for a ref with a KEEP
+row in `docs/DISPOSITIONS.md`** — a reverted merge is an ancestor of `main`, so `git branch -d` deletes a
+ref the ledger says to keep (a delegate pass did exactly this to `item-6063/6064/6066` on 2026-11-11 and
+reversed it with `git branch <name> <sha>`); (ii) it distinguishes "merged" from "content already in
+`main`" by comparing `git merge-tree --write-tree main <ref>` against `main`'s tree, so a branch that adds
+nothing net is separable from one that carries unlanded work.
+
 **Step 0 — the ledger first.** Before re-deriving a disposition for ANY branch,
 check `docs/DISPOSITIONS.md` FIRST: a branch that already has a row there is
 **not re-litigated** — it is **re-listed with its existing disposition**
@@ -183,7 +195,10 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
 5. A **held** merged branch cannot be pruned until its worktree is released, per `leaked-worktrees.md`.
    Three cases: **(a) clean + unlocked + terminal** → `git worktree remove <wt>` then `git branch -d`;
    **(b) clean but `locked`** → `git worktree unlock <wt>` → remove → `-d`, only when the item is
-   terminal (otherwise the lock means "in use" — keep it); **(c) dirty** → keep. `leaked-worktrees.md`
+   terminal (otherwise the lock means "in use" — keep it). **Which lock?** `git worktree remove` refuses a
+   *git*-locked tree with `fatal: cannot remove a locked working tree` (exit 128); `cli.mjs worktree audit`'
+   s `locked` field is the **rig's run lock**, a different lock — measured 2026-11-11, `item-5912` is
+   git-locked while the audit reports it unlocked. **(c) dirty** → keep. `leaked-worktrees.md`
    § "Reclaiming a merged item-branch pinned by a verify worktree" covers the qa `verify-*` tree case.
    **When (c) is dirty and the branch IS merged, the operator-approved resolution is to RELOCATE the
    worktree out-of-tree** (`git worktree move` to `../pi-opendurig.worktrees/`, then `switch --detach`,
