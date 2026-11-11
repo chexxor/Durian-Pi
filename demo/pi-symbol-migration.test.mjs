@@ -101,12 +101,22 @@ assert.equal(report.residue.length, 1, "exactly one file needs a human");
 assert.match(report.residue[0].file, /nested\.mjs/, "and it is the nested one");
 
 // Nothing left to rewrite, nothing left to read: exit 0, and the scan finds nothing to scan.
-writeFileSync(join(dir, "clean.mjs"), 'const harness = { snapshot: async () => ({}) };\n');
-writeFileSync(join(dir, "held.mjs"), "const c = await input.read.snapshot(Constitution, id, ctx);\nif (c) return c.text;\n");
-writeFileSync(join(dir, "nested.mjs"), "const v = await sess.snapshot(getDoc(doc), ctx); // unwrapped by hand\n");
+writeFileSync(join(dir, "clean.mjs"), "const harness = { snapshot: async () => ({}) };\n");
+writeFileSync(
+	join(dir, "held.mjs"),
+	"const c = await input.read.snapshot(Constitution, id, ctx);\nif (c) return c.text;\n",
+);
+writeFileSync(
+	join(dir, "nested.mjs"),
+	"const v = await sess.snapshot(getDoc(doc), ctx); // unwrapped by hand\n",
+);
 const cleanOut = run(["--root", ".", "--dirs", ".", "--dry-run", "--json"]);
 const cleanReport = JSON.parse(cleanOut);
-assert.equal(cleanReport.scanned, 0, "a tree with no documentState scans zero files - the tool does not invent work");
+assert.equal(
+	cleanReport.scanned,
+	0,
+	"a tree with no documentState scans zero files - the tool does not invent work",
+);
 assert.equal(cleanReport.residue.length, 0, "the clean tree has no residue");
 assert.equal(cleanReport.changed, 0, "and a file already migrated is not counted as changed");
 
@@ -115,7 +125,10 @@ assert.equal(cleanReport.changed, 0, "and a file already migrated is not counted
 execFileSync(process.execPath, [TOOL, "--root", ".", "--dirs", "."], { cwd: dir });
 let stillOld = "";
 try {
-	stillOld = execFileSync("grep", ["-rlE", "documentState", ".", "--include=*.mjs"], { cwd: dir, encoding: "utf8" });
+	stillOld = execFileSync("grep", ["-rlE", "documentState", ".", "--include=*.mjs"], {
+		cwd: dir,
+		encoding: "utf8",
+	});
 } catch (err) {
 	// grep's "no matches" exit is 1; anything else is a real error.
 	if ((err.status ?? err.code) !== 1) throw err;
