@@ -75,20 +75,43 @@ export function signatureOf(block) {
 	}
 
 	let site = null;
+	const frames = [];
 	for (const line of body) {
 		if (!/^\s*at\s/.test(line)) continue;
 		// Two shapes: `at file://path:1:2` and `at fnName (file://path:1:2)`. Taking only the first shape
 		// means the site of a real throw is lost, and the signature is weaker than it needs to be.
-		const after = line.trim().slice(3).trim();
-		const target = after.includes("(") ? after.slice(after.indexOf("(") + 1).replace(/\)+$/, "") : after;
+		const after = line
+			.trim()
+			.slice(3)
+			.trim()
+			.replace(/[)]+$/, "")
+			.replace(/\{\s*$/, "");
+		const target = after.includes("(")
+			? after.slice(after.indexOf("(") + 1).replace(/\)+$/, "")
+			: after;
 		const m = target.match(/^(?:file:\/\/)?(\S+?)(?::(\d+):(\d+))?$/);
-		if (m) {
-			const file = (m[1] || "").split("/").pop();
-			site = m[2] ? `${file}:${m[2]}:${m[3]}` : file;
-			break;
+		if (m) frames.push({ file: (m[1] || "").split("/").pop(), pos: m[2] ? `${m[2]}:${m[3]}` : "" });
+	}
+	// Prefer the frame that IS this demo: the top frame of a truncated capture is often node's own loader,
+	// which names a site but not the one a human needs.
+	const stem = (block.file || "").split("/").pop();
+	const own = frames.find((f) => f.file === stem);
+	if (own) site = own.pos ? `${own.file}:${own.pos}` : own.file;
+	else if (frames.length)
+		site = frames[0].pos ? `${frames[0].file}:${frames[0].pos}` : frames[0].file;
+
+	if (!kind) {
+		// The runner shows head+tail of a long capture, so the error header is often cut and only the stack
+		// survives. Node's `code: 'ERR_…'` line is still there, and that is enough to name the cause.
+		for (const line of body) {
+			const c = line.trim().match(/^code: '([A-Z0-9_]+)'\s*,?$/);
+			if (c) {
+				kind = c[1] === "ERR_ASSERTION" ? "AssertionError[ERR_ASSERTION]" : `Error[${c[1]}]`;
+				message = "cause line cut by the runner's head+tail; named from the error code";
+				break;
+			}
 		}
 	}
-
 	if (!kind) kind = timedOut ? "TIMEOUT" : "UNCLASSIFIED";
 	if (!message) {
 		// Nothing recognisable. Do NOT throw it into a shared catch-all: name the row, and if it produced
@@ -128,7 +151,9 @@ export function classify(text) {
 		// Grouping is a judgement. Say out loud when it merged, so the next person can disagree with it
 		// instead of inheriting a flattened "N reds of type X" line.
 		if (g.members.length > 1)
-			g.notes.push(`MERGED: ${g.members.length} reds share this cause - confirm they really do before writing one line about them`);
+			g.notes.push(
+				`MERGED: ${g.members.length} reds share this cause - confirm they really do before writing one line about them`,
+			);
 	}
 	return {
 		blocks: blocks.length,
