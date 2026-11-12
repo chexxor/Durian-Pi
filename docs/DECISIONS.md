@@ -11923,3 +11923,24 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D292 — (provisional; re-mint at land from the MERGED tree) **the execution mode is a CLAIM minted at intake and a FACT derived at landing; the check rule judges the mismatch on claimed rows only, never the absence of a worktree, and `branchless` is not minted for an acceptance that names a file write until the delta sink exists** (architect review, item #7160, of build rows #7158 and #7159; host measured: Linux, kernel `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0; tree = branch `item-7160`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling before #7158 (mode minting) and #7159 (the `branchless-violation` check rule) are built. Whether the mode exists at all is `lead`'s (WORK-ITEM-MODEL §4 is PROVISIONAL); sequencing is `pm`'s.
+
+**Context.** `node tools/probes/branchless-check-baseline-7160.mjs` → **exit 1**. Measured: **140** worktrees (137 item-linked, **113 reapable**, 7 dirty, 2 locked) against **1564** non-terminal rows, of which only **11** are claimed and **11** have a live worktree; **1553** non-terminal rows have none, because `prepare_workspace` runs at CLAIM. `src/seattools.mjs:162` calls `prepareSeatWorkspace` **unconditionally**; `src/seatguard.mjs:129-141` refuses **every** shell command from a degraded cwd (the shared checkout), allowing only `prepare_workspace`; pm, lead and advocate currently sit in the shared checkout; the main worktree holds **2** uncommitted tracked changes, and this rig has already recorded that `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`, `docs/SELFDEV.md` 281). `executionMode`/`branchless` appear **0** times in src/ and scripts/. `isDocumentationPath` (src/landinggate.mjs:45) is applied at :98 - after the diff exists - so it cannot be the mint-time predicate §3 proposes.
+
+**Decision.**
+1. **Two names for one predicate.** `modeClaim` is minted at intake from kind + acceptance text (a prediction); `modeActual` is derived at landing from `changedPaths` (a fact). The check rule reports the mismatch. A prediction and a fact that share a name is how a rig starts trusting the prediction.
+2. **Population = claimed rows.** The rule never fires on unclaimed rows; measured, the naive version would report 1553 findings and be disabled, the #3539 outcome.
+3. **A violation is a contradiction, not an absence.** "Claimed branchless, produced code" and "claimed isolated, produced nothing" are findings; "no worktree exists" is not, because the tree is created at claim.
+4. **No `branchless` for a write-producing acceptance until the delta sink exists.** Today a branchless seat has no legal place to write: the guard refuses shell from the shared checkout. Minting the mode without the mechanism manufactures a deferral.
+5. **Residue is the honest metric.** Reapable worktrees per non-terminal row (113 / 1564 today) is the number the mode rule is supposed to move; anything else is inference about intent.
+
+**Options considered.** (A) mint + check as specified - rejected, measured 1553 findings at birth. (B) claim-vs-fact check on claimed rows - chosen: cheap, reversible, measures something true. (C) make `prepareSeatWorkspace` conditional first - rejected as the first step: isolation semantics cannot change before they are measurable, and the unconditional tree is what makes the current census tractable. **Trade-off accepted:** the mode field is advisory for a while and only the mismatch is enforced, in exchange for a rule that does not start red and does not stall seats.
+
+**Consequences.**
+- #7158's "one function called from both sites" is correct only if it returns different things at the two sites; the demo must assert the delta, not the equality of a mint-time guess with a post-diff fact.
+- #7159's baseline is 1553 unclaimed rows / 11 claimed rows / 113 reapable trees; it must print those before going live, exactly as pm required.
+- Dirty-tree attribution (registered as #3648) becomes the guard against the branchless cascade: a dirty main tree stops the broker and the fleet, so the finding must name the seat and item.
+- Falsifier: the probe exits 1 today; it exits 0 when the rule's population is claimed rows and the finding is a claim/fact mismatch.
