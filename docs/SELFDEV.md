@@ -4217,3 +4217,63 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `prune: merged into main` for 54 refs, and `tools/branch-census.mjs --plan` printed the exact
     `git worktree remove … && git branch -d …` lines that pruned them (refs 156→103, worktrees 147→94, one
     refusal: a LOCKED worktree, `git worktree unlock` first — never `remove -f -f`).
+
+## Operational pitfalls (delegate unattended-fleet pass 3, 2026-11-12 — numbered 304-311, continuing from 303; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+304. **A TERMINALLY STOPPED BROKER LOOKS COMPLETELY HEALTHY.** Measured 2026-11-12T21:17:21Z–21:21:44Z: the
+    broker's storage handle closed (`database is locked` → `SessionFailed` → closed store), the reopen cap
+    (3 attempts over ~35 s) was exhausted, and `src/broker.mjs` set `stoppedBy="session-failed"` and **broke
+    out of its loop** — but the `serve` process stayed alive serving `READ-DRAIN`, so ALL of these read
+    healthy: `ps -o etime` (42 min up), the keepalive heartbeat (`hb=8s`), the log's last `START` line, and
+    `status --json`. The ONLY symptom is `lastPass` climbing (185 s → 245 s → 305 s). Judge fleet liveness by
+    **`PASS n` advancing in the log**, never by the process, the heartbeat or a `START` line. The recovery
+    that works: `tools/broker-keepalive.mjs` prints `broker STRANDED (no pass Ns, N intent(s) waiting) ->
+    re-arming`, `kill -TERM`s the pid and starts a new one (observed: EXIT reason=deadline 21:21:44.987Z,
+    START pid=2808072 21:21:46.784Z, first `PASS 1` 0.6 s later).
+305. **SQLITE_BUSY at pi-durable's 5 s default is a FLEET-OUTAGE, not a slow read.** The 750 MB store can
+    hold a colliding write longer than 5 s (`DEFAULT_BUSY_TIMEOUT_MS` in
+    `@earendil-works/chord/dist/sqlite/node.js`), and ONE `database is locked errcode=5` is enough to close
+    the Session and then kill the broker terminally (304). A lock is transient, so waiting is correct: both
+    product open sites now pass `STORE_BUSY_TIMEOUT_MS = 30_000` (`src/readclient.mjs`, imported by
+    `cli.mjs openStore()`, which is BOTH the harness's connection and the probe's) and the read-only open
+    passes `timeout` to `DatabaseSync` so a contended `status` read cannot bounce onto the write-mode
+    fallback (the second-writer collision `readLocal` exists to avoid). Guarded by
+    `demo/store-busy-timeout.test.mjs` (static over every open site). Pitfall shape: a timeout default is a
+    policy, and an unexamined default is how one lock becomes a dead fleet.
+306. **"The escalation did not fire" and "the escalation fired and was deduped" are distinguishable only by a
+    timestamp.** Measured 21:2xZ: `grep -c 'escalation-deduped'` = **0** and `grep -c 'WAKE lead'` = 915.
+    The dedup signature is taken at the PUSH (correct, so a suppressed pass cannot mark it told), and
+    `SKIP lead reason=pending` preempts the branch — so `escalation-deduped` never appears while the seat is
+    busy. The proof that lead WAS escalated is a `WAKE lead` line after the code that escalates was
+    committed, nothing else. Do not conclude "armed but never fired" from the absence of a dedup line.
+307. **A dedup keyed on a STATIC set can nudge a seat exactly once, forever.** All 431 legacy human parks are
+    `why:"no-clock"` (they predate the lease), so `escalationSignature` is constant, lead is woken once and
+    every later pass is `escalation-deduped`. Nothing re-nudges a lead that wakes and then ignores it. Rows
+    with no clock are also invisible to `resumeBy`-based liveness, so the fix is an explicit delegate intent
+    with a per-CLASS rubric (431 row-level asks = 431 turns; 7 class rulings is the affordable shape), not
+    another wake.
+308. **Orphaned wake submissions accumulate and make `SKIP pending` look permanent.** Measured 21:2xZ: 1,220
+    `submissions` rows with `status='queued'` across every seat (lead 62, one conversation 270), growing
+    ~12/min; on impl, 189 queued ids span 501360–505963 while a LATER id is already `done` — so the pile is
+    not a FIFO backlog, it is never-delivered wake bodies. They are inert for scheduling (`advancingConvIds`
+    ignores stale rows, #4170) but they grow the store and dirty every reading. Detect: count by
+    `conversation_id` where `status='queued'`; do NOT treat the count as "queued work".
+309. **Zero movement over 90 s is a measurement, not impatience.** Two `status --json` snapshots 90 s apart
+    (queue 793/431 identical, submissions 1175 identical) said the rig was frozen — and it WAS (dead broker,
+    304). The cheap liveness probe is a queue-count delta, not a heartbeat: `done` + `queued` + submission
+    count, T0 and T+90.
+310. **`git branch --no-merged main --list 'item-*' | wc -l` is not the landing debt.** Measured 21:2xZ: 75
+    no-merged item branches, but `tools/landing-batch-plan.mjs --max 80` reported `refsNeedingLanding: 1`
+    (`item-6959`) and `unlandable: []`. The planner counts only refs whose ITEM IS TERMINAL and that compose;
+    the other 74 belong to OPEN items. Reading 75 as "75 landings owed" invents work the team does not have.
+311. **`demo/test-areas.json`'s contract is BIDIRECTIONAL, so a mapping cannot be pre-added on `main`.** Its
+    note states "every listed file must exist", therefore adding a mapping for `demo/noop-wake-census.test.mjs`
+    to `main` breaks `main`'s own partition gate before the branch arrives. That is exactly why **item-6959
+    needs its AUTHOR to re-cut the branch** (it adds the demo without the mapping) — the one-line fix cannot
+    be landed from outside, and a delegate who tries makes `main` red. Same reason a shared-file list union
+    (item-7232 vs `test-areas.json`) is an author action.
+312. **Backticks in `git commit -m "…"` are command-substituted by the shell.** A commit body containing
+    `` `database is locked errcode=5` `` and `` `ps` `` came out with the backtick spans REPLACED BY THE
+    OUTPUT OF THE COMMANDS (the body contained a full `ps` listing of the session). The commit still
+    "succeeded", which is what makes it dangerous. Use `git commit -F <file>` for any message that quotes a
+    command, a flag or an error string — this repo's house style quotes all three.
