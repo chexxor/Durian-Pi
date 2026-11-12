@@ -77,7 +77,7 @@ import {
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { followCommits } from "./src/commitstream.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -3091,6 +3091,11 @@ async function cmdStatus(args = []) {
   const broker = brokerHealth(readBrokerState(DB_PATH), {
     streamTimeoutMs: streamSettings(CFG).stream?.timeoutMs ?? null,
   });
+  // #6139: LIVENESS and PROGRESS are not enough to explain a read that times out. The spool census
+  // (what is undrained, how much of it is reads, how long the oldest has waited) is what separates
+  // "the broker is parked with queued reads" from "the broker is stuck somewhere else", and it is
+  // a file read, so it answers even when every broker-routed read is timing out.
+  const brokerView = { ...broker, spool: pendingIntentCensus(DB_PATH) };
   // #6082: the note census rides in the same view, so "is the mechanism working for THIS seat" is one read
   // away rather than a script against the store. It is a direct read-only open (src/fleethealth.mjs's
   // precedent), so it answers even when the broker is wedged and every broker-routed read times out.
@@ -3162,7 +3167,7 @@ async function cmdStatus(args = []) {
     // script that must join a branch to its row's state (clock-in's landing debt) can do it without re-reading
     // 24 MB of bodies.
     queueTerminalIndex: args.includes("--with-terminal-index") ? terminalStatusIndex(health.queueItems) : null,
-    broker,
+    broker: brokerView,
     notes,
     noteCensus,
   });

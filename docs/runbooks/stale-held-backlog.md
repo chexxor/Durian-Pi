@@ -68,6 +68,14 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
    If the broker is wedged and the read times out (`read queue-census: timed out awaiting the broker's
    result`), audit a COPY: `cp selfdev.sqlite .spike/delegate/audit.sqlite` - a copy has no broker state,
    so the read falls back to a local read-only harness open. Never open a second Harness on the live store.
+   **This is a WORKAROUND, not the intended path** (#6139). Before reaching for the copy, read the spool
+   census, which is a file read and answers even while broker-routed reads are timing out:
+   ```bash
+   node cli.mjs status --local --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).broker.spool))'
+   ```
+   `count>0` with a large `oldestAgeMs` means the drain is not running (`intent-stuck-in-inbox.md`); an
+   empty spool with a frozen pass is the wedged-handle case (`broker-down-or-stalled.md`). Pin both legs:
+   `node demo/intent-spool-census.test.mjs` (exit 0), `node demo/read-intent-starvation.test.mjs` (exit 0).
 
    **The recorded park class (#6150) - read this, not the prose.** Every row parked through the ONE enqueue
    path or `hold_work` now carries `park: {class, basis, gateIds, recordedAt}` written at the moment it is

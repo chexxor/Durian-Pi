@@ -82,11 +82,15 @@ try {
   }
   // A mutating intent makes the drain need the roster, and a wedged roster call MUST throw the whole
   // drain out (so the wake loop reaches its recovery branch) rather than dead-lettering intents it
-  // never had a chance to apply. Nothing is silently dropped: the intents stay pending.
+  // never had a chance to apply. Nothing is silently dropped: the mutation stays pending. #6139
+  // changed the ORDER only - the reads in the same spool are served BEFORE the roster is taken, so
+  // one stuck mutation can no longer hold every read behind it.
   assert.ok(drainErr, `a mutating intent with a wedged harness must make the drain throw, not swallow the spool`);
+  const served = await awaitIntentResult(dbPath, "read-c", { timeoutMs: 2000 });
+  assert.ok(served.ok, "the read in the mixed spool was SERVED, not starved behind the mutation");
   const stillPending = readIntentFiles(dbPath).length;
-  assert.equal(stillPending, 2, `the mixed spool is DELAYED, not lost (pending=${stillPending})`);
-  console.log(`OUT-OF-BAND PASS (2 reads served with a harness whose every call throws; mixed spool: drain threw as pinned (${drainErr.message}), 2 intents left pending for the next drain)`);
+  assert.equal(stillPending, 1, `the mutation is DELAYED, not lost (pending=${stillPending})`);
+  console.log(`OUT-OF-BAND PASS (2 reads served with a harness whose every call throws; mixed spool: the read landed and the mutation is DELAYED (${stillPending} pending), drain threw as pinned (${drainErr.message}))`);
 
   await probe.close(ctx);
 } finally {
