@@ -113,3 +113,106 @@ permanent park (`src/workstrategy.mjs` — the lease rule exists for exactly thi
 
 Item 3's scope is the one the operator should ratify, because it decides **how much authority the delegate
 holds** — propose-only (default here), or propose-and-apply. That is not a technical choice.
+
+---
+
+# Addendum — operator ratified propose-and-apply (2026-11-12T17:5xZ)
+
+The operator's ruling: **the delegate holds propose-and-apply authority.** What follows is the concrete
+change list that ruling implies, split into *access to the team* and *ways to set priority*. Everything here
+is a recommendation to be routed; the delegate routes nothing.
+
+## 7. Access to the team: there is no working operator verb today, and that is the biggest defect
+
+Measured on `main` `ae647935`:
+
+- `cli.mjs send` **refuses whenever a resident broker drives the store** (`refuseWhileBrokerDrives("send")`,
+  `cli.mjs:2554`) and is deprecated on purpose (ROADMAP 92 / #1585) because it opens a full writing harness =
+  a second owner. Its documented staging is *"deprecate → thin alias over the spool → remove"*. **Step 1
+  shipped; step 2 did not.**
+- `cli.mjs reset` refuses while the broker drives too (`cli.mjs:1599`) — yet the spool supports `--op reset`.
+- The channel that *does* work in resident mode is `node intent.mjs <seat> --body-file <file>`, a tracked
+  repo-root script that **`cli.mjs --help` never mentions**.
+
+So every operator verb that mutates the team refuses in the only mode the team runs in, and the one working
+channel is undocumented in the CLI. That is what "more access" should mean before anything else.
+
+**Recommendation A — one seam: `cli.mjs steer` (finish ROADMAP 92 step 2).**
+A spool-backed verb carrying every operation the broker already knows how to apply:
+`message | pause | unpause | reset | compact | stop | priority | cancel | release | preempt | directive`.
+- Reuse `intent.mjs`'s wire format — do not build a second spool. `cli.mjs steer` becomes the documented
+  front door; `intent.mjs` stays as the script form and is named in `--help`.
+- Prints the `requestId` and the result path, `--wait` blocks for the answer (what `send --stream` did).
+- Attribution on every application: `by: "operator" | "delegate"`, `authority: "operator" | "delegate (operator-authorised)"`.
+- One seam means one audit path: `cli.mjs events --since <seq>` shows every operator/delegate mutation, in
+  order, with the row it touched. That is the "control" that survives being asleep — not the verb.
+
+## 8. Ways to set priority: four mechanisms, each with one job
+
+| mechanism | when | shape |
+|---|---|---|
+| **directive** (`priority` scope) | a *policy*: "landing is the priority" | one leased row: seats/tags/ref-match → `now`, `reason`, `expiresAt`; evaluated at claim time by `orderCandidates` |
+| **priority —id…** | a computed shortlist (the delegate has measured 6 specific rows) | bulk by explicit id, leased, propose/apply |
+| **priority —id X** | one row ahead of its siblings | single id; `set_priority`'s existing validation |
+| **preempt —id X** | take work back from a seat that is running it | stop/release the claim cleanly → `queued`, then re-prioritise. **Never** `cancel` a claimed row: that races a live turn and is a modelled inconsistent state |
+
+Two rules that make this set sufficient rather than sprawling:
+- **No fan-out of flags.** A directive covers rows minted after it; a bulk `now` does not, and that staleness
+  is pitfall 294 repeated in the queue.
+- **`blockedBy` edits are NOT a delegate power.** Structural links change the team's decomposition; that stays
+  `pm`, and it needs the healing ruling (row A) before anyone edits a chain by hand.
+
+## 9. Authority matrix — ratified, and the part that must NOT scale
+
+| power | operator | delegate | pm | seat |
+|---|---|---|---|---|
+| read (status/queue/log/events/metrics) | yes | yes | yes | yes |
+| message a seat | yes | yes | yes | yes |
+| order (`priority`, `directive`) | yes | **yes, propose-and-apply** | yes | own queue |
+| eligibility (`cancel`, `release`, `held`) | yes | **yes, propose-and-apply + stranding guard** | yes | own rows |
+| preempt a running claim | yes | **yes, via clean stop** | yes | — |
+| structure (`blockedBy`, minting rows = routing) | yes | **propose only** | yes | no |
+| completion (`complete_work`) | via a seat | **no** | via a seat | yes |
+| landing (`scripts/land.mjs`) | no (it is a seat's gated work) | **no** | routes it | yes, gated |
+| push | **yes, sole** | no | no | no |
+
+Why routing stays proposed-only even with propose-and-apply: minting rows *is* decomposition. A delegate that
+mints rows makes pm's plan a transcription of the delegate's plan, and pm can no longer be held to a
+decomposition it did not make. Apply on *order* and *eligibility*; propose on *structure*.
+
+## 10. Safety invariants that must not scale with authority
+
+1. **Append-only.** A mutation appends a compensating transition; nothing rewrites history. `undo` is the
+   inverse transition (`cli.mjs revert <transitionSeq>`), not a document edit. This is what makes
+   propose-and-apply safe to use in the dark: every action has a named inverse.
+2. **Blast radius is printed.** `--apply` touching more than 20 rows prints the census delta it expects and
+   requires `--yes`. Under 20 it just prints the diff and applies.
+3. **Claimed rows refuse** unless `--stop-seat` is given, which stops the seat first and releases the claim —
+   never a silent race with a live turn.
+4. **Leases always expire.** No permanent priority (`set_priority` already requires `expiresAt`, ≤ 30 days).
+   A directive with no expiry is refused.
+5. **Every delegate apply is announced twice**: a notice row to the affected seat(s) in their own queue
+   language (so the team can cite *why* its order changed), and an entry the operator's closure report
+   enumerates from the ledger. An overnight delegate must be auditable in the morning in one read.
+6. **`cli.mjs check` fails** when a non-terminal row is gated on a terminal row — the reader the 151 existing
+   orphans never had.
+
+## 11. Order of work (unchanged by the ratification, and it matters)
+
+1. **Row A/B first — the healing rule.** Applying eligibility changes before it multiplies orphans: today's
+   cancellations already stranded #3503 and #5885 on cancelled #3377.
+2. Then **`cli.mjs steer`** (§7) and the four priority mechanisms (§8), in one row each or one row together —
+   `devtools`'s call inside its own scope.
+3. Then `cli.mjs check` for terminal-gated rows, so the 151 are visible from the day the verbs ship.
+
+## 12. Acceptance — how anyone knows it works without trusting the author
+
+- `node demo/terminal-gate-heals.test.mjs` — a cancelled gate never leaves a dependent in limbo (#3503/#5885
+  as fixtures).
+- `node demo/steer-propose-apply.test.mjs` — no `--apply` → zero transitions appended; `--apply` → exactly the
+  printed transitions, `by`/`authority` correct, inverse transition reachable.
+- `node demo/priority-directive-scope.test.mjs` — a directive applies to a row minted AFTER it, which a
+  fan-out would have missed. This is the test that justifies the directive form.
+- `node cli.mjs check` red on a terminal-gated fixture, green after healing.
+- Live probe: cancel a gate whose dependent is queued, then `status` names it and no `SKIP` line says
+  `gate-cancelled` for it on the next pass.
