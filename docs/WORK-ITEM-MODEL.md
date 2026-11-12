@@ -145,6 +145,30 @@ node scripts/suite.mjs --all --jobs 4        # 300/300 in 122.9 s at a464e1c4
 A `docs`-area gate is a third of a full suite; a full suite at promotion (which the operator runs once, on
 the merged result) is the expensive leg, and it is run **once per promotion**, not once per item.
 
+### Implemented: the rule is now a function (#7158)
+
+`executionMode(row)` in `src/executionmode.mjs` is the three questions as code, pure in the same shape as
+`src/landinggate.mjs` — no store, no git, no fs, so a demo can pin it without a 611 MB store. TWO call sites,
+ONE function:
+
+- **mint** — `enqueueItem` (`src/rig.mjs`) records `{mode, rule, why}` on the row at intake;
+- **the gate** — `prepare_workspace` (`src/seattools.mjs`, `workspaceModeLine`) recomputes it from the row and
+  prints it, printing `DRIFT` when the recorded and recomputed values disagree.
+
+One reading worth stating, because it decides the outcome: a path that sits as the OPERAND of a run verb
+(`node cli.mjs`, `node demo/x.test.mjs`) is a program the row executes, not code the row edits. Rule 1 asks
+about files; execution is question 2. Without that split every row that mentions `cli.mjs` reads as "touches
+tracked code" and prose gets a tree — which is the exact cost §1 measured.
+
+The guard now says the mode instead of just refusing: `modeClause` (`src/seatguard.mjs`) appends to the
+shared-tree refusal which mode the row is in, which rule produced it, and which of the two has to change
+(prepare the tree, or re-cut the row so its acceptance names the check it needs). Wording only — nothing new
+is refused by it.
+
+**What the mode does not yet do:** skip the worktree. §4's mechanism is still open, so a branchless row is
+still given a tree. Pinned by `demo/execution-mode.test.mjs` (`node demo/execution-mode.test.mjs`, exit 0):
+the transitions, the mint round-trip through the store, mint==gate for the same row, and the refusal shape.
+
 ---
 
 ## 4. What "branchless" means concretely (PROVISIONAL — the mechanism is the open part)
