@@ -42,6 +42,20 @@ export const BROKER_READ_TIMEOUT_MS = 120_000;
  * If it has not answered within this, it is not going to. */
 export const DEGRADED_READ_TIMEOUT_MS = 10_000;
 
+/**
+ * How long ANY connection to this rig's store waits for a lock before giving up (measured, 2026-11-12).
+ *
+ * pi-durable's default is 5 s. That is too short for this rig: on a 750 MB store one colliding write
+ * (`database is locked errcode=5`, 2026-11-12T21:15:40Z) closed the broker's Session, the reopen cap was
+ * exhausted, and the resident broker stopped terminally while its process kept serving READ-DRAIN - so
+ * `ps`, the heartbeat and the last `START` line all read healthy. The fleet was dead until the keepalive
+ * saw `no pass 305s`.
+ *
+ * A lock is transient; waiting is the correct response, so every open site passes this. Bounded on purpose:
+ * past the timeout SQLITE_BUSY still surfaces, just after a real grace period instead of instantly.
+ */
+export const STORE_BUSY_TIMEOUT_MS = 30_000;
+
 let LOCAL_READS = false;
 
 /** `--local`: answer reads from the store directly, bypassing the broker. Set once at CLI startup. */
@@ -208,7 +222,7 @@ export async function readLocal(dbPath, fn) {
   }
   let storage;
   try {
-    storage = await openNodeSqliteStorage(dbPath);
+    storage = await openNodeSqliteStorage(dbPath, { busyTimeoutMs: STORE_BUSY_TIMEOUT_MS });
   } catch (err) {
     throw new Error(`cannot open ${dbPath}: ${String(err?.message ?? err)}`);
   }

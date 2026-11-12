@@ -95,7 +95,7 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
-import { readData, setLocalReads, liveGenerationLeases } from "./src/readclient.mjs";
+import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS } from "./src/readclient.mjs";
 import { installSignalHandlers, isStopping, stopSignalName, stoppableSleep } from "./src/signals.mjs";
 import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -184,9 +184,16 @@ const MODEL_ID = CFG.DURIG_MODEL ?? "zai-org/GLM-5.3-Flash";
 // database file") — the wrong-rig trap a fresh install meets on day one. One
 // wrapper keeps the resolved DB_PATH in front of the cause for every verb
 // (#491 C7): same JSON contract {ok:false,error}, same exit code, path named.
+// THE BUSY TIMEOUT IS A FLEET-LIVENESS SETTING, not a tuning knob (measured 2026-11-12T21:15:40Z):
+// the broker's pass met `database is locked errcode=5`, pi-durable closed the Session on the storage error,
+// the reopen cap (3 attempts, ~35 s) was exhausted, and the broker stopped TERMINALLY - while the process
+// stayed alive serving READ-DRAIN, so `ps`, the heartbeat and the last `START` line all read healthy. The
+// fleet was dead for ~4 min until `tools/broker-keepalive.mjs` noticed `no pass 305s` and re-armed it.
+// The constant and its reasoning live with the other store-timeout policy in src/readclient.mjs, so this
+// open and the read path cannot drift apart.
 async function openStore(path = DB_PATH) {
   try {
-    return await openNodeSqliteStorage(path);
+    return await openNodeSqliteStorage(path, { busyTimeoutMs: STORE_BUSY_TIMEOUT_MS });
   } catch (err) {
     throw new Error(`cannot open ${path}: ${String(err?.message ?? err)}`);
   }

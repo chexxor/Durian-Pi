@@ -77,7 +77,11 @@ const isAliveAt = (record, at) => {
  * callers fall back and REPORT which path served the read.
  */
 export function openReadOnlyStore(dbPath) {
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  // `timeout` is SQLite's busy timeout. A read-only connection does not take the write lock, but it still
+  // needs the WAL index, and a concurrent CHECKPOINT can hold it: with the default 0 an ordinary status read
+  // fails instantly and pushes the caller onto the write-mode fallback - which is the very second-writer
+  // collision this path exists to avoid (see src/readclient.mjs `readLocal`).
+  const db = new DatabaseSync(dbPath, { readOnly: true, timeout: 30_000 });
   const stmtCache = new Map();
   const stmt = (sql) => {
     if (!stmtCache.has(sql)) stmtCache.set(sql, db.prepare(sql));
