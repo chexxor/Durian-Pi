@@ -11911,3 +11911,15 @@ first pass) and its own passes logged four claims on the new code — `#6215` by
 the claim PATH runs on the new code with the default strategy, and the `priority_first` ordering itself is proven on the
 tool plane (`demo/workstrategy-claim.test.mjs`), because this rig resolves to `oldest_first` and flipping the live team to
 `priority_first` to watch it reorder would have changed the team's behaviour for a test.
+
+**Addendum (2026-11-12, N35, after the operator's landing directive).** The operator approved a SEAT-LEVEL flip, not a team
+one: `impl` and `devtools` carry `"workStrategy": "priority_first"` in `rig.selfdev.json` while the team value stays
+`oldest_first`, because `pm` routes landing passes to both. Applied with `up rig.selfdev.json --refresh` while the broker was
+stopped (`up` refuses while it drives), verified by `ps` (`{strategy: priority_first, source: seat}` for exactly those two),
+and measured over the live queue with the production selector: impl's order became `#7124(now), #7126(now), #6222(next)`
+where `oldest_first` would still hand out `#6222`. Two facts this demonstrates, both designed in: a lease written while a
+seat ignored priority is RECORDED and takes effect the moment the seat honours it (pm had leased `#7124`/`#7126` at 07:14Z,
+before the flip), and the neutral-tie rule means 235 unprioritised rows kept their exact order. The `up` also exposed two
+operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
+`broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
+the broker can start again.
