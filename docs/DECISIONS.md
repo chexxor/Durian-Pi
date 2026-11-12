@@ -11923,3 +11923,26 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D285 — (provisional; re-mint at land from the MERGED tree) **gate authority reads the AUTHORED `block` field, add and remove are DIFFERENT predicates, and the reference validator ships in the same chain before the edit verb** (architect review, item #7038, of lead's #6530 and pm's corrections #7034; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7038`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Review ruling on the shape of the gate-edit contract. Scope and sequencing stay with `lead` (#6530) and `pm`; the build is `devtools`'s row.
+
+**Context.** Measured, `node tools/probes/gate-predicate-computability-7038.mjs` → **exit 1**: a stored row's keys are `id, from, to, subject, body, optimizedVia, notice, block, status, transitions` — there is no `authoredBlock` field anywhere in `src/`, so lead's `mayGate` cannot be evaluated as written; `effectiveBlock()` → `legacyBlock()` synthesizes `resolver: "pm"` for a never-claimed held row (src/queue-lifecycle.mjs:257) on a row whose parties are `lead` and `impl`; mint accepts `blockedBy:[9999]` (target absent), a self-gate, and a gate on a row already cancelled, because `normalizeBlockedBy` (src/rig.mjs:434-451) checks shape only; a row gated on the absent id #9999 reports `{workable:true, reason:null}` (src/rig.mjs:335-337: "a MISSING or AMBIGUOUS signal means WORKABLE") while the queue line prints `blockedBy=9999`. Live census (`node tools/probes/gate-authority-census-7038.mjs`, 7202 rows, exit 1): 428 held, 265 with no authored block, 24 of those with pm not a party; 246 non-terminal rows carry a gate; **19** are gated on a CANCELLED id, 89 on a held/deferred id; 0 dangling, 0 self-gates, 0 cycles today. **0 of 7202** rows carry a `gated`/`ungated` event, and there are **0** removal sites for `blockedBy` in `src/rig.mjs` — removal is neither derivable nor possible. `node demo/workable-claim.test.mjs` → exit 0: the ratified gate semantics (cancelled = positive non-workability, ambiguous = workable) are unchanged by this review.
+
+**Decision.**
+1. **Authority reads `row.block`, never `effectiveBlock()`.** `mayChangeGate(row, seat) = seat === row.from || seat === row.to || row.block?.resolver === seat`. The view stays a read mapping for humans and metrics; it is not an authority input.
+2. **Add and remove have different legality tests.** `gateAddIsLegal` refuses self, an id that does not exist, a terminal-cancelled id, and an id that closes a cycle. `gateRemoveIsLegal` accepts any recorded id, terminal included: a void reference is a broken pointer, and clearing it is a repair, not a scope decision.
+3. **The validator ships before the verb, in the same chain.** A verb that can add references without the validator is the laundering path the standing bound exists to prevent.
+4. **The conservative default (unknown id → workable) is kept but never exercised by minted rows.** It is a safety net against starving a workable item, not a licence to mint an unresolvable reference.
+5. **One canonical sentence about a cancelled reference** goes in `docs/WORK-ITEM-SCHEMA.md` §4; the comments at src/rig.mjs:296-298 ("POSITIVE non-workability") and src/rig.mjs:313-317 ("a DROPPED prerequisite, not an unmet one") state opposite meanings, and the code (src/rig.mjs:337) plus the 19 stranded rows settle it.
+6. **The fallback for rows predating the event is the parties of the row being edited**, not the target's parties.
+
+**Options considered.** (a) Validator only, no edit verb — closes the mint hole but leaves 19 stranded rows whose only exit is cancelling the dependent (the #6656 class). Rejected. (b) Verb first, validator later — rejected: the verb mints what mint refuses. (c) Chosen: one chain, validator first, two predicates, an event written at every change. Trade-off accepted: more refusals at mint (a row cannot be gated on something that cannot resolve) in exchange for gates that mean something.
+
+**Consequences.**
+- 19 rows need a repair pass; the census tool is green only at zero, so the acceptance is a state, not a verb.
+- Mint gains a reference check: naming a gate on an id that cannot resolve is refused at creation with the reason named. That is a behaviour change for anyone relying on prose-only gates.
+- Cycle refusal is load-bearing: a two-node cycle reads as two open gates and is never named today.
+- Existing rows are not rewritten; the fields and events are additive, so the call is reversible.
+- Falsifier: `tools/probes/gate-predicate-computability-7038.mjs` (exit 1 now, 0 when the accessor is fixed, mint validates, and terminality precedes authority) and `tools/probes/gate-authority-census-7038.mjs` (exit 1 while any non-terminal row is gated on a reference that can never resolve).

@@ -67,10 +67,14 @@ Pick by whether you are a party.
 Gate hygiene, whichever route you take:
 
 - every id in `blockedBy` must **exist and be non-terminal**. A dangling id is inert
-  (`workable` returns `{workable: true}`, `src/rig.mjs:312`); a `cancelled` id blocks forever
+  (`workable` returns `{workable: true}`, `src/rig.mjs:326-337`); a `cancelled` id blocks forever
   (`gate-cancelled:#id`).
-- never gate two rows on each other. `normalizeBlockedBy` (`src/rig.mjs:355-380`) checks shape only —
+- never gate two rows on each other. `normalizeBlockedBy` (`src/rig.mjs:434-451`) checks shape only —
   no existence check, no cycle check. A cycle starves both rows with no exit.
+- there is **no removal verb**: `blockedBy` is written at mint and never cleared anywhere in
+  `src/rig.mjs` (0 removal sites, measured 2026-11-12). A row stranded on a dead reference has no legal
+  exit except `cancel_work` on the dependent, which orphans every id naming it. The count of such rows is
+  a state, not a guess: run the census below.
 
 ## Verify
 
@@ -79,6 +83,13 @@ The boundary this runbook describes is pinned by a probe:
 ```bash
 node tools/probes/revise-authority-boundary.mjs
 ```
+
+Measured on 2026-11-12 in the `item-7038` worktree (`@earendil-works/pi-durable` 1.3.0 from the lockfile):
+`node tools/probes/gate-predicate-computability-7038.mjs` -> **exit 1** (mint accepted `[9999]`, a self-gate
+and a gate on a cancelled row; no removal path exists), and
+`node tools/probes/gate-authority-census-7038.mjs` -> **exit 1** with 7202 rows: 428 held, 265 without an
+authored block, 24 of those with pm not a party, 246 gated non-terminal rows, **19** gated on a cancelled
+id, 0 dangling, 0 self-gates, 0 cycles. Green means zero stranded references, not "the verb exists".
 
 Expected: exit 0, and the six lines read as — coordinator revise REFUSED; both parties revise OK;
 sender `revise_work` with `blockedBy` REFUSED **and the body unchanged**; a `done` row answered by
