@@ -263,6 +263,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Local provider (PolyStrata) | local-provider-down, broker-down-or-stalled |
 | Provider request body | request-trace |
 | Research | research-request, competitor-review |
+| An item's branch/worktree never retires; refs pile up; how `staging` landing and operator promotion are supposed to work | branch-cleanup, land, merge, `docs/WORK-ITEM-MODEL.md` (the model), `docs/reviews/branch-lifecycle-llm-agent-teams.md` (round-1 research), `docs/DISPOSITIONS.md` (append-only disposition ledger) |
 
 ## Template
 

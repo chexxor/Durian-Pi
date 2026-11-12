@@ -11,12 +11,17 @@ It is the third leg of the item record:
 | [`BRANCH-AND-WORKTREE-LIFECYCLE.md`](BRANCH-AND-WORKTREE-LIFECYCLE.md) | git artefacts — what exists and who retires it |
 | **this file** | **execution mode** — branch or no branch, shared or private, landing and promotion |
 
-**Status: PROVISIONAL.** Sections marked **DECIDED** are grounded in code that exists in this tree (path:line
-given, each verified with `test -e` before citing). Sections marked **PROVISIONAL** are the team's design
-decision, held open pending the external research requested in
-[`reviews/branch-lifecycle-research-prompt.md`](reviews/branch-lifecycle-research-prompt.md) — that prompt is
-written but not yet routed to the research agent (routing is an operator action), so no outside evidence has
-landed yet. Do not treat a PROVISIONAL section as settled.
+**Status: PROVISIONAL, with round 1 of the research folded in.** Sections marked **DECIDED** are grounded in
+code that exists in this tree (path:line given, each verified with `test -e` before citing). Sections marked
+**PROVISIONAL** are the team's design decision. External evidence now exists —
+[`reviews/branch-lifecycle-llm-agent-teams.md`](reviews/branch-lifecycle-llm-agent-teams.md) is round 1, run
+by the delegate on this host (the delegate has a network path, and the taxonomy was blocking the MVP); the
+operator-routed off-host prompt in
+[`reviews/branch-lifecycle-research-prompt.md`](reviews/branch-lifecycle-research-prompt.md) is **still open**,
+and when that report lands it supersedes round 1 where they disagree. Round 1 changed two things: §5 is
+**contradicted by prior art and rewritten**, and §8's retirement rule gained a mechanism (ownership marker +
+lock + sweep) taken from a shipping agent product. §4's storage question and §7's promotion mechanics stay open.
+Do not treat a PROVISIONAL section as settled.
 
 | | |
 |---|---|
@@ -166,19 +171,30 @@ produce three merges of the same files and the `add/add` conflict class already 
 `BRANCH-AND-WORKTREE-LIFECYCLE.md` §7 point 2 ("two branches that both ADD the same path cannot be merged in
 either order").
 
-**Proposed rule (needs the research report before it is ratified):**
+**Rule, as revised by the research (round 1, `reviews/branch-lifecycle-llm-agent-teams.md` §"Cooperative work
+on one feature"):**
 
-1. A **cluster** is a set of items that must land together. It is declared structurally — a
-   `feature: <slug>` field plus `clusterOf`/`blockedBy` links — never by prose in a title (R8).
-2. Every item in a cluster uses the branch **`feature-<slug>`** and the worktree **`feature-<slug>`**.
-   One tree, several rows, several seats — this is the natural extension of the rule already enforced in
-   `src/worktree.mjs:893` (`itemBranchFor`, one ref per item so two seats share history).
-3. The cluster branch is retired when **every** member row is terminal **and** the branch is an ancestor of
-   the branch it landed into. Ownership is the cluster, not the last seat.
-4. A cluster must be small. If a cluster spans files that conflict, it is not one change; it is two items
-   that were mislabeled as one.
+> "Another key rule is how many developers are allowed congregate on a short-lived feature branch. Another
+> simple answer: the developer count should stay at one (or two if pair-programming). These short-lived
+> feature branches are not shared within a team for general development activity."
+> — trunkbaseddevelopment.com, *Short-Lived Feature Branches*, fetched 2026-11-12
+
+A shared branch for several seats is therefore **not** the default. The proven arrangement is ordered
+decomposition, not a shared tree:
+
+1. A **cluster** is a set of items that must land together. It is declared structurally — a `feature: <slug>`
+   field plus `clusterOf`/`blockedBy` links — never by prose in a title (R8).
+2. **Cluster members land one at a time, in declared order**, each re-validated against the staging tip the
+   previous landing produced (§6.1). Several rows, several seats, one landing sequence — not one shared tree.
+3. A genuinely un-splittable change may use one branch **`feature-<slug>`** with hard bounds: **≤ 2 member
+   seats, ≤ 2 days of life, one named owner**. Exceeding a bound is a `check` finding (ROADMAP **360**), not a
+   judgement call.
+4. The cluster branch is retired when **every** member row is terminal **and** the branch is an ancestor of the
+   branch it landed into. Ownership is the cluster, not the last seat.
 5. Legacy `item-<id>` refs are never renamed into a cluster (R7's "never rename a branch that holds commits
    others reference"): a cluster starts at its first item.
+
+If a cluster spans files that conflict, it is not one change; it is two items that were mislabeled as one.
 
 Naming for `feature-<slug>` is derived by a function, never hand-written (R7): the slug is minted by the
 minting seat from the cluster's lead item id, e.g. `feature-6140`.
@@ -203,8 +219,21 @@ not exist is the seat making the move, or a branch to move into.
 | 5. promote | **operator only** | §7 |
 
 Refusal, not repair: the verb reports the failed predicate and does nothing. The current land helper already
-proves the right structure — merges happen in a scratch detached worktree and `main` advances only by a
-clean FF, so the shared tree is never mid-merge (`scripts/land.mjs` header).
+proves the right structure — merges happen in a scratch detached worktree and `main` advances only by a clean
+FF, so the shared tree is never mid-merge (`scripts/land.mjs` header).
+
+### 6.1 `staging` is a queue, not just a branch (added from round-1 research)
+
+The established pattern at fleet scale is a **merge queue**: "Agentic teams need more: a commit queue, a fast
+local build with Test Impact Analysis, and agents that talk to each other before touching shared code", and
+"GitHub Merge Queue can help solve the 'race to push' problem. This will automate pull request merges into a
+busy branch to increase velocity" — both *advertised-elsewhere*, trunkbaseddevelopment.com, fetched 2026-11-12.
+What is worth copying is the mechanism, not the service: **validate at merge time, serialise, re-validate
+against the moved tip**. Our gate re-checks ancestry and the diff but not the tip the verify row named, so a
+verified candidate can go stale between verification and landing (ROADMAP **359**, row **#6928**).
+
+Concretely: land one candidate at a time; the gate runs on the candidate rebased onto the staging tip the
+previous landing produced; if the tip named by the verify row has moved, the landing is refused, not patched.
 
 Two facts the gate structurally cannot see, and therefore the promotion leg is not optional:
 
@@ -258,6 +287,17 @@ Every artefact gets an owner and a retirement condition. Extending `BRANCH-AND-W
 | scratch `.verify-*` | a verifier | `worktree scratch clean` | the rig |
 | `staging` | first promotion setup | never — it is a permanent branch | nobody deletes it |
 
+**Ownership is a fact, not an inference.** Claude Code solves the same residue problem with three primitives,
+all of which git already gives us: it "writes a marker into the git metadata of every worktree it creates with
+git, and the sweep keeps any worktree without one"; "While an agent is running, Claude Code holds a git
+worktree lock on its worktree so that concurrent cleanup can't remove it, and releases the lock when the agent
+finishes"; and its sweep "leaves a worktree in place" when it "still holds work: changed or untracked files, or
+unpushed commits" (*observed*, https://code.claude.com/docs/en/worktrees, fetched 2026-11-12). The rig's
+version: stamp every rig-created worktree with `git worktree lock --reason rig:<item-id>` at creation — the
+native `--reason` field IS the ownership marker (`git-scm.com/docs/git-worktree`, fetched 2026-11-12) — and a
+sweep may touch **only** marked trees, and only clean ones. Dirty marked trees go to `DISPOSITIONS.md`; they are
+never deleted. ROADMAP **358**.
+
 **Never** a force. `git worktree remove` without `--force`, `git branch -d` only (git itself refuses an
 unmerged branch). Unmerged refs are **dispositioned** in [`DISPOSITIONS.md`](DISPOSITIONS.md) — a new row,
 append-only — never silently deleted.
@@ -275,6 +315,11 @@ A lifecycle nobody checks is a suggestion. `src/checkup.mjs` already carries the
 4. `branchless-violation`: an item classified branchless that spawned a worktree → finding (the mode is
    recorded on the item, so this is a comparison, not a judgement).
 5. `cluster-orphan`: a `feature-<slug>` branch with members still live after the branch landed.
+6. `branch-age-days`: a ref older than 2 days whose item is not terminal — the literature defines a long-lived
+   branch by age, not intent ("Any longer than two days, and there is a risk of the branch becoming a
+   long-lived feature branch", trunkbaseddevelopment.com, fetched 2026-11-12).
+7. `unmarked-worktree`: a worktree with no `rig:<item-id>` lock reason, i.e. one the rig did not mint — the
+   sweep must never touch it, so the finding is "unknown owner", not "reap it".
 
 Each is proven by a **red-first demo**: forge the violation, assert the verb exits nonzero
 (`docs/failing-first-recipe.md` is the recipe the repo already uses).
@@ -283,7 +328,27 @@ mode documented in `docs/runbooks/land.md` ("A landing entry may NOT close on `o
 
 ---
 
-## 10. Open questions the research must answer (before §4, §5, §7 are ratified)
+## 10. What round 1 answered, and what is still open
+
+Round 1 (`reviews/branch-lifecycle-llm-agent-teams.md`) answers the four questions §4/§5/§7 depended on:
+
+1. **Unit of a branch** — one small change, ≤ 2 days, one owner. Per-item refs with no retirement rule are the
+documented failure mode; ours measured **93 refs / 83 worktrees** on 2026-11-12T01:55Z.
+2. **Closest pattern to a promoted `staging`** — a merge queue, not Git Flow's `develop`. Keep the human
+promotion (no queue gives the operator a single deliberate act with printed evidence); adopt the queue's
+mechanism (§6.1).
+3. **When a change needs isolation** — no source gives a predicate. The observed behaviour is *no per-change
+branch at all*: Aider commits each edit on the current branch, OpenHands shares a workspace and tells the user
+to isolate, Claude Code makes a worktree on demand and sweeps it. §3's predicate is our invention, consistent
+with that evidence rather than derived from it.
+4. **Clusters** — contradicted as proposed; see the revised §5.
+
+Still unverified (named in the report): GitHub merge-queue internals (docs.github.com returned 404 from this
+host), Trunk/Mergify, Devin/Copilot/Sweep/Orbi/Miko/Baton/Code Conductor/Sourcegraph, how agent products
+regression-test prompts, and whether any tool measures branch sprawl. Follow-up prompt:
+`reviews/branch-lifecycle-followup-research-prompt.md`.
+
+## 11. Open questions the research must answer (before §4 and §7 are ratified)
 
 1. Do agent fleets that produce many small changes use per-change branches, a shared integration branch, or
    patch submission — and what does each cost in ref litter and merge conflict rate?
@@ -299,7 +364,7 @@ and §6's gate are the parts we can defend from code; §4's storage and §5's na
 
 ---
 
-## 11. How to re-verify this document
+## 12. How to re-verify this document
 
 ```bash
 git for-each-ref --format='%(refname:short)' refs/heads | wc -l   # ref count — re-count, it moves live

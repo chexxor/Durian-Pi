@@ -1,6 +1,8 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-11T23:5xZ (delegate session **N32** — the **census close-out + the work-item model**:
+**Last update:** 2026-11-12T01:5xZ (delegate session **N33** — **branch-lifecycle research round 1 folded in**, D265,
+ROADMAP 358–362; the fleet was parked again by its own `--max-duration` and restarted as pid **2108053** with
+`--max-duration 5400`). Session **N32** — the **census close-out + the work-item model**:
 `main` = **`6d36ab0f`**, suite **300/300** in **122.9 s** (`--all --jobs 4`, exit 0, unpiped), refs **84** and
 worktrees **75** (count live — the fleet mints them; 77→81 refs in ten minutes this session), **1 ref pruned**
 (`item-6809`, provably merged), **51 OPEN rows** appended to `docs/DISPOSITIONS.md`, and `docs/WORK-ITEM-MODEL.md`
@@ -36,9 +38,20 @@ disposition rows. The branch-cleanup pass's **git half is closed** (`main` green
 **Milestone this window worked** — the **work-item lifecycle** (above), with the branch-census pass as its
 residue-cleanup tranche.
 
-**Blocker:** two, both operator-grant, neither a git one. (1) The **external research** on branch taxonomy is written
-(`docs/reviews/branch-lifecycle-research-prompt.md`); the research agent is off-host with no repo access, so **routing
-that prompt is an operator action**, and `docs/WORK-ITEM-MODEL.md` §4/§5 stay PROVISIONAL until it lands. (2) The
+**Research status (changed this session):** round 1 landed — the delegate ran it itself (`node`+`curl`, this host)
+into **`docs/reviews/branch-lifecycle-llm-agent-teams.md`**, with every quote re-fetched into `inputs/fetched/` and
+sha256/HTTP/last-modified recorded in `inputs/fetched/MANIFEST-branch-lifecycle.md` (14/14 quotes substring-checked
+against our copies). It **rewrote** `docs/WORK-ITEM-MODEL.md` §5 (shared `feature-<slug>` branches are contradicted
+by prior art → ordered decomposition with hard bounds) and added §6.1 (staging as a queue) and §8's ownership
+marker (`git worktree lock --reason rig:<item>`). Registered **ROADMAP 358–362**; 362 is an explicit rejection with
+a reason. **Still an operator action:** routing the off-host prompt (and the round-2 prompt
+`docs/reviews/branch-lifecycle-followup-research-prompt.md`) to the research agent — GitHub merge-queue internals,
+Trunk/Mergify, Devin/Copilot/Sweep/Orbi/Miko/Baton/Code Conductor/Sourcegraph and every product's iteration loop
+stay unverified. D265 records the decision.
+
+**Blocker:** two, both operator-grant, neither a git one. (1) The **round-2 external research** is written
+(`docs/reviews/branch-lifecycle-followup-research-prompt.md`); the research agent is off-host with no repo access, so **routing
+that prompt is an operator action**, and `docs/WORK-ITEM-MODEL.md` §4/§7 stay PROVISIONAL until it lands. (2) The
 verifier leg: `DURIG_VERIFIER_API_KEY` spend is capped and `local2` is a shared LAN box whose 20 s preflight probe
 false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
 

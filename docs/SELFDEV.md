@@ -3944,3 +3944,33 @@ at `:743`). Re-measure every `path:line` before repeating it.
 266. **Never pipe the runner, and never parse `git rev-list --left-right --count` with `cut -f1`.** The output is `left<tab>right`; `echo $ab | cut -f1` collapses the tab to a space, so `cut -f1` returns the WHOLE line and every "ahead" number in the loop is silently wrong. Use the two unambiguous probes: `git rev-list --count main..<ref>` (0 ⇒ merged) and `git merge-base --is-ancestor <ref> main; echo $?` (0 ⇒ ancestor). Same class as the suite runner: `node scripts/test.mjs --all | tail -3` reports `tail`'s exit, not the suite's — redirect to a file and capture `rc=$?`.
 267. **Refs are LIVE during a cleanup pass — re-count immediately before pruning.** At 05:0xZ `item-6517` read as an ancestor of `main` and "reapable"; by the pruning step it carried unlanded commits again. The gate is never a remembered `ahead` count: `git merge-base --is-ancestor <ref> main && git branch -d <ref>`, run at the moment of deletion. Seats mint refs and commits while a delegate measures, so a pass that counts once at the start will prune the wrong set.
 268. **The suite leaks the CLI children it spawns — and a leaked `send` sits for hours, invisibly.** Measured 2026-11-11 (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1): `ps -o pid,etime,cmd -p 244975 -p 317288` found two `node demo/local-slot-gate.test.mjs` processes alive **12 h 59 m** and **13 h 07 m**, each holding a `node cli.mjs send alpha hold the slot` child (246411, 319700), while the fixture stores they were waiting on were already deleted (`ls /tmp/durig-suite-kDI5uS` → "No such file or directory"). `demo/local-slot-gate.test.mjs:103` `spawn`s the child and only listens for `exit`; nothing kills it on teardown. `demo/runbook-diagnose.test.mjs:94` bounds its `spawnSync` with `timeout: 30000`, but a spawned `send` is a grandchild and no timer reaches it. A clean re-run leaks one child that exits within ~5 s (`pgrep -af "cli.mjs send"` right after `node demo/runbook-diagnose.test.mjs` exit 0), so the leak is usually short-lived — it becomes a 13-hour orphan only when the parent is killed or its store is deleted. **Reap them with SIGINT, not SIGKILL**: 246411 exited **502 ms** after `kill -INT`, 317288 + 319700 both gone **254 ms** after it — the #6160 signal seam works on a hung verb; the defect is that nobody sends the signal. Minted to `pm` as intent `3c779f4a-5e23-4b96-a0f2-66f9c705fc4b`. Rule for the next session: `pgrep -af "cli.mjs send" | grep -v pgrep` before concluding a rig is idle.
+
+## Operational pitfalls (delegate work-item-lifecycle research pass, 2026-11-12 — numbered 269-273, continuing from 268; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+269. **A broker parked by its own `--max-duration` still answers reads, so `stranded-inbox` says nothing is
+    wrong.** Measured 2026-11-12: pid 1948745 (`serve --max-duration 3600`) reached `PASS 429` at 00:53:42Z and
+    then logged only `READ-DRAIN` for 20 minutes; `node tools/stranded-inbox.mjs selfdev.sqlite` printed
+    `inbox=0 drainStranded=0 hbAgeS=15 progressAgeS=927`. The discriminator is **`progressAgeS` against
+    `hbAgeS`**, not the inbox count: a fresh heartbeat with a frozen pass clock is the parked shape. Run the
+    ladder in `docs/runbooks/broker-down-or-stalled.md` ("The third shape") before concluding the fleet is idle.
+    Cost of missing it this session: ~20 minutes of watching PASS numbers that were not moving.
+270. **A green suite does not mean the mocked plane works.** `node scripts/test.mjs --all --jobs 4` reported
+    300/300 exit 0 while `node demo/offline.mjs` — the pm→worker→done loop the whole lifecycle is supposed to
+    iterate on — exited **1** (`ASSERT FAIL: the fresh context should be short, got 7 messages`,
+    `demo/offline.mjs:173`, 0.244 s). Suite roots are `demo/*.test.mjs` and `tools/*-test.mjs`; a demo without
+    `.test` in its name is invisible to it. Until ROADMAP 359/#6929 lands, run the named demos separately and
+    capture the exit code.
+271. **`grep -c OPEN docs/DISPOSITIONS.md` is not a row count.** It returned 51 at `6d36ab0f` and 54 at
+    `e529b65b` in the same session; the file is append-only free text with notes, so the match counts lines
+    containing the word. Count rows with a parser or a `^| ` anchored grep, and print the command with its exit
+    code — ROADMAP 361 exists because nothing measures this reliably.
+272. **Ref and worktree counts move while you measure them.** 77 → 81 refs in ten minutes (2026-11-11), 84 → 91
+    → 93 refs and 75 → 83 worktrees across 2026-11-12T01:0x–01:5xZ, because claiming an item mints both
+    (`src/worktree.mjs:286`, `installWorktreeDeps` at `:231`). Every count in a doc must carry its timestamp and
+    its HEAD sha; a remembered count is never a measurement.
+273. **Fetch failures are silent in the body.** From this host `docs.github.com` returns **HTTP 404** for every
+    merge-queue path tried and `trunk.io`/`mergify` feature pages 404, while `code.claude.com` returned
+    **HTTP 103** with a usable 447 KB body. A fetcher that records only "got bytes" publishes a quote against a
+    page it never actually retrieved. `inputs/fetched/MANIFEST-branch-lifecycle.md` records status + sha256 +
+    `last-modified` for exactly this reason; regenerate it with
+    `.spike/research/fetch-manifest.py` (promote per 312) before citing anything external.

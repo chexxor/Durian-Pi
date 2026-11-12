@@ -11779,3 +11779,53 @@ the very condition it diagnoses. Every route must print which path served the re
 **Residual:** this decides the ownership gate and the bound shape. It does not decide which check-rule
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
+
+## D265 — 2026-11-12T01:5xZ: **a work item's branch is a temporary isolation, not a namespace; `staging` is a queue with a human promotion gate; and an artefact the rig did not mint is never swept** (delegate, on the operator's objective "give the team a work-item lifecycle it can run itself"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**Decision.** Three rules, in that order:
+
+1. **A branch exists to isolate one small change, and it has an expiry.** `item-<id>` refs stay, but they are
+   retired when the item is terminal **and** the ref is an ancestor of the branch it landed into. A ref whose
+   item is terminal and which is not an ancestor is *dispositioned*, never deleted.
+2. **`staging` is a queue, not merely a branch.** Land one candidate at a time; run the gate on the candidate
+   rebased onto the staging tip the previous landing produced; refuse when the tip named by the verify row has
+   moved. The operator's promotion is the one human act; everything before it is mechanical.
+3. **Ownership is a fact written into git, not an inference.** Every rig-created worktree carries
+   `git worktree lock --reason rig:<item-id>`; a sweep may touch only marked trees, and only clean ones.
+
+**Context (measured, not asserted).** At `e529b65b` on 2026-11-12T01:55Z this rig had **93 refs and 83
+worktrees** (84/75 an hour earlier — the fleet mints them live), **54 OPEN rows** in `docs/DISPOSITIONS.md`,
+and 60 worktrees the audit calls reapable. `BRANCH-AND-WORKTREE-LIFECYCLE.md` §2 says a branch is deleted only
+when merged, and D249 pins the tree to *queue* state, not git state — so an unlanded item keeps its artefact
+forever. Nothing in the rig retires anything.
+
+**Why, and what the evidence actually says.** The external research the operator commissioned
+(`docs/reviews/branch-lifecycle-research-prompt.md`) could not be routed to the off-host research agent
+without an operator action, and the taxonomy was blocking the MVP, so the delegate ran round 1 itself
+(`docs/reviews/branch-lifecycle-llm-agent-teams.md`) with the runbook's discipline: every quote re-fetched into
+`inputs/fetched/`, sha256 recorded in `inputs/fetched/MANIFEST-branch-lifecycle.md`, each quote substring-checked
+against **our** copy before the doc was written (14/14 matched). The literature defines a branch by **age and
+owner** ("the branch should only last a couple of days"; "the developer count should stay at one (or two if
+pair-programming)"), and names long-lived branches as the failure mode (Atlassian, on its own Git Flow:
+"Gitflow has numerous, longer-lived branches and larger commits … higher risk of deviating from the trunk
+branch"). The observed behaviour of shipping agent tools is the opposite of ours: Aider commits each edit on
+the current branch, OpenHands shares a workspace and warns, Claude Code creates a worktree on demand, marks it
+in git metadata, locks it while the agent runs, and sweeps by age — and even it leaves residue when the run
+shape has no cleanup point ("Non-interactive runs with `-p` have no exit prompt, so Claude doesn't clean up
+their worktrees").
+
+**Where this diverges from the design as written.** `WORK-ITEM-MODEL.md` §5 proposed a shared `feature-<slug>`
+branch for cooperative items. Round 1 contradicts it: the proven arrangement is **ordered decomposition**, and
+a shared branch is allowed only with hard bounds (≤ 2 member seats, ≤ 2 days, one owner). §10 records that
+§3's isolation predicate is **our invention**, consistent with the evidence but not derived from it — that is
+stated plainly rather than dressed up as prior art.
+
+**Residual, and what the delegate deliberately did not do.** The operator-routed research prompt is still
+unrouted; round 1 is explicitly labelled round 1 and a follow-up prompt
+(`docs/reviews/branch-lifecycle-followup-research-prompt.md`) names the five questions round 1 could not
+answer (GitHub merge-queue internals, Trunk/Mergify, the agent products unreachable from this host, iteration
+architecture, sprawl measurement). Registering the build items (ROADMAP **358–362**) does not schedule them:
+`pm` owns decomposition and sequencing, and the delegate claimed, completed, deferred or routed no queue row.
+Rejected with a reason, not silently: a purpose-prefix naming taxonomy enforced by a linter (ROADMAP **362**) —
+no fetched source shows one enforced, and a naming rule the tooling cannot enforce is a rule set that gets
+violated silently.
