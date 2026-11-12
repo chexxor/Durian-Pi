@@ -66,11 +66,13 @@ try {
   // 0. The vocabulary is a CLOSED list: an absent `op` defaults to "message" so producers
   //    written before the spool keep working, and a mutating verb EXTENDS this array rather
   //    than opening a second writer. The additions so far are `pause`/`unpause` (ROADMAP 131,
-  //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads) and
-  //    `configure` (D105/D106 seat-doc-write, #2182; operator-only since #1966).
+  //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads), `configure`
+  //    (D105/D106 seat-doc-write, #2182; operator-only since #1966) and `queue` (operator ruling
+  //    2026-11-12T17:5xZ: propose-and-apply queue order/eligibility for the operator and the
+  //    delegate, applied by `src/queueops.mjs`; see demo/queue-control-spool.test.mjs).
   assert.deepEqual(
     SPOOL_OPS,
-    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure"],
+    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "queue"],
     "the spool's op vocabulary",
   );
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");

@@ -37,6 +37,9 @@ import { contextOverWindow } from "./context.mjs";
 import { describeFaults } from "./textintegrity.mjs";
 import { messageDefects } from "./commitmsg.mjs";
 import { MEASURES } from "./metrics.mjs";
+// The stranded-gate census lives with the repair it plans (src/queueops.mjs), so `check` reports exactly
+// the rows the operator/delegate repair verb would touch — one rule, one census.
+import { strandedGates } from "./queueops.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -131,6 +134,17 @@ export const RULES = [
     id: "duplicate-item",
     severity: "fix-now",
     what: "a non-terminal queue item is SAME-INTENT with an already-terminal item (same from/to/tier plus high subject overlap)",
+  },
+  {
+    // THE READER THE ORPHANS NEVER HAD (operator ruling 2026-11-12T17:5xZ, src/queueops.mjs).
+    // `workable()` treats a CANCELLED prerequisite as positive non-workability (lead-ratified #2677,
+    // "terminal != done"), so a dependent of a cancelled row can NEVER be claimed — and nothing
+    // repaired the chain. Measured on this rig: 151 such rows from
+    // `node tools/queue-drain-audit.mjs`, plus two live casualties (#3503, #5885 behind cancelled
+    // #3377). A tool printed that census and nothing consumed it, which is why it accrued for weeks.
+    id: "stranded-gate",
+    severity: "fix-now",
+    what: "a non-terminal item is gated on a CANCELLED item, so it can never be claimed and nothing repairs it",
   },
   {
     id: "shared-tree-on-main",
@@ -793,6 +807,27 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
           `cancel #${it.id} as a duplicate of #${twin.id} (point at the completed original), or state in the body why it is a deliberate second attempt`,
         );
       }
+    }
+  }
+
+  // 13b. STRANDED GATE — the cross-row rule `workable()` enforces and no audit ever reported. A
+  //    dependent whose prerequisite was CANCELLED is permanently unclaimable; the only trace today is
+  //    a broker-log SKIP line. Uses the SAME census the repair verb plans from (src/queueops.mjs), so
+  //    the audit and the repair can never disagree about which rows are stranded.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "stranded-gate",
+      why: "the queue could not be read, so terminal-gated items cannot be inspected",
+    });
+  } else {
+    const stranded = strandedGates(queueItems);
+    for (const row of stranded.rows) {
+      add(
+        "stranded-gate",
+        `#${row.id}`,
+        `#${row.id} (${row.status}, to ${row.to ?? "?"}) is gated on the CANCELLED #${row.gateId} — a cancelled gate can never be satisfied, so this row can never be claimed and nothing repairs the chain`,
+        `release the dead gate: node intent.mjs queue --op queue --action repair-gates --id ${row.id} --apply  (propose first: drop --apply)`,
+      );
     }
   }
 

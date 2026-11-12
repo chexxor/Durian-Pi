@@ -90,7 +90,9 @@
       "demo/workable-claim.test.mjs",
       "demo/workstrategy-claim.test.mjs",
       "demo/workstrategy-up.test.mjs",
-      "demo/workstrategy.test.mjs"
+      "demo/workstrategy.test.mjs",
+      "demo/queue-ops.test.mjs",
+      "demo/queue-control-spool.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",

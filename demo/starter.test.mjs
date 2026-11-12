@@ -245,6 +245,7 @@ try {
 		"commit-message-encoding": "demo/commit-message-encoding.test.mjs",
 		"context-over-window": "demo/context-over-window.test.mjs",
 		"doc-count-drift": "demo/doc-count-drift.test.mjs",
+		"stranded-gate": "demo/queue-ops.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

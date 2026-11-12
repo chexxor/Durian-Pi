@@ -20,6 +20,7 @@ import { CompactionEntry, configure } from "@earendil-works/pi-durable";
 
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { dispatchRead } from "./brokerread.mjs";
+import { planQueueAction, confirmGate } from "./queueops.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { isLocalProviderId } from "./providers/local.mjs";
@@ -486,6 +487,25 @@ export const OPERATOR = "operator";
 export const CONTROL_PLANE_OPS = new Set(["pause", "unpause", "configure"]);
 
 /**
+ * The DELEGATE identity (operator ruling 2026-11-12T17:5xZ: the delegate holds propose-and-apply
+ * authority over queue ORDER and ELIGIBILITY). It is a SEPARATE identity from the operator, not an
+ * alias: the transition it stamps reads `authority: "delegate (operator-authorised)"`, so the record
+ * names who acted. It is NOT admitted to CONTROL_PLANE_OPS — pausing the rig's driver, reconfiguring a
+ * seat's model and minting seats stay the operator's alone.
+ */
+export const DELEGATE = "delegate";
+
+/**
+ * QUEUE-CONTROL spool ops: they change the work queue (order, eligibility, a dead-gate repair), which
+ * the operator's ruling opened to the delegate as well. Kept in its own set so the widening is ONE
+ * named place a reviewer can read — a future queue mutation is added HERE, not given an ad-hoc gate.
+ *
+ * Same residual as every spool identity (see `authorizeSpoolRequest`): `from` is producer-stamped and
+ * forgeable by any process on the same OS user, so this is detect-and-layer, not a boundary.
+ */
+export const QUEUE_CONTROL_OPS = new Set(["queue"]);
+
+/**
  * Ops that can act on a seat OTHER than the requester: a `from=<seat>` request for one
  * of these is a cross-seat act (privilege escalation), so it is operator-only too. A
  * self-target (`to === from`) stays allowed, so a seat may still stop/reset itself.
@@ -508,6 +528,17 @@ export const CROSS_SEAT_OPS = new Set(["stop", "reset", "compact"]);
  */
 export function authorizeSpoolRequest(request, { op = requestOp(request) } = {}) {
   const from = request?.from ?? null;
+  if (QUEUE_CONTROL_OPS.has(op)) {
+    // The operator plane: the operator, or the delegate acting on the operator's authority.
+    if (from !== OPERATOR && from !== DELEGATE) {
+      return {
+        allowed: false,
+        code: "not-operator-plane",
+        detail: `${op} is a queue-control op; only from="${OPERATOR}" or from="${DELEGATE}" may apply it (from=${JSON.stringify(from)})`,
+      };
+    }
+    return { allowed: true, code: from === DELEGATE ? "delegate-authorised" : "operator-queue-control" };
+  }
   if (CONTROL_PLANE_OPS.has(op)) {
     if (from !== OPERATOR) {
       return {
@@ -598,7 +629,7 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
  * harness — rather than opening a second writer. `pause`/`unpause` (ROADMAP 131) are
  * rig-level: they carry no seat target.
  */
-export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure"];
+export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "queue"];
 
 /** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
 const QUIESCE_POLL_MS = 100;
@@ -751,6 +782,66 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
       context,
     );
   }
+  if (op === "queue") {
+    // OPERATOR/DELEGATE QUEUE CONTROL (operator ruling 2026-11-12T17:5xZ, src/queueops.mjs).
+    // The plan is computed from the LIVE queue, so `propose` and `apply` are one code path: the reply
+    // always carries the exact transitions that would be (or were) appended. Three rules are enforced
+    // HERE rather than in the caller, because a caller is the thing being constrained:
+    //   - nothing is written without `apply: true` (propose is the default);
+    //   - a plan over the confirm threshold is refused without `confirm: true`;
+    //   - the mutation itself is appended as TRANSITIONS on each row, never a rewrite, so every change
+    //     has an inverse and `cli.mjs events` shows it in order.
+    const action = String(request.action ?? "");
+    const snap = await harness.snapshot(RigQueue, undefined, context);
+    const plan = planQueueAction(action, snap?.items ?? [], {
+      ids: request.ids,
+      priority: request.priority,
+      reason: request.reason,
+      expiresAt: request.expiresAt,
+      from: request.from,
+      confirm: request.confirm,
+    });
+    if (!plan.ok) throw new Error(`queue ${action}: ${plan.refusal}`);
+    const gate = confirmGate(plan, request);
+    if (!gate.ok) throw new Error(`queue ${action}: ${gate.refusal}`);
+    const reply = {
+      op,
+      action,
+      proposed: plan.changes?.length ?? 0,
+      changes: plan.changes ?? [],
+      transitions: plan.transitions ?? [],
+      strands: plan.strands ?? [],
+      ...(plan.census ? { census: { count: plan.census.count, rows: plan.census.rows } } : {}),
+      applied: 0,
+    };
+    if (request.apply !== true || reply.proposed === 0) return reply;
+    await harness.commit(async (tx) => {
+      const queue = await tx.doc(RigQueue);
+      for (let i = 0; i < reply.changes.length; i += 1) {
+        const change = reply.changes[i];
+        const item = queue.items.find((it) => String(it.id) === String(change.id));
+        if (!item) continue;
+        if (action === "repair-gates") {
+          const dead = new Set(change.gateReleased.map(String));
+          item.blockedBy = (item.blockedBy ?? []).filter((g) => !dead.has(String(g)));
+        } else if (action === "priority") {
+          item.priority = change.to;
+          item.prioritySet = {
+            at: reply.transitions[i].at,
+            by: reply.transitions[i].by,
+            reason: reply.transitions[i].reason,
+            expiresAt: reply.transitions[i].expiresAt,
+            authority: reply.transitions[i].authority,
+          };
+        } else if (action === "cancel") {
+          item.status = "cancelled";
+        }
+        (item.transitions ??= []).push(reply.transitions[i]);
+      }
+    }, context);
+    reply.applied = reply.changes.length;
+    return reply;
+  }
   throw new Error(`unknown op: ${op} (known: ${SPOOL_OPS.join(", ")})`);
 }
 
@@ -827,7 +918,7 @@ async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic
     // AUDITED for every gated op (allowed and refused), then a refusal is dead-lettered
     // with a STRUCTURED code so the producer reports "refused" rather than "pending".
     const decision = authorizeSpoolRequest(request, { op });
-    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op)) {
+    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op) || QUEUE_CONTROL_OPS.has(op)) {
       appendGateAudit(dbPath, {
         requestId,
         op,
