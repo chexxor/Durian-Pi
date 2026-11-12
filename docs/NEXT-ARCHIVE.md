@@ -1,5 +1,26 @@
 # durian-pi — NEXT archive (history, verbatim)
 
+> **Archive disposition (added 2026-11-11 by scribe, item #6334): nothing in this file was rewritten.**
+> Commands quoted below are verbatim records of what was typed at the time of recording, and some of
+> their environment names are no longer current. Measured in the `item-6334` worktree on `main
+> 35001c3a`: **68 lines** in this archive still carry the pre-rebrand store selector `DURIAN_PI_DB`,
+> **38** of them command-shaped (`DURIAN_PI_DB=<value>`; **36** point at `./selfdev.sqlite`). Those are
+> the archive's own lines, counted as `git show 35001c3a:docs/NEXT-ARCHIVE.md | grep -c 'DURIAN_PI_DB'` → 68,
+> exit 0; this header itself adds lines naming the literal, so a plain `git grep -c` on the file now
+> returns 73. The live
+> selector is `--db` / `DURIG_DB`. Re-run here, exit 1 both ways: `DURIAN_PI_DB=./scratch-x.sqlite node
+> cli.mjs status` resolves to `…/rig.sqlite`, while `DURIG_DB=./scratch-y.sqlite node cli.mjs status`
+> resolves to `…/scratch-y.sqlite` — so an archived command followed today opens a store other than the
+> one it names, silently. `scripts/clockin.mjs:468` is the one exception that still reads `DURIAN_PI_DB`
+> first. The current form is in the runbooks, e.g. `docs/runbooks/broker-down-or-stalled.md:47`
+> ("`DURIG_*`, not `DURIAN_PI_*`"). Rewriting the archive would make it read as though the commands
+> always said `--db`, which is false evidence; the warning lives here instead.
+> One encoding note for the same reader: the single mojibake sequence `node scripts/fix-mojibake.mjs
+> docs/NEXT-ARCHIVE.md` reports (line 1241 now; line 1221 in the pre-header tree `35001c3a`, detector
+> exit 1) is a **deliberate quotation** of the damaged characters in a passage explaining the read
+> artefact — not damage — so it is left byte-for-byte as recorded. See
+> `docs/runbooks/docs-encoding-mojibake.md`.
+
 > Cut VERBATIM out of `docs/NEXT.md` on 2026-10-25 when the pointer was re-cut for the landing of #4747/#4750
 > (landing entry #4815), again on 2026-10-26 when the `2026-10-25T01:52Z` block was superseded by the
 > Linux-store session (D128/D129) and the live file hit its 200-line cap, again on 2026-10-27 when the
