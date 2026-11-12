@@ -1,10 +1,6 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-12T06:5xZ (delegate session **N35** — the **work-strategy change implemented by hand**, the one
-thing the operator paused the lifecycle goal for: claim order is now a declared policy per team and per seat (**D266**),
-with a leased `priority` and a `ps`/`status` readout naming its source). `main` = N35 (code commit **`69d4d2cc`**), suite **303/303** in
-**117.0 s** (`--jobs 4`, exit 0), refs **101** / worktrees **91** at 06:2xZ (live: 95/85 at 05:0xZ → 101/91 an hour later).
-**The lifecycle goal is PAUSED** — nothing resumed; the delegate minted/claimed/completed/deferred no row. D266 RATIFIED (see its **Status**). Operator directives executed this window: prune what is provably merged, route the landing passes to the team, and PRIORITISE them. Measured: 106 refs / 97 worktrees at `2e2f1797` -> **105 / 95** after pruning `item-6193`+`item-6448` (`4c111c16`, clean+unlocked); a fresh pairwise plan (**45 refs, 990 pairs, 28 conflicts, 3 batches**) in `.spike/batches-n35.out`; the three `land.mjs ... --suite` commands delivered to `pm`, which minted **#7124/#7126/#7128** (N35 passes 1-3). Prioritisation: the operator approved, then widened — `impl`+`devtools` first (seat overrides, `6f036b2e`), then the **TEAM is `priority_first`** (`04fa3af6`, `up`, verified `ps`: 12/12 seats `priority_first`, team source; unleased rows keep ascending-id order by the neutral tie). A third intent (07:34:04Z) asked `pm` to lease `now` on 18 rows (8 landing, 6 goal, 4 D266); at 07:39Z it had done **3** — `#7124`/`#7126` `now` (exp 11-15), `#7128` `next` — and 15 were still unleased.
+**Last update:** 2026-11-12T09:3xZ (delegate session **N36** — the operator stepped away and left one directive: **finish the backlog, land every branch, clean up**. The fleet is driving and **nothing has landed**: `main` is still **`ddcc0a23`** (+2 local commits, unpushed) while refs went **101 → 114** and worktrees **91 → 107** in three hours (~4 refs/hour minted, **0** landings). Suite **303/303** in **115.5 s** (`--jobs 4`, exit 0) at `ddcc0a23`; the new delegate instrument `tools/broker-keepalive.mjs` (commit **`5491cfe1`**) keeps the broker driving until 2026-11-13T06:00Z and appends `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED** — nothing resumed; the delegate minted/claimed/completed/deferred no row.
 
 **Milestone this window worked** — **a work-item lifecycle the team can run itself** (the goal the operator PAUSED):
 seats land their own verified branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless
@@ -34,7 +30,7 @@ blessed refs), **#7056** (bind the gate to the verifier's tip), **#7057** (the p
 **#7058** (mint the execution mode on the row). The delegate's landing intent (delivered 05:18:19Z,
 `INTENT delivered=1`) carries the 41-ref triage and the three batch commands below.
 
-**Milestone this window worked** — the **work-item lifecycle** above (paused mid-way); its residue-cleanup tranche, the branch census, is where N34 stopped. This session added D266 only and left every lifecycle row as the pause found them.
+**Milestone this window worked** — **landing the branch residue (operator directive 2026-11-12, rows #7124/#7126/#7128)**, inside the paused work-item-lifecycle goal. N36 drove the fleet (intent delivered to `pm` 08:01:57Z, `INTENT delivered=1`), kept the broker driving with a new instrument, and measured the gap: **the fleet mints ~4 refs/hour and has landed zero in 3 h**. This session committed no team row and closed no queue item.
 
 **Research status (changed this session):** round 1 landed — the delegate ran it itself (`node`+`curl`, this host)
 into **`docs/reviews/branch-lifecycle-llm-agent-teams.md`**, with every quote re-fetched into `inputs/fetched/` and
@@ -67,9 +63,10 @@ DURIG_DB=./selfdev.sqlite node cli.mjs ps                             # 1.8 s �
 node demo/offline.mjs                                                  # exit 1 — the mocked plane is still red
 ```
 
-**Broker status:** resident pid **2997720** (`--no-probe --max-duration 3600 --yes-pm-wakes`, started 05:17:5xZ;
-`INTENT delivered=1 dead=0 dup=0` at 05:18:19Z, `PASS 3 ms=64`). Read `selfdev.sqlite.broker.json` for the pid — the
-pid is the identity, not `pgrep`.
+**Broker status:** resident pid **3670950** (`--no-probe --max-duration 3600 --yes-pm-wakes`, started **08:45:18Z** after
+the previous broker (3455955) reached its 3600 s bound and exited). A detached `node tools/broker-keepalive.mjs
+--interval 60 --until 2026-11-13T06:00:00Z` loop (pid 3666805, log `.spike/keepalive.log`) re-arms it on the stranded
+signature only. Read `selfdev.sqlite.broker.json` for the pid — the pid is the identity, not `pgrep`.
 **The bound is not a hard bound, and it is now measured, not hypothesised**: a broker whose wake loop broke at
 `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1855-1857`) with **no stop request**, so
 `graceExpired()` is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded
@@ -102,7 +99,8 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live, re-count before trusting): refs **101**, worktrees **91**, `main` = `origin/main` = **`792aa059`** (pushed), queue census **7,101 rows** (4,711 done / 933 cancelled / 427 held / 524 deferred / 11 claimed / 495 queued). Broker pid **3387492** runs THIS code (`START` 06:50:20Z, `PASS 3` onward), so `status --json --no-notes` answers in **2.3 s** with `workStrategy` from the health payload — the extra round-trip the old broker forced is gone.
+**State at clock-out** (measured live 09:2xZ, re-count before trusting): refs **114** / item branches **111** / worktrees
+**107**; census (`node tools/branch-census.mjs --json`, **15.6 s**): **50** refs need a landing decision, **31** conflict with main, 11 uncommitted, 9 seat roots, 2 locked, 9 ruled in DISPOSITIONS, **2 prune-ready** (item-7127, item-7130), **28 unaccounted**. `main` = **`5491cfe1`** locally, **2 ahead of `origin/main` (`a18ede9e`) — NOT pushed** (operator grant). Queue census **7,159 rows**: 4,736 done / 935 cancelled / 428 held / 524 deferred / 12 claimed / 530 queued; the landing rows **#7124/#7126/#7128 are `queued`, not claimed**; **#7074/#7075** (the old batch rows) are **cancelled**.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
