@@ -305,6 +305,7 @@
       "demo/commit-message-encoding.test.mjs",
       "demo/duplicate-item.test.mjs",
       "demo/doc-count-drift.test.mjs",
+      "demo/doc-integrity-env-name.test.mjs",
       "demo/metrics.test.mjs",
       "demo/ownership.test.mjs",
       "demo/provenance.test.mjs",
