@@ -11926,12 +11926,45 @@ the broker can start again.
 
 ---
 
-## D### — Backlog disposition: an unlanded branch is a claim on attention, not a store of value; CANCEL is the default and is reversible, CONTENT — not ancestry — is the test, a stack may not land ahead of its base, and a number minted in an unlanded branch is a claim that must be re-checked at land (lead ruling #3265, amended #3338/#3354, carried live by #3410; recorded by `scribe`, item #3271, 2026-11-12)
+## D### — Backlog disposition, and the one principle underneath it: an unlanded branch is a claim on attention, not a store of value; CANCEL is the default and is reversible, CONTENT — not ancestry — is the test, a stack may not land ahead of its base, a number minted in an unlanded branch is a claim to be re-checked at land — and where a cheap signal stands in for an expensive fact, the signal may ACCEPT but must never DECIDE (lead ruling #3265, amended #3338/#3354, carried live by #3410; the principle and its twin from #3575/#4058; recorded by `scribe`, items #3271/#3575, 2026-11-12)
 
 **Mint note (#3075/#3186 discipline).** `D###` is a placeholder on purpose; the landing pass derives the next FREE
 number by scanning this file at merge. Highest at this branch's fork point `90c63124` is **D266** — re-derive, do not
 assume 267. Per #3186 the entry lands from the landing pass, never as an independent side-branch entry. Complements,
 does not replace, #3252.
+
+### The principle: a cheap signal may ACCEPT, but it must never DECIDE
+
+When a cheap signal stands in for an expensive fact, the signal is allowed to say *proceed* — it is never allowed to
+say *the fact is X*. Everything below is one instance of this, which is why #3575 registers it as the head of the
+entry rather than a seventh convention: a reader who has the principle can derive the rule at the moment they meet it,
+instead of carrying six unrelated ones.
+
+| Cheap signal | The fact it stands in for | What breaks when it is allowed to decide | Where the check lives |
+|---|---|---|---|
+| commit reachability (`git merge-base --is-ancestor`) | content on `main` | a squash-shaped landing is byte-identical on main while ancestry says no (`security-item-1475` @`7cf5a34` vs union tip `e3abbca`) — work is reported unlanded and re-landed | `scripts/land.mjs:479-487`: ancestry is a FAST PATH (`contains-base` / `already-landed` / `neither` → fall through to the merge), never a refusal |
+| patch-id (`git cherry`) | whether a branch's content is already main's | an add/add branch that adds a whole file reports "unique" even when the blob is identical (`architect-item-3005` @`0827b39`, blob `0a26921ef6…` on both sides) — the branch is routed as live work, or re-landed as an add onto a file that is already there | blob identity at path is the verdict, patch-id secondary: `docs/DISPOSITIONS.md` §"The probe method", `docs/runbooks/branch-cleanup.md` step 0 |
+| test coverage | proof | a test that reaches a branch without forcing the condition it guards proves nothing — the bounded-drain case whose `waitForIdle` resolved instantly | force the condition: the guard is shown FAILING on planted damage |
+| a title | the spec | #2826's title named four things, its body carried seven; the three unnamed ones fell out of a split made from the title | read the body; a split enumerates from the body |
+| green tests | the defect is fixed | pm's formulation, quoted: "a verified fix proves it does what it says, not that it addresses the mechanism that produced the observed failures. Landing something green that leaves the defect in place is the most expensive outcome available, because it looks solved." | a defect-fix verify confirms the **mechanism** — the `originCallId` check decides whether #3192's dedup key matches the mechanism that produced the duplicates |
+| a reported state | the actual state | `revise` reporting "unchanged", `held: true` silently downgrading to `queued`, cancel reasons never reaching the sender, a delivery snapshot stale after a revise (#3236, #3435 class) | read the state back, not the report |
+
+**The producing-side twin (#4058): a degraded source must degrade to UNKNOWN, never to EMPTY or PERMISSIVE.** An empty
+result is indistinguishable from a real empty result, so it makes *absence look like evidence*, and the default must
+follow the **cost of being wrong**. Same error, opposite ends of the same wire: an unknown treated as a fact.
+
+| Degraded source | The permissive default that must not be taken | What it authorises | Where it is |
+|---|---|---|---|
+| liveness probe | "dead" when the OS cannot tell | a second writer into the store | `src/broker.mjs:2444-2447` — "FAIL-SAFE (#3398): dead ONLY on ESRCH … unknown ⇒ ALIVE"; same rule `src/genlock.mjs:77-79` |
+| `listWorktrees` | `[]` when git itself failed | the delete the check exists to prevent | `src/worktree.mjs:1385` ("`strict: true` — a caller that DECIDES on the result. A failure THROWS"), used at `:930` and `:1004`; `node demo/worktree-list-failure.test.mjs` exit **0** (2026-11-12) |
+| keyboard bindings | "all free" when the binding list is unknown | binding over `ctrl+]`, measured as already bound to `tui.editor.jumpForward` — the operator finds it by being unable to leave a session | `src/tui/durable/launch.mjs:63, 96` |
+| a CANCELLED gate | released | the dependent reads as blocked while being permanently dead (starved) | `src/rig.mjs:296, 339` — `gate-cancelled:#<id>` |
+
+The counter-example that makes it a rule rather than a style: the seat-label retirement, where the honest answer *was*
+"unknown, so say both". The default followed the cost there too — a wrong label meant a wrong audit, so the label was
+widened instead of guessed.
+
+### The rules that follow from it
 
 **Trigger.** lead's ruling #3265 was asked to dispose "the leftover unlanded set: 9 unclassified clean branches" and
 to settle who owns the rest. The cost of an unlanded branch is not storage — it is attention: it reappears in every
@@ -11989,7 +12022,8 @@ runbooks refer to them.
   `scribe-item-3268`'s branch carried a minted D121 while the union branch #3343 also inserted D115–D120).
 
 **The principle underneath R-C, R-E and R-I: content is the invariant, ancestry is a proxy.** The evidence pin is a
-CONTENT invariant — what lands must be what was verified. Ancestry is only a proxy for content, and squash-shaped
+CONTENT invariant — what lands must be what was verified — and it is the first table's first row applied at two
+lifecycle points. Ancestry is only a proxy for content, and squash-shaped
 landings break the proxy: an artifact can sit on main byte-identically while `git merge-base --is-ancestor` reports it
 is not an ancestor (`security-item-1475` @`7cf5a34` against union tip `e3abbca` — true by content, false by ancestry).
 Decision procedure:
