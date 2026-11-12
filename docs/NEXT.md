@@ -1,6 +1,6 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-12T10:4xZ (delegate session **N37** — the operator stepped away and left one directive: **finish the backlog, land every branch, clean up**. The fleet is driving and **nothing has landed**: `main` is **`ebb5ba71`** (6 local commits, unpushed) and refs went **114 → 118** / worktrees **104 → 108** in six minutes (~1 ref/minute minted, **0** seat landings). `node tools/landing-batch-plan.mjs --max 12` (**12.5 s**, exit 0) answers the real question: **53 refs needing a landing decision pack into 6 verified merge chains — 12,12,12,12,4,1 — 0 unlandable**, where the old pairwise filter threw away 36 of them. Suite **26/26** in **17.2 s** (`--area toolchain`, exit 0); the full-suite confirmation after `60380781` is still owed. The delegate instrument `tools/broker-keepalive.mjs` (commit **`5491cfe1`**) keeps the broker driving until 2026-11-13T06:00Z and appends `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED** — nothing resumed; the delegate minted/claimed/completed/deferred no row.
+**Last update:** 2026-11-12T10:5xZ (delegate session **N37** — operator away with one directive: **finish the backlog, land every branch, clean up**. The fleet is driving and **nothing has landed**: `main` = `ebb5ba71` (6 local commits, unpushed), refs **114 → 118**, worktrees **104 → 108** in six minutes, **0** seat landings. New instrument: `node tools/landing-batch-plan.mjs --max 12` (**12.5 s**, exit 0) chains merges with `git commit-tree` scratch commits and packs **53 refs → 6 verified bins (12,12,12,12,4,1), 0 unlandable** — the old pairwise filter threw away 36. Suite **304/305** in **121.2 s** (`--all --jobs 4`); the one red is `demo/clockin-digest.test.mjs`: this pointer's digest is **20,124 B** against a **20,000 B** budget, so cut here before adding. `tools/broker-keepalive.mjs` (`5491cfe1`) re-arms the broker until 2026-11-13T06:00Z, logging `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED**; the delegate minted/claimed/completed/deferred no row and landed no branch. `tools/broker-keepalive.mjs` (commit **`5491cfe1`**) keeps the broker driving until 2026-11-13T06:00Z and appends `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED** — nothing resumed; the delegate minted/claimed/completed/deferred no row.
 
 **Milestone this window worked** — **a work-item lifecycle the team can run itself** (the goal the operator PAUSED):
 seats land their own verified branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless
@@ -65,9 +65,9 @@ node demo/offline.mjs                                                  # exit 1 
 ```
 
 **Broker status:** resident pid **3912450** (`--max-duration 3600`, started **10:17:11Z**) after two refused re-arms at
-09:55Z and 09:57Z printed `START REFUSED: broker-degraded, live-tree-dirty` — the cause was the delegate's own
-uncommitted work (pitfall **287**: commit before re-arming). A detached `node tools/broker-keepalive.mjs --interval 60
---until 2026-11-13T06:00:00Z` loop (pid **3912747**, log `.spike/keepalive.log`) re-arms it on the stranded signature only. Read `selfdev.sqlite.broker.json` for the pid — the pid is the identity, not `pgrep`.
+09:55Z and 09:57Z printed `START REFUSED: broker-degraded, live-tree-dirty` — the cause was uncommitted delegate work
+(pitfall **287**: commit before re-arming). The detached keepalive loop (pid **3912747**, `--until 2026-11-13T06:00:00Z`,
+log `.spike/keepalive.log`) re-arms it on the stranded signature only. Read `selfdev.sqlite.broker.json` for the pid — the pid is the identity, not `pgrep`.
 **The bound is not a hard bound, and it is now measured, not hypothesised**: a broker whose wake loop broke at
 `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1855-1857`) with **no stop request**, so
 `graceExpired()` is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded
@@ -101,10 +101,8 @@ seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 202
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
 **State at clock-out** (measured live 10:3xZ, re-count before trusting): refs **118** / item branches **115** / worktrees
-**108**; census (`node tools/branch-census.mjs --json`, **~10 s**): **53** refs need a landing decision and chain into
-**6 bins** (12,12,12,12,4,1); 9 seat roots, 2 locked, 9 ruled in DISPOSITIONS, **28 unaccounted**. The delegate pruned
-**item-7127** and **item-7130** (clean, ancestors of main, `git branch -d` exit 0, no `--force`) with rows appended to
-`docs/DISPOSITIONS.md`. `main` = **`ebb5ba71`** locally, **6 ahead of `origin/main` (`a18ede9e`) — NOT pushed** (operator grant). Queue census **7,183 rows**: 4,746 done / 936 cancelled / 428 held / 524 deferred / 14 claimed / 535 queued; the landing rows **#7124/#7126/#7128 are still `queued`, not claimed**.
+**108**; census (**~10 s**): **53** refs need a landing decision and chain into **6 bins** (12,12,12,12,4,1); 9 seat roots,
+2 locked, 9 ruled in DISPOSITIONS, **31 unaccounted**. `main` = **`ebb5ba71`** locally, **6 ahead of `origin/main` (`a18ede9e`) — NOT pushed** (operator grant). Queue census **7,183 rows**: 4,746 done / 936 cancelled / 428 held / 524 deferred / 14 claimed / 535 queued; the landing rows **#7124/#7126/#7128 are still `queued`, not claimed**.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
