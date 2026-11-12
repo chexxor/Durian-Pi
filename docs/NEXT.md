@@ -4,7 +4,7 @@
 thing the operator paused the lifecycle goal for: claim order is now a declared policy per team and per seat (**D266**),
 with a leased `priority` and a `ps`/`status` readout naming its source). `main` = N35 (code commit **`69d4d2cc`**), suite **303/303** in
 **117.0 s** (`--jobs 4`, exit 0), refs **101** / worktrees **91** at 06:2xZ (live: 95/85 at 05:0xZ → 101/91 an hour later).
-**The lifecycle goal is PAUSED** — nothing resumed, no row minted/claimed/completed/deferred, nothing pushed. Readout verified live against the older broker (pid **2997720**, since exited): `ps` 1.8 s, `status` 2.9 s, both exit 0. D266's choices were RATIFIED at this close (see its **Status**): vocabulary+lease, precedence, wake left boolean, broker left to recycle — it exited by itself at 06:43:53Z (`reason=max-duration passes=210`), so the next start runs this code. Two read-surface gaps went to `pm` as ONE `message` intent (**inbox=1**, undrained while no broker runs).
+**The lifecycle goal is PAUSED** — nothing resumed, and the delegate minted/claimed/completed/deferred no row. D266's choices were RATIFIED at this close (see its **Status**). The broker was recycled and **one live claim was observed on the new code BEFORE pushing** (the accepted 1B condition): pid **3387492** (START 06:50:20Z) logged `#6215` by impl, `#7018` by qa, `#7097` by lead at 06:52:46Z and `#6549` by scribe at 06:53:25Z. The four commits are **PUSHED** (`origin/main` = `792aa059`). Two read-surface gaps went to `pm` as ONE `message` intent (`INTENT delivered=1`).
 
 **Milestone this window worked** — **a work-item lifecycle the team can run itself** (the goal the operator PAUSED):
 seats land their own verified branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless
@@ -102,7 +102,7 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live 06:2xZ, re-count before trusting): refs **101**, worktrees **91**, `main` `69d4d2cc`, queue census **7,101 rows** (4,711 done / 933 cancelled / 427 held / 524 deferred / 11 claimed / 495 queued) via `status --json --no-notes` exit 0. Broker pid **2997720** is alive and current (`hbAgeS=7 progressAgeS=519`, `drainStranded=0`, last pass 06:18:10Z) but still runs PRE-`69d4d2cc` code, so `status` pays one extra round-trip for `workStrategy` until it restarts; `ps` is correct either way.
+**State at clock-out** (measured live, re-count before trusting): refs **101**, worktrees **91**, `main` = `origin/main` = **`792aa059`** (pushed), queue census **7,101 rows** (4,711 done / 933 cancelled / 427 held / 524 deferred / 11 claimed / 495 queued). Broker pid **3387492** runs THIS code (`START` 06:50:20Z, `PASS 3` onward), so `status --json --no-notes` answers in **2.3 s** with `workStrategy` from the health payload — the extra round-trip the old broker forced is gone.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own

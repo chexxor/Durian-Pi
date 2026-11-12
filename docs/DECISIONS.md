@@ -11903,5 +11903,11 @@ pin), the rig-file-over-`DURIG_WORK_STRATEGY` precedence, the order-agnostic wak
 `reason=max-duration passes=210`, so its next start runs this code). Two read-surface gaps — a human-visible priority view
 on the operator's `queue` path without changing the JSON byte contract, and a MONITORED artifact for leases (the #2643
 rule) — were routed to `pm` as an intent (`selfdev.sqlite.broker.inbox`, one `message` intent to `pm`); the delegate minted
-no row, since routing is `pm`'s. The push of the three commits was accepted CONDITIONALLY on one live seat claim, which
-cannot happen while the broker is down and must not be manufactured by the delegate: no row was sent to make a seat claim.
+no row, since routing is `pm`'s. The push was accepted CONDITIONALLY on one live seat claim. That condition was MET before pushing, by observation and
+not by manufacture: the broker was started from this tree (pid **3387492**, `START` 06:50:20Z, `INTENT delivered=1` on its
+first pass) and its own passes logged four claims on the new code — `#6215` by impl, `#7018` by qa, `#7097` by lead
+(06:52:46Z) and `#6549` by scribe (06:53:25Z). The delegate sent no row to provoke a claim. Then `main` was pushed:
+`origin/main` = `792aa059` (fetch-verified, 0 ahead). Note what this evidence does and does not cover — a live claim proves
+the claim PATH runs on the new code with the default strategy, and the `priority_first` ordering itself is proven on the
+tool plane (`demo/workstrategy-claim.test.mjs`), because this rig resolves to `oldest_first` and flipping the live team to
+`priority_first` to watch it reorder would have changed the team's behaviour for a test.
