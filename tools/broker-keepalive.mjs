@@ -138,6 +138,9 @@ function snapshot(db, ledger, withQueue) {
 		lastPassAgeS: state?.lastPassAt ? Math.round((now - state.lastPassAt) / 1000) : null,
 		pendingIntents: pendingIntents(db),
 		refs: gitCount(["branch", "--list"]),
+		// main's sha, so "did anything land?" is readable from the ledger without a second git call.
+		// A landing is the only thing that moves main; refs rising with main pinned = minting, not landing.
+		mainSha: spawnSync("git", ["rev-parse", "--short", "main"], { cwd: REPO, capture: true, timeout: 20000, encoding: "utf8" }).stdout.trim() || null,
 		itemBranches: spawnSync("git", ["branch", "--list", "--format=%(refname:short)"], {
 			cwd: REPO,
 			capture: true,
@@ -205,7 +208,7 @@ console.log(
 while (Date.now() < until) {
 	const snap = snapshot(db, ledger, tick % 10 === 0);
 	console.log(
-		`${snap.at} pid=${snap.brokerPid ?? "-"} hb=${snap.heartbeatAgeS}s lastPass=${snap.lastPassAgeS}s intents=${snap.pendingIntents} refs=${snap.refs} itemBranches=${snap.itemBranches} worktrees=${snap.worktrees}` +
+		`${snap.at} pid=${snap.brokerPid ?? "-"} hb=${snap.heartbeatAgeS}s lastPass=${snap.lastPassAgeS}s intents=${snap.pendingIntents} refs=${snap.refs} itemBranches=${snap.itemBranches} worktrees=${snap.worktrees} main=${snap.mainSha ?? "-"}` +
 			(snap.queue ? ` queued=${snap.queue.queued ?? 0} claimed=${snap.queue.claimed ?? 0} held=${snap.queue.held ?? 0} deferred=${snap.queue.deferred ?? 0} leased=${(snap.leased ?? []).length}` : "")
 	);
 	const verdict = rearmVerdict(snap, stale);
