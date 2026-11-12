@@ -20,6 +20,7 @@ import { authorEnv, verifierEnv, NON_INTERACTIVE_GIT } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
 import { describeSeatRoot, resolveSeatRoot } from "./seatroot.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";
+import { READONLY_COMMANDS, runReadonlyCommand, READONLY_TIMEOUT_S } from "./readonlytool.mjs";
 
 /** A tool result carrying only text (the shape `defineTool` accepts). */
 function result(text) {
@@ -225,6 +226,34 @@ const seatRoot = defineTool({
 // host got, and `src/seatguard.mjs`'s shell set reads the same registry, so the tool set and the
 // guard's set cannot disagree about what a shell is.
 export const seatShell = seatShellSelection;
+
+/**
+ * `run_readonly` — the coordinator's INSTRUMENT (operator decision 2026-11-12T18:5xZ).
+ *
+ * Named, read-only entrypoints only (`src/readonlytool.mjs` holds the table, the token rule, the
+ * read-only git subcommands and the refusals). Every result is TEXT, never a throw, and a timeout comes
+ * back as BLOCKED with the reason — a bounded non-answer is a measurement a router can act on, while a
+ * thrown timeout costs the turn.
+ */
+const runReadonly = defineTool({
+	name: "run_readonly",
+	description:
+		"Measure the rig with a NAMED read-only entrypoint — this is not a shell. Names: " +
+		`${Object.keys(READONLY_COMMANDS).join(", ")}. ` +
+		"Examples: run_readonly(name='landing-plan', args=['--max','12']), run_readonly(name='queue', args=['--status','queued','--json','--no-body']), " +
+		"run_readonly(name='git', args=['log','--oneline','-5']), run_readonly(name='test', args=['--area','docs']). " +
+		`Bounded at ${READONLY_TIMEOUT_S}s: a timeout returns BLOCKED, never a number. Tokens may contain only [A-Za-z0-9_.:@/=+-]; ` +
+		"pipelines, redirection, node -e and writes are refused, and git is limited to read-only subcommands.",
+	parameters: obj({
+		name: str({ description: "an allowlisted measurement name" }),
+		args: opt(arr(str(), { description: "tokens appended to the entrypoint (validated; no shell syntax)" })),
+	}),
+	execute: async (args, api, context) => {
+		const out = await runReadonlyCommand(api, context, String(args.name ?? ""), Array.isArray(args.args) ? args.args : []);
+		return result(out);
+	},
+});
+
 export const seatTools = {
 	read: createReadTool(),
 	write: createWriteTool(),
@@ -232,6 +261,7 @@ export const seatTools = {
 	shell: seatShellSelection.tool,
 	prepareWorkspace,
 	seatRoot,
+	runReadonly,
 };
 
 export const SeatTools = defineExtension({
@@ -256,7 +286,21 @@ export const VERIFIER_REMOVALS = [seatTools.write, seatTools.edit];
  * enforcement without replacing it, so pm investigated the repository instead of routing the
  * request. Removing the tools restores what prose could not.
  */
-export const COORDINATOR_REMOVALS = [seatTools.read, seatTools.write, seatTools.edit, seatTools.shell, seatTools.prepareWorkspace];
+/**
+ * A coordinator loses the tools that CHANGE things. It keeps `read` and gains `run_readonly`
+ * (`src/readonlytool.mjs`), because removing MEASUREMENT as well as capability made every number it routed
+ * on a relayed number: pm's own continuity note reads "every measurement quoted here is relayed by another
+ * seat or the delegate", the same 10-bin landing plan had to be sent twice as prose on 2026-11-12, and two
+ * rows ("priority leases are inert", "main is red") stayed alive for hours because the seat that could
+ * route could not measure.
+ *
+ * The line is the one the original comment drew: a coordinator must not DO the work. `read` reads;
+ * `run_readonly` runs named, read-only entrypoints with validated tokens and no shell. `write`, `edit`,
+ * `shell` and `prepareWorkspace` stay removed, and a coordinator does NOT get a working capability —
+ * adding one would make `seatIsCoordinator` false and silently strip the coordinator-only `release`
+ * authority (#6097/#6112).
+ */
+export const COORDINATOR_REMOVALS = [seatTools.write, seatTools.edit, seatTools.shell, seatTools.prepareWorkspace];
 
 /** Capabilities that mean a seat produces or checks something, so it needs the working tools. */
 const WORKING_CAPABILITIES = ["implement", "code", "verify", "review"];

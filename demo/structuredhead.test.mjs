@@ -22,7 +22,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
-import { Router, Seats, enqueueItem, registerSeat } from "../src/rig.mjs";
+import { Router, Seats, enqueueItem, registerSeat, thinResultText } from "../src/rig.mjs";
 import { fillRoster, makeSeatEnv } from "../src/seattools.mjs";
 
 const INLINE_LIMIT = 2000;
@@ -88,15 +88,26 @@ try {
 	assert.ok(existsSync(workerFile), "the full body is written to cwd/.durig/<id>.md for the read-tool seat");
 	assert.ok(readFileSync(workerFile, "utf8").includes("LARGE_"), "the file holds the full body");
 
-	// (b) NO-READ-TOOL seat: the full body arrives inline, because a path is unreadable to it.
+	// (b) A COORDINATOR — which since the operator decision of 2026-11-12T18:5xZ KEEPS its read tool
+	// (demo/coordinator-instrument.test.mjs) — now gets the same structured head + path as any seat, and
+	// its restored read tool is what makes the path usable. Before that decision a coordinator was the
+	// only no-read seat in production, so this branch carries the same shape as (a).
 	const coordItem = await harness.commit(async (tx) =>
 		enqueueItem(tx, "boss", "coordinator", "Big task for coordinator", LARGE_BODY), ctx);
 	const coordResult = await driveClaim(ids.coordinator);
 	assert.ok(coordResult.includes(`#${coordItem}`), "coordinator result identifies the item");
-	assert.ok(coordResult.includes("LARGE_"), "a no-read-tool seat gets the BODY inline (no blind path)");
+	assert.ok(coordResult.includes(`item #${coordItem}: full text at `), "a coordinator gets the structured head + PATH, not a blind one");
+	assert.ok(!coordResult.includes("LARGE_"), "and not the body inline: it can read the file now");
+	const coordFile = join(cwd, ".durig", `${coordItem}.md`);
+	assert.ok(existsSync(coordFile), "the body is on disk where the coordinator's read tool can open it");
+	assert.ok(readFileSync(coordFile, "utf8").includes(LARGE_BODY), "the whole body is there, untruncated (#144 B)");
+
+	// (c) THE INLINE FALLBACK is still the contract for a seat with NO read tool, whatever makes it one:
+	// `thinResultText(..., { inlineBody: true })` is the assertion, so the path stays usable without a
+	// reader and the branch cannot be deleted by accident.
 	assert.ok(
-		coordResult.includes(LARGE_BODY),
-		"and the body is not truncated — the whole thing arrives (#144 B)",
+		thinResultText({ cwd }, LARGE_BODY, "999", "head", { inlineBody: true }).includes(LARGE_BODY),
+		"inlineBody=true still returns the body verbatim — a no-read seat is never handed a blind path",
 	);
 
 	// (c) a SMALL item stays fully inline for a read-tool seat, no file written.

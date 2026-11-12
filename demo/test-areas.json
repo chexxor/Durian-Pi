@@ -278,7 +278,8 @@
       "demo/text-integrity.test.mjs",
       "demo/wrap-newlines.test.mjs",
       "demo/write-targets.test.mjs",
-      "tools/compaction-guard-test.mjs"
+      "tools/compaction-guard-test.mjs",
+      "demo/coordinator-instrument.test.mjs"
     ],
     "readapi": [
       "demo/context-measure.test.mjs",

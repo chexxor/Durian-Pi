@@ -19,7 +19,7 @@ import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@ear
 import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
 
 import { deadGateId, isTerminalItem, registerSeat, RigQueue, Router, Seats, workable } from "../src/rig.mjs";
-import { seatHasReadTool, seatIsCoordinator } from "../src/seattools.mjs";
+import { seatHasReadTool, seatIsCoordinator, toolRemovalsFor } from "../src/seattools.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 let failures = 0;
@@ -37,8 +37,16 @@ console.log("\npure — the predicate is derived from capabilities, not from the
 check("a seat with only routing capabilities is a coordinator", seatIsCoordinator({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }));
 check("a seat that implements is not", !seatIsCoordinator({ name: "impl", role: "implementation engineer", capabilities: ["implement", "code"] }));
 check("a verifier is not", !seatIsCoordinator({ name: "qa", role: "independent verifier", capabilities: ["verify"] }));
-check("a seat declaring no capability is a coordinator (the F9 rule: it gets no working tools)", seatIsCoordinator({ name: "whoever", capabilities: [] }) && !seatHasReadTool({ name: "whoever", capabilities: [] }));
-check("the seat that loses its working tools is exactly the seat this predicate calls a coordinator", seatIsCoordinator({ name: "x", capabilities: [] }) === !seatHasReadTool({ name: "x", capabilities: [] }));
+// OPERATOR DECISION 2026-11-12T18:5xZ: a coordinator now KEEPS its read tool and gains `run_readonly`,
+// so "is a coordinator" and "has no read tool" are DECOUPLED — the old pins here asserted the inverse and
+// would now be pinning a policy the operator reversed. What must still hold, and is what this file is
+// about, is the AUTHORITY: `seatIsCoordinator` remains capability-derived, so `release` is unchanged.
+check("a seat declaring no capability is a coordinator (the F9 rule: it gets no working tools)", seatIsCoordinator({ name: "whoever", capabilities: [] }));
+check(
+	"and it still holds no WORKING tools: write, edit, shell and prepare_workspace are removed (the F9 rule survives)",
+	["write", "edit", "prepare_workspace"].every((n) => toolRemovalsFor({ name: "whoever", capabilities: [] }).some((t) => t.name === n)),
+);
+check("a coordinator keeps a read tool now, so the structured head it is handed is dereferenceable", seatHasReadTool({ name: "whoever", capabilities: [] }));
 
 console.log("\npure — a gate naming a CANCELLED row is dead, and the claim predicate agrees");
 check("cancelled prerequisite -> deadGateId names it", deadGateId({ blockedBy: [1] }, [{ id: 1, status: "cancelled" }]) === 1);

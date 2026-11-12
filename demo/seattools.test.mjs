@@ -8,7 +8,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { COORDINATOR_REMOVALS, VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv, seatShell, toolRemovalsFor } from "../src/seattools.mjs";
+import { COORDINATOR_REMOVALS, VERIFIER_REMOVALS, SeatTools, fillRoster, makeSeatEnv, seatIsCoordinator, seatShell, seatTools, toolRemovalsFor } from "../src/seattools.mjs";
 import { seatShellSelection, selectSeatShell, shellPlan, shellToolNames, offeredShellNames, withheldShellNames, shellWithheldReason } from "../src/shellregistry.mjs";
 import { SHELL_TOOLS } from "../src/seatguard.mjs";
 
@@ -33,9 +33,12 @@ try {
 	// host and on this Linux box — the old assertion baked `powershell` into a literal and was therefore
 	// wrong the moment the rig moved hosts. Its replacement fails on the old tree (which registered
 	// `powershell` here) and passes on the new one.
-	const expected = ["edit", "prepare_workspace", "read", "seat_root", "write", plan.name].sort();
+	// `run_readonly` is the coordinator's INSTRUMENT (operator decision 2026-11-12T18:5xZ): the bundle is
+	// read/write/edit/ONE shell/prepare_workspace/seat_root PLUS the named read-only entrypoints. It is in
+	// the bundle for every seat; each seat's REMOVALS decide who keeps it.
+	const expected = ["edit", "prepare_workspace", "read", "run_readonly", "seat_root", "write", plan.name].sort();
 	check(
-		`read, write, edit, ONE shell, prepare_workspace and seat_root are bundled (${process.platform} -> ${plan.name})`,
+		`read, write, edit, ONE shell, prepare_workspace, seat_root and run_readonly are bundled (${process.platform} -> ${plan.name})`,
 		JSON.stringify(names) === JSON.stringify(expected),
 		JSON.stringify(names),
 	);
@@ -189,10 +192,24 @@ try {
 		"an implementer keeps every working tool",
 		toolRemovalsFor({ name: "impl", role: "implementation engineer", capabilities: ["implement", "code"] }).length === 0,
 	);
+	// OPERATOR DECISION 2026-11-12T18:5xZ (demo/coordinator-instrument.test.mjs): a coordinator keeps READ
+	// and gains `run_readonly` (named, read-only entrypoints), and still loses every tool that CHANGES the
+	// repo. Before this, removing measurement with capability made every number a coordinator routed on a
+	// RELAYED number — pm's own note said so, the 10-bin landing plan had to be sent twice as prose, and
+	// two false queue rows survived for hours because the seat that could route could not measure. The F9
+	// rule this pin used to encode is intact where it matters: no write, no edit, no shell, no workspace.
 	check(
-		"a coordinator loses read, write, edit, the shell AND prepare_workspace, so it can only route",
+		"a coordinator loses write, edit, the shell AND prepare_workspace, keeps read and gains run_readonly",
 		JSON.stringify(removalNames(toolRemovalsFor({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }))) ===
-			JSON.stringify(["edit", "prepare_workspace", "read", "write", seatShell.name].sort()),
+			JSON.stringify(["edit", "prepare_workspace", "write", seatShell.name].sort()),
+	);
+	check(
+		"and it is still a coordinator, so its coordinator-only `release` authority is unchanged (#6097/#6112)",
+		seatIsCoordinator({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }) === true,
+	);
+	check(
+		"the instrument is named, not a shell: `run_readonly` is registered and takes a name from the table",
+		typeof seatTools.runReadonly?.name === "string" && seatTools.runReadonly.name === "run_readonly",
 	);
 	check(
 		"a verifier loses write and edit but keeps read, the shell AND prepare_workspace, so it can still re-run in its own tree",
