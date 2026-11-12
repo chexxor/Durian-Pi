@@ -3975,7 +3975,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `last-modified` for exactly this reason; regenerate it with
     `.spike/research/fetch-manifest.py` (promote per 312) before citing anything external.
 
-## Operational pitfalls (delegate work-strategy pass, 2026-11-12 — numbered 274-280, continuing from 273; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate work-strategy pass, 2026-11-12 — numbered 274-281, continuing from 273; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 274. **A registered tool nothing documents is a dead feature, and the primer is the only reader.** `set_priority` was
     registered, tested at the policy level and reachable, and `demo/primer.test.mjs` still went **red**: "tool
@@ -4026,3 +4026,15 @@ at `:743`). Re-measure every `path:line` before repeating it.
     against the PREVIOUS turn's result and reads as "the tool ignored me"; (2) a seat registered with no capabilities
     counts as a COORDINATOR (`seatIsCoordinator` = "no working capability"), so an authority test must give the
     non-coordinator a working capability (`["implement"]`) or the refusal it expects never fires. Cost: 0.27 s.
+281. **A mutating spool intent does not WAKE a dormant broker — it waits for the next pass, and a dormant loop may
+    never take one.** Measured 2026-11-12 (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1):
+    the delegate wrote an `op=message` intent at 07:06:51Z to a broker that had last passed at 07:00:21Z; 68 s later
+    `node tools/stranded-inbox.mjs selfdev.sqlite` printed `inbox=1 … DRAIN-STRANDED` with `hbAgeS=13` and
+    `progressAgeS=437`, while `READ-DRAIN served=1` kept answering every ~2 s. The loop's own comment says a non-empty
+    inbox should mark the scheduler dirty (`src/broker.mjs`, the block above `drainIntentInbox`), but that check lives
+    INSIDE the pass loop: a loop resting after a settle does not re-read the inbox, and the read-only drain path
+    deliberately does not mark dirty (`#2321`). So the intent is stranded by the same shape as a parked broker, just
+    younger. Remedy that worked: `kill -TERM <pid>` → `EXIT … reason=deadline passes=-` (a CLI-side literal, ROADMAP
+    328) → restart → `INTENT delivered=1` on the FIRST pass (07:08:06Z). Rule for the delegate: after writing ANY
+    intent, verify delivery in the log (`grep "INTENT delivered" <db>.broker.log`) instead of assuming it landed; if
+    it did not, `stranded-inbox` classifies it and a restart is the delivery, not a workaround.
