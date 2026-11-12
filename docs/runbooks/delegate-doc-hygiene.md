@@ -84,6 +84,18 @@ grep -s "^| \[" docs/runbooks/README.md | grep -c "\](.*\.md)"   # index rows; c
    turns any path it cannot match into a soft finding (56 at one point), and `docs/ROADMAP.md:4905` was flagged before this
    session. Run it over the files your commit touched, and report the scope in the same breath as the verdict. Do not claim
    tree-wide `0 failing` when the tree is not.
+10. **If your file QUOTES another report's footnote markers, say so in the file.** `tools/review-cite-check.mjs:520` reads
+    `<!-- cite-ns: quoted -->`; with the declaration a `[^key]` that has no definition in that file is reported **soft**, without
+    it it is **hard** and the checker exits 1 (`:527`). The convention is recorded in `docs/DECISIONS.md:6206` ("Suppression is
+    counted, never silent") and is live in `docs/NEXT-ARCHIVE.md` (7044, 7295, 7494, 7701, ...). Measured 2026-11-12 in this
+    item's worktree on `main ed84f0b4`: a one-line scratch file using `[^P3]` with no definition gave `HARD DANGLING KEY 1` /
+    "VERDICT: 1 failing, 37 not failing (of 38 findings)" / **exit 1**; the same content with the declaration gave `SOFT DANGLING
+    KEY 1 (hard 0 + not-failing 1)` / "VERDICT: 0 failing, 38 not failing" / **exit 0** (both scratch files deleted afterwards).
+    Do **not** add the declaration to an append-only ledger on your own initiative: whether `docs/DISPOSITIONS.md` should carry
+    it is UNDECIDED, routed to lead as #6462 and to be settled with #3539 (a whole-corpus scoping ruling). As of this
+    measurement `docs/DISPOSITIONS.md` has no footnote markers at all (`grep -c '\[\^' docs/DISPOSITIONS.md` -> 0, exit 1) and
+    no declaration (`grep -c 'cite-ns' docs/DISPOSITIONS.md` -> 0, exit 1), so renaming one key fixes one row while the next
+    appended row re-arms the same hard finding — which is why the posture has to be a file-level decision, not a per-row patch.
 
 ## Verify
 
@@ -91,7 +103,11 @@ grep -s "^| \[" docs/runbooks/README.md | grep -c "\](.*\.md)"   # index rows; c
 node tools/doc-integrity-guard.mjs                        # expect: DOC INTEGRITY GUARD … 0 hard findings, exit 0
 node demo/next-pointer.test.mjs                           # NEXT POINTER TEST PASS
 node tools/review-cite-check.mjs <the paths you staged>   # VERDICT: 0 failing …  exit 0
+node tools/review-cite-check.mjs docs/DISPOSITIONS.md     # posture check: DANGLING KEY reported hard or soft per the cite-ns declaration
 ```
+
+The cite-ns leg was re-run 2026-11-12 by scribe (item #6463) on `main ed84f0b4` with the two probe files described in Do step 10
+(undeclared -> exit 1, declared -> exit 0). The other legs of this Verify section were not re-run on that date.
 
 Note that `"224 lines"` written next to a path citation on the same line is read by the citation checker as a **size claim
 about that file**, and `swapon`/`free`-style instruments can silently print `NaN` when you parse their header line — both
