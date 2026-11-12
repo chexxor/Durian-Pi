@@ -1,15 +1,13 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-12T10:5xZ (delegate session **N37** — operator away with one directive: **finish the backlog, land every branch, clean up**. The fleet is driving and **nothing has landed**: `main` = `ebb5ba71` (6 local commits, unpushed), refs **114 → 118**, worktrees **104 → 108** in six minutes, **0** seat landings. New instrument: `node tools/landing-batch-plan.mjs --max 12` (**12.5 s**, exit 0) chains merges with `git commit-tree` scratch commits and packs **53 refs → 6 verified bins (12,12,12,12,4,1), 0 unlandable** — the old pairwise filter threw away 36. Suite **304/305** in **121.2 s** (`--all --jobs 4`); the one red is `demo/clockin-digest.test.mjs`: this pointer's digest is **20,124 B** against a **20,000 B** budget, so cut here before adding. `tools/broker-keepalive.mjs` (`5491cfe1`) re-arms the broker until 2026-11-13T06:00Z, logging `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED**; the delegate minted/claimed/completed/deferred no row and landed no branch. `tools/broker-keepalive.mjs` (commit **`5491cfe1`**) keeps the broker driving until 2026-11-13T06:00Z and appends `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED** — nothing resumed; the delegate minted/claimed/completed/deferred no row.
+**Last update:** 2026-11-12T12:2xZ (delegate session **N38** — operator away with one directive: **finish the backlog, land every branch, clean up**. **Nothing has landed**: `main` = `9655e761` (10 local commits, unpushed), every `main` commit this window is a delegate commit; refs **109 → 124**, worktrees **100 → 119**, **0** seat landings. The fleet went **unattended** at 11:37Z (two `START REFUSED: broker-degraded` re-arms, broker pid 3912450 dead) and is driving again: keepalive loop pid **56057**, broker pid **56117**, heartbeat 12 s. New instruments: `node tools/backlog-burn.mjs --hours 4` (**0.03 s**, exit 0, reads the keepalive ledger — no store open): **done +33 (8.9/h) vs queued +42 (11.3/h) → backlog GROWING**, refs +14 in 3.4 h. `node tools/landing-batch-plan.mjs --max 12` (**12.5 s**, exit 0): **53 refs → 6 verified bins (12,12,12,12,4,1), 0 unlandable**. `tools/instrument-provenance.mjs` → **PROVENANCE CLEAN** (cite drift 2, soft). Suite `--area toolchain` **28/28 in 18.6 s**; the two new demos are mapped there in `demo/test-areas.json`. `tools/broker-keepalive.mjs` re-arms the broker until 2026-11-13T06:00Z, logging `.spike/fleet-ledger.jsonl` every 60 s. The **lifecycle goal is PAUSED**; the delegate minted/claimed/completed/deferred no row and landed no branch.
 
 **Milestone this window worked** — **a work-item lifecycle the team can run itself** (the goal the operator PAUSED):
 seats land their own verified branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless
 items never spawn a worktree (`docs/WORK-ITEM-MODEL.md`, rows **#6924–#6927** minted by `pm`). The session's own work
 was the tranche pulled out of that goal before the pause: the claim-order policy, D266. The pin move (D255 → D256, ROADMAP 353–357) is the
-frame it operates in. Prior window's milestone — **no 120 s silence, and Ctrl-C actually stops the verb**
-(ROADMAP **314**, row **#6160**, decision **D262**) — baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
-`watch --once --json` went from **120,547 ms / exit 1** (signal ignored for 119 s) to **1,518 ms / exit 130, 15 ms
-after the signal** — table in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`. Still open under it:
+frame it operates in. Prior window's milestone (**no 120 s silence, Ctrl-C stops the verb** — ROADMAP **314**,
+row **#6160**, decision **D262**) moved verbatim to `docs/NEXT-ARCHIVE.md`. Still open under it:
 the pinned-pi thread (D255 → D256, ROADMAP 353–357: pin `v1.5.1`, `pi-schema` first, the symbol migration, the
 `commitstream`/`livewatch` seams) with the three policy calls **#6171/#6172/#6173**, the item-5301 rework
 (**#6174**), the superseded WIP disposition (**#6178**), and the auto-clean ceiling (D249, ROADMAP **311** / **344**).
@@ -59,15 +57,19 @@ cd /home/chexxor/Git/Durian-Pi
 node tools/landing-batch-plan.mjs --max 12                             # 12.5 s, exit 0 — the 6 verified chains and the exact `scripts/land.mjs` command for each
 node tools/branch-census.mjs --plan                                    # exit 0 — WITHOUT --plan the landing list is CAPPED at 15 of 41 (tools/branch-census.mjs:262)
 node tools/stranded-inbox.mjs selfdev.sqlite                           # 1 s — is the broker PARKED? hbAgeS vs progressAgeS; then COUNT LIVE: git branch --list | wc -l; git worktree list | wc -l
-node scripts/test.mjs --all --jobs 4                                 # 303/303 in 117.0 s at the N35 tip, exit 0
+node tools/backlog-burn.mjs --hours 4                                # 0.03 s, exit 0 — the backlog RATE from the keepalive ledger (no store open)
 DURIG_DB=./selfdev.sqlite node cli.mjs ps                             # 1.8 s — roster + claim ORDER (workStrategy: team/seat/default, with its source)
 node demo/offline.mjs                                                  # exit 1 — the mocked plane is still red
 ```
 
-**Broker status:** resident pid **3912450** (`--max-duration 3600`, started **10:17:11Z**) after two refused re-arms at
-09:55Z and 09:57Z printed `START REFUSED: broker-degraded, live-tree-dirty` — the cause was uncommitted delegate work
-(pitfall **287**: commit before re-arming). The detached keepalive loop (pid **3912747**, `--until 2026-11-13T06:00:00Z`,
-log `.spike/keepalive.log`) re-arms it on the stranded signature only. Read `selfdev.sqlite.broker.json` for the pid — the pid is the identity, not `pgrep`.
+**Broker status:** resident pid **56117** (re-armed **11:48Z**, `--max-duration 3600`, heartbeat 12 s, `lastPass` 30 s at
+12:05Z). The fleet went **unattended** at 11:37Z: the old keepalive loop (pids 3912747/3912749) exited 1 after two
+consecutive `START REFUSED: broker-degraded` re-arms (11:22Z, 11:37Z) and broker 3912450 died. **Cause, measured:** a loop
+that breaks out at `--max-duration` never reads the flag `cli.mjs serve --stop` writes, so the pid lingers and the next
+`broker-serve --start` refuses. Fixed in place in `tools/broker-keepalive.mjs` (**`9655e761`**): stop → poll
+`brokerProcessAlive(pid)` → SIGTERM only a pid the state file names **and** whose cmdline matches `cli.mjs serve` → wait
+≤20 s → start; pinned by `demo/broker-keepalive-stop-guard.test.mjs` (0.28 s). Detached loop pid **56057**
+(`--until 2026-11-13T06:00:00Z`, log `.spike/keepalive.log`). Read `selfdev.sqlite.broker.json` for the pid — the pid is the identity, not `pgrep`.
 **The bound is not a hard bound, and it is now measured, not hypothesised**: a broker whose wake loop broke at
 `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1855-1857`) with **no stop request**, so
 `graceExpired()` is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded
@@ -88,7 +90,7 @@ row **#6927** is the inventory of the 51 OPEN `docs/DISPOSITIONS.md` rows behind
 1.1 GB `fix-20261031`, 1.1 GB `backups`, 814 MB `delegate`, plus four store backups (435 MB, 419 MB, 419 MB, and
 `.spike/backups/20261110T0551Z/selfdev.sqlite`). Deleting a store backup is the operator's call; the fix-* scratch
 dirs are prior landing passes and can be pruned once their content is confirmed on `main`. Also note **`docs/NEXT.md`
-is at 199 of the 200 counted lines** (`demo/next-pointer.test.mjs` enforces the cap): before appending anything, move
+is at 198 of the 200-line cap** (`demo/next-pointer.test.mjs` enforces it on the whole file): before appending, move
 a section verbatim to `docs/NEXT-ARCHIVE.md`.
 
 **Open decisions the operator owns:** (a) **item-6063/6064/6066** — the compaction-gate trio was reverted. Either
@@ -100,9 +102,9 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live 10:3xZ, re-count before trusting): refs **118** / item branches **115** / worktrees
-**108**; census (**~10 s**): **53** refs need a landing decision and chain into **6 bins** (12,12,12,12,4,1); 9 seat roots,
-2 locked, 9 ruled in DISPOSITIONS, **31 unaccounted**. `main` = **`ebb5ba71`** locally, **6 ahead of `origin/main` (`a18ede9e`) — NOT pushed** (operator grant). Queue census **7,183 rows**: 4,746 done / 936 cancelled / 428 held / 524 deferred / 14 claimed / 535 queued; the landing rows **#7124/#7126/#7128 are still `queued`, not claimed**.
+**State at clock-out** (measured live 12:2xZ, re-count before trusting): refs **124** / item branches **121** / worktrees
+**119**; census (**~10 s**): **53** refs need a landing decision and chain into **6 bins** (12,12,12,12,4,1), **0 unlandable**;
+**31** refs still have no DISPOSITIONS ruling. `main` = **`9655e761`** locally, **10 ahead of `origin/main` (`a18ede9e`) — NOT pushed** (operator grant). Queue census **7,222 rows**: 4,765 done / 936 cancelled / 424 held / 524 deferred / 13 claimed / 560 queued; the landing rows **#7124 `claimed`, #7126/#7128 still `queued`** — no branch has landed.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
