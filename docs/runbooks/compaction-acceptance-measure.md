@@ -3,10 +3,10 @@ runbook: compaction-acceptance-measure
 symptom: "'truncated summaries dropped to zero' — but I need the number, not the claim"; "is the acceptance instrument still able to fail?"; "the 100-compaction run took half an hour and reported FAIL and I do not know why"
 writes: false
 precondition: "read-only against the store you point it at; the LIVE tranche needs the broker stopped"
-last_verified: 2026-11-10
-verified_by: devtools
-evidence: "#6131 (tools/compaction-acceptance.mjs, branch item-6131); measured in that tree, pi-durable 1.5.1 built-pin, node v24.22.1, Linux kernel 7.2.15-300.fc45.x86_64: seed 0.99 s exit 0; armed 1.02 s exit 0 (100 tasks, 100 summaries placed, 0 truncated, 0 summariser requests); negative control 0.4 s exit 0 (9 truncated == 9 summariser requests); inverse control exit 1 (0 truncated, 9 summaries placed); live store with the broker resident: exit 1, 70 of 100 tasks settled, 1809.7 s"
-check_rule: null
+last_verified: 2026-11-12
+verified_by: devtools (#6131 audit 2026-11-10; #6382 re-run of the gate in branch item-6382)
+evidence: "#6131 (tools/compaction-acceptance.mjs, branch item-6131); measured in that tree, pi-durable 1.5.1 built-pin, node v24.22.1, Linux kernel 7.2.15-300.fc45.x86_64: seed 0.99 s exit 0; armed 1.02 s exit 0 (100 tasks, 100 summaries placed, 0 truncated, 0 summariser requests); negative control 0.4 s exit 0 (9 truncated == 9 summariser requests); inverse control exit 1 (0 truncated, 9 summaries placed); live store with the broker resident: exit 1, 70 of 100 tasks settled, 1809.7 s. Gate re-run 2026-11-12 in branch item-6382 (pi-durable 1.3.0 from the lockfile, node v24.22.1): node demo/compaction-acceptance-gate.test.mjs exit 0 — seed compactions=120 placed=68 TRUNCATED=0; positive compactions=100 placed=100 TRUNCATED=0 requests=0; negative control TRUNCATED=9 placed=0 requests=9; inverse control placed=9 TRUNCATED=0 instrument exit 1; 2901 ms total"
+check_rule: "demo/compaction-acceptance-gate.test.mjs (#6382) — the registered check rule; it REPORTS the four measured halves (seed, positive, negative control, inverse control) with truncation counts named. tools/compaction-acceptance.mjs is the instrument: its exit code is data, never the gate. What blocks a landing is this demo's own exit code, read by the suite (scripts/test.mjs --area rig)."
 ---
 
 # Measure the compaction-acceptance claim, and prove the instrument can still go red
@@ -51,9 +51,12 @@ pi-durable 1.3.0 from the lockfile while the live store was written by 1.5.1, an
 | **negative control** (control, `stopReason=length`) | exit 0, truncated **> 0** and equal to the summariser-request count | 0.4 s, exit 0, 9 truncated == 9 requests, 0 summaries placed |
 | **inverse control** (control, `stopReason=stop`) | exit **1**, 0 truncated | exit 1, 0 truncated, 9 summaries placed |
 
-The suite runs the same three halves against a fixture store it builds itself:
-`node demo/compaction-acceptance-gate.test.mjs` (2.4 s, exit 0). That is the gate; `tools/compaction-acceptance.mjs`
-is the instrument the gate wraps, and its exit code is not the pre-landing gate.
+The suite runs the same four halves against a fixture store it builds itself:
+`node demo/compaction-acceptance-gate.test.mjs` (~2.9 s, exit 0). That demo is the **check rule** (#6382): it
+prints the four measured halves before it decides anything, naming for each one `compactions=`,
+`summaries placed=`, `TRUNCATED=` and `summariser requests=`. `tools/compaction-acceptance.mjs` is the
+instrument the demo wraps - its exit code is a measurement reported on that page, not the pre-landing gate.
+The live-store numbers in the table above are a **separate measurement**: the gate never reads the live store.
 
 ## If it fails
 - **The inverse control exits 0** — the instrument is a rubber stamp. The truncation counter is no longer tied to
