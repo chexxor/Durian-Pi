@@ -4,7 +4,7 @@ symptom: "an effort has stopped progressing with nothing broken: held rows sit u
 writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
 precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
 last_verified: 2026-11-11        # the tool below was run against the live store; see Evidence
-verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry)
+verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry); scribe (2026-11-12, #6626 — the Verify legs only: the audit, `demo/held-gate-audit.test.mjs`, `demo/runbook-frontmatter.test.mjs`, `demo/text-integrity.test.mjs`, `tools/doc-integrity-guard.mjs`, and the symptom-index grep, all in an UNLINKED worktree; the intent-spool and release legs were NOT re-run, so last_verified is not raised)
 evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Re-run 2026-11-11 by scribe (#6315) in the `item-6315` worktree with UNLINKED deps (pi-durable **1.3.0** from the lockfile): live store exit **0** `rows=6502 held=434`, `git landing commits read: 153`; a worktree-local copy exit **0** `rows=6501 held=434`, same 153. The schema-version refusal did NOT fire in that tree — see If it fails. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"
 check_rule: demo/held-gate-audit.test.mjs
 ---
@@ -206,6 +206,17 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
   header `rows=6502 held=434`, line `git landing commits read: 153`. State which tree and which pi-durable
   produced the verdict: this was an UNLINKED worktree (lockfile 1.3.0), and the same tool on a copy inside
   that worktree also exited 0 (`rows=6501 held=434`).
+
+  **The counts in that header are a snapshot, not an expectation.** Re-run 2026-11-12 by `scribe` (#6626) in
+  worktree `item-6626` off main `a7c9ab0`, same UNLINKED plane (pi-durable **1.3.0** from the lockfile, `sync-pi
+  --link` failed): exit **0**, header `rows=7316 held=422`, `git landing commits read: 158`, classes
+  release-candidate 25 / cancel-candidate 9 / standing-rule 180 / gate-open 98 / unattributed 110. Assert the
+  **shape** — exit 0 plus the landing-commits line plus per-class totals that add up to `held` — never a fixed
+  number. That run also did **not** reproduce the `Durable SQLite schema version 2 is newer than supported
+  version 1` refusal, which is the second independent non-reproduction (devtools' reproduce-before-patching row
+  is #6625). The mechanism the refusal would come from is real and line-checked: `src/readclient.mjs:187` opens
+  the read-only store first and falls through to the migrating `openNodeSqliteStorage` at `:207` only if that
+  fails.
 - **The schema-version entry is reachable from the symptom index**, not only from the rule text (run 2026-11-11, exit 0):
 
   ```bash
