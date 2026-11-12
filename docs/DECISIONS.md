@@ -11911,3 +11911,24 @@ first pass) and its own passes logged four claims on the new code — `#6215` by
 the claim PATH runs on the new code with the default strategy, and the `priority_first` ordering itself is proven on the
 tool plane (`demo/workstrategy-claim.test.mjs`), because this rig resolves to `oldest_first` and flipping the live team to
 `priority_first` to watch it reorder would have changed the team's behaviour for a test.
+
+## D268 — 2026-11-12T06:5xZ: **a gate reference is validated at MINT against the doc being written, and that makes the gate graph of every new row acyclic; the cycle guard is for legacy rows only** (architect review of pm's #7005 re-cut of ruling #6758; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7005`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1. Provisional number — re-derive at land: D265-D274 were minted-at-land by commit `53eea388`, branch `item-6926` carries a provisional D266, `item-6999` carries D267, and the #6758 ruling carries D269.)
+
+**Status.** Accepted as the predicate contract; the code is NOT landed. Legs #7001 (mint validation), #7002 (id space), #7003 (read default), #7004 (runbook) are queued to impl/scribe.
+
+**Context.** `normalizeBlockedBy` (src/rig.mjs:434-451) checks shape only — array of positive integers, deduped. Probe `node tools/probes/mint-gate-validation-7005.mjs` (exit 1, branch `item-7005`) shows the mint seam today accepts: a dangling id `[9999]` (read verdict `workable=true`), a `cancelled` gate, a **self-gate** (`#5 blockedBy=[5]` → `gate-open:#5(queued)` forever, and `deadGateId` returns null so the release path calls it a release-candidate while the claim path can never claim it), and a forward reference to a row minted later.
+
+**Decision.**
+1. At mint, a gate id must **exist in the queue doc being written**, must not be the row's own id, and must not already be `cancelled`. Validate against `tx.doc(RigQueue).items`, never a projection: `--with-gates` is capped (cli.mjs:1414, `GATE_VIEW_CAP`), and a truncated list produces false refusals.
+2. **The invariant that follows, stated out loud:** ids are monotonic (`queue.nextId++`), so every accepted edge points to an older id. A cycle requires both directions to exist at mint, which is impossible. Therefore the gate graph of every row minted after this change is a **DAG**, and the bounded walk in D267 terminates for new rows without a guard.
+3. The read default (unknown id → workable) stays, scoped to rows minted before validation, and the reason string says why.
+4. Discriminate the id space by **existence, not prose**: a bare integer in `blockedBy` is a queue id and is accepted whatever the row's text says; a `blockedBy` id that names no queue row is refused, and if the text names `ROADMAP n`/`RM-n` the refusal says the roadmap reference belongs in `block.constraints[{kind:"roadmap", ref:n}]`.
+
+**Options considered.** (a) Chosen: strict mint validation. (b) Allow forward references inside one transaction — rejected: dangling refs reappear when a later commit of the same batch fails, and the DAG invariant becomes unprovable. (c) No mint check, repair at read — rejected: every wake walks the legacy population instead of making new bad rows impossible. (d) Typed `{kind, ref}` gates — already rejected and recorded, not re-litigated.
+
+**Consequences.**
+- **Cost accepted:** decomposition batches must mint gates before dependents. Each `send_work` is its own commit (src/rig.mjs:825), so a refusal mid-batch leaves a half-minted plan — the runbook leg #7004 must state the ordering rule and the counting check.
+- **Kill the locked-row class:** self-gates and dangling gates stop accumulating. Measured today: 405 gated rows, 61 with a directly cancelled hop, 6 cycles; all 6 cycles are legacy, and none can be minted again.
+- **One predicate, three readers:** mint validation, the release refusal (`deadGateId`, src/rig.mjs:312), the held-row audit class (`heldgate.mjs:105-107`, which counts `cancelled` as closed) and both claim paths must use the same walk, or the audit says "release-candidate" for a row the claim predicate can never claim.
+- **Reversible:** relaxing the mint check restores today's behaviour exactly; the legacy population is untouched either way.
+- **Left open, deliberately:** the cancelled-TWIN question (#3863, held) and the disposition of rows already gated on cancelled ids (lead #6656) are scope calls, not predicate calls.
