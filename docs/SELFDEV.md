@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-298, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-299, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4175,3 +4175,14 @@ at `:743`). Re-measure every `path:line` before repeating it.
     resident broker was serving the projection it had loaded at START. Two lessons in one: a new field is not
     shipped until a read returns it (`c7ff4aab`), and the read to test is the one routed through the broker, not
     a local one.
+299. **A directive's scope is a CONTRACT WITH WHOEVER MINTS THE ROWS, and naming drift breaks it
+    silently.** Measured 2026-11-12T19:2xZ: `pm` minted the ten per-bin landing rows as **"LAND BIN 1..10"**,
+    while the live directive's scope read `["LANDING", "Land item", "land.mjs", "MERGE ORDER", "PRUNE"]`.
+    None of those tokens matches "LAND BIN" — so the rows the operator had just asked to prioritise
+    matched NOTHING, and because `pm` set bins 5–10 to `next` they would have sorted BEHIND every
+    unrelated `now` row. Re-applying the directive with the added token `LAND BIN` fixed it (applied 1,
+    `matchedNow` 343), and the claim order then read `[7439, 7443, <unrelated chore>]`. Two habits: when a
+    directive's purpose is a CLASS of work, spell the class the way the minting seat names it (and re-run
+    the propose's `matchedNow` after a minting pass); and treat "a directive that matches no row" as a
+    defect to report, not a quiet rig — a policy that reorders nothing looks exactly like a policy that is
+    obeyed.
