@@ -286,8 +286,20 @@ problem #5568 exists to prevent.
      delegate's side this is a **routing fact delivered to `pm`** (the delegate does not do seat work);
      `pm` issues the release.
    - No longer worth doing → `cancel_work(<id>, reason)`. Terminal rows never reappear.
+   - **SPENT one-shot** — the instruction it carried has already been executed, or the rule it carried is
+     already recorded in a doc. Dispose it: `cancel_work(<id>, reason)`, and make the reason name BOTH where
+     the rule now lives (file:line) and the check that shows the specific instruction was carried out.
+     Releasing it instead re-wakes a seat for work that has no work, and leaving it `held` keeps a row that
+     reads as an open decision to the next audit.
    - A pure backlog/roadmap registration → leave it in `held`, or move the intent to the roadmap ledger
      (WORK-ITEM-SCHEMA §11) so the queue stops carrying long-lived parks.
+
+   **Who may dispose it:** the authority is narrow. CANCEL is party-only — the guard is
+   `item.to !== me && item.from !== me` → refuse (`src/rig.mjs:1439-1440`). RELEASE is party-only PLUS one
+   carve-out: a COORDINATING seat (one that declares no working capability, e.g. `pm`) may un-park a row it
+   did not mint, because release is reversible, and it must carry a `reason`; that release is REFUSED when the
+   row's gate names a cancelled item (`src/rig.mjs:1293-1347`). A seat that is neither party and not
+   coordinating must route the disposition to a party rather than work around it.
 2. **Is the row `deferred`?**
    - `deferredTo: <seat>` → the question item is queued to that seat; chase the seat, not the item.
    - `deferredTo: human` → this is an operator input; surface it (it already appears in `attention`) and
