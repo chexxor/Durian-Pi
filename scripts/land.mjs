@@ -71,6 +71,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
 import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
 import { parseGateFlags, requireGate, docsOnlyAttestation } from "../src/landinggate.mjs";
+import { dependencyProvenance, formatDependencyProvenance } from "../src/provenance.mjs";
 // #4936: the CHANGED-SUITE scope report — which areas ran and which did NOT. It reads the SAME
 // area data as `scripts/test.mjs` and `tools/what-to-test.mjs`; it is a reporter, not a second
 // selector, and that is the whole point (#4922: a second mechanism is the thing that drifts).
@@ -567,6 +568,12 @@ function linkScratchDependencies(root, scratchPath) {
 	}
 }
 const scratchDeps = linkScratchDependencies(repoRoot, scratch);
+// #6196: which pi the scratch actually resolved. `node_modules` is symlinked from the working checkout, so the
+// scratch inherits whatever set that checkout has - which is not necessarily the pinned build. Naming it here
+// is what makes a suite number traceable to the graph it ran in; the refusal on drift is #6205, deliberately
+// not shipped with this change.
+const scratchProvenance = dependencyProvenance(scratch);
+console.error(formatDependencyProvenance(scratchProvenance));
 
 const merged = [];
 for (const branch of branches) {
@@ -1089,6 +1096,7 @@ report(
 		// #5793: what the scratch's environment actually was. A suite result without this field cannot be
 		// read as a measurement of the tree, because a bare scratch is a different tree.
 		scratchDeps,
+		dependencyProvenance: scratchProvenance,
 	},
 	0,
 );

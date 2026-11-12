@@ -89,7 +89,7 @@ import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs"
 import { readCommitMessages } from "./src/commitmsg.mjs";
 import { readCitations } from "./src/citation.mjs";
 import { readDocCountClaims } from "./src/doccounts.mjs";
-import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
+import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView } from "./src/readapi.mjs";
@@ -3139,10 +3139,17 @@ async function cmdStatus(args = []) {
   // is exactly the rows a session can act on and exactly the rows a terminal-only drop would hide. Measured
   // 2026-11-09: bounding status without this made `scripts/clockin.mjs` — which reads status for its queue
   // section — report a 200-row store and a zero deferred backlog against a store holding 384 deferred rows.
+  // #6196: which pi THIS tree actually resolves. The same command in two trees can print opposite verdicts
+  // (an unlinked tree at the lockfile release ran 262/283; the same tree linked to the pin ran 282/282), so
+  // the status view names the dependency set it is describing instead of assuming the pinned one.
+  // cli.mjs sits at the repository root, so the tree it ran in is its own directory - not the parent of a
+  // worktree, which is what resolve(dirname(CLI_PATH), "..") would have named (#6196).
+  const depProv = dependencyProvenance(resolve(dirname(CLI_PATH)));
   out({
     ok: true,
     command: "status",
     db: DB_PATH,
+    dependencyProvenance: depProv,
     ...health,
     // Overrides the spread above when the fallback ran (a broker that predates the field).
     workStrategy,
@@ -3280,6 +3287,9 @@ async function cmdMetrics(rigFile, human, windowArg) {
     if (human) {
       process.stdout.write(
         `${formatProvenance(provenance, provenance.active)}\n` +
+          // #6196: the human view also says which pi this tree is running - a red measured here is only
+          // comparable with a red measured in the same dependency set.
+          `${formatDependencyProvenance(dependencyProvenance(resolve(dirname(CLI_PATH))))}\n` +
           `${formatMetrics(health.metrics, {
             color: Boolean(process.stdout.isTTY) && !process.env.NO_COLOR,
           })}\n`,
