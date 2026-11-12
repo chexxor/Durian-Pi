@@ -12009,3 +12009,18 @@ transition); no skill store; no resumption of the paused lifecycle goal.
 **Status:** spec only — no code written; `src/rig.mjs` was left untouched (a partial implementation was reverted
 before the handoff so the tree is clean). Evidence for the design: the six seams cited in spec §3 all exist and were
 read at `792445d5`.
+
+**D275 addendum — the three follow-up answers (2026-11-12T22:3xZ), recorded because each widens or constrains authority.**
+(7) **Who assigns capabilities: "pm may assign".** This supersedes the delegate's recommendation that a NEW
+capability name require the operator: `pm` may assign existing *and* new names. Two constraints are part of the
+decision, not of the implementation: every grant is recorded as a **transition on the seat's roster entry**
+(`by: "pm"`, the name, the reason) so the growth of the specialisation vocabulary is answerable from the store; and
+the §6.4 **check rule stays** — a pooled row whose `requires` names a capability no seat advertises is a red check,
+which is what turns a vocabulary mistake into a failure rather than into unclaimable work. Item 3 is unchanged: a
+**seat** still cannot grant itself a capability.
+(8) **Calibrate the size table before the build: approved.** `tier → tokens` is derived from
+`selfdev.sqlite.spend.jsonl` as **build row 0**, before the claim-time gate exists, because a wrong `feature`
+estimate refuses real work and the refusal reads like an unlucky claim rather than a defect.
+(9) **Who implements: "fresh context, not a seat in the team, but a different LLM model".** The implementer has no
+capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
+part of N19 may assume otherwise. It edits files and runs demos.

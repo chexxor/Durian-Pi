@@ -15,7 +15,7 @@
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **N19 "The Pool" (D275)**, PLANNING phase: the team queue becomes authoritative routing, `requires` becomes a capability SET (AND) so a seat pulls only work it is specialised for, and `tier` becomes an enforced size gate (claim refused past 70 % of the claimer's usable window, with a split instruction). Spec: `docs/POOL-QUEUE-SPEC.md`; no code written — implementation handed to a fresh context.
+**Milestone this window worked** — **N19 "The Pool" (D275)**: the queue becomes authoritative, `requires` becomes a capability SET (AND) so a seat pulls only work it is specialised for, and `tier` becomes an enforced size gate (claim refused past 70 % of the claimer's window, with a split instruction). Spec: `docs/POOL-QUEUE-SPEC.md`; no code written — handed to a fresh context on a different model (not a seat); `pm` assigns capabilities; size table calibrated first (§9.1).
 
 **Liveness:** the last ` PASS ` line, not the pid or the heartbeat (pitfall 304).
 

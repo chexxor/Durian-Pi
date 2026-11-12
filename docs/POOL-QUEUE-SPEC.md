@@ -1,9 +1,13 @@
 # Spec — the pool: one authoritative team queue, specialisation as a predicate, work sized to the window
 
 **Milestone:** **N19 — The Pool** (`docs/MILESTONES.md`). **Decision:** D275. **Operator approvals:**
-2026-11-12, six design questions answered (recorded verbatim in D275 and §9 here).
-**Status:** SPEC ONLY. No code is written. `main` at the time of writing is `792445d5` (4 commits ahead of
-`origin/main`, unpushed). **Intended reader:** an implementation agent in a fresh context, not the author.
+2026-11-12, SIX design questions answered, then THREE follow-up answers on 2026-11-12T22:3xZ — all nine are
+recorded verbatim in D275 and §9 here; §9 is the authority when this document and a summary disagree).
+**Status:** SPEC ONLY. No code is written. `main` at the time of writing is `571094d7` — `origin/main` is
+`792445d5`, so this spec's own commit is local and unpushed. **Intended reader:** **a fresh context running a
+DIFFERENT LLM model, and NOT a member of the team.** It is not a seat: it has no capabilities, no queue row,
+no roster entry and no presence the broker can wake, so it cannot claim this work through the pool it is
+building. It implements by editing files and running the demos, exactly like an operator-side delegate.
 
 **Host for every number in this document:** Linux, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Probe:
@@ -195,6 +199,13 @@ relying on them):
 | `feature` | 40 000 | several files, a demo, a gate run |
 | `project` | 120 000 | **exceeds most seat windows → must be split** |
 
+**CALIBRATION IS A PREREQUISITE, NOT A FOLLOW-UP (operator-approved 2026-11-12).** The four values above are
+PROPOSED DEFAULTS, not measurements, and a wrong `feature` estimate silently blocks real work — the failure is
+invisible because a refused claim looks like an unlucky start. Before build row 5, derive the table from
+`selfdev.sqlite.spend.jsonl` (per-item tokens where the ledger records a claim, aggregated per tier) and commit
+the measured numbers WITH the derivation command in the config's comment. If the ledger cannot answer it for a
+tier, say so and keep that tier's default explicit rather than interpolating.
+
 Usable window = `declaredContextWindow(seat) − DURIG_COMPACTION_RESERVE_TOKENS − DURIG_COMPACTION_KEEP_RECENT_TOKENS`.
 Note the measured trap: the compaction defaults (reserve 16 384, keepRecent 20 000) are **larger than a
 24 576 verifier-class window**, so usable can be ≤ 0. The gate must therefore report "no usable budget
@@ -232,6 +243,7 @@ that kind of change on this box; **re-measure, do not quote these as fact**.
 
 | # | row | files | acceptance | verify (fast loop) | est. |
 |---|---|---|---|---|---|
+| 0 | **calibrate `tier → tokens` from the spend ledger** (prerequisite, §6.2) | `src/config.mjs` or config | each tier's number is backed by a ledger query + the command is in the comment; tiers the ledger cannot answer keep an explicit default | the derivation command itself, re-runnable | ≤ 10 min |
 | 1 | `requiredCapabilities()` + `workable()` set semantics, string compat | `src/rig.mjs` | single-string rows behave byte-identically; a 2-set demands both | `node demo/workable-claim.test.mjs` + new case | ≤ 60 s |
 | 2 | `assertSendAllowed` accepts a set and a pool target | `src/rig.mjs` | a seat missing ONE of two caps is refused, message names it | `node demo/send-work.test.mjs` (or nearest) | ≤ 60 s |
 | 3 | `enqueueItem(pool)` + `send_work` args (`pool`, set `requires`, optional `to`) | `src/rig.mjs` | pooled row stores `to:null`,`pool:true`; bad arg shapes refused | new demo `demo/pool-address.test.mjs` | ≤ 90 s |
@@ -268,7 +280,7 @@ The operator was offered six questions with a recommendation each and answered:
 
 1. Pool address — **approved**: `to: null` + `pool: true` (not a pseudo-seat).
 2. `requires` — **"a set"**: AND semantics; empty set = anyone.
-3. Can a seat earn eligibility via skills — **approved: assigned only**; no self-service grant.
+3. Can a seat earn eligibility via skills — **approved: assigned only**; no self-service grant. (Assignee named in item 7 below.)
 4. Size gate window — **approved**: the claimer's declared window, plus a pool-level warning when a row
    exceeds the smallest seat's window.
 5. Split — **approved**: the claimer splits; children inherit `from`/`requires`/`blockedBy`; the parent
@@ -279,6 +291,27 @@ Two further points the delegate decided (offered as "I will decide unless you ob
 a claimer may **not** bump a pool row's priority (priority stays the operator's / `pm`'s; a seat may only
 self-defer with a clock), and `to` is **owner-of-record only** — routing authority is the pool, while the
 DONE notice still returns to `from`.
+
+### 9.1 Follow-up answers (2026-11-12T22:3xZ), and what each one changes
+
+7. **Who assigns capabilities — "pm may assign".** Settled: **`pm` may assign a capability**, both existing and
+   a NEW name. Consequence, and it is a real widening of authority: `pm` can therefore grow the specialisation
+   vocabulary the pool's eligibility runs on. Two constraints keep that visible rather than silent, and neither
+   is negotiable in the build:
+   - every capability assignment is written as a **transition on the seat's roster entry** (`by: "pm"`, the name,
+     the reason), so "who gave devtools `landing`" is answerable from the store and not from memory;
+   - the **`check` rule in §6.4 stays**: a pooled row whose `requires` names a capability NO seat advertises is
+     a failure. That rule is what turns a `pm` vocabulary mistake into a red check instead of unclaimable work.
+   This supersedes the delegate's earlier recommendation ("a new name requires the operator"). It does NOT
+   change item 3: a **seat** still cannot assign itself a capability — the grant is `pm`'s or the operator's.
+8. **Calibrate the size table before the build — "approved".** Accepted as recommendation (b): derive
+   `tier → tokens` from `selfdev.sqlite.spend.jsonl` BEFORE implementing the gate, as **build row 0** (§7, §6.2).
+   A default-only table was rejected because a wrong `feature` estimate refuses real work and reads like an
+   unlucky claim rather than a defect.
+9. **Who implements — "fresh context, not a seat in the team, but a different LLM model".** The implementer is an
+   external context on a different model. It has no capability, no queue row, no roster entry and no broker
+   presence, so it cannot claim the work it is building through the pool, and nothing in this milestone may
+   assume it can be woken or addressed as a seat. It edits files and runs the demos (see §11).
 
 ---
 
@@ -300,6 +333,11 @@ DONE notice still returns to `from`.
 
 ## 11. Handoff
 
+**Who you are, operationally (operator, 2026-11-12):** a fresh context running a **different LLM model**, and **not a
+seat**. You have no capability, no queue row, no roster entry and no broker presence — you cannot claim, wake or be
+addressed, and you must not try to become a seat to get closer to the work. You edit files, run the demos, and
+commit explicit paths, exactly like an operator-side delegate.
+
 **Read, in this order:** this file → `docs/DECISIONS.md` D275 → `src/rig.mjs` (`workable`,
 `selectNextWork`, `assertSendAllowed`, `enqueueItem`, the `claim_work` execute block) →
 `docs/WORK-ITEM-MODEL.md` §4–§7 → `docs/reviews/architecture-queue-lifecycle-redesign-review.md` §F6/F12/F17
@@ -314,8 +352,9 @@ node scripts/test.mjs --area rig                                                
 node demo/workable-claim.test.mjs                                               # the predicate's own pin
 ```
 
-**Do not:** push (the operator holds that grant; 4 commits are already local and unpushed); resume the paused
-lifecycle goal; build the skill store; add a second queue document; add a `split` status literal; edit
+**Do not:** push (the operator holds that grant; this spec's own commit is local and unpushed); resume the paused
+lifecycle goal; build the skill store; add a second queue document; add a `split` status literal; build a
+capability-**grant** verb (`pm` assigns via the roster, recorded as a transition — §9.1 item 7); edit
 `docs/DISPOSITIONS.md` (append-only) or `docs/NEXT.md` without re-running its two budget demos
 (`demo/next-pointer.test.mjs` — 200-line cap and a required `**Blocker:**` line — and
 `demo/clockin-digest.test.mjs` — 20 000 B digest cap).
