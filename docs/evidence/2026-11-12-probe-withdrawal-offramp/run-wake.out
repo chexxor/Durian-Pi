@@ -1,0 +1,33 @@
+=== 1. register the probe and the row gated on it ===
+  send probe -> [{"model":[{"role":"assistant","content":[{"type":"text","text":"done"}],"api":"faux:1794458087504:g5zwj9seu97","provider":"faux","model":"faux-seat","usage":{"input":0,"output":1,"cacheRead":2109,"cacheWrite":43,"totalTokens":2153,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1794458087523,"thinkingLevel":"off"}],"kind":"pi.assistant","id":25,"conversationId":2,"byTaskId":24},{"model":[{"role":"toolResult","toolCallId":"tool:1794458087523:7on6dcrhle9","toolName":"send_work","content":[{"type":"text","text":"queued item #1 for qa"}],"isEr
+  send gated row -> [{"model":[{"role":"assistant","content":[{"type":"text","text":"done"}],"api":"faux:1794458087504:g5zwj9seu97","provider":"faux","model":"faux-seat","usage":{"input":0,"output":1,"cacheRead":2158,"cacheWrite":50,"totalTokens":2209,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1794458087559,"thinkingLevel":"off"}],"kind":"pi.assistant","id":33,"conversationId":2,"byTaskId":32},{"model":[{"role":"toolResult","toolCallId":"tool:1794458087559:80wq513c8lu","toolName":"send_work","content":[{"type":"text","text":"queued item #2 for qa"}],"isEr
+  probe id 1 gated row id 2 status queued blockedBy [1]
+=== 2. withdraw the probe ===
+  cancel_work -> [{"model":[{"role":"assistant","content":[{"type":"text","text":"done"}],"api":"faux:1794458087504:g5zwj9seu97","provider":"faux","model":"faux-seat","usage":{"input":0,"output":1,"cacheRead":2214,"cacheWrite":56,"totalTokens":2271,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1794458087569,"thinkingLevel":"off"}],"kind":"pi.assistant","id":41,"conversationId":2,"byTaskId":40},{"model":[{"role":"toolResult","toolCallId":"tool:1794458087569:e5u2bljad0u","toolName":"cancel_work","content":[{"type":"text","text":"item #1 cancelled: probe wit
+  probe now: cancelled | cancelReason: probe withdrawn: the measurement is no longer wanted
+  notice to the other party: NONE
+=== 3. state of the gated row ===
+  status: queued blockedBy: [1] park: null
+  workable(qa): {"workable":false,"reason":"gate-cancelled:#1"}
+  selectWakes: [{"name":"qa","conversationId":9,"reason":"queued"}]
+  onSkip trace: [[{"seat":"pm","reason":"no-work"},null]]
+=== 4. can the seat act on it? ===
+  claim_work oldest-path -> [{"model":[{"role":"assistant","content":[{"type":"text","text":"done"}],"api":"faux:1794458087504:g5zwj9seu97","provider":"faux","model":"faux-seat","usage":{"input":0,"output":1,"cacheRead":2110,"cacheWrite":70,"totalTokens":2181,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1794458087580,"thinkingLevel":"off"}],"kind":"pi.assistant","id":51,"conversationId":9,"byTaskId":50},{"model":[{"role":"toolResult","toolCallId":"tool:1794458087580:d36md78k02","toolName":"claim_work","content":[{"type":"text","text":"ITEM #3 | from=pm | subject=CA
+  claim_work by-id -> [{"model":[{"role":"assistant","content":[{"type":"text","text":"done"}],"api":"faux:1794458087504:g5zwj9seu97","provider":"faux","model":"faux-seat","usage":{"input":0,"output":1,"cacheRead":2186,"cacheWrite":44,"totalTokens":2231,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"stop","timestamp":1794458087590,"thinkingLevel":"off"}],"kind":"pi.assistant","id":59,"conversationId":9,"byTaskId":58},{"model":[{"role":"toolResult","toolCallId":"tool:1794458087590:gk42odzheyf","toolName":"claim_work","content":[{"type":"text","text":"ITEM #2 | from=pm | subject=L
+  gated row status after both attempts: claimed
+=== 5. CLI surface on the same store ===
+  cli.mjs queue --id 2 exit 0 -> { "projection": { "noBody": true, "droppedFields": [ "body" ], "warning": "bodies are OMITTED from this view. Do not act on a subject you have not read in full — read the row with `queue --id <id>` (or `show <id>`) first (#5016).", "derivedOver": "3 rows, bodies included" }, "ok": true, "command": "
+  cli.mjs check exit 1 -> {
+  "ok": true,
+  "command": "check",
+  "rig": "rig.selfdev.json",
+  "db": "/tmp/offramp-fhdBbB/rig.sqlite",
+  "store": "read",
+  "seats": 12,
+  "discovered": false,
+  "findings": [
+    {
+      "id": "constitution-not-applied",
+      "severity": "error",
+      "subject": "rig",
+      "detail": "the 

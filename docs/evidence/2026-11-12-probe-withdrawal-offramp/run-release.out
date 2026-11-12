@@ -1,0 +1,12 @@
+queued item #1 for impl
+queued item #2 for impl
+withdraw: item #1 cancelled: withdrawn (notified impl as notice #3)
+1. pm release_work on the dead-gated row: item #2 is not held (status=queued)
+   row status: queued
+2. impl hold_work on it (park without claim): item #2 held (parking the dead-gate row); release with release_work(2) to restore it to queued.
+   row status: held park: {"class":"gated-work","basis":"every gate it names (#1) is terminal","gateIds":[1],"recordedAt":"2026-11-12T04:35:38.974Z"}
+3. pm release_work after the hold: item #2 not released: its gate names #1, which is cancelled - releasing it would make a row claimable whose prerequisite was dropped
+   row status: held
+4. impl defer_work without a claim: item #2 is not claimed by you (status=held)
+5. impl revise_work on the queued row: item #2 is not queued (status=held); only unclaimed work can be revised
+6. workable verdict: {"workable":false,"reason":"not-queued:held"}
