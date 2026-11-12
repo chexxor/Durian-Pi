@@ -87,7 +87,9 @@
       "demo/thinkinglevel.test.mjs",
       "demo/trace-requests.test.mjs",
       "demo/up-model-reset.test.mjs",
-      "demo/workable-claim.test.mjs"
+      "demo/workable-claim.test.mjs",
+      "demo/workstrategy-up.test.mjs",
+      "demo/workstrategy.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",

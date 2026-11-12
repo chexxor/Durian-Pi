@@ -18,6 +18,7 @@ import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
 import { strandedMsSetting, declaredContextWindow, compactionSettings } from "./config.mjs";
+import { DEFAULT_STRATEGY, resolveStrategy } from "./workstrategy.mjs";
 import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
@@ -56,21 +57,71 @@ function readBrokerLogTail(dbPath, maxBytes = 256 * 1024) {
 	}
 }
 
-/** The seats a store holds, as the plain {name, conversationId, role} shape a
- * renderer or client consumes. An absent session document is an empty rig, not
- * an error: the wrong-database guardrail is the caller's job (noteEmptyRig). */
-export async function readSeatList(storage, context = BACKGROUND_CONTEXT) {
+/** The seats DOCUMENT, in the same `{found, value}` shape the broker's generic `document` read
+ * view returns. That shape is the compatibility seam: a resident broker outlives the code on disk,
+ * and an OLD broker only knows the views that existed when it started — so a new CLI asks for a
+ * document it already serves rather than for a view name the broker has never heard of.
+ * The raw value (or `{}` for an absent document) is internal: the roster and the work-strategy view
+ * are two readings of the SAME document, and splitting them into two storage reads would let them
+ * disagree in a single render. */
+export async function readSeatsDocument(storage, context = BACKGROUND_CONTEXT) {
 	const rec = await storage.findDocument(
 		{ kind: Seats.definition.kind, scope: { kind: "session" } },
 		"current",
 		context,
 	);
-	const value = rec ? (await storage.document(rec.id, "current", context))?.value ?? {} : {};
+	if (!rec) return { found: false, value: null };
+	return { found: true, value: (await storage.document(rec.id, "current", context))?.value ?? {} };
+}
+
+async function readSeatsValue(storage, context = BACKGROUND_CONTEXT) {
+	return (await readSeatsDocument(storage, context)).value ?? {};
+}
+
+/** Project the seats document into the plain rows a renderer or client consumes. */
+function seatRowsFrom(value) {
 	return Object.entries(value.seats ?? {}).map(([name, s]) => ({
 		name,
 		conversationId: s.conversationId,
 		role: s.role,
+		// Additive (and OMITTED when unset, so the row is byte-identical to the pre-change roster and the
+		// broker's JSON payload equals the direct read): what the seat was CREATED with, so a readout can
+		// explain why a seat was offered a row. `workStrategy` is the seat's own OVERRIDE, not the
+		// resolved value — a reader that wants the effective one asks `readWorkStrategyView`.
+		...(s.capabilities === undefined ? {} : { capabilities: s.capabilities }),
+		...(s.workStrategy === undefined ? {} : { workStrategy: s.workStrategy }),
 	}));
+}
+
+/** The strategy a rig RESOLVES to, per seat and for the team, with its provenance.
+ *
+ * Exposed because the operator-facing question is not "what is stored" but "in what order will
+ * this seat claim". `source` is the path the value came down (seat > team > default), so a seat
+ * override that surprised the operator is visible as `seat` rather than merely "a strategy".
+ * Pure over a seats-document value; invalid stored names THROW here (via `resolveStrategy`), which
+ * is deliberate: a rig that will refuse every claim on that seat must not first read as healthy.
+ */
+export function workStrategyView(value) {
+	const team = resolveStrategy({ teamStrategy: value.workStrategy });
+	const seats = Object.fromEntries(
+		Object.entries(value.seats ?? {}).map(([name, s]) => [
+			name,
+			resolveStrategy({ seatStrategy: s.workStrategy, teamStrategy: value.workStrategy }),
+		]),
+	);
+	return { default: DEFAULT_STRATEGY, team, seats };
+}
+
+/** The resolved claim order for a rig, read from its store (see `workStrategyView`). */
+export async function readWorkStrategyView(storage, context = BACKGROUND_CONTEXT) {
+	return workStrategyView(await readSeatsValue(storage, context));
+}
+
+/** The seats a store holds, as the plain {name, conversationId, role} shape a
+ * renderer or client consumes. An absent session document is an empty rig, not
+ * an error: the wrong-database guardrail is the caller's job (noteEmptyRig). */
+export async function readSeatList(storage, context = BACKGROUND_CONTEXT) {
+	return seatRowsFrom(await readSeatsValue(storage, context));
 }
 
 /**
@@ -407,7 +458,10 @@ export async function readRigHealth(
 	slots,
 	{ modelsBySeat = {}, entryLimit = SCAN_LIMIT, cfg = undefined, windowsBySeat = {} } = {},
 ) {
-	const seats = await readSeatList(storage);
+	// One read of the seats document serves both the roster and the claim-order view, so
+	// `status` cannot print a roster and a strategy drawn from different snapshots.
+	const seatsValue = await readSeatsValue(storage);
+	const seats = seatRowsFrom(seatsValue);
 	const queueItems = await readQueueItems(storage);
 	// #2231: the roster carries no model, but each conversation's `pi.agent` does. Resolve the
 	// seats the caller did NOT already supply a model for, so a LOCAL seat's declared window is
@@ -543,6 +597,9 @@ export async function readRigHealth(
 	const compactGate = compactGateMap({ seats, cfg, modelsBySeat, agentModels });
 	return {
 		seats,
+		// The order each seat will claim in, and where that choice came from (seat > team > default).
+		// Additive to the JSON contract; `status` gets it via `...health`, `ps` via the same view.
+		workStrategy: workStrategyView(seatsValue),
 		queueItems,
 		// ROADMAP 131: the rig-level paused state, so `status`/`watch` report it and the
 		// operator KNOWS whether new work is being taken.

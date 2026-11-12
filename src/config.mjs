@@ -160,6 +160,14 @@ export const CONFIG_KEYS = [
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",
 	"DURIG_SEAT_ROOT",
+	// THE CLAIM ORDERING POLICY (priority-first selection, `src/workstrategy.mjs`). Registered because a key
+	// absent from this inventory is REFUSED in a config file by `assertNoUnknownFileKeys` (`:237`) — which made
+	// an unregistered `DURIG_NOTES_DIR` inert-by-name the moment it was added, the #5071 class this repo keeps
+	// paying for. `oldest_first` is the default so a rig that never sets it keeps its exact current order; the
+	// per-seat override (`workStrategy` in the rig file) and the team value live in the seats doc, not here.
+	// The value is VALIDATED at `up` against the implemented table (an unknown name REFUSES and lists them),
+	// never silently coerced.
+	"DURIG_WORK_STRATEGY",
 	// Where continuation-note MIRROR files are written (D240). Registered because `assertNoUnknownFileKeys`
 	// (src/config.mjs:227-234) refuses a config file that sets an unregistered key: an operator who puts
 	// `DURIG_NOTES_DIR` in `durig.config.json` without this row gets the same accepted-and-ignored class as

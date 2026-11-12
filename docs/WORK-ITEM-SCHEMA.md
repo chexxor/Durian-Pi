@@ -48,6 +48,17 @@ A queue item has exactly these fields (`node cli.mjs queue`):
 | `resultSummary` | the completion record: claim, and (for a verification) the evidence |
 | `optimizedVia` | provenance for an optimized instruction |
 | `notice` | **structural flag**: this item is a notification, not work |
+| `priority` | optional ordering HINT: `now` \| `next` \| `later` (closed vocabulary, `src/workstrategy.mjs`). Absent means `next`, so an unprioritised backlog is not reshuffled when a rig opts into `priority_first`. Written only by `set_priority`, only on a `queued`/`held` row, and only by a party to the row or a coordinator |
+| `prioritySet` | the priority's **lease**: `{at, by, reason, expiresAt, authority}`. `expiresAt` is mandatory and at most 30 days out; the priority stops applying when it passes (decided at READ time by `effectivePriority`, so ordering and every readout agree). A stored `priority` whose lease has lapsed is history, not policy |
+
+**Ordering is a declared policy, not a field's side effect.** *Which* claimable row a seat takes is decided by an
+explicit strategy: `oldest_first` (the default — ascending id, byte-identical to the pre-existing scan of queue array
+order) or `priority_first` (rank `now < next < later`, then ascending id). It is declared per team in the rig file
+(`workStrategy`) and overridden per seat, with `DURIG_WORK_STRATEGY` as the ambient fallback; `up` validates it before
+opening a harness and persists it on the seats document (the claim path has no config object). `ps` and `status` print
+the RESOLVED value and its source (`seat` / `team` / `default`), so a rig that declares nothing is visibly unchanged and
+a rig that declares something is visibly changed. Proofs: `demo/workstrategy.test.mjs`, `demo/workstrategy-up.test.mjs`;
+decision **D266**.
 
 Terminal means `done` **or** `cancelled` — a `cancelled` item is not work (it must never reappear as
 phantom work in a "non-terminal" view).

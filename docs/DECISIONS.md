@@ -11829,3 +11829,59 @@ architecture, sprawl measurement). Registering the build items (ROADMAP **358–
 Rejected with a reason, not silently: a purpose-prefix naming taxonomy enforced by a linter (ROADMAP **362**) —
 no fetched source shows one enforced, and a naming rule the tooling cannot enforce is a rule set that gets
 violated silently.
+
+## D266 — 2026-11-12T06:5xZ: **claim order is a declared POLICY with a name, a default that changes nothing, and a priority that EXPIRES; a setting nobody reads back is not a setting** (delegate, on the operator's directive "I like that idea. Implement that yourself now, bypassing the team to get this done"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+
+**Decision.** The order a seat takes work in is a **named policy**, not an emergent property of array order:
+
+1. **Two strategies exist, in a table**: `oldest_first` (the historical behaviour — ascending queue-item id) and
+   `priority_first` (priority rank `now < next < later`, then ascending id). An unknown name is **refused by
+   name, listing the valid set** — never silently defaulted, because `#5071`'s accepted-and-ignored class is
+   exactly a typo that leaves every read saying `ok`.
+2. **The default is `oldest_first`, and it is byte-identical to the old behaviour.** Selection used to scan queue
+   array order (insertion order = ascending id), so a rig that declares nothing must not reorder. `selectOldestWorkable`
+   is kept as an alias that FORCES `oldest_first`, and the claim reply only appends its `ORDER:` line for a
+   non-default strategy — the default path's bytes are unchanged on purpose.
+3. **Precedence is per seat over team over default** (`seat.workStrategy` > team `workStrategy` > `DURIG_WORK_STRATEGY`
+   > `oldest_first`), and every readout names the SOURCE, so "why is my queue in this order" is answerable without
+   opening a config file.
+4. **Priority is a closed vocabulary with a LEASE**: `now | next | later`, an absent row ties at the neutral `next`
+   (so opting in does not reshuffle 7,000 unprioritised rows), and `set_priority` **requires** an `expiresAt` no more
+   than 30 days out. The lease lapses at READ time, and one function (`effectivePriority`) decides what a priority means
+   right now, so ordering and the queue line cannot disagree.
+5. **`set_priority` acts only on a row still WAITING for a seat** (`queued` or `held`) and only for a party to the row
+   or a coordinator — the same authority rule as `release_work` (#6112). Its reply says whether the RECIPIENT's
+   resolved strategy actually honours priority.
+
+**Why now, and whose ruling this completes.** `docs/ROADMAP.md:724-726` (row 115) already **ratified** "claim
+selection honors an explicit `priority`/`rank` so human ordering survives ingest"; it was parked only because it
+waited on an external `TaskSource` that was never built. This lands the ratified half without the source. The operator
+asked for the per-team/per-seat shape directly and put the lifecycle goal on pause for it.
+
+**Why the value lives on the seats document and not in config.** `claim_work` runs inside the rig extension, which
+has **no config object**, and reading the environment from inside a tool would be a second, invisible source for one
+setting. So `up` validates the rig file BEFORE a harness is opened (a typo refuses the whole `up` instead of
+bootstrapping a rig whose order did not change), persists the team value on `seatsDoc.workStrategy` change-only, and
+persists a per-seat override on create / on `--refresh` (`null` deletes it, so a team can revert a seat without
+hand-editing the store). `DURIG_WORK_STRATEGY` is registered in `CONFIG_KEYS` and added to both shipped defaults files.
+
+**Where it is, and how it is proven.** Policy: `src/workstrategy.mjs` (pure, no I/O). Wire: `src/rig.mjs`
+(`selectNextWork`; the `set_priority` tool; `queueItemLine`'s `priority=`/`=lapsed`/`=invalid` rendering). Readout:
+`src/readapi.mjs` (`workStrategyView`, `readWorkStrategyView`, `readSeatsDocument`), `cli.mjs` (`up`'s
+`workStrategy: {team, source, seat}`, and `ps`/`status` reading the seats DOCUMENT through the broker's existing
+generic `document` view — a view of its own would fail closed against a resident broker older than the CLI, which
+was measured: `unknown read view: roster` with 4 live generation leases → exit 1). Proof: `demo/workstrategy.test.mjs` (45 checks,
+pure policy) and `demo/workstrategy-up.test.mjs` (the real CLI in faux mode, 3.3 s: declare → persist → `ps`/`status`
+read back with provenance → re-run unchanged → changed value applied → `--refresh` applies and `null` clears → a typo
+refuses before a store exists). The primer line for `set_priority` is pinned by `demo/primer.test.mjs`, which is what
+caught the first cut: a registered tool the primer does not name is a feature no seat is ever told about.
+
+**Residual, and what the delegate deliberately did not do.** Nothing was routed: no queue row was minted, claimed,
+completed or deferred, and the delegate remains outside the team. Nothing was pushed (the operator holds that grant).
+Not built here, named rather than implied: the wake gate (`src/driver.mjs`, `queuedVerdicts`) asks only WHETHER a seat
+has a workable row, so it is order-agnostic by construction and needs no change; what is unbuilt is the read surface
+elsewhere — the TUI/`watch` roster does not yet print the resolved strategy, and `peek_queue` (via `queueItemLine`)
+shows `priority=` to seats while the operator's `queue` dump carries the raw field only. Rejected with a reason: an integer priority (a typo or an inverted convention becomes silently either "highest"
+or "ignored"; a closed vocabulary can be refused by name), and an unbounded priority flag (`hold` already demonstrates
+the unbounded-park pathology — 197 rows, median 564.9 h — and a second unbounded reordering mechanism would be harder
+to see because the row still looks normal).

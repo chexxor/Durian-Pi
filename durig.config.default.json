@@ -1,5 +1,6 @@
 {
   "DURIG_DB": "./rig.sqlite",
+  "DURIG_WORK_STRATEGY": "oldest_first",
   "DURIG_MAX_CONCURRENT_SEATS": "1",
   "DURIG_OPTIMIZE": "off",
   "DURIG_LOCAL_CONTEXT": "200000",

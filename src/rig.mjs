@@ -18,6 +18,13 @@ import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
+import {
+	DEFAULT_STRATEGY,
+	effectivePriority,
+	orderCandidates,
+	resolveStrategy,
+	validatePriorityRequest,
+} from "./workstrategy.mjs";
 
 /** Seat roster: name -> conversation id + role text. Session singleton. */
 export const Seats = defineDoc({
@@ -336,24 +343,48 @@ export function workable(item, seat, { items = [], capabilities = [] } = {}) {
 }
 
 /**
- * The OLDEST-WORKABLE SELECTION (#2673), extracted so the choice is testable without a
- * harness: `claim_work` with no itemId must return the oldest item that is WORKABLE for this
- * seat, and must REPORT every item it passed over — a starved item is otherwise
- * indistinguishable from an empty queue.
+ * THE WORKABLE SELECTION (#2673), now ORDER-AWARE.
  *
- * Only items addressed to `seat` and still `queued` are candidates; the scan stops at the
- * first workable one, so the order is oldest-first and a later workable item is never
- * preferred over an earlier one.
+ * Extracted so the choice is testable without a harness: `claim_work` with no itemId must return the
+ * first WORKABLE item for this seat IN STRATEGY ORDER, and must REPORT every item it passed over — a
+ * starved item is otherwise indistinguishable from an empty queue.
+ *
+ * TWO RESPONSIBILITIES, DELIBERATELY SEPARATED:
+ *  - ORDER (`orderCandidates`, src/workstrategy.mjs) answers "in what sequence do I look". It is a policy
+ *    an operator declares, so it lives in the table-module and can be tested with no store at all.
+ *  - CLAIMABILITY (`workable` above) answers "may this seat take this row". It stays here, single-owned:
+ *    a second gate rule in the ordering function is how a gate rule drifts (#6112's reason for
+ *    extracting `deadGateId`).
+ *
+ * Only items addressed to `seat` and still `queued` are candidates; the scan stops at the first workable
+ * one. Under the default `oldest_first` that is byte-for-byte the historical answer (ascending id ==
+ * insertion order == array order), so a rig that does not opt in is unchanged.
+ *
+ * `strategy` is REQUIRED to be one of the implemented names: an unknown name throws (see
+ * `assertWorkStrategy`) rather than silently ordering oldest-first. `now` is injected for tests only.
  */
-export function selectOldestWorkable(items, seat, { capabilities = [] } = {}) {
+export function selectNextWork(items, seat, { capabilities = [], strategy = DEFAULT_STRATEGY, now = Date.now() } = {}) {
 	const skipped = [];
-	for (const candidate of items ?? []) {
+	for (const candidate of orderCandidates(items, { strategy, now })) {
 		if (candidate.to !== seat || candidate.status !== "queued") continue;
 		const verdict = workable(candidate, seat, { items, capabilities });
 		if (verdict.workable) return { item: candidate, skipped };
 		skipped.push({ id: candidate.id, reason: verdict.reason });
 	}
 	return { item: null, skipped };
+}
+
+/**
+ * The OLDEST-WORKABLE SELECTION (#2673) — kept as a BACK-COMPATIBLE ALIAS.
+ *
+ * Six demos import this name (`demo/workable-claim.test.mjs:25`, plus the deferred-stage, pm-release,
+ * blockedBy and wake-claimability pins). They are the proof that the strategy change is a no-op for the
+ * default: renaming the seam would have forced them to change, and a test that had to be edited to keep
+ * passing proves nothing about compatibility. The alias IGNORES any `strategy` passed in — its contract is
+ * "oldest", and honouring a strategy here would make a name that says oldest return something else.
+ */
+export function selectOldestWorkable(items, seat, opts = {}) {
+	return selectNextWork(items, seat, { ...opts, strategy: DEFAULT_STRATEGY });
 }
 
 /**
@@ -365,13 +396,25 @@ export function selectOldestWorkable(items, seat, { capabilities = [] } = {}) {
 function queueItemLine(it) {
 	const gate =
 		it.blockedBy && it.blockedBy.length ? ` blockedBy=${[...it.blockedBy].join(",")}` : "";
+	// A PRIORITY LEASE is shown with its EFFECTIVE value, not the stored one: an expired `now` that still
+	// prints as `now` would read as urgent in the queue view while ordering neutral in the selector — two
+	// views of one row disagreeing, which is how a reader concludes the selector is broken. Lapsed rows say
+	// so, with the instant, so "why did #6193 stop jumping the queue" is answerable from the line itself.
+	const priority = it.priority
+		? (() => {
+				const eff = effectivePriority(it);
+				if (eff.lapsed) return ` priority=${eff.raw}~lapsed@${eff.expiresAt}`;
+				if (eff.invalid) return ` priority=${String(eff.raw)}!invalid`;
+				return ` priority=${eff.priority}${eff.expiresAt ? ` until=${eff.expiresAt}` : ""}`;
+			})()
+		: "";
 	// #6112: a row that was un-parked says WHO un-parked it and WHY in the same line the seat
 	// already reads. A release that is only a `transitions` entry is invisible to a seat scanning
 	// its queue, so the row looks as if it un-parked itself and the coordinator's action is lost.
 	const release = it.release
 		? ` releasedBy=${it.release.by}${it.release.reason ? ` reason=${it.release.reason}` : ""}`
 		: "";
-	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}${release}`;
+	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}${priority}${release}`;
 }
 
 /**
@@ -875,12 +918,28 @@ const Router = defineExtension({
 					// instead of silently occupying the slot ahead of real work. Suppressed while paused.
 					const skipped = [];
 					let queued;
+					let order = null;
 					if (!paused) {
 						const seatsDoc = await tx.doc(Seats);
-						const capabilities = seatsDoc.seats[me]?.capabilities ?? [];
-						const picked = selectOldestWorkable(queue.items, me, { capabilities });
+						const seatEntry = seatsDoc.seats[me] ?? {};
+						const capabilities = seatEntry.capabilities ?? [];
+						// WHICH ORDER is a POLICY, resolved where the roster already lives: the seat's own override
+						// beats the team's, which beats `oldest_first`. An unknown name THROWS here (with the valid
+						// set in the message) instead of quietly claiming oldest-first — a strategy that silently did
+						// not apply is the accepted-and-ignored class (#5071), and it would look exactly like a
+						// working rig from every read.
+						const resolved = resolveStrategy({
+							seatStrategy: seatEntry.workStrategy,
+							teamStrategy: seatsDoc.workStrategy,
+							defaultStrategy: DEFAULT_STRATEGY,
+						});
+						const picked = selectNextWork(queue.items, me, {
+							capabilities,
+							strategy: resolved.strategy,
+						});
 						queued = picked.item ?? undefined;
 						skipped.push(...picked.skipped);
+						order = resolved;
 					}
 					if (queued) {
 						queued.status = "claimed";
@@ -900,6 +959,7 @@ const Router = defineExtension({
 							subject: queued.subject,
 							body: queued.body,
 							skipped,
+							order,
 						};
 					}
 					// Stalled-claim legal move (ROADMAP 42 / #118): no queued work, but
@@ -982,7 +1042,15 @@ const Router = defineExtension({
 				const skippedLine = skipped.length
 					? `\n\nSKIPPED (addressed to you, not workable yet): ${skipped.map((s) => `#${s.id} (${s.reason})`).join(", ")}`
 					: "";
-				const claimText = `${head}\n${found.body}${skippedLine}`;
+				// A NON-DEFAULT order is announced, and only then: `WAKE_CONTENT` tells the seat to take "the oldest
+				// item addressed to you" (fixed string, ROADMAP 33 / #4557), so a seat handed a LATER row must be
+				// told why or it will read the claim as the harness ignoring its instructions. The default path
+				// stays byte-identical, which is the same no-op proof the alias provides.
+				const orderLine =
+					found.kind === "claimed" && found.order && found.order.strategy !== DEFAULT_STRATEGY
+						? `\n\nORDER: ${found.order.strategy} (from ${found.order.source}) — this is NOT the oldest workable row; the queue is ordered by priority lease, and this row is the first workable one in that order.`
+						: "";
+				const claimText = `${head}\n${found.body}${skippedLine}${orderLine}`;
 				// Thin-context return contract: an over-threshold body goes to disk and
 				// the tool returns the structured head + a path, not the dump (see
 				// thinResultText / RANK-1 / #118 half 2).
@@ -1365,6 +1433,94 @@ const Router = defineExtension({
 						reason: item.release.reason,
 					});
 					return `item #${item.id} released back to queued${item.release.authority === "coordinator" ? ` by ${me} (coordinator release: ${item.release.reason})` : ""}.`;
+				}, context);
+				return toolText(out);
+			},
+		}),
+		defineTool({
+			name: "set_priority",
+			description:
+				"Move a row up or down the RECIPIENT's queue by setting its PRIORITY LEASE (now / next / later). " +
+				"A priority is a LEASE, not a flag: it needs a `reason` and an `expiresAt` (ISO-8601, in the future, " +
+				"at most 30 days out) and it LAPSES back to neutral at that instant. It only changes claim order when " +
+				"the recipient's resolved work strategy is `priority_first`; the reply says which strategy is in force, " +
+				"because recording a priority under `oldest_first` changes nothing and must not read as success. " +
+				"The row's parties (sender/recipient) or a COORDINATING seat may set it.",
+			parameters: obj({
+				itemId: num(),
+				priority: union([lit("now"), lit("next"), lit("later")], {
+					description:
+						"now = ahead of the backlog, next = the neutral value (what an unprioritised row already ranks as), later = behind it",
+				}),
+				reason: str({
+					description:
+						"REQUIRED: why the order changes. Written on the row and shown in every queue view — a reordering the recipient cannot explain is how 'why is my queue in this order' becomes an escalation.",
+				}),
+				expiresAt: str({
+					description:
+						"REQUIRED: ISO-8601 instant when the lease lapses, e.g. 2026-11-19T00:00:00Z. In the future, at most 30 days out.",
+				}),
+			}),
+			replay: "safe",
+			execute: async (args, api, context) => {
+				const me = await mySeatName(api, context);
+				const out = await api.commit(async (tx) => {
+					const queue = await tx.doc(RigQueue);
+					const seats = await tx.doc(Seats);
+					const item = queue.items.find((it) => it.id === args.itemId);
+					if (!item) return `unknown item #${args.itemId}`;
+					// TERMINAL BEFORE AUTHORITY, the #5778 ordering rule: a finished row is not orderable, and telling a
+					// coordinator it lacks authority over a row that is already `done` sends it chasing a closed item.
+					if (isTerminalItem(item))
+						return `item #${args.itemId} is already ${item.status} (terminal); there is nothing to order`;
+					// SAME SCOPED AUTHORITY AS `release_work` (#6112, ruling #6097), and for the same reason: moving a
+					// third party's row is exactly what a coordinator is FOR (it is the operator's lever into a seat's
+					// queue), while a seat with no relation to the row must not silently reprioritise someone else's work.
+					// Unlike release, this does NOT go back on its own — but it LAPSES, which is the bounded form of
+					// reversibility that makes the delegated power safe to grant.
+					const isParty = item.to === me || item.from === me;
+					const coordinating = seatIsCoordinator({
+						name: me,
+						role: seats.seats[me]?.role,
+						capabilities: seats.seats[me]?.capabilities ? [...seats.seats[me].capabilities] : [],
+					});
+					if (!isParty && !coordinating)
+						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender, the recipient, or a coordinating seat may set its priority`;
+					// A CLAIMED row is being acted on right now: ordering it changes no selection (the selector only picks
+					// `queued` rows), so accepting it would record a lever that cannot move. `held` IS accepted: the lease
+					// is set while parked and applies the moment release_work makes the row claimable.
+					if (item.status !== "queued" && item.status !== "held")
+						return `item #${item.id} is ${item.status}; set_priority orders rows still waiting for a seat (queued or held), not one already in flight`;
+					const valid = validatePriorityRequest(args);
+					if (!valid.ok) return `item #${args.itemId}: ${valid.error}`;
+					const at = new Date().toISOString();
+					item.priority = valid.value.priority;
+					// STRUCTURE, not prose (the same rule as `release` and `park`): who leased it, why, until when, and
+					// on what authority, so a reader and a metric both read the row instead of its history.
+					item.prioritySet = {
+						at,
+						by: me,
+						reason: valid.value.reason,
+						expiresAt: valid.value.expiresAt,
+						authority: isParty ? (item.from === me ? "sender" : "recipient") : "coordinator",
+					};
+					item.transitions.push({ at, event: "priority", by: me, priority: valid.value.priority });
+					// THE HONESTY CHECK for this whole feature: a priority is INERT unless the RECIPIENT's resolved
+					// strategy is `priority_first`. Resolving it here (the recipient's seat first, then the team) and
+					// saying so is what stops "I set a priority and nothing happened" from becoming a mystery, which
+					// would be this repo's accepted-and-ignored class (#5071) reintroduced by a new mechanism.
+					const recipient = seats.seats[item.to] ?? {};
+					const order = resolveStrategy({
+						seatStrategy: recipient.workStrategy,
+						teamStrategy: seats.workStrategy,
+						defaultStrategy: DEFAULT_STRATEGY,
+					});
+					const where = item.status === "held" ? " (the row is held; the lease applies when it is released)" : "";
+					const effect =
+						order.strategy === "priority_first"
+							? `#${item.to} claims by ${order.strategy} (from ${order.source}), so this DOES change the order it looks in.`
+							: `#${item.to} claims by ${order.strategy} (from ${order.source}), which IGNORES priority: the lease is recorded but does NOT change claim order until that seat (or the team) is set to \`priority_first\`.`;
+					return `item #${item.id} priority=${valid.value.priority} until ${valid.value.expiresAt}${where} — ${effect}`;
 				}, context);
 				return toolText(out);
 			},

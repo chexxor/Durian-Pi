@@ -63,6 +63,7 @@ import {
   registerSeat,
 } from "./src/rig.mjs";
 import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+import { DEFAULT_STRATEGY, assertWorkStrategy, strategyNames } from "./src/workstrategy.mjs";
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
 import { contextConsumption } from "./src/context.mjs";
@@ -91,7 +92,7 @@ import { readDocCountClaims } from "./src/doccounts.mjs";
 import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
 import { readData, setLocalReads, liveGenerationLeases } from "./src/readclient.mjs";
@@ -611,6 +612,7 @@ async function buildSeatPrompt(models, seat, providerId) {
     "- resume_work(itemId): take back a deferred item once the answer has arrived, then finish it with complete_work.",
     "- hold_work(itemId, reason?): park one of your claimed items so it becomes unclaimable until released; reason is optional.",
     "- release_work(itemId): restore a held item to queued, so the driver can re-wake the seat.",
+    "- set_priority(itemId, priority, reason, expiresAt): move a QUEUED or HELD item up or down a seat's queue. priority is now|next|later, and it is a LEASE: it stops applying at expiresAt (required, at most 30 days), so urgency cannot become a permanent park. It only reorders claims where that seat works `priority_first`, and the reply says whether the recipient does.",
     "- revise_work(itemId, {subject?, body?}): fix the subject/body of a QUEUED item you sent or were sent, before it is claimed.",
     "- cancel_work(itemId, reason): cancel a stale or superseded item (one you sent or were sent). Terminal: it is never claimed and never woken for.",
     "- peek_queue([all]): read the queue. By default your non-terminal items (addressed to or sent by you); pass all=true for the team-wide, all-status view when coordinating or debugging.",
@@ -706,6 +708,28 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
       `note: ${rigFile}: seat ${name} sets both instructions and instructionsFile; using the file`,
     );
   }
+  // ---- WORK STRATEGY: the claim ORDER this team works in (priority-first selection) ----------------
+  // The rig file's `workStrategy` is the TEAM default; a seat may override it per seat. Precedence follows
+  // the `seatCwd` precedent below (`seat.cwd ?? spec.cwd ?? DURIG_SEAT_ROOT`): the rig file wins over the
+  // config file, because the rig file declares THIS team while `DURIG_WORK_STRATEGY` is the host's ambient
+  // setting. Validated HERE — before a harness is opened and before any seat is created — so a typo refuses
+  // the whole `up` instead of bootstrapping a rig whose claim order silently did not change (the #5071
+  // accepted-and-ignored class). The resolved value is PERSISTED onto the seats doc because that is the one
+  // document `claim_work` can read: the rig extension has no config object, and reading the environment from
+  // inside a tool would be a second, invisible source for one setting.
+  const declaredTeamStrategy =
+    typeof spec.workStrategy === "string" && spec.workStrategy.trim() !== "" ? spec.workStrategy.trim() : null;
+  const teamWorkStrategy = assertWorkStrategy(declaredTeamStrategy ?? CFG.DURIG_WORK_STRATEGY ?? DEFAULT_STRATEGY, {
+    where: `${rigFile} workStrategy (or DURIG_WORK_STRATEGY; valid: ${strategyNames().join(", ")})`,
+  });
+  for (const seat of spec.seats ?? []) {
+    // `undefined` inherits and `null` explicitly clears/never-sets an override (the refresh path below), so
+    // NEITHER is a strategy NAME: validating them would make the documented null-means-clear form unreachable.
+    if (seat.workStrategy === undefined || seat.workStrategy === null) continue;
+    assertWorkStrategy(seat.workStrategy, {
+      where: `${rigFile} seat ${JSON.stringify(seat.name ?? "(unnamed)")} workStrategy`,
+    });
+  }
   const created = [];
   const existing = [];
   const refreshed = [];
@@ -790,6 +814,10 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
   try {
     await harness.commit(async (tx) => {
       const seatsDoc = await tx.doc(Seats);
+      // The TEAM strategy is applied on every `up` (like edges and the constitution), idempotently: it is the
+      // declaration of how these seats claim, and a `up` that silently kept an old order would be the same
+      // class of invisible no-op. A per-seat override below is applied only where the spec declares one.
+      if (seatsDoc.workStrategy !== teamWorkStrategy) seatsDoc.workStrategy = teamWorkStrategy;
       for (const seat of spec.seats) {
         // Prompts were resolved once above (detection pass) and are REUSED here —
         // a second buildSeatPrompt would run the optimizer twice (DURIG_OPTIMIZE=on).
@@ -820,6 +848,12 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
           if (prompt.optimizedVia) {
             seatsDoc.seats[seat.name].instructionsOptimizedVia = prompt.optimizedVia;
           }
+          // --refresh re-applies a CHANGED seat strategy; an explicit `null` in the spec clears it (so a team
+          // can revert a seat to the team default without hand-editing the store).
+          if (seat.workStrategy !== undefined) {
+            if (seat.workStrategy === null) delete seatsDoc.seats[seat.name].workStrategy;
+            else seatsDoc.seats[seat.name].workStrategy = seat.workStrategy;
+          }
           refreshed.push(seat.name);
           continue;
         }
@@ -842,6 +876,11 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
         await registerSeat(tx, seat.name, conv.id, seat.role ?? seat.name);
         if (seat.capabilities?.length) {
           seatsDoc.seats[seat.name].capabilities = seat.capabilities;
+        }
+        // A per-seat work strategy is persisted beside the capabilities: it is part of how this seat works, and
+        // the claim path reads it from the roster, not from the rig file (the file is not present at claim time).
+        if (seat.workStrategy) {
+          seatsDoc.seats[seat.name].workStrategy = seat.workStrategy;
         }
         created.push(seat.name);
       }
@@ -881,6 +920,13 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
     refreshed,
     extensions,
     broker,
+    // The order this rig's seats claim in, and WHERE it came from. Reported because an operator who set a
+    // strategy and sees nothing here cannot tell "applied" from "ignored" without opening the store.
+    workStrategy: {
+      team: teamWorkStrategy,
+      source: declaredTeamStrategy ? "rig file" : process.env.DURIG_WORK_STRATEGY ? "environment" : "config",
+      seat: Object.fromEntries(spec.seats.filter((s) => s.workStrategy).map((s) => [s.name, s.workStrategy])),
+    },
     // #402: bare up reports detected mismatches (write NOTHING); --refresh reports what
     // it reset (and anything it refused for a live lease — the operator re-runs when idle).
     ...(modelMismatch.length ? { modelMismatch: modelMismatch.map(({ seat, from, to }) => ({ seat, from, to })) } : {}),
@@ -1130,13 +1176,25 @@ function healthParams({ modelsBySeat = {}, windowsBySeat = {}, entryLimit = SCAN
 // broker when one drives (see src/readclient.mjs); with no broker it opens the storage
 // directly and is the sole owner.
 async function cmdPs() {
+  // The roster as printed before, plus the claim ORDER each seat resolves to and the path it came down.
+  // The strategy is derived from the seats DOCUMENT, read through the broker's generic `document` view
+  // rather than through a view of its own: a resident broker outlives the CLI on disk and only knows the
+  // views it started with, so a new view name would make `ps` fail closed against an older broker
+  // (measured 2026-11-12: `unknown read view: roster` with 4 live generation leases → exit 1).
   const seats = await readData(DB_PATH, "seats", {}, (storage) => readSeatList(storage));
   noteEmptyRig(seats.length);
+  const seatsDoc = await readData(
+    DB_PATH,
+    "document",
+    { kind: Seats.definition.kind, scope: { kind: "session" } },
+    (storage) => readSeatsDocument(storage),
+  );
   out({
     ok: true,
     command: "ps",
     db: DB_PATH,
     seats,
+    workStrategy: workStrategyView(seatsDoc?.found ? seatsDoc.value : {}),
   });
 }
 
@@ -3010,6 +3068,22 @@ async function cmdStatus(args = []) {
   const health = await readData(DB_PATH, "health", healthParams(), (storage) =>
     readRigHealth(storage, DB_PATH, maxSeats(), { cfg: CFG }),
   );
+  // The claim order a rig RESOLVES to. Normally it rides in `health` (readRigHealth computes it), but a
+  // resident broker older than this CLI serves a health payload that predates the field — the broker
+  // outlives the code on disk, so that skew is the normal case after an update, not an edge case. Rather
+  // than silently OMITTING the readout (the accepted-and-ignored class), fall back to the seats document
+  // through the generic `document` view, which every broker version already serves. Cost: one extra spool
+  // round-trip (~0.9 s measured on this box) ONLY under skew; a current broker pays nothing.
+  const workStrategy =
+    health.workStrategy ??
+    workStrategyView(
+      (await readData(
+        DB_PATH,
+        "document",
+        { kind: Seats.definition.kind, scope: { kind: "session" } },
+        (storage) => readSeatsDocument(storage),
+      ))?.value ?? {},
+    );
   noteEmptyRig(health.seats.length);
   // The broker's health (#2581 / BROKER-SUPERVISION §4): a fresh heartbeat alone is only
   // LIVENESS; `lastPassAt` carries PROGRESS, so a wedged-but-alive broker reads `degraded`,
@@ -3065,6 +3139,8 @@ async function cmdStatus(args = []) {
     command: "status",
     db: DB_PATH,
     ...health,
+    // Overrides the spread above when the fallback ran (a broker that predates the field).
+    workStrategy,
     queueItems: view.rows,
     queueCensus: queueCensusOf(health.queueItems),
     queueDeferred: deferredBacklogRows(health.queueItems),

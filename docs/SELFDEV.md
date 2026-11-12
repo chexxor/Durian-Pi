@@ -3974,3 +3974,45 @@ at `:743`). Re-measure every `path:line` before repeating it.
     page it never actually retrieved. `inputs/fetched/MANIFEST-branch-lifecycle.md` records status + sha256 +
     `last-modified` for exactly this reason; regenerate it with
     `.spike/research/fetch-manifest.py` (promote per 312) before citing anything external.
+
+## Operational pitfalls (delegate work-strategy pass, 2026-11-12 — numbered 274-279, continuing from 273; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+274. **A registered tool nothing documents is a dead feature, and the primer is the only reader.** `set_priority` was
+    registered, tested at the policy level and reachable, and `demo/primer.test.mjs` still went **red**: "tool
+    `set_priority` is registered but not in the protocol primer, so no seat would ever be told it exists". The primer is
+    read out of **`cli.mjs`'s `PROTOCOL` array literal as source text**, so the fix is a primer line, never a test edit.
+    Run `node demo/primer.test.mjs` (0.2 s) in the same breath as adding ANY Router tool — the policy unit test passed
+    45/45 on a tool no seat could discover.
+275. **An uncommitted `docs/NEXT.md` can redden the suite before you commit anything.** `demo/next-pointer.test.mjs`
+    failed on the previous session's clock-out edit: its `## NEXT SESSION` body had lost every `node cli.mjs` line (they
+    had moved into the `## Exact next command` section, which the rule does NOT check). Second trap in the same file:
+    the cap is `text.split("\n").length <= 200`, so a file with **199** newline-terminated lines already counts 200 —
+    adding a line means CUTTING one. Folded the `git branch/worktree` count into the census line's comment instead of
+    moving a section to `docs/NEXT-ARCHIVE.md` (a cut to the archive is the honest move when the content is history;
+    this content was live). Always capture the demo's exit code (`; echo exit=$?`) before committing NEXT.md.
+276. **A validation rule and the code that CONSUMES the value can disagree, and `node --check` cannot see it.** `cmdUp`
+    validated every `seat.workStrategy` with `assertWorkStrategy`, which THROWS on `null` — while the `--refresh` path
+    below it documents `null` as "delete the override". The documented form was unreachable until the end-to-end demo
+    (`demo/workstrategy-up.test.mjs`, step 5) ran it. Rule: for every "null means X" or "absent means Y" comment, run
+    the path that relies on it; a comment is not evidence.
+277. **A broker-routed read that is deepEqual-asserted against the direct call cannot carry an `undefined` field.**
+    The spool is JSON, so `{capabilities: undefined}` arrives without the key and `demo/broker-read.test.mjs`'s
+    equivalence assertion fails with a one-line diff that looks like a shape error. Omit the key at the producer
+    (`...(v === undefined ? {} : {k: v})`) rather than weakening the assertion: the payload then stays byte-identical
+    for every rig that does not use the new field.
+278. **A new CLI against the resident broker must ask for what the broker ALREADY serves, not for a new view name.**
+    The broker outlives the code on disk (pid 2997720 was started at 05:17Z, before this pass), and `READ_VIEWS` is a
+    closed vocabulary it validates at request time — so a `ps` built on a new `roster` view returned exit 1 with
+    `apply failed: unknown read view: roster (known: seats, queue, …)` and `cause: broker_degraded`, because 4 seats held
+    live generation leases and the client therefore refuses to read the store directly. The suite could NOT see this: it
+    runs with no resident broker, where the new view works. The compatible shape is the broker's generic `document`
+    view (served by every version) plus a local derivation, and for `status` a FALLBACK that only pays the extra ~0.9 s
+    round-trip when the payload lacks the field. Verify any read-surface change against the LIVE store (`ps` 1.8 s,
+    `status --json --no-notes` 2.9 s with an old broker resident), not only against a fixture.
+279. **Two inventories fire when you add a demo, and both are cheap to satisfy at the moment of the change.**
+    `demo/test-areas.json` requires every `demo/*.test.mjs` in exactly one area, and `tools/what-to-test.mjs` prints the
+    rotation message naming the unmapped file. Edit that JSON by inserting next to a sibling — a `json.dump` round-trip
+    re-sorted 6 neighbours and escaped a unicode em-dash into the diff. (A new READ VIEW also has to pass
+    `demo/broker-read.test.mjs`'s `deepEqual` on `READ_VIEWS`; see 278 for why a new view is usually the wrong answer.)
+    Measured cost of the whole pass on this box: new end-to-end demo 3.3 s standalone / 6.1 s under `--jobs 4`, full
+    suite **302/302 in 127.7 s**.
