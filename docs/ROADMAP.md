@@ -2817,16 +2817,30 @@ one gated investigation are registered here. `pm` sequences. Registered **not sc
     + `src/seattools.mjs`. *Acceptance:* a seat can be scoped to a tool subset without editing tool
     definitions. *Cross-links:* ROADMAP item 18 (per-seat tool scoping); the survey's reference #4.
 
-157. **CONTINGENCY (not default) — move the audit/event trail off the SQLite write lock.** Investigate
-    OpenHands' per-record-file + `.lock` append-only model *only if* evidence still shows lock contention
-    *after* D111 (broker-served reads) and the `harness.storage` read fix (`8d48cb1`, `6140467`). The
-    follow-up research found **no throughput figure at our scale**, and round 2 confirmed throughput is
-    **not a deciding factor** (~50 records/s is 2–3 orders below the measured fsync/WAL ceilings) — so
-    this is a contingency justified only by *lock-contention relief*, never speed. If it opens, `filelock`'s
-    Windows primitive is `LockFileEx` (kernel-enforced, **auto-released on process death**, no stale
-    reclaim) and is **local-filesystem only**.
-    *Owner:* lead · impl. *Acceptance:* a written finding that first demonstrates residual contention on the
-    write lock (not corruption, not a second opener), then a scoped change with a rollback. *Cross-links:*
+157. **RETIRED AS WRITTEN (2026-11-12, #6386 ruled, routed by #6605) — the lock-contention contingency has no
+    evaluable trigger.** Investigating OpenHands' per-record-file + `.lock` append-only model was made conditional
+    on "evidence still shows lock contention *after* D111 (broker-served reads) and the `harness.storage` read fix
+    (`8d48cb1`, `6140467`)". That condition **cannot be evaluated**, and leaving it worded as a pending contingency
+    is how a void trigger reads as dormant work:
+    - **There is no failure ledger to measure it against.** #3795 ("THE FAILURE LEDGER: one classified red set") was
+      registered and never built; the closest instrument that exists is `tools/suite-signature.mjs` (#6176), which
+      classifies a *capture* at run time and persists nothing — its own header says it exists because "5 pre-existing
+      reds" flattened three causes into one. Nothing records a red set over time, so "evidence still shows
+      contention" has no input.
+    - **There is no `lock` classification to count.** The only machine classification is `classifyDemoResult` in
+      `src/suite.mjs:43-56`, whose kinds are `pass | environmental | fail`; grepping source for a `lock` kind returns
+      nothing (the only `lock` hits are `git worktree lock`, `src/worktree.mjs:856`).
+    - **A timeout structurally cannot reach one.** For a killed run `classifyDemoResult` returns
+      `{kind: "fail", code: null, reason: "nonzero exit (killed)"}` — the classifier can name *that a run was
+      killed*, never *that it was blocked on a lock*.
+    **The concern is re-pointed, not deleted.** The measured cause is a double-open **inside one process**: commit
+    `9e220e79` found pid 3521203 holding 5 handles on `selfdev.sqlite` (two sqlite connections plus wal/shm) with no
+    other process holding the store, and `d7d2ef9c` counted 23 `PASS-FAILED … database is locked errcode=5` events
+    the same day. Moving the audit trail off the write lock does not address that. Follow **#5858** (the broker's own
+    second connection) and **#3795** (the ledger that must exist before any trigger can be computed).
+    **The rule this enforces: a trigger that cannot be evaluated is void, not dormant** — retire it and name what
+    would make it live (a persisted red-set ledger, plus a `lock` classification the classifier can actually produce).
+    *Owner:* lead · impl. *Acceptance:* now the two pointer rows, not a written finding about throughput. *Cross-links:*
     the survey's reference #2; incident `2026-10-18-broker-retry-hotloop.md`;
     `docs/reviews/daemon-harness-architecture-followup-review.md` Q5.
 
