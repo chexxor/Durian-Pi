@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-292, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-294, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4127,3 +4127,19 @@ at `:743`). Re-measure every `path:line` before repeating it.
     landing: a delegate doc commit moving `main`, and a `done` status on a LANDING PASS row. The proof
     of a landing is `git merge-base --is-ancestor <sha> main` exit 0 **and** the ref disappearing, in
     that order, with the census count falling (`node tools/branch-census.mjs --json` before and after).
+293. **A row can say "main is red" and be false at the tip you are standing on.** Rows #7237 and #7244
+    both assert `demo/clockin-digest.test.mjs` is red on main and that this blocks every landing. At
+    `main` `4b549e34`, 15:3xZ: `node scripts/test.mjs --all --jobs 4` → **308/308 passed in 123.9 s, exit 0**
+    (`.spike/suite-main-4b549e34.out`). Before a seat accepts "the base is red" as a blocker, run the gate
+    against the current tip in one bounded call and quote the tally; a blocker inherited from a row written
+    hours earlier costs a whole landing pass. Cost of that probe: **124 s** — cheaper than a refused pass.
+294. **A budget guard that asserts against a RECORDED census is green while the live value is over
+    budget.** `node scripts/clockin.mjs | wc -c` = **20,573 bytes** at 7,282 queue rows against
+    `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`), yet `node demo/clockin-digest.test.mjs`
+    **passes** (17.9 s) because its assertion is written against the recorded production census of **5,773
+    rows**. The guard cannot see the drift it exists to catch, and the drift is monotone: queue rows only
+    grow. The same shape applies to every demo that quotes a measured number as a literal — the test is a
+    photograph, not a sensor. Consequence for landing: a suite green today can go red tomorrow with no code
+    change, and every landing would then be refused for a condition no branch caused. Fix shape: the demo
+    measures the live queue (or takes the census as an argument), and the assertion compares against the
+    same number the entry point uses.
