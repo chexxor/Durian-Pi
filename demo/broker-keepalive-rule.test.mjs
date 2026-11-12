@@ -30,7 +30,7 @@ function dirnameOf(p) {
 	return p.split("/").slice(0, -1).join("/");
 }
 
-const { rearmVerdict, countIntentFiles, snapshot } = await import(TOOL);
+const { rearmVerdict, countIntentFiles, snapshot, brokerBoundSeconds, parseBound } = await import(TOOL);
 const { intentInboxDir, writeBrokerState } = await import("../src/broker.mjs");
 
 console.log("=== 1. THE TRUTH TABLE (every case is a state this rig has actually been in) ===");
@@ -57,9 +57,27 @@ assert.equal(stranded.shouldRearm, true, "that is exactly what the keepalive exi
 // Just under the bound, nothing fires — the threshold is the tool's, and it is honoured.
 assert.equal(rearmVerdict({ brokerAlive: true, heartbeatAgeS: 12, lastPassAgeS: 300, pendingIntents: 5 }, 300).shouldRearm, false, "at the bound the broker still gets the benefit of the doubt");
 
+// THE OVER-BOUND SHAPE, measured 2026-11-12T16:2xZ on this box (Linux, Fedora Linux 45, kernel
+// 7.2.15-300.fc45.x86_64, node v24.22.1): pid 1273802 launched with `cli.mjs serve --max-duration 3600`
+// was alive 1 h 34 m, heartbeat 11 s fresh, last PASS 2,082 s ago, spool EMPTY, no genlock, no seat
+// process, and the fleet sat idle with 604 queued rows. The empty spool is why the `stranded` leg
+// misses it; the run's own bound is what names it.
+const parked = rearmVerdict({ brokerAlive: true, heartbeatAgeS: 11, lastPassAgeS: 2082, pendingIntents: 0, runAgeS: 5700, brokerBoundS: 3600 }, 300);
+assert.equal(parked.stranded, false, "an empty spool means the stranded leg alone does NOT catch a parked broker");
+assert.equal(parked.overBound, true, "a run 2,100 s past the --max-duration it asked for, with no pass, is parked on the drain");
+assert.equal(parked.shouldRearm, true, "the keepalive exists precisely to re-arm that fleet");
+
+// A broker still INSIDE its own bound with an empty spool is the healthy-idle case, not a parked one.
+assert.equal(rearmVerdict({ brokerAlive: true, heartbeatAgeS: 15, lastPassAgeS: 1412, pendingIntents: 0, runAgeS: 3000, brokerBoundS: 3600 }, 300).overBound, false, "inside the bound, no pass is idle, not parked");
+// Past the bound but STILL passing: the drain leg is not wedged, so leave it alone.
+assert.equal(rearmVerdict({ brokerAlive: true, heartbeatAgeS: 5, lastPassAgeS: 30, pendingIntents: 0, runAgeS: 4300, brokerBoundS: 3600 }, 300).overBound, false, "a run past its bound that is still passing is driving, not parked");
+// A broker started without --max-duration has no bound, so this leg can never fire on it.
+assert.equal(rearmVerdict({ brokerAlive: true, heartbeatAgeS: 12, lastPassAgeS: 2000, pendingIntents: 0, runAgeS: 9000, brokerBoundS: null }, 300).overBound, false, "no bound on the cmdline means the bound leg cannot fire");
+console.log("  ok   11 states decided; the idle-broker false positive is refused, the parked run is named");
+
 // A missing heartbeat with a live pid is a fresh broker, not a dead one.
 assert.equal(rearmVerdict({ brokerAlive: true, heartbeatAgeS: null, lastPassAgeS: null, pendingIntents: 0 }, 300).shouldRearm, false, "a broker that has not written its state file yet is not re-armed");
-console.log("  ok   6 states decided; the idle-broker false positive is refused");
+console.log("  ok   a state file with no ages yet is a fresh broker, not a dead one");
 
 console.log("\n=== 2. THE SPOOL COUNT IS A COUNT OF INTENTS, NOT OF FILES ===");
 const base = mkdtempSync(join(tmpdir(), "durig-keepalive-rule-"));
@@ -110,7 +128,17 @@ assert.equal(s.brokerPid, process.pid, "the state file's pid is the identity, no
 assert.equal(s.brokerAlive, true, "the process is still running");
 assert.ok(s.lastPassAgeS > 800, `no PASS for ${s.lastPassAgeS}s`);
 assert.equal(s.pendingIntents, 3, "three intents are waiting in the spool");
+assert.ok(s.runAgeS > 800, `the state file's since stamp gives the run age (${s.runAgeS}s)`);
+assert.equal(s.brokerBoundS, null, "this pid has no --max-duration on its cmdline, so it has no bound");
 assert.equal(rearmVerdict(s, 300).stranded, true, "fresh heartbeat + no pass + intents waiting = the stranded signature");
+assert.equal(rearmVerdict(s, 300).overBound, false, "the over-bound leg does not fire on an unbounded run");
+// The bound is read off the broker's own command line, not assumed by the loop. A pure parser, so
+// this leg needs no live `serve` process (the first version spawned one and read an empty cmdline:
+// `node -e ... --max-duration 120` never puts the flag where `ps` reports it).
+assert.equal(parseBound("node /repo/cli.mjs serve --max-duration 120"), 120, "the bound is read off the broker's own cmdline");
+assert.equal(parseBound("node cli.mjs serve --max-duration=600 --no-probe"), 600, "the = form parses too");
+assert.equal(parseBound("node cli.mjs serve"), null, "no flag means no bound, so the leg cannot fire");
+assert.equal(brokerBoundSeconds(null), null, "no pid, no bound");
 const r2 = spawnSync("node", [TOOL, "--once", "--no-restart", "--db", sdb, "--ledger", join(base, "ledger2.jsonl")], { capture: true, timeout: 120000, encoding: "utf8" });
 assert.equal(r2.status, 0, "the measuring run exits 0");
 assert.ok(!r2.stdout.includes("re-arming"), "--no-restart measures a stranded broker without stopping it");

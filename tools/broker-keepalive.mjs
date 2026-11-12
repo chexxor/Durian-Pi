@@ -108,14 +108,37 @@ function pendingIntents(db) {
 // fast loop of its own). A dead pid is obvious; "no pass for 400 s" is NOT, because a pass only
 // runs when the store changes — an idle but healthy broker reads that way. Measured 2026-11-12T08:26Z:
 // re-arming on staleness alone issued a STOP-REQUESTED against a broker holding four genlock leases.
-function rearmVerdict(snap, stale = 300) {
+function rearmVerdict(snap, stale = 300, boundMargin = 600) {
 	const dead = !snap.brokerAlive || (snap.heartbeatAgeS !== null && snap.heartbeatAgeS > 120);
 	const stranded =
 		!!snap.brokerAlive &&
 		snap.lastPassAgeS !== null &&
 		snap.lastPassAgeS > stale &&
 		(snap.pendingIntents ?? 0) > 0;
-	return { dead, stranded, shouldRearm: dead || stranded };
+	// THE THIRD SHAPE (measured 2026-11-12T16:2xZ on this box): a broker launched with
+	// `serve --max-duration 3600` breaks out of the wake loop at its deadline (src/broker.mjs:1855)
+	// and parks on the unbounded drain leg if a generation is still open. It keeps a fresh heartbeat,
+	// drains reads, and logs NO pass and NO EXIT — with an EMPTY spool, so the `stranded` leg above
+	// never fires. The discriminator is the run's OWN bound, read off its cmdline: a run older than
+	// the `--max-duration` it asked for, with no completed pass, is parked, not idle.
+	const overBound =
+		!!snap.brokerAlive &&
+		snap.brokerBoundS !== null &&
+		snap.runAgeS !== null &&
+		snap.runAgeS > snap.brokerBoundS + boundMargin &&
+		(snap.lastPassAgeS === null || snap.lastPassAgeS > stale);
+	return { dead, stranded, overBound, shouldRearm: dead || stranded || overBound };
+}
+
+// Parse `--max-duration <s>` off the resident broker's own command line. No flag = no bound = the
+// over-bound leg cannot fire. Measured cost: one `ps` call, ~10 ms.
+function parseBound(cmdline) {
+	const m = /--max-duration[ =](\d+)/.exec(String(cmdline || ""));
+	return m ? Number(m[1]) : null;
+}
+function brokerBoundSeconds(pid) {
+	if (!pid) return null;
+	return parseBound(brokerCmdline(pid));
 }
 
 function countIntentFiles(dir) {
@@ -136,6 +159,8 @@ function snapshot(db, ledger, withQueue) {
 		brokerAlive: brokerProcessAlive(state?.pid) ? true : false,
 		heartbeatAgeS: state?.heartbeatAt ? Math.round((now - state.heartbeatAt) / 1000) : null,
 		lastPassAgeS: state?.lastPassAt ? Math.round((now - state.lastPassAt) / 1000) : null,
+		runAgeS: state?.since ? Math.round((now - state.since) / 1000) : null,
+		brokerBoundS: brokerBoundSeconds(state?.pid),
 		pendingIntents: pendingIntents(db),
 		refs: gitCount(["branch", "--list"]),
 		// main's sha, so "did anything land?" is readable from the ledger without a second git call.
@@ -221,7 +246,7 @@ async function restart(db, maxDuration) {
 	return { ok: r.status === 0, out: r.stdout.trim().slice(-500), err: r.stderr.trim().slice(-500), stop: s.how };
 }
 
-export { rearmVerdict, countIntentFiles, snapshot, providerEnv, isResidentBroker, stopBroker };
+export { rearmVerdict, countIntentFiles, snapshot, providerEnv, isResidentBroker, stopBroker, brokerBoundSeconds, parseBound };
 
 // A demo imports this file to test the RULE; only a command-line run drives a broker. (First version
 // ran the loop at import time, which is why the guard is a block and not a process.exit — exiting on
@@ -252,7 +277,12 @@ while (Date.now() < until) {
 	);
 	const verdict = rearmVerdict(snap, stale);
 	if (verdict.shouldRearm && !flag("--no-restart")) {
-		console.log(`${snap.at} broker ${verdict.dead ? "DEAD" : "STRANDED (no pass " + snap.lastPassAgeS + "s, " + snap.pendingIntents + " intent(s) waiting)"} -> re-arming`);
+		const why = verdict.dead
+			? "DEAD"
+			: verdict.overBound
+				? `OVER-BOUND (run ${snap.runAgeS}s past its --max-duration ${snap.brokerBoundS}s, no pass ${snap.lastPassAgeS}s, spool empty)`
+				: `STRANDED (no pass ${snap.lastPassAgeS}s, ${snap.pendingIntents} intent(s) waiting)`;
+		console.log(`${snap.at} broker ${why} -> re-arming`);
 		const r = await restart(db, maxDuration);
 		fails = r.ok ? 0 : fails + 1;
 		console.log(`  re-arm ${r.ok ? "ok" : "FAILED"} (stop leg: ${r.stop ?? "-"}): ${r.out || r.err}`);
