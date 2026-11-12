@@ -322,6 +322,7 @@
       "demo/land-scratch-deps.test.mjs",
       "demo/backlog-burn.test.mjs",
       "demo/broker-keepalive-stop-guard.test.mjs",
+      "demo/process-leak-guard.test.mjs",
       "demo/landing-batch-plan.test.mjs",
       "demo/landing-gate.test.mjs",
       "demo/local-model-pointer.test.mjs",

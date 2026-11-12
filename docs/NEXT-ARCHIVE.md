@@ -14333,3 +14333,16 @@ injected virtual clock and runs 0/15 red in **0.193 s** — pitfall **255**, §F
 run is still node's default disposition; the force-exit timer cannot fire while a synchronous read blocks the loop
 (~2.5 s measured); `tui.mjs` signal behaviour is unmapped; `gcIntentResults` is per-pass, not per read drain — the
 architect's exit-drain row **#6391/#6390** (branch `item-6381`, merges clean).
+
+## CUT 2026-11-12 (delegate N38) — verbatim text removed from docs/NEXT.md to keep the pointer inside the clockin digest budget
+
+**Research status (changed this session):** round 1 landed — the delegate ran it itself (`node`+`curl`, this host)
+into **`docs/reviews/branch-lifecycle-llm-agent-teams.md`**, with every quote re-fetched into `inputs/fetched/` and
+sha256/HTTP/last-modified recorded in `inputs/fetched/MANIFEST-branch-lifecycle.md` (14/14 quotes substring-checked
+against our copies). It **rewrote** `docs/WORK-ITEM-MODEL.md` §5 (shared `feature-<slug>` branches are contradicted
+by prior art → ordered decomposition with hard bounds) and added §6.1 (staging as a queue) and §8's ownership
+marker (`git worktree lock --reason rig:<item>`). Registered **ROADMAP 358–362**; 362 is an explicit rejection with
+a reason. **Still an operator action:** routing the off-host prompt (and the round-2 prompt
+`docs/reviews/branch-lifecycle-followup-research-prompt.md`) to the research agent — GitHub merge-queue internals,
+Trunk/Mergify, Devin/Copilot/Sweep/Orbi/Miko/Baton/Code Conductor/Sourcegraph and every product's iteration loop
+stay unverified. D265 records the decision.
