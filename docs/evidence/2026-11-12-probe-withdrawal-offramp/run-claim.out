@@ -1,0 +1,16 @@
+setup: probe (pm->qa), gated row (pm->impl, blockedBy probe)
+  queued item #1 for qa
+  queued item #2 for impl
+withdraw:  item #1 cancelled: probe withdrawn (notified qa as notice #3)
+A. gated row: status queued park null workable(impl) {"workable":false,"reason":"gate-cancelled:#1"}
+B. wakes with the CANCELLED notice present: [{"name":"qa","conversationId":9,"reason":"queued"}] skips: [{"seat":"impl","reason":"queued-gated:gate-cancelled:#1"}]
+C. wakes with the notice removed: [] skips: [{"seat":"impl","reason":"queued-gated:gate-cancelled:#1"},{"seat":"qa","reason":"no-work"},{"seat":"impl","reason":"queued-gated:gate-cancelled:#1"}]
+D. oldest-path claim as impl: NO_QUEUED_WORK — but NOT an empty queue: #2 is addressed to you and is now `queued`. It is not claimable in its current state; check `status` for who holds it.
+E. by-id claim as impl on the dead-gated row: ITEM #2 | from=pm | subject=LANDING ENTRY gated on the probe | status=claimed
+close it after the probe
+   row status now: claimed
+F. complete it anyway: ok
+note: your seat cwd was reset to the shared checkout (/home/chexxor/Git/Durian-Pi/item-6988) after this item - call prepare_workspace before writing for the next one.
+   row status now: done
+G. write paths that assign blockedBy: 437:	blockedBy = null,
+H. cli.mjs check exit 1 findings: 2 | gate-related: NONE
