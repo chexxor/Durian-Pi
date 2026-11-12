@@ -216,3 +216,38 @@ decomposition it did not make. Apply on *order* and *eligibility*; propose on *s
 - `node cli.mjs check` red on a terminal-gated fixture, green after healing.
 - Live probe: cancel a gate whose dependent is queued, then `status` names it and no `SKIP` line says
   `gate-cancelled` for it on the next pass.
+
+---
+
+# Status 2026-11-12T17:5xZ — IMPLEMENTED and USED (`35eee1a7`)
+
+The operator directed: *"implement that now. Do this yourself, without routing the work through the team."*
+What shipped, and what was measured after it shipped:
+
+| § | what | state |
+|---|---|---|
+| §4b healing rule | not a reinterpretation of `workable()` — the lead-ratified #2677 definition ("terminal != done") stands. A cancelled gate is repaired by an EXPLICIT `gate-released` transition | **shipped** (`src/queueops.mjs`) |
+| §4c census | `strandedGates` + `check` rule 24 `stranded-gate` (fix-now, so findings never make `check` exit 1) | **shipped**, and the live census went **20 → 0** |
+| §7 access | `intent.mjs --op queue …` is the resident-mode control plane today. The `cli.mjs steer` verb of §7 is NOT built: the spool op is the seam it would front, and a CLI verb that cannot write while a broker drives would be a second writer | **partial — deliberately** |
+| §8 priority | `--action priority` with a reason + expiry (≤30 d), propose by default | **shipped and used**: 33 landing rows → `now`, lease to 2026-11-13T23:59Z |
+| §8 cancel | `--action cancel`, refuses a claimed row, NAMES the dependents it would strand | **shipped** (not yet used on the live rig) |
+| §9 authority | `QUEUE_CONTROL_OPS` admits `from=operator` and `from=delegate`; `DELEGATE` is a separate identity; pause/configure stay operator-only | **shipped** |
+| §10 invariants | append-only transitions with `by`/`authority`; propose/apply one path; blast radius >20 needs `--confirm`; leases always expire; claimed rows refuse | **shipped** |
+| §8 directive (scoped) | the leased scoped directive is NOT built | **open** — this is the remaining design work, and it is the one I would still argue for over bulk flags |
+
+Live evidence, every number from a command run on this host (Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1):
+
+- `--action stranded` → `census.count = 20`, including **#3503** (scribe) and **#5885** (pm) gated on
+  cancelled **#3377**.
+- `--action repair-gates` without `--apply` → `proposed: 20, applied: 0`, store untouched.
+- `--action repair-gates --apply --confirm` → `applied: 20`, first transition
+  `{"event":"gate-released","by":"delegate","authority":"delegate (operator-authorised)","gate":["3274"] …}`.
+- `--action stranded` again → `census.count = 0`; #3503/#5885 now `blockedBy=[]` with a `gate-released`
+  transition.
+- `--action priority --apply --confirm` on the 33 landing rows → `applied: 33`; `priority=now` count in the
+  live queue 8 → **41**.
+
+**What is still the team's work and was not done here:** minting rows (routing), the 10 per-bin landing
+rows, landing a branch, and pushing. The delegate's authority is order and eligibility, and that is exactly
+what it exercised.

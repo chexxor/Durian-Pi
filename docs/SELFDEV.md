@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-294, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-296, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4143,3 +4143,21 @@ at `:743`). Re-measure every `path:line` before repeating it.
     change, and every landing would then be refused for a condition no branch caused. Fix shape: the demo
     measures the live queue (or takes the census as an argument), and the assertion compares against the
     same number the entry point uses.
+295. **A NEW SPOOL OP IS INVISIBLE TO A RESIDENT BROKER UNTIL IT RESTARTS, and the symptom is a dead
+    letter, not an error at the producer.** `SPOOL_OPS` (`src/broker.mjs`) is a module constant the drain
+    reads in-process, so a broker started before the edit applies the vocabulary it loaded at `START`. A
+    `queue` intent sent to an old broker is dead-lettered as `unknown op: queue` and the producer, which
+    only prints a `requestId`, sees nothing wrong until it reads `<db>.broker.inbox.error/<file>.reason`.
+    Measured shape of the working sequence (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node
+    v24.22.1, 2026-11-12T17:4xZ): `kill -TERM <broker pid>` → the keepalive re-arms within ~60 s →
+    `grep START <db>.broker.log` → *then* spool the request and poll `<db>.broker.inbox.out/<requestId>.json`.
+    Restarting is the cost; forgetting it looks like a broken op.
+296. **A CLI verb can be born with a guard that forbids the case it exists for.** The first `intent.mjs
+    --op queue --action repair-gates` required `--id`, so the "repair every stranded row" call failed
+    locally with `needs at least one --id` and never reached the broker — and because the failure is a
+    one-line JSON on stderr, a `$(...)` capture that only reads `requestId` swallows it as an empty string.
+    Measured: `node intent.mjs queue --op queue --action repair-gates --from delegate --reason …` printed
+    `{"ok":false,"error":"op queue --action repair-gates needs at least one --id"}` while a later read of
+    `.inbox.out/` showed no result file at all. Two habits: when a new verb's reply is parsed, print the
+    whole line on failure; and when a verb has a natural "everything matches" form, do not make `--id`
+    mandatory for it (only the actions with no defensible implicit set — `priority`, `cancel` — require ids).

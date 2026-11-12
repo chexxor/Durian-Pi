@@ -129,7 +129,10 @@ const expiresAt = untilAt === -1 ? undefined : args[untilAt + 1];
 const apply = args.includes("--apply");
 const confirm = args.includes("--confirm");
 if (op === "queue" && !action) fail("op queue needs --action repair-gates|priority|cancel|stranded");
-if (op === "queue" && action !== "stranded" && ids.length === 0) fail(`op queue --action ${action} needs at least one --id`);
+// repair-gates with NO --id means "repair every stranded row" (the census is the selection); priority and
+// cancel must name their targets, because neither has a defensible implicit set.
+if (op === "queue" && (action === "priority" || action === "cancel") && ids.length === 0)
+  fail(`op queue --action ${action} needs at least one --id`);
 if (op === "queue" && action === "priority" && (!priority || !reason || !expiresAt))
   fail("op queue --action priority needs --priority now|next|later, --reason <text> and --until <iso> (it is a lease)");
 if (op === "queue" && action === "cancel" && !reason) fail("op queue --action cancel needs --reason <text> (it is terminal)");
