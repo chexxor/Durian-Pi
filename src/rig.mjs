@@ -17,6 +17,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
+import { executionModeRecord } from "./executionmode.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 import {
 	DEFAULT_STRATEGY,
@@ -497,6 +498,10 @@ export async function enqueueItem(
 		optimizedVia,
 		// A protocol notice (a DONE ack), not work: completing it enqueues nothing.
 		notice,
+		// #7158: the EXECUTION MODE, computed at intake by the same function the gate calls
+		// (src/executionmode.mjs), so "what the row was minted as" and "what the gate needs" are
+		// one rule rather than two. Compact on purpose: mode + rule + the reason, not the signal dump.
+		executionMode: executionModeRecord({ subject, body }),
 		// Ratcheting task tier (RANK 2 borrow): the PM's size for the request,
 		// assigned at intake and LATCHED onto the item's chain (its DONE notice,
 		// verification item and follow-ups inherit it). null = not tiered.

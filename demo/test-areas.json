@@ -90,7 +90,8 @@
       "demo/workable-claim.test.mjs",
       "demo/workstrategy-claim.test.mjs",
       "demo/workstrategy-up.test.mjs",
-      "demo/workstrategy.test.mjs"
+      "demo/workstrategy.test.mjs",
+      "demo/execution-mode.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",
