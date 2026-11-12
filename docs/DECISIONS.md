@@ -11923,3 +11923,18 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D293 — (provisional; re-mint at land from the MERGED tree) **a presence check is defined at FRAGMENT granularity, never line granularity, and a cancellation that closes a branch must name the commits it covers** (architect review, item #7388; host measured: Linux, kernel `7.2.15-300.fc45.x86_64`, Fedora Linux 45, node v24.22.1; tree = branch `item-7388`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling, triggered by pm's cancellation of #5421 ("artifact already fully on main"). Whether the unlanded host-identity residue on `item-4879` is landed or retired is pm's/lead's call.
+
+**Context.** `node tools/probes/cancel-claim-content-check-7388.mjs 3c4973c9` → **exit 0**, 211 fragments present on main, 0 absent: the cancelled artifact (the 2026-11-07 broker specimen folded into ROADMAP rows 303/314/328/329 and the stall runbook) is genuinely on main, and ancestry alone was not accepted as the answer (#3337: a squash can carry the sha while reverting content). But the first version of that probe compared **whole added lines**, and it reported one false absence: the runbook's `evidence_addendum` line added by `3c4973c9` is not a substring of main's version of that line, because six later addenda were appended to it. A line-level presence test can only pass if nobody ever edits the line again. Separately, `git rev-list --count main..item-4879` → **2** unlanded commits (`45466f1c` the host-identity probe, `dab62450` its design note plus a provisional `## D265`, a number main has since used for a different decision): cancelling the row closed the branch without saying what happened to the other concern on it.
+
+**Decision.**
+1. **Fragment, not line.** Split an added line on `; `, ` — ` and `. ` and test each clause of at least 40 characters. The probe does this; the control runs prove it can detect absence, not only confirm presence: `item-3570` 24/29 absent, `item-4058` 28/60 absent, `item-4879` tip 173/173 absent.
+2. **Ancestry is the fast path; content is the decision.** Both halves belong in any land-verification, including the `evidence` field now required on completions.
+3. **A cancellation names its commits.** If a row closes a branch, the reason states which commits it covers; residue gets either its own entry or an explicit retirement.
+
+**Options considered.** (A) line-level substring — rejected, it produced a measured false absence on a artifact that was fully present. (B) whole-file blob equality — rejected: it cannot distinguish "content present" from "content present plus later edits", which is the normal state of a living doc. (C) fragment granularity — chosen: it tolerates later edits and still detects real loss. **Trade-off accepted:** fragments are coarser than a diff and can miss a loss confined to one short clause under 40 characters, in exchange for a check that does not report false absences.
+
+**Consequences.** Every presence check in the landing machinery (#4772 green-from-the-wrong-tree, #4775 land-verification, the `evidence` field on completions) inherits this rule. False absences reopen closed work — the mirror image of #3539, where a rule reporting 498 findings got disabled; both come from the check's unit being wrong. Falsifier: the probe exits 0 on `3c4973c9` and exits 1 on any branch whose content is genuinely absent.
