@@ -27,7 +27,22 @@ Scratch at main `fb20ca24`, `node_modules` symlinked to the seat root's (`@earen
 | `node scripts/test.mjs --area docs` | **7/7** in 43.6 s | **0** |
 | `node demo/test-areas.test.mjs` | **311 tests across 9 areas**, 0 ghosts; `demo/broker-serve-shell-availability.test.mjs` is mapped in the `broker` area (77 demos) | **0** |
 
-Two figures in the routing row are stale: the suite is **311 tests in 9 areas**, not 245; and the `deepinfra-catalog` red **did not reproduce** here — it ran green in 0.6 s inside the docs area. It is not reported here as a pre-existing red, because on this tree and plane it is not red.
+Two figures in the routing row are stale: the suite is **311 tests in 9 areas** at that tree, not 245; and the `deepinfra-catalog` red **did not reproduce** here — it ran green in 0.6 s inside the docs area. It is not reported here as a pre-existing red, because on this tree and plane it is not red.
+
+### 2b. Re-run at the tree main is at now: `dfa0db1b`
+
+Same method, pinned plane (`pi-durable 1.5.1`), scratch `.spike/vc` created with `git worktree add --detach`, `git rev-parse HEAD` = `dfa0db1b956fbe7080a09218c5c8529f7b761ea0`:
+
+| Command | Result | Exit |
+|---|---|---|
+| `node demo/broker-serve-shell-availability.test.mjs` | `PASS` | **0** |
+| `node scripts/test.mjs --area guard` | **30/30** in 9.9 s | **0** |
+| `node scripts/test.mjs --area check` | **13/13** in 3.8 s | **0** |
+| `node scripts/test.mjs --area docs` | **7/7** in 39.5 s | **0** |
+| `node demo/test-areas.test.mjs` | **312 tests across 9 areas**, 0 ghosts | **0** |
+| `node tools/broker-serve.mjs --status --no-probe` | `NOTE seat-shell-availability: the seat shell tool "bash" CAN start on linux — /usr/bin/bash (registry: bash … CAN start (/usr/bin/bash) [preferred on this host] \| powershell … WITHHELD on linux — RM-306 …)` — a NOTE with the per-candidate truth spelled out, **not** a BLOCK | **0** |
+
+A test scratch created inside an item worktree can be reaped by the harness mid-run (one such scratch read back empty, HEAD reporting the item branch instead of the requested tree). That is why every leg above was re-run in a fresh scratch and `git rev-parse HEAD` printed in the same command as the measurement: a number whose tree is not named in the same breath is not a number.
 
 ## 3. The same merged tree on the LOCKFILE plane — the red is the plane, not the code
 
