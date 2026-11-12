@@ -20,6 +20,7 @@
       "demo/blocked.test.mjs",
       "demo/blockedby-field.test.mjs",
       "demo/cancel-notifies-sender.test.mjs",
+      "demo/claim-order-measure.test.mjs",
       "demo/cli-broker-refuse.test.mjs",
       "demo/cli-help.test.mjs",
       "demo/cli.test.mjs",
