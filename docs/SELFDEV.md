@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-301, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-303, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4202,3 +4202,18 @@ at `:743`). Re-measure every `path:line` before repeating it.
     and they must be classified BEFORE any work-row verdict. Also: `cli.mjs queue --status done` is ~5 MB
     — a `spawnSync` with the default 1 MB `maxBuffer` truncates it and the failure surfaces as
     "Unterminated string in JSON", which reads like store corruption.
+302. **A failed `land.mjs --suite` leaves a STRAY scratch at the repo root that refuses the NEXT landing.** Measured
+    2026-11-12T20:5x–21:0xZ (Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1): after
+    `STOPPED: demo/compaction-acceptance-gate.test.mjs failed`, `.land-scratch-2612766` remained (an EMPTY dir,
+    not a registered worktree, invisible to `git status`), and the next `land.mjs` refused with `1 STRAY worktree
+    directory(ies) ... remove them and re-run`. Two consequences: every failed bin costs one manual `rm -rf`
+    before the next attempt, and a bisect of a red bin (land halves, clean, re-run) costs a gate run PLUS that rm.
+    `ls -d .land-scratch-*` before each attempt is the cheap probe. The scratch's spilled `.spike/gate/regions/*.js`
+    is the only content — the gate runner's writes — so removing it loses nothing.
+303. **A branch whose item is `done` still has to be LANDED, and the census says so in six words.** At 20:4xZ the
+    verdict on most of 156 refs was `prune: clean, unmerged, item terminal (needs a landing entry first)`:
+    conflict-free, item done, nothing missing but the merge. Do not read "item terminal" as "already on main";
+    `git merge-base --is-ancestor <ref> main` is the fact. After five gated landings the same census said
+    `prune: merged into main` for 54 refs, and `tools/branch-census.mjs --plan` printed the exact
+    `git worktree remove … && git branch -d …` lines that pruned them (refs 156→103, worktrees 147→94, one
+    refusal: a LOCKED worktree, `git worktree unlock` first — never `remove -f -f`).
