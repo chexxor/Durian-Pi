@@ -11923,3 +11923,23 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D287 — (provisional; re-mint at land from the MERGED tree — unlanded branches already carry provisional D284 (`item-7026`) and D285 (`item-7038`)) **a protocol notice is a RECORD, not a task: the claim/wake predicate that already sets `notice: true` must read it, and an ack should be terminal at the moment it is minted** (architect review, item #7082; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7082`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the shape of the notice seam. Whether acks become terminal at mint (which amends a ratified demo pin) is a **scope call for `lead`**; sequencing is `pm`'s.
+
+**Context.** `cancelItem` mints the ack as a normal row: `enqueueItem(tx, me, other, "CANCELLED #<id>: <subject>", "cancelled by <me>: <reason>", null, true, tier)` (src/rig.mjs:224-232); the flag is stored at src/rig.mjs:499 and consulted by `isNoticeItem` (src/rig.mjs:265) only to stop an ack spawning an ack — the rig already knows the chain grows without bound and burns a seat turn per hop (src/rig.mjs:189-191, ROADMAP 39). No claim or wake predicate reads the flag: `workable` (src/rig.mjs:326-341) checks status, `requires` and gates only, and the wake is `queuedVerdicts.some(workable)` (src/driver.mjs:135-137). Measured, `node tools/probes/notice-as-work-7082.mjs` → **exit 1**: an ack minted before a real task is `{workable: true, reason: null}` and wins `selectNextWork` for the seat. Live store (7221 rows, 2026-11-12T11:0xZ): **2671 notice rows** — 2217 done, 173 cancelled, 136 deferred, 8 held, **135 queued**, 2 claimed — and the per-seat queued split is `pm 44 work / 66 acks`, `impl 214/39`, `devtools 94/15`, `architect 1/7`. `node demo/notices.test.mjs` → exit 0, and line 125 of that demo is the pin this decision bumps: "pm can claim its own DONE notice".
+
+**Decision.**
+1. **An ack is a record of an event that has already happened.** The end state is: minted terminal (`done`) with a `notified` transition, so it is unclaimable (claim requires `queued`, src/rig.mjs:899), never wakes, and never counts as open work.
+2. **Until that ruling is made, the interim is bounded and reversible**: rank notices behind real work in `orderCandidates` (src/workstrategy.mjs:145) and do not wake a seat whose queue contains only acks. Any metric that says "open" must mean *workable and not a notice*, or it is lying.
+3. **One rule, one place.** `docs/WORK-ITEM-SCHEMA.md` R6 already says a notice must never be answered with another notice; the same paragraph must say a notice is not claimable work.
+
+**Options considered.** (a) Stop minting ack rows and record the notification as a transition on the completed row — rejected: the recipient loses the durable record of *why* the other party stopped, which is the notice's whole purpose. (b) Chosen: mint the ack terminal. (c) De-rank only — rejected as the end state because 2217 claims were already spent on rows carrying no work; ranking around the class does not remove it. Trade-off accepted: ceremony is removed at the cost of amending a ratified pin (`demo/notices.test.mjs:125`) and reconciling 135 open acks.
+
+**Consequences.**
+- Seat turns stop being burned on ceremony: 2217 ack claims have already been made, and 135 acks are claimable now.
+- `queued: 546` and drain-rate metrics stop counting acks as throughput; the numbers the fleet health census reports change, and anyone comparing across dates must know why.
+- A seat no longer gets a wake to learn that its prerequisite was cancelled. Recovery path: the cancelled gate already reads `gate-cancelled:#<id>` in `workable`, and the queue line names the row — the notice is not the only channel.
+- Reversible: the change is one field read plus one status at mint; no existing row is rewritten by the predicate.
+- Falsifier: `tools/probes/notice-as-work-7082.mjs` exits 1 today; it exits 0 only when an ack is not workable, selection returns the real task when both are queued, and the census reports zero acks in `queued`/`claimed` state.
