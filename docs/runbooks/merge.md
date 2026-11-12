@@ -134,6 +134,9 @@ branch that fails a row is not ready: send it back through W2; do not merge it "
 - [ ] No code touched.
 
 ## Do
+
+**Which instrument?** Landing goes through the chokepoint: `scripts/land.mjs` — usage at `scripts/land.mjs:34-35`; there is **no** `cli.mjs land` verb — `node cli.mjs land …` exits 2 with the generic usage blob, `cli.mjs:3767-3769`). `docs/runbooks/land.md` is the procedure. Step 3 below is the merge the helper performs; running it by hand in the SHARED tree is the state the helper exists to prevent, and this runbook does not decide when raw git is admissible — that is open and flagged by #5002.
+
 1. Confirm the branch and its sha: `git log --oneline -1 <branch>`.
 2. **Pre-flight the branch** (no working tree) and stop before merging if it conflicts:
    ```bash
