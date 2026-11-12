@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-296, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-298, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4161,3 +4161,17 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `.inbox.out/` showed no result file at all. Two habits: when a new verb's reply is parsed, print the
     whole line on failure; and when a verb has a natural "everything matches" form, do not make `--id`
     mandatory for it (only the actions with no defensible implicit set — `priority`, `cancel` — require ids).
+297. **A transient `live-tree-dirty` killed the keeper, and that is how a fleet dies quietly.** At
+    18:03–18:04Z (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1) `tools/broker-keepalive.mjs`
+    saw two consecutive `START REFUSED: live-tree-dirty` (a seat mid-write in the live tree), counted them as two
+    failed re-arms, and exited. By the time a human looked the tree was CLEAN and no broker was running: a
+    statement about one second became an outage. Fixed in `f7ed214f` — `isPreflightRefusal` makes a refusal
+    DEFERRED (retried next tick, spends none of the two-strike budget) while a start that was attempted and
+    failed still stops the loop. Same class as 295: the daemon reads the world at START, so anything that
+    changes between two 60 s ticks must be retried, not scored.
+298. **A projection can lag the write, so verify a new field at the READ the operator uses.** `RigControl.directive`
+    was written and applied correctly (`113a3307`), and `cli.mjs status --json` still showed `control` with no
+    directive — because `readRigControl` (`src/readapi.mjs`) projected only the pause fields, and because the
+    resident broker was serving the projection it had loaded at START. Two lessons in one: a new field is not
+    shipped until a read returns it (`c7ff4aab`), and the read to test is the one routed through the broker, not
+    a local one.
