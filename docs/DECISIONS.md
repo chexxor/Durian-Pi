@@ -11923,3 +11923,29 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D283 — (provisional; re-mint at land from the MERGED tree; amends D282) **a gate's authority to be cleared is a property of the CHAIN, not of the hop's status; and the acceptance metric must count void gates and parked gates separately or it rewards clearing the wrong ones** (architect review of lead's ruling on #6530, item #7012; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7012`, pi-durable **1.3.0** from this worktree's lockfile, not the seat root's 1.5.1)
+
+**Status.** Review ruling, before the `gate_work` chain builds. Sequencing stays lead's; the single-chain ruling (validator commit first, verb commit second) is accepted and not reopened.
+
+**Context.** Both instruments run on the live store through the read seam (`node cli.mjs queue --json --no-body > queue-dump.json`; snapshot 2026-11-12T07:0xZ, 7141 rows):
+- `node tools/probes/gate-authority-census-6782.mjs queue-dump.json` → **exit 1**: 414 gated rows; 156 gated on a target the rule calls unresolvable (63 `cancelled`, 95 `held`/`deferred`); **0** rows carry a `gated`/`ungated` event; **0** dangling ids, **0** self-gates.
+- `node tools/probes/gate-graph-classification-7012.mjs queue-dump.json` → **exit 0**: transitive never-resolvable = **70** (63 direct + 7 nested), depth-1 = 156, rows missed by depth-1 = 0; parked targets = 76 (52 deferred, 10 held-no-block, 14 held-authored); **0 real cycles**, while a shared-`visited`-set walk calls 7 rows cycles.
+
+**Decision.**
+1. **Void is computed, not declared.** A hop is void when it is `cancelled`, or when every path from it terminates in a `cancelled` row (bounded walk, `MAX_DEPTH = 8`, path-based DFS). `gate_work`'s removal authority and `check`'s `gate-cancelled`/`gate-cycle` findings use that predicate; `statusOf(target)` alone is not the test.
+2. **"Parked" is a status set, spelled out in code:** `{held, deferred}`. Left as a word, the rule reaches 10 targets; as a set it reaches 62. Pin it in a demo, and say it in the runbook.
+3. **Two counters, one acceptance.** `VOID` = chain cannot close; `PARKED` = hop is held/deferred with a resolver and an open `reviewBy`. Acceptance is `VOID == 0`. Grading the verb against the combined 156 would make the number reachable only by clearing gates that are legitimately waiting — the test would reward laundering a scope decision as a repair.
+4. **Cycle guard correctness:** push/pop the path (`path.add` before recursing, `path.delete` after). A shared visited set reads a diamond as a cycle.
+5. **The add leg is the same validator.** `normalizeBlockedBy` checks shape only; the verb's add leg and `revise_work` (which today drops `blockedBy` silently, `tools/probes/gate-write-surface.mjs`) must call the mint validator, or the verb is the laundering path from the other side.
+
+**Correction, recorded because it is mine.** The "6 cycles in the live store" in `docs/reviews/architecture-gate-transitivity-6999.md` and ADR D268 are misreported diamonds: a path-based DFS finds **0** cycles in this store. D268's invariant (mint-time existence makes every new edge point to an older id, so new rows cannot cycle) is unaffected.
+
+**Options considered.** (a) Status-based authority as written — rejected: 7 rows stay locked behind a live hop whose chain ends in a cancelled row, and 3 parked targets are protected pointers to a cancelled resolver (`#4852`, `#4853`, `#4855` → `#4847`). (b) Chosen: the shared graph predicate. (c) Hand-repair the 7 — rejected: every `cancel_work` makes more.
+
+**Consequences.**
+- The repair reaches the class it was written for: 70 void rows are reachable, not 10.
+- The acceptance test is honest: 86 parked gates are triage, not failure, and clearing one is `lead`'s scope call, not a verb's default.
+- Cost accepted: one bounded walk per grading run and one shared definition to maintain. Reversible: swapping `chainVoid` back for the status test restores today's behaviour exactly.
+- Atomicity is part of the contract: the `ungated` event and the gate mutation commit together; if the record cannot be written, the removal does not happen (D258).
+- Removing `legacyBlock`'s `resolver: "pm"` inference (`src/queue-lifecycle.mjs:256`) leaves 266 held rows unattributed; readers must treat null as *unattributed*, never as pm, and the parked-wake bound must not spin on them.
