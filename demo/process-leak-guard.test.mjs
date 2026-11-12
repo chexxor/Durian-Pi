@@ -27,7 +27,17 @@ const cases = [
 	["a reparented test runner aged 1 h", { ...base }, true],
 	["the fleet broker by pid", { ...base, pid: 56117, brokerPid: 56117 }, false],
 	["the fleet broker by cmdline", { ...base, cmdline: "node /repo/cli.mjs serve --max-duration 3600" }, false],
-	["a suite child still supervised by a live runner", { ...base, isSupervised: true }, false],
+	// Supervision is now BOUNDED (2026-11-12): it keeps a runner only while the supervising chain is younger than
+	// --max-supervised-age, because a reparented 5.6 h-old shell looping over a hung demo supervises nothing.
+	["a suite child still supervised by a live runner", { ...base, ageS: 600, isSupervised: true }, false],
+	[
+		"supervised only by a chain 5.6 h old — the hung shape measured 2026-11-12 (pid 1451343 under a leaked bash loop)",
+		{ ...base, ageS: 20136, isSupervised: true },
+		true,
+	],
+	["supervised, just under the default max supervised age", { ...base, ageS: 3599, isSupervised: true }, false],
+	["supervised, exactly at the default max supervised age", { ...base, ageS: 3600, isSupervised: true }, true],
+	["a supervised chain older than a RAISED max-supervised-age", { ...base, ageS: 20136, isSupervised: true, maxSupervisedAgeS: 86400 }, false],
 	["a test that started 30 s ago", { ...base, ageS: 30 }, false],
 	["this tool's own parent chain", { ...base, pid: 998 }, false],
 	["the tool itself", { ...base, pid: 999 }, false],

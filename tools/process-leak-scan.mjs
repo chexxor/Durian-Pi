@@ -21,6 +21,7 @@
 //   node tools/process-leak-scan.mjs --json                   # machine-readable tail
 //   node tools/process-leak-scan.mjs --strict                 # exit 1 if any orphan is found
 //   node tools/process-leak-scan.mjs --pattern 'demo/x\.test' --min-age 300
+//   node tools/process-leak-scan.mjs --max-supervised-age 1800   # treat a supervised runner older than 30 min as hung
 //
 // THE LEAK HAS TWO GENERATIONS (measured 2026-11-12T13:4xZ, same host, re-measure before quoting):
 // killing the reparented `demo/broker.test.mjs` runner leaves its OWN children standing — the fixture
@@ -36,6 +37,9 @@
 //   2. NO live ancestor is a shell, node, or `timeout` — i.e. it was reparented, so nobody is watching
 //      it (a running suite's child is never a candidate);
 //   3. it is older than --min-age (default 120 s), so a test still legitimately running is never touched;
+//   3b. and if it IS still supervised, that supervision only counts while the chain is younger than
+//       --max-supervised-age (default 3600 s) - a reparented ancient shell looping over a hung demo is
+//       not watching anything (measured 2026-11-12: 20,061 s);
 //   4. it is NOT the resident broker (the pid named by the broker state file, or `cli.mjs serve`);
 //   5. it is NOT this tool or its own ancestor chain.
 // Every pid that fails a guard is printed as KEPT, with the reason — the tool never silently skips.
@@ -50,11 +54,21 @@ const REPO = join(HERE, "..");
 export const DEFAULT_PATTERN =
   "demo/(broker|cli|seatguard)\\.test\\.mjs|scripts/test\\.mjs|fake-broker\\.mjs";
 
-// Order matters: a supervised process is never a candidate, however old it is.
-export function classify({ pid, selfPid, ancestors, ageS, minAgeS, isSupervised, brokerPid, cmdline }) {
+// Order matters: a supervised process is never a candidate, however old it is — EXCEPT past
+// `maxSupervisedAgeS`, because a supervisor that is itself a reparented ancient shell is not watching
+// anything. Measured 2026-11-12T21:2xZ on this box: `bash -c for f in demo/*.test.mjs …` (pid 1451342)
+// had been looping over a hung `node demo/broker.test.mjs` (pid 1451343) for **20,061 s = 5.6 h**, and the
+// scan answered `clean — no reparented test runner older than the min age` because that bash is a live
+// ancestor. The known-longest legitimate run is the full suite at ~140 s and the slowest demo at 40 s, so
+// a supervised runner past an hour is a HUNG CHAIN, not work. That is the only reason age overrides
+// supervision, and it stays a hard, printed verdict (KEPT with its reason), never a silent skip.
+export const DEFAULT_MAX_SUPERVISED_AGE_S = 3600;
+
+export function classify({ pid, selfPid, ancestors, ageS, minAgeS, isSupervised, brokerPid, cmdline, maxSupervisedAgeS = DEFAULT_MAX_SUPERVISED_AGE_S }) {
 	if (pid === selfPid || ancestors.has(pid)) return { kill: false, why: "this tool's own process chain" };
-	if (isSupervised) return { kill: false, why: "still supervised by a live runner" };
+	if (isSupervised && ageS < maxSupervisedAgeS) return { kill: false, why: "still supervised by a live runner" };
 	if (ageS < minAgeS) return { kill: false, why: `only ${ageS} s old (< --min-age ${minAgeS})` };
+	if (isSupervised) return { kill: true, why: `its "supervisor" is a chain older than ${maxSupervisedAgeS} s — a hung runner, not a running one` };
 	if (brokerPid === pid) return { kill: false, why: "the resident broker named by the state file" };
 	if (/cli\.mjs serve/.test(cmdline)) return { kill: false, why: "the fleet broker (cli.mjs serve)" };
 	return { kill: true, why: "reparented, older than the min age, nothing supervising it" };
@@ -69,6 +83,7 @@ function arg(name, fallback) {
 async function main() {
 	const pattern = arg("--pattern", DEFAULT_PATTERN);
 	const minAgeS = Number(arg("--min-age", 120));
+	const maxSupervisedAgeS = Number(arg("--max-supervised-age", DEFAULT_MAX_SUPERVISED_AGE_S));
 	const kill = process.argv.includes("--kill");
 	const json = process.argv.includes("--json");
 	const strict = process.argv.includes("--strict");
@@ -136,7 +151,7 @@ async function main() {
 		for (const line of readFileSync(`/proc/${pid}/status`, "utf8").split("\n")) {
 			if (line.startsWith("VmRSS:")) rssKb = Number(line.split(/\s+/)[1]);
 		}
-	 const verdict = classify({ pid, selfPid: process.pid, ancestors, ageS, minAgeS, isSupervised: supervised(pid), brokerPid, cmdline });
+	 const verdict = classify({ pid, selfPid: process.pid, ancestors, ageS, minAgeS, isSupervised: supervised(pid), brokerPid, cmdline, maxSupervisedAgeS });
 		suspects.push({ pid, ppid: Number(rest[1]), ageS, rssKb, cmd: cmdline.slice(0, 90), keep: verdict.kill ? null : verdict.why });
 	}
 
