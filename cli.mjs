@@ -3101,7 +3101,7 @@ async function cmdStatus(args = []) {
   // precedent), so it answers even when the broker is wedged and every broker-routed read times out.
   const noteCensus = args.includes("--no-notes")
     ? { skipped: true, why: "--no-notes; run without it for the per-seat continuity-note census" }
-    : safeNoteCensus(DB_PATH, health.seats);
+    : safeNoteCensus(DB_PATH, health.seats, health.queueItems);
   // #4403: the note is CARRIED IN THE JSON, not written to stderr. `status` IS the machine-readable
   // queue view (stdout is JSON by default, and `--json` is accepted), but a consumer that merges
   // streams (`2>&1`) parses the note as a JSON value and fails with "Invalid JSON primitive: note" —
@@ -3180,10 +3180,13 @@ async function cmdStatus(args = []) {
  * the reason in the section rather than taking `status` down with it. `--no-notes` skips the scan for a
  * faster read (one pass over `entries`, ~1.4 s on this rig's 424k-entry store).
  */
-function safeNoteCensus(dbPath, seats) {
+function safeNoteCensus(dbPath, seats, queue = []) {
   try {
     const census = readNoteCensus(dbPath, {
       seats: (seats ?? []).map((seat) => ({ name: seat.name, conversationId: seat.conversationId })),
+      // #6161: "never compacted" means two different things. A seat holding nothing cannot reach a window
+      // boundary; the queue rows in play tell the census which seats are idle and which are merely untested.
+      queue: (queue ?? []).filter((item) => item.status === "claimed" || item.status === "queued"),
     });
     return { ...census, lines: renderCensus(census).split("\n") };
   } catch (error) {

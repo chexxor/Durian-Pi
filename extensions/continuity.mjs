@@ -59,6 +59,10 @@ export const ContinuityNotes = defineDoc({
 		worktree: null,
 		filesTouched: [],
 		updatedAt: null,
+		// #6161: who put this note here. `null` = nobody has written it yet; "wake-seed" = the rig seeded it from
+		// the seat's claimed/queued item at the wake; "seat" = the seat wrote it. The census needs the
+		// distinction - a note the rig wrote is not a seat proving it has continuity.
+		origin: null,
 	}),
 	checkpointWhen: () => false, // required in pi-durable 1.5.1; provisional (ROADMAP 355)
 });
@@ -198,10 +202,14 @@ async function seededGoal(tx, conversationId) {
 	const seats = await tx.doc(Seats);
 	const seatName = Object.keys(seats.seats ?? {}).find((name) => seats.seats[name].conversationId === conversationId) ?? null;
 	const queue = await tx.doc(RigQueue);
-	const mine = (queue.items ?? []).filter((item) => item.to === seatName && (item.status === "claimed" || item.status === "queued"));
-	if (mine.length === 0) return { seat: seatName, itemId: null, goal: null };
-	const item = mine[mine.length - 1];
-	return { seat: seatName, itemId: item.id, goal: item.subject ?? null };
+	const items = (queue.items ?? []).filter((item) => item.to === seatName);
+	// #6161: a CLAIMED item outranks a queued one, and within a class the OLDEST wins - the item the seat is
+	// actually working on, not the newest row that happened to land last.
+	const claimed = items.filter((item) => item.status === "claimed").sort((a, b) => a.id - b.id);
+	const queued = items.filter((item) => item.status === "queued").sort((a, b) => a.id - b.id);
+	const item = claimed[0] ?? queued[0] ?? null;
+	if (!item) return { seat: seatName, itemId: null, goal: null, status: null };
+	return { seat: seatName, itemId: item.id, goal: item.subject ?? null, status: item.status };
 }
 
 /** The seat's own name, for the note header and the mirror file name. */
@@ -327,6 +335,9 @@ export const continuityExtension = defineExtension({
 				const written = await api.commit(async (tx) => {
 					const note = await tx.doc(ContinuityNotes, api.conversationId);
 					if (note.seat === null) note.seat = await seatNameOf(tx, api.conversationId);
+					// #6161: a note the seat wrote is the seat's, and the wake seed must never overwrite it. The
+					// seed can only be in place before this call; once a seat writes, it owns the note.
+					note.origin = "seat";
 					if (args.itemId !== undefined) note.itemId = args.itemId;
 					if (args.goal !== undefined) note.goal = args.goal;
 					if (args.verified !== undefined) note.verified = args.verified;
@@ -443,11 +454,35 @@ export const continuityExtension = defineExtension({
 				if (visible.length > FRESH_VISIBLE_MESSAGES) return undefined;
 				if (visible.some((message) => messageTextOf(message).includes(NOTE_MARKER))) return undefined;
 				let rendered = "";
+				let seeded = null;
 				await runtime.commit(async (tx) => {
 					const note = await tx.doc(ContinuityNotes, runtime.conversationId);
-					rendered = renderNote(note === null || note === undefined ? null : JSON.parse(JSON.stringify(note)));
+					const plain = note === null || note === undefined ? null : JSON.parse(JSON.stringify(note));
+					const seed = await seededGoal(tx, runtime.conversationId);
+					const holdsNothing = seed.itemId === null && seed.goal === null;
+					// A seat's own note is never touched by the rig. A rig seed is refreshed when the seat moves on
+					// to a different item, so the wake seed tracks the claim rather than freezing at the first one.
+					const authoredBySeat = plain?.origin === "seat";
+					const staleSeed = plain?.origin === "wake-seed" && plain.itemId !== seed.itemId;
+					if (!holdsNothing && !authoredBySeat && (renderNote(plain) === "" || staleSeed)) {
+						// #6161: the seed is WRITTEN, not merely rendered. A seed that only appears inside the
+						// compaction summary is not durable - a reset or a `continue_from_note` boundary has no summary
+						// to carry it, `read_note` returns nothing, and the mirror file never exists.
+						note.itemId = seed.itemId;
+						note.seat = seed.seat;
+						note.goal = seed.goal;
+						note.origin = "wake-seed";
+						note.updatedAt = new Date().toISOString();
+						seeded = JSON.parse(JSON.stringify(note));
+						rendered = renderNote(seeded);
+					} else {
+						rendered = renderNote(plain);
+					}
 					return undefined;
 				}, context);
+				// Mirror the seed at the wake boundary too, so a gate or a human can read it without opening the
+				// store (queue row #5935: mirror at wake/compaction/reset, not only on write).
+				if (seeded) await mirrorNote(seeded, runtime.conversationId);
 				if (!rendered) return undefined;
 				const system = messages[0];
 				if (!system || system.role !== "system") return undefined;

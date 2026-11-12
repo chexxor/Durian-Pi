@@ -3,9 +3,9 @@ runbook: continuation-notes
 symptom: "a seat cannot finish its item inside one context window; compaction summaries come back truncated ('Summarization hit the token limit'); a seat woken into a fresh context has no idea what it already established; `status`/`queue` return tens of megabytes; nobody can say WHICH seat the note mechanism has actually reached"
 writes: true                       # arming the extension writes config; the diagnosis below is read-only
 precondition: "read-only"          # Diagnose is read-only; the Do steps that edit config need the broker stopped
-last_verified: 2026-11-10
-verified_by: devtools
-evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (0.464 s, exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0)"
+last_verified: 2026-11-11
+verified_by: impl
+evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0); #6161: demo/note-wake-seed.test.mjs (exit 0) and demo/note-census.test.mjs (exit 0), era re-measured on ./selfdev.sqlite 2026-11-11 (`node cli.mjs status --json`, exit 0, 12 seats: 8 proven, 2 seeded, 1 idle, 1 predates-arming; 1,980 compactions = 1,893 pre-arm + 87 post-arm, 0 post-arm summariser)"
 check_rule: null
 ---
 
@@ -120,11 +120,38 @@ Three readings that the numbers do **not** support, and are easy to take from th
   pins the difference (`demo/note-census.test.mjs` §4).
 - **`digest 0` is expected, not missing.** `beforeCompact` always renders a note — the seat's own note, or a
   seed from its claimed/queued item — so the bare-digest bucket only fires when neither exists.
+- **A rig-written note is not a seat-written note (#6161).** The wake seed is now durable — it is written into
+  the conversation's `durig.notes` doc at the wake, stamped `origin: "wake-seed"` — so `noteWritten` alone can no
+  longer mean the seat kept a note. `noteAuthored` (a `write_note` call in the transcript) is the proof, and
+  `classifySeat` uses it.
 
-**The fleet-wide fact the census is for:** 1,893 of 1,905 compactions on this store still went to the
-summariser. The note path is real (12 compactions, zero model calls, proven by the demo's unchanged
-`callCount`) but it has only been in the running recently; a seat whose `latest:` is `summariser` is a seat the
-mechanism has not reached yet.
+**The fleet-wide fact the census is for, stated in a way the store can support (#6161):** this store holds
+1,980 compactions. **1,893 of them were recorded before the conversation was ever armed** with the continuity
+tools; **87 were recorded after, and all 87 took the note path — zero went to the summariser**
+(`node cli.mjs status --json`, exit 0, 2026-11-11, this rig, `totals.predatesArming=1893`,
+`totals.afterArming=87`, `totals.afterArmingSummariser=0`). "1,893 of 1,905 compactions went to the summariser"
+was never a failure rate: it counts weeks of runs from before the extension was loaded into each conversation.
+The row now prints the split — `era pre-arm N / post-arm M` — and a seat whose `latest:` is `summariser` is a
+defect only if `post-arm` is non-zero.
+
+**The verdict vocabulary, and who owns each gap** (`classifySeat`, pinned by `demo/note-census.test.mjs` §6):
+
+| verdict | what the store shows | owner |
+|---|---|---|
+| `proven` | a note the seat wrote was supplied as the summary at a boundary | nobody |
+| `seeded` | the boundary was covered by a rig seed drawn from the seat's claimed/queued item; the seat never called `write_note` | the seat |
+| `path-not-reached` | compactions recorded **after** arming still went to the summariser | the mechanism — the only shape that is a real defect |
+| `predates-arming` | every compaction in that conversation predates the extension being loaded into it | history (nobody) |
+| `digest-only` | armed compactions carried neither a note nor a seed | the seat |
+| `not-armed` | 0 turns declared the note tools: the extension is not in `DURIG_EXTENSIONS` for that conversation | the operator |
+| `idle` | the seat holds no claimed or queued item, so it can never reach a boundary | pm — a routing gap, not a mechanism failure |
+| `not-observed` | the seat holds work but has never been compacted | open — a non-observation, not a failure |
+
+Measured 2026-11-11 on this rig: **8 of 12 seats `proven`, 2 `seeded` (auditor, security), 1 `idle`
+(designer: 0 compactions, 0 held — routing), 1 `predates-arming` (qa2: all 125 compactions before entry
+449530, the first that declared the note tools), 0 `path-not-reached`.** The `idle` verdict is the one that
+changes the reading: a seat with nothing in its queue cannot hit a window boundary, and counting it as a
+coverage failure was the error #6161 closes.
 
 Expected shape of step 2 (from the 2026-11-09 run):
 
@@ -234,6 +261,10 @@ node demo/continuity-note.test.mjs          # expect "CONTINUITY PASS", exit 0, 
 node demo/note-census.test.mjs              # expect "PASS: 0 failed check(s)", exit 0, ~0.46 s: the exercised seat
                                             # reads note=written / read_note 1x / compaction via note; the control
                                             # seat with no extension reads summariser - the census distinguishes them
+node demo/note-wake-seed.test.mjs           # expect "WAKE-SEED PASS: 0 failed check(s)", exit 0: the seed is WRITTEN
+                                            # at the wake (goal, itemId, origin wake-seed), mirrored to DURIG_NOTES_DIR,
+                                            # returned by read_note, and carried by continue_from_note; a seat-authored
+                                            # note is never overwritten and a seat holding nothing gets no phantom note
 node demo/offline.mjs                        # pm -> worker -> done with a mid-item handoff, ~0.29 s
 node demo/status-view-bound.test.mjs        # expect "STATUS VIEW BOUND OK ...", exit 0, ~1.8 s
 node scripts/test.mjs --area rig            # the continuity demo is in the rig area
@@ -261,7 +292,8 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
 | `--full-queue` exits 1 | that is the guard working: an unbounded read is refused with its row count and size | ask for a slice (`--status claimed --to <seat>`, `--queue-limit N`) |
 | clock-in prints `## QUEUE 200 rows` for a 6,021-row store, or a deferred backlog of 0 | the digest read the *view* instead of the census | it now reads `queueCensus`/`queueDeferred`; if those fields are missing the status call predates them — check `git log --oneline -- src/readapi.mjs | head` |
 | the note is in the store but no file appears | the mirror write failed (permissions, a path outside the cwd) — the note is still authoritative | the tool result names the mirror failure; the store doc is the truth |
-| the census says a seat has a note but every compaction is `summariser` | the boundaries happened before the extension was armed, or the seat has not been compacted since | `latest: summariser` with `noteToolsOffered 0` means the tools were never in the request; `noteToolsOffered > 0` means the mechanism is loaded but the note path has not been reached |
+| the census says a seat has a note but every compaction is `summariser` | the boundaries happened before the extension was armed, or the seat has not been compacted since | read the era split, not the total: `era pre-arm N / post-arm M`. `post-arm 0` with a non-zero total is history (`predates-arming`), not a defect; `post-arm > 0` with summariser inside it is the real failure (`path-not-reached`) |
+| the fleet reads "1,893 compactions went to the summariser" and the mechanism is called broken | the total mixes compactions recorded before the extension was ever loaded into that conversation with ones recorded after it | `totals.predatesArming` vs `totals.afterArming` (#6161). On this rig 2026-11-11: 1,893 pre-arm, 87 post-arm, 0 of the post-arm went to the summariser |
 | `status --json` is 1.4 s slower than you expect | the note census scans `entries` in one pass | pass `--no-notes` for a fast read |
 | a seat woken by `reset` knows nothing | the extension is not armed — an unlisted extension is an absent one (§Do 2), and a plain reset carries no handoff | arm it; `beforeRequest` then supplies the note in the system message |
 | the gate prints `pi.system entries carrying the durig-continuity section: 0` and `requests offering the note tools: 0` | the extension was armed and **no seat has run a request since** — the transcript only shows what ran. Compare the newest entry timestamp with the config write (`ls -l durig.config.json`); on this rig they were 07:54:09Z and 20:59:08Z on the same day | run the mechanism's own proof, `node demo/continuity-note.test.mjs` (0.43 s, no key/network/broker): `CONTINUITY PASS` means the code is sound and the fleet simply has not exercised it. Getting a number on a live fleet needs a provider that registers a model (pitfall 219) |
