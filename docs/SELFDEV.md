@@ -4038,3 +4038,35 @@ at `:743`). Re-measure every `path:line` before repeating it.
     328) → restart → `INTENT delivered=1` on the FIRST pass (07:08:06Z). Rule for the delegate: after writing ANY
     intent, verify delivery in the log (`grep "INTENT delivered" <db>.broker.log`) instead of assuming it landed; if
     it did not, `stranded-inbox` classifies it and a restart is the delivery, not a workaround.
+
+## Operational pitfalls (delegate unattended-fleet pass, 2026-11-12 — numbered 282-286, continuing from 281; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+282. **A tool that runs its main loop at IMPORT time silently kills the demo that imports it.** The first
+    `demo/broker-keepalive-rule.test.mjs` run printed **nothing and exited 0** in 0.12 s: the tool's loop ran
+    at import and `process.exit(0)` took the whole process. A guard that *exits* on import is worse than no
+    guard — the demo looks green while asserting nothing. Wrap the command-line body in
+    `if (process.argv[1] === fileURLToPath(import.meta.url)) { … }` and export the decision function. Verified:
+    the same demo now runs 4 legs in **11.0 s**, exit 0.
+283. **`spawnSync` truncates a big store read and the failure is silent.** `cli.mjs queue --json` returns
+    ~22 MB; the 1 MB `maxBuffer` default cuts it and `JSON.parse` throws into a `catch` that returns `null`, so
+    the snapshot printed `queued=undefined` instead of a number. Two flags are mandatory for any instrument that
+    reads the queue: `encoding:"utf8"` (stdout is a **Buffer** otherwise) and `maxBuffer:64*1024*1024`. Rule: when
+    a probe's number is `null`/`undefined`, suspect the read bound before the rig.
+284. **"Idle" and "stranded" look identical on a healthy broker.** A pass only runs when the store changes, so an
+    idle broker reads `lastPassAgeS = 1412 s` with a fresh 15 s heartbeat — and re-arming on that alone wrote
+    `STOP-REQUESTED source=file pid=3455955` at 08:26:25Z against a broker holding **four genlock leases** (seats
+    mid-generation). The discriminator is the **spool**: no PASS for `stale` seconds AND intents waiting in
+    `<db>.broker.inbox` is stranded; no PASS and an empty spool is idle. Check
+    `node tools/stranded-inbox.mjs selfdev.sqlite` before any kill.
+285. **A broker that reached `--max-duration` is not necessarily dead, and killing it mid-pass loses generations.**
+    pid 3455955 was 1 h 12 m past its bound, heartbeating, with four `<db>.genlock.N` files whose `since` was
+    minutes old. Read `<db>.broker.json` (pid/heartbeat/lastPass) and the genlock files **in the same command**
+    before deciding; the keepalive re-arms only when the pid is gone (`kill -TERM` is the operator's verb, not the
+    instrument's).
+286. **Ref counts are the landing KPI, and they are not dateable.** `git for-each-ref` on git 2.56 has **no
+    `createtime` field** (`fatal: unknown field name: createtime:iso8601-strict`), and a branch cut from an old
+    commit carries that commit's date — so "which refs appeared this hour" cannot be answered by committer date.
+    Count refs/worktrees (`git for-each-ref refs/heads | wc -l`, `git worktree list | wc -l`) and diff the numbers
+    across ledger ticks. Measured this window: refs **101 → 109 → 114** and worktrees **91 → 99 → 107** in three
+    hours with **zero** landings on `main` (HEAD `ddcc0a23` unchanged) — the fleet mints ~4 refs/hour while the
+    landing batches (#7124/#7126/#7128) sit `queued`.
