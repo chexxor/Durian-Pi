@@ -792,6 +792,21 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
     //   - the mutation itself is appended as TRANSITIONS on each row, never a rewrite, so every change
     //     has an inverse and `cli.mjs events` shows it in order.
     const action = String(request.action ?? "");
+    if (action === "directive" || action === "directive-clear") {
+      // A DIRECTIVE lives on the control doc, not on the rows: one leased statement of policy that
+      // `orderCandidates` evaluates at claim time, so rows minted after it are covered (src/queueops.mjs
+      // `planDirective` explains why a fan-out of `now` is the wrong shape).
+      const plan = planQueueAction(action, [], { priority: request.priority, reason: request.reason, expiresAt: request.expiresAt, seats: request.seats, subjectContains: request.subjectContains, from: request.from });
+      if (!plan.ok) throw new Error(`queue ${action}: ${plan.refusal}`);
+      const reply = { op, action, proposed: 1, changes: plan.changes, transitions: [], strands: [], directive: plan.directive, applied: 0 };
+      if (request.apply !== true) return reply;
+      await harness.commit(async (tx) => {
+        const control = await tx.doc(RigControl);
+        control.directive = plan.directive ? { ...plan.directive } : null;
+      }, context);
+      reply.applied = 1;
+      return reply;
+    }
     const snap = await harness.snapshot(RigQueue, undefined, context);
     const plan = planQueueAction(action, snap?.items ?? [], {
       ids: request.ids,

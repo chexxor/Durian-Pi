@@ -233,7 +233,7 @@ What shipped, and what was measured after it shipped:
 | §8 cancel | `--action cancel`, refuses a claimed row, NAMES the dependents it would strand | **shipped** (not yet used on the live rig) |
 | §9 authority | `QUEUE_CONTROL_OPS` admits `from=operator` and `from=delegate`; `DELEGATE` is a separate identity; pause/configure stay operator-only | **shipped** |
 | §10 invariants | append-only transitions with `by`/`authority`; propose/apply one path; blast radius >20 needs `--confirm`; leases always expire; claimed rows refuse | **shipped** |
-| §8 directive (scoped) | the leased scoped directive is NOT built | **open** — this is the remaining design work, and it is the one I would still argue for over bulk flags |
+| §8 directive (scoped) | one leased statement on the control doc (`RigControl.directive`), evaluated at CLAIM time by `orderCandidates` — so rows minted after it are covered, and NO row carries a copied flag | **shipped** (`demo/priority-directive-scope.test.mjs`): a fan-out puts the post-directive row LAST, the directive puts it first |
 
 Live evidence, every number from a command run on this host (Linux, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1):

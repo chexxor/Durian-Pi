@@ -180,16 +180,62 @@ function idOf(item) {
  * @returns {Array<object>} the same row objects, in strategy order
  * @throws when `strategy` is not implemented (see assertWorkStrategy)
  */
-export function orderCandidates(items, { strategy = DEFAULT_STRATEGY, now = Date.now() } = {}) {
+export function orderCandidates(items, { strategy = DEFAULT_STRATEGY, now = Date.now(), directive = null } = {}) {
 	assertWorkStrategy(strategy, { where: "orderCandidates" });
 	const list = [...(items ?? [])];
 	const byId = (a, b) => idOf(a) - idOf(b);
-	if (strategy === "oldest_first") return list.sort(byId);
-	// Cache the rank per row: `priority_first` re-reads each row O(log n) times during the sort, and
-	// recomputing `Date.parse(expiresAt)` inside the comparator is pure waste on a 7,000-row queue.
+	// `oldest_first` is a DECLARED policy and a directive is a PRIORITY, so a directive reorders nothing
+	// here — exactly like `set_priority`, which the tool reports as inert on a seat that does not work
+	// `priority_first`. Saying so is cheaper than silently changing what a declared strategy means.
+	if (strategy !== "priority_first") return list.sort(byId);
+	// A DIRECTIVE is a scoped POLICY evaluated here, at claim time — not a flag copied onto rows. That
+	// distinction is why it exists (operator ruling 2026-11-12): a fan-out of `now` onto the rows present
+	// at write time silently misses every row minted afterwards, the same recorded-census-goes-stale
+	// defect as pitfall 294. A directive matches by SCOPE, so future rows are covered, and it lapses on
+	// its own lease. Absent or expired, `directiveRank` is null and ordering is byte-for-byte unchanged.
+	const directiveRank = directiveRankOf(directive, now);
+	// Cache the rank per row: the sort re-reads each row O(log n) times, and recomputing
+	// `Date.parse(expiresAt)` inside the comparator is pure waste on a 7,000-row queue.
 	const rank = new Map();
-	for (const item of list) rank.set(item, effectivePriority(item, now).rank);
+	for (const item of list) {
+		const own = effectivePriority(item, now).rank;
+		const scoped = directiveRank === null ? null : rankUnderDirective(directive, item, directiveRank);
+		rank.set(item, scoped === null ? own : Math.min(own, scoped));
+	}
 	return list.sort((a, b) => rank.get(a) - rank.get(b) || byId(a) - byId(b));
+}
+
+/**
+ * The rank a live directive imposes on everything it scopes, or null when the directive is absent or has
+ * lapsed. A directive is a LEASE like a row priority: an expired one stops applying at read time, in the
+ * one place that decides what a priority means (see the header).
+ */
+function directiveRankOf(directive, now) {
+	if (!directive || typeof directive !== "object") return null;
+	const expiryMs = typeof directive.expiresAt === "string" ? Date.parse(directive.expiresAt) : Number.NaN;
+	if (!Number.isFinite(expiryMs) || expiryMs <= now) return null;
+	const rank = PRIORITY_RANK[directive.priority];
+	return Number.isFinite(rank) ? rank : null;
+}
+
+/**
+ * Does this row fall inside the directive's SCOPE? `null` when it does not, else the directive's rank.
+ * Scope is deliberately narrow and legible — a seat and/or a subject substring — because a directive the
+ * reader cannot check against a row is an order nobody can audit. No scope field at all is refused at
+ * write time (src/queueops.mjs), so it can never mean "everything".
+ */
+function rankUnderDirective(directive, item, rank) {
+	const seats = directive.seats ?? null;
+	const contains = directive.subjectContains ?? null;
+	if (Array.isArray(seats) && seats.length > 0) {
+		if (!seats.includes(item?.to)) return null;
+		return rank;
+	}
+	if (typeof contains === "string" && contains !== "") {
+		const subject = String(item?.subject ?? "").toLowerCase();
+		return subject.includes(contains.toLowerCase()) ? rank : null;
+	}
+	return null;
 }
 
 /**

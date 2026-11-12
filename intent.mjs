@@ -42,6 +42,8 @@ usage:
   node intent.mjs queue --op queue --action repair-gates|stranded [--id N …] [--apply]
   node intent.mjs queue --op queue --action priority --id N [--id N …] --priority now|next|later --reason <text> --until <iso> [--apply]
   node intent.mjs queue --op queue --action cancel --id N [--id N …] --reason <text> [--apply] [--confirm]
+  node intent.mjs queue --op queue --action directive --seat S [--seat S2 …] [--subject <substr>] --priority now --reason <text> --until <iso> [--apply]
+  node intent.mjs queue --op queue --action directive-clear [--apply]
 
 ops: ${SPOOL_OPS.join(", ")}
 
@@ -126,6 +128,10 @@ const priorityAt = args.indexOf("--priority");
 const priority = priorityAt === -1 ? undefined : args[priorityAt + 1];
 const untilAt = args.indexOf("--until");
 const expiresAt = untilAt === -1 ? undefined : args[untilAt + 1];
+const seats = [];
+for (let i = 0; i < args.length; i += 1) if (args[i] === "--seat") seats.push(String(args[i + 1]));
+const subjectAt = args.indexOf("--subject");
+const subjectContains = subjectAt === -1 ? undefined : args[subjectAt + 1];
 const apply = args.includes("--apply");
 const confirm = args.includes("--confirm");
 if (op === "queue" && !action) fail("op queue needs --action repair-gates|priority|cancel|stranded");
@@ -133,6 +139,8 @@ if (op === "queue" && !action) fail("op queue needs --action repair-gates|priori
 // cancel must name their targets, because neither has a defensible implicit set.
 if (op === "queue" && (action === "priority" || action === "cancel") && ids.length === 0)
   fail(`op queue --action ${action} needs at least one --id`);
+if (op === "queue" && action === "directive" && (!priority || !reason || !expiresAt))
+  fail("op queue --action directive needs --priority, --reason and --until (it is a lease), plus --seat and/or --subject");
 if (op === "queue" && action === "priority" && (!priority || !reason || !expiresAt))
   fail("op queue --action priority needs --priority now|next|later, --reason <text> and --until <iso> (it is a lease)");
 if (op === "queue" && action === "cancel" && !reason) fail("op queue --action cancel needs --reason <text> (it is terminal)");
@@ -150,7 +158,18 @@ try {
     ...(reason !== undefined ? { reason } : {}),
     ...(handoff !== undefined ? { handoff } : {}),
     ...(instructions !== undefined ? { instructions } : {}),
-    ...(op === "queue" ? { action, ids, ...(priority !== undefined ? { priority } : {}), ...(expiresAt !== undefined ? { expiresAt } : {}), apply, confirm } : {}),
+    ...(op === "queue"
+      ? {
+          action,
+          ids,
+          ...(priority !== undefined ? { priority } : {}),
+          ...(expiresAt !== undefined ? { expiresAt } : {}),
+          ...(seats.length > 0 ? { seats } : {}),
+          ...(subjectContains !== undefined ? { subjectContains } : {}),
+          apply,
+          confirm,
+        }
+      : {}),
     requestId,
     createdAt: new Date().toISOString(),
   });

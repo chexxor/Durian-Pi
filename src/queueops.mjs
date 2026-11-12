@@ -196,6 +196,47 @@ export function planPriority(items, request = {}) {
 }
 
 /**
+ * PLAN: a scoped, leased DIRECTIVE.
+ *
+ * A directive is the operator's POLICY ("landing is the priority, for these rows, until then"), expressed
+ * ONCE and evaluated at claim time by `orderCandidates` (src/workstrategy.mjs). The alternative — writing
+ * `now` onto the rows that exist today — is a copied value: every row minted afterwards silently misses it,
+ * which is the recorded-census-goes-stale defect this repo already paid for (pitfall 294). Measured cost of
+ * the fan-out mistake once: 33 rows promoted by hand while 444 real queued rows kept minting.
+ *
+ * SCOPE IS REQUIRED and deliberately narrow — seats and/or a subject substring — because a directive that
+ * scopes to "everything" is an untraceable global reorder. Same lease rules as a row priority: a reason, an
+ * `expiresAt` in the future, at most 30 days.
+ */
+export function planDirective(request = {}) {
+  const { by, authority } = authorityOf(request);
+  const at = request.at ?? new Date().toISOString();
+  const priority = request.priority;
+  if (!PRIORITIES.includes(priority)) return { ok: false, refusal: `directive priority must be one of ${PRIORITIES.join("|")}, got: ${priority}` };
+  const reason = String(request.reason ?? "").trim();
+  if (reason === "") return { ok: false, refusal: "a directive needs a reason: it reorders other people's work" };
+  const until = request.expiresAt ? Date.parse(request.expiresAt) : NaN;
+  if (!Number.isFinite(until)) return { ok: false, refusal: `directive expiresAt must be an ISO-8601 instant, got: ${request.expiresAt}` };
+  if (until <= Date.parse(at)) return { ok: false, refusal: "directive expiresAt must be in the future (a lease, not a flag)" };
+  if (until - Date.parse(at) > 30 * 24 * 3600 * 1000) return { ok: false, refusal: "directive expiresAt may be at most 30 days out" };
+  const seats = Array.isArray(request.seats) ? request.seats.map(String).filter((x) => x !== "") : [];
+  const subjectContains = typeof request.subjectContains === "string" ? request.subjectContains.trim() : "";
+  if (seats.length === 0 && subjectContains === "")
+    return { ok: false, refusal: "a directive needs a SCOPE: --seat <name> (repeatable) and/or --subject <substring>; an unscoped directive would reorder the whole queue" };
+  const directive = {
+    priority,
+    reason,
+    expiresAt: request.expiresAt,
+    at,
+    by,
+    authority,
+    ...(seats.length > 0 ? { seats } : {}),
+    ...(subjectContains !== "" ? { subjectContains } : {}),
+  };
+  return { ok: true, directive, changes: [{ id: "control", to: `directive:${priority}` }], transitions: [] };
+}
+
+/**
  * PLAN: cancel rows — and NAME WHAT THIS WOULD STRAND.
  *
  * The stranding warning is the whole point. Cancelling #3377 is what put #3503 and #5885 in limbo, and the
@@ -257,6 +298,8 @@ export function planQueueAction(action, items, request = {}) {
   if (action === "repair-gates") return planRepairGates(items, request);
   if (action === "priority") return planPriority(items, request);
   if (action === "cancel") return planCancel(items, request);
+  if (action === "directive") return planDirective(request);
+  if (action === "directive-clear") return { ok: true, directive: null, changes: [{ id: "control", to: "directive:none" }], transitions: [] };
   if (action === "stranded") return { ok: true, changes: [], transitions: [], census: strandedGates(items) };
-  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, stranded)` };
+  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, directive, directive-clear, stranded)` };
 }

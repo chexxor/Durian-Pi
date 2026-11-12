@@ -68,7 +68,7 @@ export const RigControl = defineDoc({
 	kind: "durig.control",
 	version: 1,
 	scope: "session",
-	initial: () => ({ paused: false, pausedAt: null, pausedBy: null, reason: null }),
+	initial: () => ({ paused: false, pausedAt: null, pausedBy: null, reason: null, directive: null }),
 	checkpointWhen: () => false, // provisional, see Seats above and ROADMAP 355
 });
 
@@ -363,9 +363,12 @@ export function workable(item, seat, { items = [], capabilities = [] } = {}) {
  * `strategy` is REQUIRED to be one of the implemented names: an unknown name throws (see
  * `assertWorkStrategy`) rather than silently ordering oldest-first. `now` is injected for tests only.
  */
-export function selectNextWork(items, seat, { capabilities = [], strategy = DEFAULT_STRATEGY, now = Date.now() } = {}) {
+export function selectNextWork(items, seat, { capabilities = [], strategy = DEFAULT_STRATEGY, now = Date.now(), directive = null } = {}) {
 	const skipped = [];
-	for (const candidate of orderCandidates(items, { strategy, now })) {
+	// The DIRECTIVE enters the ORDER only, never `workable()`: a policy may say which eligible row looks
+	// most urgent, and may never make an ineligible one claimable. Keeping the two apart is the same
+	// separation the header above describes (#6112), and it is what makes a directive safe to grant.
+	for (const candidate of orderCandidates(items, { strategy, now, directive })) {
 		if (candidate.to !== seat || candidate.status !== "queued") continue;
 		const verdict = workable(candidate, seat, { items, capabilities });
 		if (verdict.workable) return { item: candidate, skipped };
@@ -933,9 +936,11 @@ const Router = defineExtension({
 							teamStrategy: seatsDoc.workStrategy,
 							defaultStrategy: DEFAULT_STRATEGY,
 						});
+						const control = await tx.doc(RigControl);
 						const picked = selectNextWork(queue.items, me, {
 							capabilities,
 							strategy: resolved.strategy,
+							directive: control?.directive ?? null,
 						});
 						queued = picked.item ?? undefined;
 						skipped.push(...picked.skipped);
