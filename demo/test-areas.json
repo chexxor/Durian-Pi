@@ -237,6 +237,7 @@
       "demo/tui-sync-output.test.mjs",
       "demo/tui-thinking.test.mjs",
       "demo/tui-toolblock.test.mjs",
+      "demo/ui-entrypoint-exec.test.mjs",
       "demo/ui-driver.test.mjs",
       "demo/ui-readstate.test.mjs",
       "demo/watch.test.mjs",
