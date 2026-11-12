@@ -159,6 +159,27 @@ export function effectivePriority(item, now = Date.now()) {
 	return { ...neutral, invalid: true };
 }
 
+/**
+ * Render one row's lease as the SAME text fragment everywhere a lease is shown (#7113).
+ *
+ * WHY ONE FUNCTION: `peek_queue`'s line and the operator's `queue --human` readout must say the same thing
+ * about the same row. Two renderings of one lease is how a seat sees `now` while the selector ranks the row
+ * neutral, and the reader concludes the selector is broken. A row with no priority renders "" — there is
+ * nothing to say, and inventing "next" would read as a lease that does not exist.
+ *
+ * Returns `priority=<level> until=<instant>`, `priority=<raw>~lapsed@<instant>`, or `priority=<raw>!invalid`.
+ *
+ * @param {{priority?: unknown, prioritySet?: {expiresAt?: unknown}|null}|null|undefined} item
+ * @param {number} [now] epoch ms, injected so a readout is testable without a clock
+ */
+export function priorityLeaseText(item, now = Date.now()) {
+	if (!item?.priority) return "";
+	const eff = effectivePriority(item, now);
+	if (eff.lapsed) return `priority=${String(eff.raw)}~lapsed@${eff.expiresAt}`;
+	if (eff.invalid) return `priority=${String(eff.raw)}!invalid`;
+	return `priority=${eff.priority}${eff.expiresAt ? ` until=${eff.expiresAt}` : ""}`;
+}
+
 /** Queue ids are positive integers; anything else sorts last, deterministically, rather than as NaN. */
 function idOf(item) {
 	const n = Number(item?.id);
