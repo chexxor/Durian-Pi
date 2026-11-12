@@ -4218,7 +4218,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git worktree remove … && git branch -d …` lines that pruned them (refs 156→103, worktrees 147→94, one
     refusal: a LOCKED worktree, `git worktree unlock` first — never `remove -f -f`).
 
-## Operational pitfalls (delegate unattended-fleet pass 3, 2026-11-12 — numbered 304-311, continuing from 303; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 3, 2026-11-12 — numbered 304-312, continuing from 303)
 
 304. **A TERMINALLY STOPPED BROKER LOOKS COMPLETELY HEALTHY.** Measured 2026-11-12T21:17:21Z–21:21:44Z: the
     broker's storage handle closed (`database is locked` → `SessionFailed` → closed store), the reopen cap

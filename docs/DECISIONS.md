@@ -11938,23 +11938,3 @@ rule that only sees new parks fixes none of the 493), `selectWakes` wakes `lead`
 `escalation`, and `check` rule 25 `human-deferral-past-clock` gives the census a reader. Evidence: `demo/human-defer-lease.test.mjs`
 (exit 0), suite 314/314. Enforced by `demo/defer.test.mjs`, whose old call omitted `resumeBy` — the exact shape that produced
 the 493.
-
-**D274 — a store connection waits 30 s for a lock; a lock must never tear down the session (2026-11-12T21:4xZ).**
-Decided by the delegate under the operator's standing grant to implement queue-control and fleet-reliability fixes
-directly. The measurement that forced it: at **21:15:40Z** a resident broker pass met `database is locked errcode=5`;
-pi-durable closes a Session on a storage error, the broker's reopen cap (3 attempts over ~35 s) was exhausted at
-21:17:21Z, and `served` stopped driving **terminally** — while the process stayed alive serving `READ-DRAIN`, so the
-heartbeat, `ps` and the last `START` line all read healthy and only `lastPass` climbing (305 s) showed it. The 750 MB
-store can hold a contended write longer than pi-durable's **5 s** default (`DEFAULT_BUSY_TIMEOUT_MS`). Why not the
-alternatives: raising the reopen cap only widens a window that still ends in a terminal stop on a lock that outlives
-it; retrying the pass after a store error re-enters a Session pi-durable has already closed; and refusing concurrent
-CLI reads loses the operator's own status view. A lock is transient, so the correct response is to WAIT — bounded, not
-unbounded: past 30 s `SQLITE_BUSY` still surfaces. `STORE_BUSY_TIMEOUT_MS = 30_000` lives in `src/readclient.mjs`
-(next to the other store-timeout policy, so the two cannot drift), `cli.mjs openStore()` passes it and that call is
-BOTH the harness's single connection and the probe's, and the read-only open passes `timeout` to `DatabaseSync` so a
-checkpoint-contended `status` read cannot fall back to a write-mode open — the second-writer collision `readLocal`
-exists to avoid. Guarded by `demo/store-busy-timeout.test.mjs`, a static check rule over every open site, mapped in
-`demo/test-areas.json` (`broker`). Evidence: `node scripts/test.mjs --area broker` → **81/81 in 27.2 s**;
-`node demo/test-areas.test.mjs` → 326 tests across 9 areas. Commit `575a67e8`. Unverified: that the 30 s grace is
-sufficient under the heaviest checkpoint (no lock longer than 5 s has been observed since), and the running broker
-was NOT restarted, so the live process still holds the old 5 s connection until its next re-arm.
