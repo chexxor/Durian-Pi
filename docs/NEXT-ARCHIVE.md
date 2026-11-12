@@ -14294,3 +14294,42 @@ returns the **value**, not a wrapper; `watchEvents` → `src/livewatch.mjs` `wat
 and `checkpointWhen: () => false` on the 6 rig docs, **provisional** (ROADMAP 355, rows #6171–#6173). Both seams are
 documented as approximations: turn boundaries come from the generation attempt, not a turn record; tool results are
 synthesised from committed `pi.tool-result` entries, not streamed.
+
+
+## Cut verbatim 2026-11-11 (delegate N32, NEXT.md 214 -> 184 lines, cap 200)
+
+**What the cleanup left** (re-measured at `f3ffce0e`, `cli.mjs worktree audit --json`, 1.1 s) — 25 worktrees, **0 locked**:
+7 seat roots + 1 non-item, **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty 2, `item-5912` held, `item-6177`
+claimed dirty 3), **17 reapable**, and **4 dirty orphans** whose items are `done`: `item-6057`
+(2 tracked edits — a `sync-pi --no-repair` flag and its demo, **not on `main`**: `grep -c "no-repair" scripts/sync-pi.mjs`
+→ 0, while `git merge-base --is-ancestor refs/heads/item-6057 refs/heads/main` exits 0, i.e. the branch is merged and
+the work is not), `item-6290` (23 untracked solo-run logs, 45 KB), `item-6317` (3 logs), `item-6328` (1 log). Every
+residue is exported to `.spike/worktree-residue/` (gitignored, 148 KB) before anything is touched. A dirty orphan is
+refused on purpose: a seat commits it, or the operator rules it discarded.
+
+**The recipe that made this fast (re-run it, it is idempotent):**
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json > .spike/wt.json
+node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/wt.json","utf8"));
+ for(const w of j.worktrees) if(w.keepReason==="reapable") console.log(w.worktree)' | while read -r p; do git worktree remove "$p"; done   # 75 s for 57 trees, never --force
+git worktree prune
+```
+
+**Goal: implementation complete — the audit's two objections are closed; completion re-requested.** "Every CLI verb
+answers or fails fast against a team running or stopped, no 120 s silence, and Ctrl-C actually terminates the verb."
+All legs are on `main`: the signal seam (`src/signals.mjs`, `src/cli-seam.mjs`), bounded reads (`src/readclient.mjs`),
+the read-only shim (`src/readonlystore.mjs`), the out-of-band read drain in `runWakeLoop`, the **mutating-verb** bound
+(`intentWaitBoundMs`, `src/broker.mjs:2422`: 900 s advancing / 10 s frozen pass / 0 no broker — `cli.mjs pause --wait`
+against a 658 MB store with no resident broker answered in **349 ms**), and the stop-receipt legs (`src/broker.mjs:1851`,
+`:1889`, `:2192`). Re-measured 08:1xZ, broker resident: `status --json` 10.1 s, `queue --json --no-body` 2.0 s, `watch --once --json` 1.9 s,
+`ps` 0.5 s, unknown verb `verify --json` exit 2 in 304 ms. Objection 1 (NEXT.md over the cap) is closed — 197 lines, the
+pointer test green. Objection 2 (mutating verbs defaulting to 15 min) is closed — `cli.mjs:2008` defaults `timeoutMs = null`
+and derives the bound from `intentWaitBoundMs` (`src/broker.mjs:2422`), pinned by `demo/mutate-intent-bound.test.mjs`. **One regression was found and closed:** the new
+1 s read-drain timer shifted the wake loop by a fraction of a millisecond and
+`demo/cooldown-skip-line.test.mjs` went 4/12 red (bisected: 0/12 with `readDrainMs = 0`); it is now driven by an
+injected virtual clock and runs 0/15 red in **0.193 s** — pitfall **255**, §F of
+`docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`. Open edges stated there: the first ~270 ms of a
+run is still node's default disposition; the force-exit timer cannot fire while a synchronous read blocks the loop
+(~2.5 s measured); `tui.mjs` signal behaviour is unmapped; `gcIntentResults` is per-pass, not per read drain — the
+architect's exit-drain row **#6391/#6390** (branch `item-6381`, merges clean).

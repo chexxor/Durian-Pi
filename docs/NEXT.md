@@ -1,13 +1,18 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-11T08:2xZ (delegate session **N31** — the **completion-audit rework**: both auditor objections
-closed, `main` = **`580c1343`**, suite **300/300** in **113.4 s** (`--all --jobs 4`, exit 0, unpiped), refs **33 → 38** and
-worktrees **23 → 28** (the fleet mints them — count live), a parked broker (pid **2658110**, 1 h 32 m past its bound) reaped
-with `kill -TERM` and the fleet restarted (pid **2876055**). Nothing was pushed; the delegate claimed, completed or deferred no row.
-**Count refs/worktrees live** — the fleet mints them while you measure.)
+**Last update:** 2026-11-11T23:5xZ (delegate session **N32** — the **census close-out + the work-item model**:
+`main` = **`6d36ab0f`**, suite **300/300** in **122.9 s** (`--all --jobs 4`, exit 0, unpiped), refs **84** and
+worktrees **75** (count live — the fleet mints them; 77→81 refs in ten minutes this session), **1 ref pruned**
+(`item-6809`, provably merged), **51 OPEN rows** appended to `docs/DISPOSITIONS.md`, and `docs/WORK-ITEM-MODEL.md`
+written. A **parked** broker (pid **2876055**, heartbeat 9 s fresh, `lastPassAt` frozen **48,370 s**) was reaped with
+`kill -TERM` and the fleet restarted (pid **1948745**, `PASS 1..6` in 60 s). Nothing was pushed; the delegate claimed,
+completed or deferred no row. **Count refs/worktrees live** — the fleet mints them while you measure.)
 
-**Milestone this window worked** — **no 120 s silence, and Ctrl-C actually stops the verb (ROADMAP **314**,
-row **#6160**, decision **D262**)**. Baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
+**Milestone this window worked** — **a work-item lifecycle the team can run itself**: seats land their own verified
+branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless items never spawn a worktree
+(`docs/WORK-ITEM-MODEL.md`, rows **#6924–#6927** minted by `pm`). The pin move (D255 → D256, ROADMAP 353–357) is the
+frame it operates in. Prior window's milestone — **no 120 s silence, and Ctrl-C actually stops the verb**
+(ROADMAP **314**, row **#6160**, decision **D262**) — baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
 `watch --once --json` went from **120,547 ms / exit 1** (signal ignored for 119 s) to **1,518 ms / exit 130, 15 ms
 after the signal** — table in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`. Still open under it:
 the pinned-pi thread (D255 → D256, ROADMAP 353–357: pin `v1.5.1`, `pi-schema` first, the symbol migration, the
@@ -20,67 +25,50 @@ the pinned-pi thread (D255 → D256, ROADMAP 353–357: pin `v1.5.1`, `pi-schema
 
 ## NEXT SESSION
 
-**Current item:** the **branch-cleanup pass** (`docs/runbooks/branch-cleanup.md`). Its git half is **closed**: refs
-**82 → 26**, worktrees **75 → 18**, `main` green. What is left is fleet work, not git work — the **item-5301 re-cut
-(#6174)**, the uncommitted `sync-pi --no-repair` work stranded in the `item-6057` worktree (**#6060**), the four
-dirty trees named below, and the three pin-policy rows (**#6171/#6172/#6173**).
+**Current item:** the **work-item lifecycle MVP**. `pm` cut the intent into four rows: **#6924** impl — make
+`demo/offline.mjs` green (the mocked plane is the prerequisite for everything else); **#6925** lead — does the
+PROVISIONAL taxonomy block the `staging` verb, and who routes the research prompt; **#6926** architect — where the
+seams are (mode decision, gate composition, the promote-to-main writer); **#6927** qa — inventory the 51 OPEN
+disposition rows. The branch-cleanup pass's **git half is closed** (`main` green); what is left is fleet work — the
+**item-5301 re-cut (#6174)**, the uncommitted `sync-pi --no-repair` work stranded in the `item-6057` worktree
+(**#6060**), the dirty trees named below, and the three pin-policy rows (**#6171/#6172/#6173**).
 
-**Milestone this window worked** — **landing the accumulated branches and pruning them (the branch-cleanup pass)**,
-with the pin move (D255 → D256, ROADMAP 353–357) as the frame it operated in.
+**Milestone this window worked** — the **work-item lifecycle** (above), with the branch-census pass as its
+residue-cleanup tranche.
 
-**Blocker:** none in git — every remaining branch is either conflicted (a seat re-cut, not a delegate merge) or held
-by ruling. The only operator-grant blocker is the verifier leg: `DURIG_VERIFIER_API_KEY` spend is capped and `local2`
-is a shared LAN box whose 20 s preflight probe false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
+**Blocker:** two, both operator-grant, neither a git one. (1) The **external research** on branch taxonomy is written
+(`docs/reviews/branch-lifecycle-research-prompt.md`); the research agent is off-host with no repo access, so **routing
+that prompt is an operator action**, and `docs/WORK-ITEM-MODEL.md` §4/§5 stay PROVISIONAL until it lands. (2) The
+verifier leg: `DURIG_VERIFIER_API_KEY` spend is capped and `local2` is a shared LAN box whose 20 s preflight probe
+false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
 
 **Run these first, in this order** (every number below was measured on this box; re-measure rather than trust it):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
 node scripts/suite.mjs --jobs 8                                        # 299 tests on disk; one can redden on contention
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json          # 1.1 s — total 25: seat-root 7, non-item 1, live 4, reapable 9, dirty 4, locked 0
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed --json --no-body   # 4 claimed rows; `rows: 6423` is the CENSUS, the payload is the filtered items
-git branch --list; git worktree list | wc -l; node scripts/sync-pi.mjs --check   # COUNT IT LIVE: 38 refs / 28 worktrees at 580c1343; pin dd30101cf tag v1.5.1, drift true
+node tools/stranded-inbox.mjs selfdev.sqlite                           # 1 s — is the broker PARKED? hbAgeS vs progressAgeS
+DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json           # 1.1 s — total 82: seat-root 10, non-item 4, live 2, reapable 60, dirty 5, locked 1
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed --json --no-body   # the payload is the filtered rows; `rows:` is the CENSUS
+git branch --list | wc -l; git worktree list | wc -l; node scripts/sync-pi.mjs --check   # COUNT LIVE: 84 refs / 75 worktrees at 6d36ab0f
 ```
 
-**Broker status:** resident pid **2876055** (`--no-probe --max-duration 7200 --yes-pm-wakes`, started 08:13Z): `status --json` 10.1 s, `queue --json --no-body` 2.0 s, `watch --once --json` 1.9 s, `ps` 0.5 s, `log pm 5` 1.3 s — all exit 0; SIGINT on `watch --follow --json` exits **130** 353 ms after the signal, `log pm --follow` 130 in 175 ms. **The bound is not a hard bound**: a broker whose wake loop broke at `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1856`) with **no stop request**, so `graceExpired()` (`:1713`) is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded leg, `:2216 settleWithin(...)`, fires only on `deadline`).
+**Broker status:** resident pid **1948745** (`--no-probe --max-duration 3600 --yes-pm-wakes`, started 23:53:47Z).
+**The bound is not a hard bound, and it is now measured, not hypothesised**: a broker whose wake loop broke at
+`--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1855-1857`) with **no stop request**, so
+`graceExpired()` is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded
+leg `:2216 settleWithin(...)` fires only on `deadline`). pid 2876055 sat in that state for **13 h 26 m** while its
+heartbeat stayed fresh and the read pump kept answering — `node tools/stranded-inbox.mjs selfdev.sqlite` is the
+one-line discriminator (`hbAgeS` / `progressAgeS` / `DRAIN-STRANDED`). Account: `docs/incidents/2026-11-11-parked-broker-strands-a-mutating-intent.md`.
 The force timer (`cli.mjs:2247`) arms only in `onSignal`, so `serve --stop` is invisible to a parked broker — four this
 window (pids 2066240, 2201485, 2390935, 2658110) lingered 34 min – 1 h 32 m past their bound until `kill -TERM <pid>` fired the fallback (`EXIT reason=deadline passes=-`). Preflight **blocks falsely** on local2: the 20 s probe at `tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0 blocking) and verify seats generate. Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`. Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
 
-**What the cleanup left** (re-measured at `f3ffce0e`, `cli.mjs worktree audit --json`, 1.1 s) — 25 worktrees, **0 locked**:
-7 seat roots + 1 non-item, **4 live** rows (`item-1158` claimed, `item-3087` claimed dirty 2, `item-5912` held, `item-6177`
-claimed dirty 3), **17 reapable**, and **4 dirty orphans** whose items are `done`: `item-6057`
-(2 tracked edits — a `sync-pi --no-repair` flag and its demo, **not on `main`**: `grep -c "no-repair" scripts/sync-pi.mjs`
-→ 0, while `git merge-base --is-ancestor refs/heads/item-6057 refs/heads/main` exits 0, i.e. the branch is merged and
-the work is not), `item-6290` (23 untracked solo-run logs, 45 KB), `item-6317` (3 logs), `item-6328` (1 log). Every
-residue is exported to `.spike/worktree-residue/` (gitignored, 148 KB) before anything is touched. A dirty orphan is
-refused on purpose: a seat commits it, or the operator rules it discarded.
-
-**The recipe that made this fast (re-run it, it is idempotent):**
-
-```bash
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json > .spike/wt.json
-node -e 'const j=JSON.parse(require("fs").readFileSync(".spike/wt.json","utf8"));
- for(const w of j.worktrees) if(w.keepReason==="reapable") console.log(w.worktree)' | while read -r p; do git worktree remove "$p"; done   # 75 s for 57 trees, never --force
-git worktree prune
-```
-
-**Goal: implementation complete — the audit's two objections are closed; completion re-requested.** "Every CLI verb
-answers or fails fast against a team running or stopped, no 120 s silence, and Ctrl-C actually terminates the verb."
-All legs are on `main`: the signal seam (`src/signals.mjs`, `src/cli-seam.mjs`), bounded reads (`src/readclient.mjs`),
-the read-only shim (`src/readonlystore.mjs`), the out-of-band read drain in `runWakeLoop`, the **mutating-verb** bound
-(`intentWaitBoundMs`, `src/broker.mjs:2422`: 900 s advancing / 10 s frozen pass / 0 no broker — `cli.mjs pause --wait`
-against a 658 MB store with no resident broker answered in **349 ms**), and the stop-receipt legs (`src/broker.mjs:1851`,
-`:1889`, `:2192`). Re-measured 08:1xZ, broker resident: `status --json` 10.1 s, `queue --json --no-body` 2.0 s, `watch --once --json` 1.9 s,
-`ps` 0.5 s, unknown verb `verify --json` exit 2 in 304 ms. Objection 1 (NEXT.md over the cap) is closed — 197 lines, the
-pointer test green. Objection 2 (mutating verbs defaulting to 15 min) is closed — `cli.mjs:2008` defaults `timeoutMs = null`
-and derives the bound from `intentWaitBoundMs` (`src/broker.mjs:2422`), pinned by `demo/mutate-intent-bound.test.mjs`. **One regression was found and closed:** the new
-1 s read-drain timer shifted the wake loop by a fraction of a millisecond and
-`demo/cooldown-skip-line.test.mjs` went 4/12 red (bisected: 0/12 with `readDrainMs = 0`); it is now driven by an
-injected virtual clock and runs 0/15 red in **0.193 s** — pitfall **255**, §F of
-`docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`. Open edges stated there: the first ~270 ms of a
-run is still node's default disposition; the force-exit timer cannot fire while a synchronous read blocks the loop
-(~2.5 s measured); `tui.mjs` signal behaviour is unmapped; `gcIntentResults` is per-pass, not per read drain — the
-architect's exit-drain row **#6391/#6390** (branch `item-6381`, merges clean).
+**What the residue is now** (`cli.mjs worktree audit --json`, 1.1 s, re-measured at `6d36ab0f`): **82 entries** —
+seat-root 10, non-item 4, locked 1, **live 2**, **reapable 60**, dirty 5. `git worktree list | wc -l` counts 75
+(the audit counts the shared repo too). 60 reapable trees is the residue the lifecycle is meant to stop producing;
+row **#6927** is the inventory of the 51 OPEN `docs/DISPOSITIONS.md` rows behind it. Reap recipe (idempotent, never
+`--force`): `cli.mjs worktree audit --json > .spike/wt.json`, then remove every entry whose `keepReason` is
+`reapable`, then `git worktree prune`.
 
 **Operator decision owed, not a git one:** `.spike/` is **13 GB** of gitignored scratch — 4.2 GB `fix-20261101`,
 1.1 GB `fix-20261031`, 1.1 GB `backups`, 814 MB `delegate`, plus four store backups (435 MB, 419 MB, 419 MB, and
@@ -98,12 +86,9 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live, re-count before trusting): refs **38**, worktrees **28**, `main` `580c1343`, queue
-census **6,624 rows** — 4,467 done / 915 cancelled / 433 held / 535 deferred / 265 queued / 9 claimed. Minted to `pm` this
-window: **#6604** (bound the max-duration exit drain), **#6600/#6601** (`EXIT … passes=-`), **#6548** (`status` mislabels a
-bound-exit drain), **#6598/#6599** (probe-corpus anchor guard), plus intent `3c779f4a-5e23-4b96-a0f2-66f9c705fc4b` (suite
-`spawn`s `send` children nobody reaps: two ran 13 h after their fixture store was deleted; SIGINT reaped them in 254–502 ms). Nothing is landable by a delegate: every mergeable ref is either already an ancestor of
-`main` or held by a live seat root.
+**State at clock-out** (measured live, re-count before trusting): refs **84**, worktrees **75**, `main` `6d36ab0f`, queue
+census **6,927 rows** — the fleet minted **#6924–#6927** from the delegate's lifecycle intent within two minutes of the
+broker restart.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
