@@ -58,6 +58,32 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 7. **Small and stable.** Link out to the design doc; move any growing `Background` to the design doc.
 8. **Ownership.** The delegate owns operator-surface runbooks; the team owns seat-runbooks; `scribe`
    keeps them true to the code like any other doc.
+9. **Host scope is written, not assumed.** Every command block says which shell it needs. Do not
+   translate a PowerShell-only block into a POSIX one you have not run: a Windows-only read with its
+   host named is a true document, a guessed equivalent is an unverified claim. Where both halves exist,
+   verify the half you can actually run and say which shell the check ran in.
+
+   Measured on main tip `e529b65b`, fence-by-fence over the `## Diagnose (read-only)` sections of all 61
+   files in `docs/runbooks/`: **five** runbooks carry PowerShell blocks, **two** are PowerShell-only.
+
+   | runbook | PowerShell fences in `## Diagnose` (line span) | bash half | what CI can run on Linux |
+   |---|---|---|---|
+   | `prepare-workspace-etarget.md` | 4: 50-52, 57-65, 73-75, 83-89 | none | nothing - pinned in the test's `NOTHING_EXECUTED` set |
+   | `local-provider-down.md` | 1: 45-50 | none | nothing - pinned in the same set |
+   | `prepare-workspace-refused.md` | 1: 63-68 | yes: 53-59, the same three reads | 0 of the 5 bash lines (CI gaps: `git --verify`/`git list` are not in the read-only allowlist); all three run when executed directly here, exit 0 |
+   | `leaked-secret.md` | 1: 57-61 | yes: 49-56 | 2 of its 3 bash lines executed, exit 0 |
+   | `security-trust-boundary-review.md` | 1: 47-49 | yes: 38-40, 44-46 | 1 of its 2 bash lines executed, exit 0 |
+
+   How it is checked, and what the check does not do. `node demo/runbook-diagnose.test.mjs` exits 0 and
+   lists a line as a gap with reason "host-specific shell command" when it matches the Windows keyword
+   list at `src/runbookdiagnose.mjs:292` (`powershell`, `Get-CimInstance`, `Get-NetTCPConnection`,
+   `taskkill`, `Select-String`, `cmd /c`). The decision is made **line by line, not from the fence's
+   language tag**: `prepare-workspace-refused.md` line 64, inside the PowerShell fence, is a line that is
+   also valid bash, so CI does execute it on Linux. That is why the rule above is a rule about prose, not
+   about tags - nothing in the harness enforces host scope from the fence language. Runbooks from which CI
+   executes nothing are pinned by name; both PowerShell-only files above are in that pin.
+   Outside `## Diagnose` the same pattern appears in three more fences: `local-provider-down.md` 110-112
+   and 115-118 (its `## Verify` section) and `broker-down-or-stalled.md` 363-367 (its `## Do` section).
 
 ## Topic docs — the map behind the procedures
 

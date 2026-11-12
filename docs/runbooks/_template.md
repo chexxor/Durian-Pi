@@ -24,6 +24,10 @@ check_rule: null                 # optional: the check rule that re-tests this
 ```bash
 DURIG_DB=./selfdev.sqlite node cli.mjs status
 ```
+If a read only works in one shell, tag the fence for that shell and name the host in the prose beside it.
+Never add a POSIX translation of a PowerShell-only block that you have not run - CI (`node
+demo/runbook-diagnose.test.mjs`) reports those lines as gaps, so an invented equivalent is an
+unverified claim. See convention 9 in `README.md`.
 Name the store with the variable **the entry point you are invoking actually reads**: `cli.mjs` and
 `intent.mjs` read `DURIG_DB` (`cli.mjs:155`, `intent.mjs:105`, `src/config.mjs` `CONFIG_KEYS`); the one entry
 point that also accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:379`, and it takes it first. A command carrying a
