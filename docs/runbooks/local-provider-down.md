@@ -460,3 +460,33 @@ kinds `repeated_failure, last_run_failed` - that is the defect this row closes.
 
 **The tell to look for in a store:** rows escalated with reason `repeated_failure` whose seat's newest error message is
 a 401/403. Before #6081 there was no way to distinguish them from a seat that genuinely cannot progress; there is now.
+
+**The class fix is not retroactive - measured 2026-11-11, item-6389 worktree at main tip `35001c3a`.** Changing the
+class going forward does not un-park a row that is already parked. `node cli.mjs queue --status deferred --no-body`
+against `selfdev.sqlite` returned **524 deferred rows**, and every one of them was parked by the supervisor: each row's
+`transitions` array ends with `{"event":"deferred","by":"supervisor","to":"human"}` and a date. By date: 138 on
+2026-11-05, 179 on 2026-11-07, 40 on 2026-11-08, 7 on 2026-11-09, **146 on 2026-11-10** (the storm day; the 171 in the
+section above was the count at the time of the storm, and rows since resumed left the set), 1 on 2026-11-11.
+By recipient: impl 143, devtools 132, pm 82, lead 65, qa 48, scribe 36, auditor 14, security 3, qa2 1.
+
+Two things the operator needs to know before trying to clean them up:
+
+1. **The cause is not stored.** **0 of the 524 rows carry a `reason` field**; the only cause text is the prose in
+   `question` (`"supervisor escalation: <seat> has failed 3 runs in a row..."`). A row parked by a credential storm
+   and a row parked by a seat that truly cannot progress are byte-identical in the record. That is the defect #6313
+   names, and 524 is its measured population, not an estimate.
+2. **`release_work` cannot touch them.** It is a `held` exit: on row #5598 it returned `item #5598 is not held
+   (status=deferred)` (exit 1, observed 2026-11-11). The only un-park verb for a deferred row is the **recipient's**
+   `resume_work`, and it has no precondition - it will take the row back before any answer has arrived (tested on
+   #5598: `resumed`, status `claimed`). So un-parking a fleet-wide escalation is 524 separate acts by 9 different
+   seats, and no seat can do it for another.
+
+**How to check whether the storm is over before un-parking anything** (read-only, this box):
+```bash
+node tools/keycheck.mjs --level=auth --family=LOCAL   # exit 0; "auth":"complete", "verdict":"ok", credentialSource "none" (loopback, keyless)
+node cli.mjs status                                   # attention kinds today: deferred_awaiting_answer, idle_with_queued_work,
+                                                  # last_run_failed, generation_in_flight, pass-failed, queue-ageing - no provider_auth
+```
+On 2026-11-11 neither the preflight nor attention reported a credential refusal, so the rows parked on 2026-11-10 are
+parked on a condition that is not present. Un-park them in the order you want work to happen, one seat at a time -
+`resume_work` is per row, and a seat wakes for each row it takes back.
