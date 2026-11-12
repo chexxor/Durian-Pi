@@ -157,14 +157,19 @@ try {
 	check("a party's raise carries the higher tier", (await item(raisedId)).tier === "feature", JSON.stringify((await item(raisedId)).tier));
 
 
-	/* D. release is refused when the gate names a CANCELLED row. */
+	/* D. release is refused when the gate names a CANCELLED row.
+	 * The realistic order: the gate is LIVE when the row is written (enqueue refuses a gate that is
+	 * already dead, group E below), and the gate row is CANCELLED afterwards. That is how the 67 dead
+	 * gates on the live store were actually created - the umbrella container was cancelled after its
+	 * dependents were registered - so this fixture tests the retroactive starvation, not only the
+	 * enqueue guard. */
 	await call("pm", "send_work", { to: "impl", subject: "Prerequisite that gets dropped", body: "gate" });
 	const gateId = (await queueState()).items.length;
-	await call("pm", "cancel_work", { itemId: gateId, reason: "superseded" });
-	check("the gate row is cancelled", (await item(gateId)).status === "cancelled", JSON.stringify(await item(gateId)));
 	await call("impl", "send_work", { to: "impl", subject: "Work gated on the dropped row", body: "held", held: true, blockedBy: [gateId] });
 	const gatedId = (await queueState()).items.length;
-	check("the gated row is held", (await item(gatedId)).status === "held", JSON.stringify(await item(gatedId)));
+	check("the gated row is held while its gate is live", (await item(gatedId)).status === "held", JSON.stringify(await item(gatedId)));
+	await call("pm", "cancel_work", { itemId: gateId, reason: "superseded" });
+	check("the gate row is cancelled", (await item(gateId)).status === "cancelled", JSON.stringify(await item(gateId)));
 	await call("pm", "release_work", { itemId: gatedId, reason: "coordinator unparks it" });
 	const gateSay = await toolReply("pm", "release_work");
 	check("the coordinator release is refused: the gate is dead", /not released: its gate names #\d+, which is cancelled/.test(gateSay), gateSay.slice(0, 200));

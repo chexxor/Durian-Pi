@@ -48,6 +48,7 @@ export const STRANDED_ADMITTED_MS = 30_000;
 export const REPEATED_FAILURE_STREAK = 3;
 
 import { SPEND_CAUSE, isSpendStopMessage, spendCapNamed, PROVIDER_AUTH_CAUSE, isProviderAuthStopMessage, CONTEXT_OVER_WINDOW_CAUSE } from "./causes.mjs";
+import { deadGateIds } from "./rig.mjs";
 import { contextOverWindow } from "./context.mjs";
 import { LOCAL_ENV_PREFIXES } from "./providers/local.mjs";
 
@@ -402,6 +403,21 @@ export function computeAttention(
 				// `DEFERRED_TO_NOBODY`, and echoing it verbatim prints "waiting on nobody" — a new value silently
 				// taking the old branch in a new spelling.
 				detail: `${deferred.length} item(s) parked on a question; #${held.id} ${deferredTargetPhrase(held.deferredTo)}`,
+			});
+		}
+		// #6215: a queued row whose gate names a CANCELLED row can NEVER be claimed. Until this notice
+		// existed the only symptom was a seat that never wakes: the row counts as `queued` in every
+		// census, and the reason appears only inside a claim response the seat never receives, because it
+		// never gets to claim. The notice is the operator-visible half of the enqueue rule; it ACCEPTS,
+		// it never decides (#3271) - nothing parks or cancels on it.
+		const starved = queued.filter((it) => deadGateIds(it, queueItems).length > 0);
+		if (starved.length > 0) {
+			const named = starved.map((it) => `#${it.id} gates on cancelled #${deadGateIds(it, queueItems).join(", ")}`).join("; ");
+			notices.push({
+				scope: "seat",
+				seat: seat.name,
+				kind: "starved_gate",
+				detail: `${starved.length} queued item(s) can never be claimed: ${named}. The GATE is the problem, not the seat: fix the gate or cancel the dependent. See docs/runbooks/stale-held-backlog.md (umbrella rows are pointers, never gates).`,
 			});
 		}
 		const streak = failureStreakByConv.get(seat.conversationId) ?? 0;

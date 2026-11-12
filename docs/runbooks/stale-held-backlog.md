@@ -188,11 +188,40 @@ ref is gone: measured 2026-11-11 in the `item-6315` worktree, `git rev-parse ite
 so the predicate cannot detect this; the audit's **standing-rule** class is what names the real condition
 (`docs/WORK-ITEM-LIFECYCLE.md`), and Diagnose step 5 is the git check that proves it.
 
-**Unverified, stated as a gap:** there is **no `check` rule** that detects this shape today. The rule was
-registered as #3747 ("check rule for a NON-TERMINAL item whose `blockedBy` names a CANCELLED/SUPERSEDED
-id") - that row is still `held` (created `held`, never transitioned), and `src/checkup.mjs` contains no
-such rule (grep `blockedBy` in it returns nothing). The convention is therefore **prose plus the
-`workable()` behaviour**, not enforcement.
+**Enforced at the write path now (#6215, from lead's ruling on #2465).** Three surfaces read ONE rule
+(`deadGateIds`, `src/rig.mjs`), so they cannot drift:
+
+1. **`enqueueItem` refuses the gate.** A `send_work` whose `blockedBy` names a CANCELLED row throws
+   before anything is written: *"send_work refused: the gate names #<id>, which is CANCELLED and can
+   never reach done - this item would be unclaimable forever. Gate on the row that carries the work
+   (never on a container/umbrella row), close the container with complete_work instead of cancel_work,
+   or drop the gate and re-send."* No row is created, so the starved row never enters the store.
+2. **The queue line names it.** A gated row renders as `blockedBy=6122 DEAD-GATE=#6122`, so a seat can
+   tell "waiting" from "starved" from the line it is already given.
+3. **`durig status` reports it.** `computeAttention` emits a `starved_gate` notice per seat naming the
+   dependent and the dead gate. Before it, the only symptom was a seat that never wakes: the row counts
+   as `queued` in every census and the reason appears only inside a claim response the seat never gets.
+
+What is deliberately NOT refused: a gate id that names **no row**. By the #2673 conservative default an
+unknown gate is ambiguous and stays workable, so refusing it would hold real work back on a typo.
+
+**Still a gap, stated plainly:** cancelling a row that is a LIVE gate for other rows creates the
+starvation retroactively, and `cancel_work` does not refuse it - the guard is at enqueue. Measured on
+the live store (probe below): of the 67 dead gates, the dependents were registered first and the gate
+row was cancelled afterwards, so the enqueue guard alone does not close the whole failure mode. The
+rule for an operator today: when closing a container, `complete_work` it, never `cancel_work` it.
+
+**The measurement that motivated it** (`node tools/probes/gate-starvation-census.mjs --db <store>`, run
+2026-11-12 on `selfdev.sqlite`, exit **0**): 7,130 rows, **484** gate references, **67** of them naming a
+CANCELLED row, **19** of those dependents still `held` or `deferred` - permanently unclaimable and
+invisible in every count that says "queued". Three gates name a row that is itself a parked
+registration (`park class rule`): the umbrella-as-gate category error, counted rather than guessed.
+
+**Unverified, stated as a gap:** there is still **no `check` rule** that detects this shape today. The
+rule was registered as #3747 ("check rule for a NON-TERMINAL item whose `blockedBy` names a
+CANCELLED/SUPERSEDED id") - that row is still `held` (created `held`, never transitioned), and
+`src/checkup.mjs` contains no such rule (grep `blockedBy` in it returns nothing). The enforcement is
+now the enqueue guard plus the two read surfaces; the `check` rule is the missing third one.
 
 ## Verify
 
@@ -224,6 +253,12 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
   `hold_work` handler of `src/rig.mjs` makes `node demo/hold-queued-row.test.mjs` exit 1 on "the park class is
   recorded on the row"; restoring the line returns it to exit 0.
 - The intent result file has `"delivered":true`.
+- **The census is re-runnable** (run 2026-11-12, exit 0):
+
+  ```bash
+  node tools/probes/gate-starvation-census.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite; echo "exit=$?"
+  ```
+
 - After `pm` acts, the targeted rows are no longer `held` (re-run Diagnose step 2 and watch the candidate
   count fall), and the dependent work is `queued`/`claimed`.
 - If a doc was "delivered but unlanded", it appears on `main` after the landing window:
@@ -236,6 +271,27 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore 
 
   Its assertion reads `a gate on a CANCELLED item is NOT workable (terminal != done)` and
   `...reason is gate-cancelled` (`demo/workable-claim.test.mjs:74-75`).
+- **The write-path guard is pinned by a demo** (#6215, run 2026-11-12, exit **0**):
+
+  ```bash
+  node demo/gate-cancel-refusal.test.mjs; echo "exit=$?"     # exit 0
+  ```
+
+  It proves four things separately: `deadGateIds` distinguishes cancelled (dead) / done (fine) /
+  absent (ambiguous); a dead-gated row is unclaimable on 50 consecutive claim passes under both claim
+  strategies; the queue line carries `DEAD-GATE=#<id>`; and `enqueueItem` on a real harness **throws and
+  writes nothing**, while a gate on a `done` row and a gate on a nonexistent id still go through.
+
+  Falsifier, actually run 2026-11-12 (the same probe against the pre-change tree):
+
+  ```bash
+  node tools/probes/gate-cancel-starvation.mjs                      # AFTER: guard present? YES - enqueue threw; the row does not exist  (exit 0)
+  git worktree add --detach .verify-head HEAD                       # the tree before this change
+  ln -s <repo>/node_modules .verify-head/node_modules
+  cd .verify-head && node tools/probes/gate-cancel-starvation.mjs    # BEFORE: guard present? NO - the row was written; workable on 0 of 50 claim passes, reason gate-cancelled:#1  (exit 0)
+  ```
+
+  The BEFORE line is the defect in one line: the row exists, and nothing can ever make it claimable.
 - **The release authority is pinned by a demo** (run 2026-11-10, exit 0, #6112):
 
   ```bash
