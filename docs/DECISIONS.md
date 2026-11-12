@@ -11829,3 +11829,25 @@ architecture, sprawl measurement). Registering the build items (ROADMAP **358–
 Rejected with a reason, not silently: a purpose-prefix naming taxonomy enforced by a linter (ROADMAP **362**) —
 no fetched source shows one enforced, and a naming rule the tooling cannot enforce is a rule set that gets
 violated silently.
+
+## D267 — 2026-11-12T04:5xZ: **claimability stays depth-1 and stranding is a separate, bounded graph walk; the by-id claim verb is not exempt from the gate** (architect, item #6999; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0`; tree = branch `item-6999` @ fork of `ed84f0b4`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1. Provisional number: unlanded branch `item-6926` carries a provisional D266; the landing pass re-derives, do not assume 267.)
+
+**Status.** Accepted for the predicate contract; the code change is NOT landed — it is routed to `pm` as build legs.
+
+**Context.** `workable()` (src/rig.mjs:320-335) is the ratified claim/wake predicate (#2673/#2677). Lead's #6999 asks whether workability is *transitive*: #5953 and #5954 gate on #5947, which is itself gated on the cancelled #5945, so a "live" gate is unworkable. Two probes on this tree: `node tools/probes/workability-transitivity-6999.mjs` (exit 1 — three assertions fail) and `node tools/probes/nested-gate-census-6999.mjs` (exit 0) over `node cli.mjs queue --json --no-body` (7101 rows): 405 gated rows, 61 with a directly cancelled hop, 155 open at depth 1, and **15 permanently uncloseable** (9 with a cancelled hop deeper down, 6 cycles). `node demo/workable-claim.test.mjs` exits 0 — the ratified depth-1 semantics are intact.
+
+**Decision.**
+1. **Claimability is not, and must not become, recursive.** Every hop that is not `done` already fails at depth 1 (queued, held, deferred, claimed, cancelled). Treating a hop that is merely *capable of closing* as satisfied would weaken the gate, not strengthen it.
+2. **Stranding is a different question and gets its own predicate**: one bounded walk (`visited` set, `MAX_DEPTH = 8`, cycle-guarded) that answers "can this row ever be claimed, and which hop is the blocker". It reports the hop and the path; it never decides.
+3. **One walk, one vocabulary.** `deadGateId`, the release refusal, the held-row audit class and BOTH claim paths call the same function. Today they do not: src/rig.mjs:855-858 admits any `to === me && status === "queued"` row without consulting the predicate — the probe claimed an unworkable row — and src/heldgate.mjs:105-107 calls a row a `release-candidate` when every hop is "terminal", counting `cancelled` as closed, while the predicate calls a cancelled hop a positive unworkability.
+4. **The reason string keeps its shape and gains the hop**: `{workable, reason, hop, chain}`.
+
+**Options considered.** (a) Make `workable` recursive — cheapest, rejected: weakens the gate and re-walks the graph on every wake. (b) Materialize a `stranded`/`gateClosed` field at mint — rejected: the verdict goes stale the instant a hop changes status, which is the drift qa measured in #6853, and it needs a write path plus an invalidation fan-out D53 forbids inventing without a ruling. (c) Chosen: depth-1 claimability plus a read-time bounded walk. (d) Hand-fix the 15 rows — rejected: the shape recurs with every cancel.
+
+**Consequences.**
+- **Accepted cost:** a bounded walk per wake/claim (≤ 8 hops, gated rows only) and one `Map` built per call site instead of `items.find` over 7101 rows.
+- **Reversibility:** high. Delete the walk and the previous semantics return exactly; no schema, no new field, no write path.
+- **Behaviour change worth watching:** by-id claims that today succeed on gated, unworkable rows will now be refused with a legible reason. Seats that relied on that path will see a refusal instead of a claim — that is the fix, and it is observable in the transitions.
+- **New observability:** `cancel_work` can report the dependents it strands (15 today) without deciding anything about them (#3575: the report may accept, never decide).
+- **Failure modes closed, each with its probe:** buried dead hop (probe assertion 2); cycle that never converges (assertion 3, bounded ms); wake/release/claim disagreeing (assertion 4); depth cap truncation reported, not swallowed; dangling hop ids keep the ratified conservative default but say so.
+- **Open, not decided here:** what to do with #5953/#5954/#5948 (scope, `lead`) and the ship order relative to #6530 and #6659 (sequencing, `pm`).
