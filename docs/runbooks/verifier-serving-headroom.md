@@ -31,6 +31,16 @@ Both were wrong for the seat model. The alternation refusal is real, but the eng
 **verifier** engine, not this rig's local seat model (measured below), and the three seats that actually died died in
 **compaction**. **Read the `detail` field first.**
 
+## Diagnose (read-only)
+Read the cause before the size. The rig's own verbs answer these without a model, a key or a GPU:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json | grep -c model_error   # how many seats are settling unanswered on a model. Exit 1 = none
+DURIG_DB=./selfdev.sqlite node cli.mjs check                                 # the attention kinds the rig already computed
+```
+
+**The limit, named:** the field that actually names the cause - `detail` - sits **inside** the `record` JSON column of `submissions`, and there is no read-only SQL reader the harness will run (`sqlite3` is not on this box; `node:sqlite` only through inline code, which the harness reports as "runs inline code, not a script in the tree"). Likewise the serving capacity (`GET http://127.0.0.1:8080/v1/models`, `n_ctx`) and the GPU room are live-endpoint and host-state reads, both refused by the allowlist. So CI can run the two lines above; Step 0's `node -e` probe and Steps 2-4's server reads are hand-run, and the GPU numbers in this runbook are dated (2026-10-30) for exactly that reason.
+
 ## Step 0 — read the cause: the `detail` field of the submission record
 
 `status` (`unanswered`) and `reason` (`model_error`) are symptoms. The field that names the cause is **`detail`**, and

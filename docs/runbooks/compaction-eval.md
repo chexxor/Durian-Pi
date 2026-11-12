@@ -33,7 +33,14 @@ spend the operator's DeepInfra key: DURIG_PROVIDER must be deepinfra and DEEPINF
 every firing chain prints the cost estimate and needs `--yes`.
 
 ## Diagnose (read-only)
-The engine is offline-proven: re-run `node demo/compacteval.test.mjs` to confirm it without spending tokens, and read the effective window from the last `window-*.json` report rather than guessing from the advertised number. Nothing live is needed to diagnose a formatting concern.
+Two things can be settled without spending a token: whether the engine is proven, and what the rig's config CLAIMS about compaction (the resolved policy is not printed here - see `docs/SELFDEV.md` pitfall 48).
+
+```bash
+node demo/compacteval.test.mjs                                    # the engine proof. It is in the suite, and the fixture does not carry demo/, so CI reports it as a gap
+DURIG_DB=./selfdev.sqlite node cli.mjs config | grep -i compaction   # what the config claims. An unset key prints null
+```
+
+**The limit, named:** the effective-window sweep this runbook is about cannot be executed by the CI harness - it needs the operator's DeepInfra key and a live endpoint (the harness reports such lines as "needs a live network endpoint"), and its `window-*.json` reports live in `.spike/`, which the throwaway fixture does not contain. So the Diagnose block proves the engine and reads the config surface; the measurement itself has to be run by hand against the endpoint, and its numbers are only as fresh as the last report you can point at.
 
 ## Do
 The ENGINE (src/compacteval.mjs) is offline-proven by the demo; do not re-prove it live.

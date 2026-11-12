@@ -66,29 +66,30 @@ const NOTHING_EXECUTED = [
   // throwaway fixture cannot contain (.spike/acceptance-seed/acceptance-snapshot.sqlite) and
   // start with `cd`, which the read-only allowlist refuses. Measured DIAG_DEBUG output, 2026-11-10.
   "compaction-acceptance-measure.md",
-  "compaction-eval.md",
   "constitution-amendment.md",
   "docs-encoding-mojibake.md",
   "format-before-commit.md",
   "git-form-refusal.md",
-  "harness-compaction-guard.md",
   "local-provider-down.md",
   "merge.md",
   "per-row-marker.md",
   "prepare-workspace-etarget.md",
-  "research-request.md",
   "session-start-cost.md",
   "spend-cap-tripped.md",
-  "store-corruption-recovery.md",
-  "store-probe-identity.md",
   // Added when this runbook landed: its probe takes a live network endpoint
   // (--base=https://api.deepinfra.com/v1/openai), which the allowlist refuses, and its second
   // line needs the live store. Measured DIAG_DEBUG output, 2026-11-10.
   "verifier-leg-unfunded.md",
-  "verifier-model-server.md",
-  "verifier-serving-headroom.md",
-  "workspace-move.md",
 ];
+
+// Eight runbooks were in this list until #6369 (2026-11-11): compaction-eval, harness-compaction-guard,
+// research-request, store-corruption-recovery, store-probe-identity, verifier-model-server,
+// verifier-serving-headroom, workspace-move. They had no `## Diagnose` heading or no fenced command block,
+// so CI could not execute a single line from them. Each now carries a Diagnose block whose rig-side lines
+// run against the fixture (measured DIAG_DEBUG output: only two gaps remain across the eight - the
+// `demo/compacteval.test.mjs` line, which the fixture does not carry, and the arm-probe line, whose
+// `<model>`/`<endpoint>` placeholders have no fixture value), and the rest of the diagnosis is stated as
+// a named limit in the runbook text.
 
 function run(cmd, args, cwd, env = {}) {
   const r = spawnSync(cmd, args, { cwd, env: { ...process.env, ...env }, encoding: "utf8", timeout: 30000 });
