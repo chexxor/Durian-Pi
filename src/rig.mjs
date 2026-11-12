@@ -17,6 +17,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
+import { validateHumanDefer } from "./deferlease.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 import {
 	DEFAULT_STRATEGY,
@@ -1207,6 +1208,12 @@ const Router = defineExtension({
 					description:
 						"seat to ask as well as deferring; omit to defer to the human operator",
 				})),
+				// OPERATOR RULING 2026-11-12T20:2xZ: parking on the operator is a LEASE. Without a deadline the
+				// park is a place for work to disappear — 493 rows were sitting there with a median age of 5 days.
+				resumeBy: opt(str({
+					description:
+						"REQUIRED when deferring to the human operator: an ISO-8601 instant at most 5 days out. At that instant the row escalates to `lead`, who decides rather than leaving it parked.",
+				})),
 			}),
 			replay: "safe",
 			execute: async (args, api, context) => {
@@ -1252,8 +1259,14 @@ const Router = defineExtension({
 								deliverable = false;
 							}
 						}
+						// THE LEASE (operator ruling 2026-11-12T20:2xZ): a park on the human needs a clock, and the
+						// refusal names the legal alternative in the same breath (ask `lead`/`pm`, or hold with a lease).
+						const lease = validateHumanDefer({ to: args.to === undefined ? DEFERRED_TO_HUMAN : args.to, resumeBy: args.resumeBy });
+						if (!lease.ok) return lease.refusal;
 						item.status = "deferred";
 						item.question = args.question;
+						if (lease.resumeBy) item.deferLease = { resumeBy: lease.resumeBy, by: me, at: new Date().toISOString() };
+						else delete item.deferLease;
 						// #4574: and the default is HONEST. "nobody was asked" and "the operator was asked" are DIFFERENT
 						// FACTS; `args.to ?? DEFERRED_TO_HUMAN` made them indistinguishable and manufactured "human".
 						item.deferredTo = args.to ?? DEFERRED_TO_NOBODY;
@@ -1262,6 +1275,7 @@ const Router = defineExtension({
 							event: "deferred",
 							by: me,
 							to: item.deferredTo,
+							...(lease.resumeBy ? { resumeBy: lease.resumeBy } : {}),
 						});
 						if (args.to && deliverable) {
 							await enqueueItem(
@@ -1284,6 +1298,9 @@ const Router = defineExtension({
 							}
 							if (!deliverable) {
 								return `item #${item.id} parked on ${args.to} — NOT delivered, because the org edge forbids sending to that seat, but the seat is recorded as the one that should ANSWER and it is visible through attention/status. Resume your own item with resume_work(${item.id}) once it answers.`;
+							}
+							if (args.to === DEFERRED_TO_HUMAN) {
+								return `item #${item.id} deferred to the human operator until ${lease.resumeBy}; if nobody answers by then it ESCALATES to lead, who decides. Resume it with resume_work(${item.id}) once you have the answer.`;
 							}
 							return `item #${item.id} deferred to ${args.to}; that seat has the question. Resume your own item with resume_work(${item.id}) once it answers.`;
 					}, context);

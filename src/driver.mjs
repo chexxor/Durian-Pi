@@ -17,6 +17,7 @@
 // (#6112), and the drift here is invisible: the seat wakes, `claim_work` refuses, and the log says
 // nothing about why.
 import { workable } from "./rig.mjs";
+import { escalations, escalationSignature } from "./deferlease.mjs";
 
 /**
  * The wake a seat is sent. A fixed string on purpose: the wake is committed as a
@@ -122,8 +123,29 @@ export function selectWakes({
   onParked = () => {},
 }) {
   const wakes = [];
+  // THE ESCALATION PATH (operator ruling 2026-11-12T20:2xZ): a park on the human operator is a LEASE, and when
+  // the clock runs out `lead` decides rather than the row idling. Measured before this existed: 493 rows parked
+  // on the operator at a median age of 5 days, 84 of them landing work, while the operator was away — the queue
+  // looked stalled and the rig said "waiting on human" nine times.
+  //
+  // The wake is DEDUPED on the escalation signAPture (same rule as a parked seat, #5740): a wake that carries no
+  // new information would dirty the scheduler and sustain the loop. `lead` is woken only if it is a real seat,
+  // not pending, not busy and not stopped — the ordinary guards apply, the escalation is just a new REASON.
+  const escalationCensus = escalations(items ?? []);
+  const escalationSig = escalationSignature(escalationCensus.rows);
   for (const [name, seat] of Object.entries(seats ?? {})) {
     const convId = seat.conversationId;
+    // An ESCALATION reachable by this seat: `lead` owns deciding a park the operator did not answer. It is
+    // added to the seat's wake reasons below rather than short-circuiting the other branches, so a lead with
+    // its own claimable work is woken ONCE with both reasons named.
+    const carriesEscalation =
+      escalationCensus.count > 0 &&
+      name === "lead" &&
+      !paused &&
+      !pendingConvIds.has(convId) &&
+      !busySeats.has(convId) &&
+      !stoppedConvIds.has(convId) &&
+      (parkedChanged === null || parkedChanged(name, `escalation:${escalationSig}`));
     // ROADMAP 131: while PAUSED, do NOT wake a seat to CLAIM new work. In-flight work
     // still settles, so the stalled-claim branch below stays open: pause gates TAKING
     // new work, never FINISHING current work.
@@ -157,7 +179,7 @@ export function selectWakes({
     if (parkedSig !== "") {
       onParked({ seat: name, reason: parkedUnchanged ? "deduped" : "set-changed" });
     }
-    if (!hasQueued && !hasStalledClaim && !hasParked) {
+    if (!hasQueued && !hasStalledClaim && !hasParked && !carriesEscalation) {
       // `queued-gated:<code>` is reported ahead of `no-work` so the log distinguishes "this seat has rows
       // it cannot claim yet" from "this seat has nothing". Both were `no-work` before #6189.
       const reason = gatedReasons.length
@@ -181,7 +203,12 @@ export function selectWakes({
     }
     // #4557: the wake carries WHY it was sent, so the caller can pick a body that MATCHES the verb the seat
     // will actually reach for. Without it one string had to describe two different situations and lied about one.
-    wakes.push({ name, conversationId: convId, reason: hasQueued ? "queued" : hasStalledClaim ? "stalled-claim" : "parked" });
+    wakes.push({
+      name,
+      conversationId: convId,
+      reason: carriesEscalation && !hasQueued && !hasStalledClaim ? "escalation" : hasQueued ? "queued" : hasStalledClaim ? "stalled-claim" : "parked",
+      ...(carriesEscalation ? { escalationCount: escalationCensus.count } : {}),
+    });
   }
   return wakes;
 }

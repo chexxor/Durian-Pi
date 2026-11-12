@@ -40,6 +40,9 @@ import { MEASURES } from "./metrics.mjs";
 // The stranded-gate census lives with the repair it plans (src/queueops.mjs), so `check` reports exactly
 // the rows the operator/delegate repair verb would touch — one rule, one census.
 import { strandedGates } from "./queueops.mjs";
+// The escalation census lives with the lease that produces it (src/deferlease.mjs), so `check` reports
+// exactly the rows `selectWakes` escalates — one rule, one census.
+import { escalations, escalationText } from "./deferlease.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -134,6 +137,15 @@ export const RULES = [
     id: "duplicate-item",
     severity: "fix-now",
     what: "a non-terminal queue item is SAME-INTENT with an already-terminal item (same from/to/tier plus high subject overlap)",
+  },
+  {
+    // OPERATOR RULING 2026-11-12T20:2xZ: a park on the operator is a LEASE. Measured before it existed: 493
+    // rows `deferredTo: "human"` at a median age of 5 days (32% of the non-terminal queue), which is why the
+    // rig read as stalled while the team was closing 35 rows in 4 h. fix-now, like every census: 493 findings
+    // must never make `check` exit 1, but they must be visible without anyone running a tool by hand.
+    id: "human-deferral-past-clock",
+    severity: "fix-now",
+    what: "a row is parked on the human operator past its decision clock (or was parked before parks had one), so it escalates to lead",
   },
   {
     // THE READER THE ORPHANS NEVER HAD (operator ruling 2026-11-12T17:5xZ, src/queueops.mjs).
@@ -827,6 +839,26 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         `#${row.id}`,
         `#${row.id} (${row.status}, to ${row.to ?? "?"}) is gated on the CANCELLED #${row.gateId} — a cancelled gate can never be satisfied, so this row can never be claimed and nothing repairs the chain`,
         `release the dead gate: node intent.mjs queue --op queue --action repair-gates --id ${row.id} --apply  (propose first: drop --apply)`,
+      );
+    }
+  }
+
+  // 13c. HUMAN-DEFERRAL PAST CLOCK — the census behind the escalation wake (src/deferlease.mjs). A park on the
+  //    operator is a lease now; a row past it is a decision nobody made, and `lead` is woken with this same
+  //    count. One row per report rather than one per item: the operator reads a number and the oldest id.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "human-deferral-past-clock",
+      why: "the queue could not be read, so parked deferrals cannot be inspected",
+    });
+  } else {
+    const census = escalations(queueItems);
+    if (census.count > 0) {
+      add(
+        "human-deferral-past-clock",
+        `${census.count} deferral(s)`,
+        escalationText(census),
+        "lead decides: release one whose question is answerable from the standing rulings, re-route it to the seat that owns the decision, or answer it — and the park becomes bounded for every NEW deferral automatically",
       );
     }
   }

@@ -246,6 +246,7 @@ try {
 		"context-over-window": "demo/context-over-window.test.mjs",
 		"doc-count-drift": "demo/doc-count-drift.test.mjs",
 		"stranded-gate": "demo/queue-ops.test.mjs",
+		"human-deferral-past-clock": "demo/human-defer-lease.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

@@ -105,7 +105,10 @@ await call("worker", "claim_work", {});
 assert.equal((await item(1)).status, "claimed", "the item must be claimed before it can be deferred");
 
 const itemsBefore = (await queueState()).items.length;
-await call("worker", "defer_work", { itemId: 1, question: "Which widget did you mean?" });
+// OPERATOR RULING 2026-11-12T20:2xZ (demo/human-defer-lease.test.mjs): a park on the HUMAN is a lease, so
+// `resumeBy` is required. This call used to omit it, which is exactly the shape that put 493 rows in the
+// operator's queue for a median of 5 days.
+await call("worker", "defer_work", { itemId: 1, question: "Which widget did you mean?", resumeBy: new Date(Date.now() + 2 * 86400000).toISOString() });
 
 const parked = await item(1);
 assert.equal(parked.status, "deferred", "deferring parks the item rather than leaving it claimed");

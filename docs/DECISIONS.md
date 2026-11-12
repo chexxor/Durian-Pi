@@ -11923,3 +11923,18 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+**D273 — a park on the operator is a LEASE, and when it lapses `lead` decides (2026-11-12T20:2xZ).** Decided by the
+operator, on the delegate's recommendation "lead decides, pm routes, with a 5-day lease". The measurement that forced it:
+**493 rows carried `deferredTo: "human"`** — 32% of the non-terminal queue, median age 5 days, oldest 23, and **84 of them
+were LANDING work** while the operator was away. The team was not idle (35 rows closed in 4 h, 1,227 generations, 0 failed);
+it was addressed to an absent human, and `status` reported that as nine separate alarms. Why not the alternatives: refusing
+human deferral outright (option b) hides genuinely operator-only questions and stops a seat dead; leaving it to a lease that
+auto-resumes (option c) lets work proceed on a decision nobody made. So the row still records WHO WAS ASKED (unchanged,
+because rewriting the audience would erase the evidence that the operator never answered) and the escalation is a separate
+fact: `validateHumanDefer` refuses a human park without `resumeBy` (≤ 5 days, our bound), `defer_work` persists it in
+`deferLease` and in the transition, `escalations()` is the census (it counts the LEGACY rows with no clock — otherwise a
+rule that only sees new parks fixes none of the 493), `selectWakes` wakes `lead` once per changed escalation set with reason
+`escalation`, and `check` rule 25 `human-deferral-past-clock` gives the census a reader. Evidence: `demo/human-defer-lease.test.mjs`
+(exit 0), suite 314/314. Enforced by `demo/defer.test.mjs`, whose old call omitted `resumeBy` — the exact shape that produced
+the 493.
