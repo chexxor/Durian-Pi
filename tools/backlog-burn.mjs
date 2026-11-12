@@ -48,7 +48,12 @@ if (!snaps.length) {
 }
 
 const cut = hours > 0 ? Date.now() - hours * 3600 * 1000 : 0;
-const win = snaps.filter((s) => new Date(s.at).getTime() >= cut);
+let win = snaps.filter((s) => new Date(s.at).getTime() >= cut);
+if (!win.length) {
+	// A ledger older than the window still has to answer the question, not crash.
+	console.log(`note: no snapshot in the last ${hours} h — using the whole ledger (${snaps.length} snapshots)`);
+	win = snaps;
+}
 const first = win[0];
 const last = win[win.length - 1];
 const mins = (new Date(last.at) - new Date(first.at)) / 60000;
@@ -57,7 +62,7 @@ const STATES = ["done", "cancelled", "held", "deferred", "claimed", "queued"];
 const total = (q) => STATES.reduce((a, k) => a + (q[k] ?? 0), 0);
 
 console.log(
-	`backlog burn ${first.at} -> ${last.at}  (${snaps.length} queue snapshots in window, ${win.length} used, span ${Math.round(mins)} min)`
+	`backlog burn ${first.at} -> ${last.at}  (ledger has ${snaps.length} queue snapshots; ${win.length} in the ${hours > 0 ? hours + "h" : "all"} window; span ${Math.round(mins)} min)`
 );
 console.log(`  ledger ${ledger}`);
 for (const k of STATES) {
@@ -69,5 +74,12 @@ const closedDelta = (last.queue.done ?? 0) + (last.queue.cancelled ?? 0) - ((fir
 const openDelta = (last.queue.queued ?? 0) + (last.queue.claimed ?? 0) + (last.queue.held ?? 0) + (last.queue.deferred ?? 0) -
 	((first.queue.queued ?? 0) + (first.queue.claimed ?? 0) + (first.queue.held ?? 0) + (first.queue.deferred ?? 0));
 console.log(`  verdict: ${closedDelta} rows closed, ${openDelta >= 0 ? "+" : ""}${openDelta} open rows in the window -> backlog ${openDelta > 0 ? "GROWING" : openDelta < 0 ? "shrinking" : "flat"}`);
-console.log(`  refs ${first.refs} -> ${last.refs} (${last.refs - first.refs}), worktrees ${first.worktrees} -> ${last.worktrees} (${last.worktrees - first.worktrees})`);
-if (last.mainSha) console.log(`  main ${first.mainSha} -> ${last.mainSha}${first.mainSha === last.mainSha ? "  (NOT MOVING: nothing landed)" : "  (moving: landings happened)"}`);
+const wt = (s) => (typeof s.worktrees === "number" ? s.worktrees : null);
+console.log(
+	`  refs ${first.refs} -> ${last.refs} (${last.refs - first.refs})` +
+		(wt(first) !== null && wt(last) !== null ? `, worktrees ${wt(first)} -> ${wt(last)} (${wt(last) - wt(first)})` : "")
+);
+if (last.mainSha) {
+	if (!first.mainSha) console.log(`  main ${last.mainSha} (first snapshots in this ledger predate the mainSha field, so no comparison is possible)`);
+	else console.log(`  main ${first.mainSha} -> ${last.mainSha}` + (first.mainSha === last.mainSha ? "  (NOT MOVING: nothing landed)" : "  (main moved — a landing is only PROVEN when refs fall; a delegate commit also moves main)"));
+}

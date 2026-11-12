@@ -160,14 +160,53 @@ function snapshot(db, ledger, withQueue) {
 	return line;
 }
 
-function restart(db, maxDuration) {
-	spawnSync("node", [CLI, "serve", "--stop"], {
+// Is a live pid the resident broker? `serve --stop` writes a flag; a loop that broke out at
+// --max-duration never reads it, so the process lingers and `--start` refuses with
+// `START REFUSED: broker-degraded` (measured 2026-11-12T11:22Z and 11:37Z: two consecutive failed
+// re-arms, which made THIS loop exit 1 and leave the fleet unattended). The documented remedy for
+// that shape is `kill -TERM <pid>` (docs/runbooks/broker-down-or-stalled.md). The guard below is
+// what makes that safe: only a pid the state file names AND whose cmdline is `cli.mjs serve` is
+// touched — never a seat, never a suite's /tmp fake broker.
+function isResidentBroker(cmdline) {
+	return /cli\.mjs serve/.test(String(cmdline || ""));
+}
+
+function brokerCmdline(pid) {
+	const r = spawnSync("ps", ["-o", "args=", "-p", String(pid)], { capture: true, timeout: 10000, encoding: "utf8" });
+	return (r.stdout || "").trim();
+}
+
+async function stopBroker(db) {
+	const pid = readBrokerState(db)?.pid ?? null;
+	const stop = spawnSync("node", [CLI, "serve", "--stop"], {
 		cwd: REPO,
 		capture: true,
 		timeout: 60000,
 		encoding: "utf8",
 		env: { ...process.env, ...providerEnv(), DURIG_DB: db },
 	});
+	if (!pid || !brokerProcessAlive(pid)) return { ok: true, how: "graceful", pid, out: stop.stdout.trim().slice(-300) };
+	const cmd = brokerCmdline(pid);
+	if (!isResidentBroker(cmd)) return { ok: false, how: "refused", pid, reason: `pid ${pid} is alive but is not the resident broker (cli.mjs serve); cmdline: ${cmd.slice(0, 120)}` };
+	// Parked-loop shape: the stop flag is invisible to it. TERM is the runbook's remedy.
+	try {
+		process.kill(pid, "SIGTERM");
+	} catch (e) {
+		return { ok: false, how: "term_failed", pid, reason: e.message };
+	}
+	const deadline = Date.now() + 20000;
+	while (Date.now() < deadline && brokerProcessAlive(pid)) await new Promise((res) => setTimeout(res, 1000));
+	return {
+		ok: !brokerProcessAlive(pid),
+		how: "term",
+		pid,
+		reason: brokerProcessAlive(pid) ? `pid ${pid} still alive 20 s after SIGTERM; not starting a second writer` : "parked broker TERM'd",
+	};
+}
+
+async function restart(db, maxDuration) {
+	const s = await stopBroker(db);
+	if (!s.ok) return { ok: false, out: s.reason, err: "", stop: s.how };
 	const r = spawnSync(
 		"node",
 		[SERVE, "--start", "--no-probe", "--yes-pm-wakes", "--max-duration", String(maxDuration)],
@@ -179,10 +218,10 @@ function restart(db, maxDuration) {
 			env: { ...process.env, ...providerEnv(), DURIG_DB: db },
 		}
 	);
-	return { ok: r.status === 0, out: r.stdout.trim().slice(-500), err: r.stderr.trim().slice(-500) };
+	return { ok: r.status === 0, out: r.stdout.trim().slice(-500), err: r.stderr.trim().slice(-500), stop: s.how };
 }
 
-export { rearmVerdict, countIntentFiles, snapshot, providerEnv };
+export { rearmVerdict, countIntentFiles, snapshot, providerEnv, isResidentBroker, stopBroker };
 
 // A demo imports this file to test the RULE; only a command-line run drives a broker. (First version
 // ran the loop at import time, which is why the guard is a block and not a process.exit — exiting on
@@ -214,9 +253,9 @@ while (Date.now() < until) {
 	const verdict = rearmVerdict(snap, stale);
 	if (verdict.shouldRearm && !flag("--no-restart")) {
 		console.log(`${snap.at} broker ${verdict.dead ? "DEAD" : "STRANDED (no pass " + snap.lastPassAgeS + "s, " + snap.pendingIntents + " intent(s) waiting)"} -> re-arming`);
-		const r = restart(db, maxDuration);
+		const r = await restart(db, maxDuration);
 		fails = r.ok ? 0 : fails + 1;
-		console.log(`  re-arm ${r.ok ? "ok" : "FAILED"}: ${r.out || r.err}`);
+		console.log(`  re-arm ${r.ok ? "ok" : "FAILED"} (stop leg: ${r.stop ?? "-"}): ${r.out || r.err}`);
 		if (fails >= 2) {
 			console.error("two consecutive re-arms failed; stopping so a human reads the state");
 			process.exit(1);
