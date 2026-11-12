@@ -93,6 +93,15 @@ console.log("\n=== 3. LEAD IS WOKEN, ONCE, AND ONLY WHEN THE SET CHANGES ===");
   assert.equal(wakeFor(escalated, { paused: true }).find((w) => w.name === "lead"), undefined, "a PAUSED rig wakes nobody");
   assert.equal(wakeFor(escalated, { busySeats: new Set(["lead"]) }).find((w) => w.name === "lead"), undefined, "a busy lead is not woken");
   assert.equal(wakeFor(escalated, { pendingConvIds: new Set([21]) }).find((w) => w.name === "lead"), undefined, "a lead already mid-submission is not woken");
+
+  // THE SUPPRESSION-ORDER DEFECT this demo caught: the dedup signature was first consulted BEFORE the
+  // pending guard, so the pass that logged `SKIP lead reason=pending` also recorded the escalation as "told"
+  // — and the wake never came once the turn settled. Here the signature is taken only when the wake ISSUES,
+  // so a pending pass does not consume it.
+  const seenDuringPending = new Set();
+  const pendingChanged = (_seat, sig) => (seenDuringPending.has(sig) ? false : (seenDuringPending.add(sig), true));
+  assert.equal(wakeFor(escalated, { pendingConvIds: new Set([21]), parkedChanged: pendingChanged }).find((w) => w.name === "lead"), undefined, "pending suppresses the wake");
+  assert.ok(wakeFor(escalated, { parkedChanged: pendingChanged }).find((w) => w.name === "lead"), "and the SAME set still escalates once lead is free — the suppressed pass did not spend the signature");
   assert.equal(wakeFor(escalated, { stoppedConvIds: new Set([21]) }).find((w) => w.name === "lead"), undefined, "a stopped lead is not woken");
   console.log("  ok   escalation wakes lead once per changed set; empty/inside-clock/paused/busy/pending/stopped do not");
 }

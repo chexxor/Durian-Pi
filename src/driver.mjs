@@ -138,14 +138,13 @@ export function selectWakes({
     // An ESCALATION reachable by this seat: `lead` owns deciding a park the operator did not answer. It is
     // added to the seat's wake reasons below rather than short-circuiting the other branches, so a lead with
     // its own claimable work is woken ONCE with both reasons named.
-    const carriesEscalation =
-      escalationCensus.count > 0 &&
-      name === "lead" &&
-      !paused &&
-      !pendingConvIds.has(convId) &&
-      !busySeats.has(convId) &&
-      !stoppedConvIds.has(convId) &&
-      (parkedChanged === null || parkedChanged(name, `escalation:${escalationSig}`));
+    // NOTE the dedup is NOT consulted here, and that ordering is load-bearing: this value is read BEFORE the
+    // pending/busy guards, so consuming the signature here would record an escalation as "told" on a pass that
+    // then suppressed the wake (measured shape: `SKIP lead reason=pending conv=21` on the pass that would have
+    // escalated). The signature is taken at the PUSH below, where the wake actually issues.
+    // `stopped` is checked HERE because nothing later does; pending/busy are checked below, after this value
+    // is read, which is exactly why the dedup signature is taken at the push instead.
+    const escalationRelevant = escalationCensus.count > 0 && name === "lead" && !paused && !stoppedConvIds.has(convId);
     // ROADMAP 131: while PAUSED, do NOT wake a seat to CLAIM new work. In-flight work
     // still settles, so the stalled-claim branch below stays open: pause gates TAKING
     // new work, never FINISHING current work.
@@ -179,7 +178,7 @@ export function selectWakes({
     if (parkedSig !== "") {
       onParked({ seat: name, reason: parkedUnchanged ? "deduped" : "set-changed" });
     }
-    if (!hasQueued && !hasStalledClaim && !hasParked && !carriesEscalation) {
+    if (!hasQueued && !hasStalledClaim && !hasParked && !escalationRelevant) {
       // `queued-gated:<code>` is reported ahead of `no-work` so the log distinguishes "this seat has rows
       // it cannot claim yet" from "this seat has nothing". Both were `no-work` before #6189.
       const reason = gatedReasons.length
@@ -203,11 +202,19 @@ export function selectWakes({
     }
     // #4557: the wake carries WHY it was sent, so the caller can pick a body that MATCHES the verb the seat
     // will actually reach for. Without it one string had to describe two different situations and lied about one.
+    if (escalationRelevant) {
+      // The wake is about to ISSUE, so this is where the escalation set is marked as told.
+      const fresh = parkedChanged === null || parkedChanged(name, `escalation:${escalationSig}`);
+      if (!fresh && !hasQueued && !hasStalledClaim) {
+        onSkip({ seat: name, reason: "escalation-deduped" });
+        continue;
+      }
+    }
     wakes.push({
       name,
       conversationId: convId,
-      reason: carriesEscalation && !hasQueued && !hasStalledClaim ? "escalation" : hasQueued ? "queued" : hasStalledClaim ? "stalled-claim" : "parked",
-      ...(carriesEscalation ? { escalationCount: escalationCensus.count } : {}),
+      reason: escalationRelevant && !hasQueued && !hasStalledClaim ? "escalation" : hasQueued ? "queued" : hasStalledClaim ? "stalled-claim" : "parked",
+      ...(escalationRelevant ? { escalationCount: escalationCensus.count } : {}),
     });
   }
   return wakes;
