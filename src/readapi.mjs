@@ -392,18 +392,23 @@ export async function readRigControl(storage, context = BACKGROUND_CONTEXT) {
 			"current",
 			context,
 		);
-		if (!rec) return { paused: false, pausedAt: null, pausedBy: null, reason: null };
+		if (!rec) return { paused: false, pausedAt: null, pausedBy: null, reason: null, directive: null };
 		const value = (await storage.document(rec.id, "current", context))?.value ?? {};
 		return {
 			paused: value.paused === true,
 			pausedAt: value.pausedAt ?? null,
 			pausedBy: value.pausedBy ?? null,
 			reason: value.reason ?? null,
+			// The active DIRECTIVE (src/queueops.mjs `planDirective`). A reordering policy the operator
+			// cannot see in the read they already make is the accepted-and-ignored class: it would
+			// reorder claims invisibly. Expiry is reported, never applied, here — the ordering function
+			// is the single place that decides whether a lapsed lease still means anything.
+			directive: value.directive ?? null,
 		};
 	} catch {
 		// A viewer must survive a corrupt control document: read it as unpaused rather
 		// than killing `status`/`watch` (the same discipline as an unreadable pi.live).
-		return { paused: false, pausedAt: null, pausedBy: null, reason: null, unreadable: true };
+		return { paused: false, pausedAt: null, pausedBy: null, reason: null, directive: null, unreadable: true };
 	}
 }
 

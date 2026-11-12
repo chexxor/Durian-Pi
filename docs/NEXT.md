@@ -1,8 +1,8 @@
-# NEXT.md — current state and next actions
+**Last update:** 2026-11-12T18:0xZ (delegate session **N38 cont.** — operator away; directives: **finish the backlog, land every branch, clean up**, then **ratified delegate propose-and-apply** and **"implement that now, yourself, without routing"**). `main` = **`e7b4ab2a`** (26 local commits, unpushed). **Still zero seat landings**: refs **147**, worktrees **137**, every `main` commit this window is a delegate commit. Fleet alive: broker pid **1696735** (keepalive pid **1518138**, bounded `--until 2026-11-13T06:00:00Z`), 0 failed generations.
 
-**Last update:** 2026-11-12T15:0xZ (delegate session **N38 cont.** — operator away until tomorrow, one directive: **finish the backlog, land every branch, clean up**. **Still nothing landed**: `main` = `99a8bc75` (14 local commits, unpushed), every `main` commit this window is a delegate commit; refs **135**, worktrees **125**, **0** seat landings. The fleet **stopped** at 14:19:15Z (`EXIT pid=56117 reason=max-duration passes=73`, last PASS 12:46:43Z) and ran unattended 13:51–14:48Z; re-armed 14:48:54Z (keepalive loop + broker pid **1273802**, bounded `--until 2026-11-13T06:00:00Z`), 40 generations in the first 15 min, 0 failed. Full state: `.ai-work/overnight-fleet/STATE.md`.
-**Why the landing pass is stuck, measured twice:** (a) the gate refusal is environmental — `impl` closed #7124 with `STOPPED: demo/backlog-burn.test.mjs failed in the scratch worktree (exit 1)`, but the same 12 refs chained read-only onto `99e74c7e` (scratch `8e9b4c19`) ran **317/317 in 124.8 s** and onto `52f7a57b` (scratch `4602b60b`) that demo exited 0 — the #5793 environment class, not the branches; (b) the ROUTING block is a **gate chain**, not claim order: `queue --id 7128 --with-gates` → `blockedBy:[7126]` and #7126 is `deferred`, so `workable()` (`src/rig.mjs:327-343`) refuses it with `gate-open:#7126(deferred)`. pm's row #7136 ("priority leases are INERT, seats claim oldest-first") is **stale**: `rig.selfdev.json:4` sets the team `workStrategy` `priority_first` (impl/devtools repeat it, lines 35/127) and 63 leases are active, 0 lapsed.
-Live plan at `99a8bc75`: **62 refs placed, 0 unlandable, 113 commits ahead, 8 bins (12,12,12,12,10,1,1,1)**; census **61** need a landing entry, **8** already merged, **33** conflict with main (re-cut job), **12** uncommitted, **41** refs unaccounted in `docs/DISPOSITIONS.md`. `done` +33 vs `queued` +43 in 4 h → backlog **GROWING**; **301 of 1,545 non-terminal rows (19.5%)** are coordination meta-rows (`DONE #…`/`QUESTION #…`/`CANCELLED #…`), 119 addressed to pm, 49 to lead. pm is routing: revised #7128's body and queued **#7269 to lead** (rule the landing gate: absolute green main vs "no new red"). Intent `fe13803f-afbe-48b4-9c2c-6d0e581d8b7a` delivered 15:00:04Z. Instruments added this session: `tools/process-leak-scan.mjs` + `demo/process-leak-guard.test.mjs` + `docs/runbooks/process-leak-reap.md` + pitfalls **290-292** (`84a1a5d1`); `process-leak-scan` at 14:47Z: 0 orphans. The **lifecycle goal is PAUSED**; the delegate minted/claimed/completed/deferred no row and landed no branch.
+**THE QUEUE-CONTROL SEAM SHIPPED AND WAS USED ON THE LIVE RIG (operator-ratified, delegate-authored).** `src/queueops.mjs` (pure census + plans), spool op `queue` applied by the single writer, `intent.mjs --op queue --action repair-gates|priority|cancel|stranded`, and `check` rule **24 `stranded-gate`** (`35eee1a7`; 310/310 suite, 119.3 s). The defect it fixes was measured, not assumed: `workable()` treats a CANCELLED prerequisite as positive non-workability (lead-ratified #2677), so the dependent can never be claimed and nothing repaired the chain — 151 such rows existed, and the zero-build close had just stranded **#3503/#5885** behind cancelled #3377. Live use (all applied, all attributed `delegate (operator-authorised)`): **census 20 → 0** after a 20-row `repair-gates` apply (`5f42ca87`), 33 landing rows promoted to `now` with a lease to 2026-11-13T23:59Z (`81bfc34c`), taking `priority=now` from 8 to **41**; and a scoped leased **DIRECTIVE** on the control doc (`b31a566c`, surfaced by `c7ff4aab`): `{priority:now, subjectContains:"LANDING", expiresAt:2026-11-13T23:59Z}`, so rows minted after it are still covered — a fan-out puts the newcomer last, the directive puts it first (`demo/priority-directive-scope.test.mjs`). Propose is the default; nothing is written without `--apply`; the broker must RESTART to load a new spool op or projection (pitfall 295). Keepalive fixed the same pass: a transient `START REFUSED: live-tree-dirty` killed the loop at 18:04Z and took the fleet down — refusals are now DEFERRED (`f7ed214f`, pitfall 297).
+
+**Operator rulings (relayed to pm; the delegate routed nothing):** landing is the priority, in the order (a) close the 140 zero-build rows → (b) split #7278 into per-bin rows → (c) land while main is green → (d) prune → (e) 33 conflicting refs by author re-cut → (f) #7273 delta gate; the delegate holds **propose-and-apply** on order and eligibility, **propose-only on structure**; healing before verbs (shipped together, healing first in `src/queueops.mjs`). pm has cancelled **50+/140** and has not yet minted the 10 per-bin rows (bins sent as text 17:03Z — pm has no shell; 17:05Z plan: **10 bins, 72 refs, 137 commits ahead**). **Still the operator's call:** 18 commits await the push grant; #7278 is still `queued/now`. **The lifecycle goal is PAUSED** — do not resume it.
 
 **Milestone this window worked** — **a work-item lifecycle the team can run itself** (the goal the operator PAUSED):
 seats land their own verified branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless
@@ -99,9 +99,11 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live 12:2xZ, re-count before trusting): refs **124** / item branches **121** / worktrees
-**119**; census (**~10 s**): **53** refs need a landing decision and chain into **6 bins** (12,12,12,12,4,1), **0 unlandable**;
-**31** refs still have no DISPOSITIONS ruling. `main` = **`9655e761`** locally, **10 ahead of `origin/main` (`a18ede9e`) — NOT pushed** (operator grant). Queue census **7,222 rows**: 4,765 done / 936 cancelled / 424 held / 524 deferred / 13 claimed / 560 queued; the landing rows **#7124 `claimed`, #7126/#7128 still `queued`** — no branch has landed.
+**State at clock-out** (measured live 15:3xZ, re-count before trusting): refs **136** / worktrees **126**; census (**~10 s**):
+**63** refs need a landing entry, **33** conflict with main, **12** uncommitted; `landing-batch-plan` places **64** refs, 0
+unlandable, **119 commits ahead**. `main` = **`4b549e34`** locally, **15 ahead of `origin/main` — NOT pushed** (operator grant).
+Queue census **7,282 rows**: 4,792 done / 939 cancelled / 424 held / 524 deferred / 592 queued / 11 claimed; the landing rows
+**#7124 `done`, #7126/#7128 `cancelled`**, sweep **#7278 `queued` (priority `now`)** — no branch has landed.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
@@ -131,7 +133,7 @@ provisional `checkpointWhen` — is VERBATIM in [docs/NEXT-ARCHIVE.md](NEXT-ARCH
 cd /home/chexxor/Git/Durian-Pi
 node demo/cli-sigint-exits.test.mjs                   # the Ctrl-C proof: 130 within ~130 ms of the signal (4.97 s)
 node demo/cooldown-skip-line.test.mjs                 # 0.193 s — the demo the read-drain timer broke; run it 10x, not once
-node scripts/test.mjs --all --jobs 4                  # 299/299 in 115.0 s at `14ae744a`
+node scripts/test.mjs --all --jobs 4                  # 308/308 in 123.9 s at `4b549e34` (measured 15:3xZ) — main is GREEN, so the gate can be satisfied now
 node demo/next-pointer.test.mjs                       # the pointer cap: NEXT.md must stay <= 200 counted lines
 node tools/broker-serve.mjs --status                  # broker state; the 61 dead-letters are explained in the evidence doc §G
 DURIG_DB=./selfdev.sqlite node cli.mjs status         # must answer in under 10 s, or name the cause and remedy
@@ -139,9 +141,11 @@ DURIG_DB=./selfdev.sqlite node cli.mjs status         # must answer in under 10 
 
 ## Current item (priority order)
 
-1. **Land the 41 refs** (operator directive 2026-11-12): three pairwise-clean batches, commands in
-   `.spike/landing-batch-plan.json`; each pass is `node scripts/land.mjs <refs> --suite`. Pairwise-clean is NOT a
-   proof a 28-way merge composes — a pass must drop the member that conflicts and re-gate.
+1. **Land the 64 refs the plan places** (operator directive 2026-11-12): pm's ungated sweep **#7278**, bins from
+   `node tools/landing-batch-plan.mjs --max 12`, each pass `node scripts/land.mjs <refs> --suite` (**≈124 s per bin** —
+   8 bins ≈ 17 min of suite time). `main` is **green** at `4b549e34` (308/308, 123.9 s), so the absolute gate is satisfiable
+   NOW; the delta gate (#7273) is not a prerequisite. Pairwise-clean is NOT a proof a 12-way merge composes — a pass must
+   drop the member that conflicts and re-gate.
 2. **Re-cut `item-5301`** (**#6174**) — four defects, measured on the merged tree, listed in
    `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md` §8 and pitfall **232**. Do not land until all four close.
 3. **Close the install gap** (ROADMAP **352**, rows **#6125/#6127**): nothing at session start runs

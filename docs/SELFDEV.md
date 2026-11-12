@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-292, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-298, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4127,3 +4127,51 @@ at `:743`). Re-measure every `path:line` before repeating it.
     landing: a delegate doc commit moving `main`, and a `done` status on a LANDING PASS row. The proof
     of a landing is `git merge-base --is-ancestor <sha> main` exit 0 **and** the ref disappearing, in
     that order, with the census count falling (`node tools/branch-census.mjs --json` before and after).
+293. **A row can say "main is red" and be false at the tip you are standing on.** Rows #7237 and #7244
+    both assert `demo/clockin-digest.test.mjs` is red on main and that this blocks every landing. At
+    `main` `4b549e34`, 15:3xZ: `node scripts/test.mjs --all --jobs 4` → **308/308 passed in 123.9 s, exit 0**
+    (`.spike/suite-main-4b549e34.out`). Before a seat accepts "the base is red" as a blocker, run the gate
+    against the current tip in one bounded call and quote the tally; a blocker inherited from a row written
+    hours earlier costs a whole landing pass. Cost of that probe: **124 s** — cheaper than a refused pass.
+294. **A budget guard that asserts against a RECORDED census is green while the live value is over
+    budget.** `node scripts/clockin.mjs | wc -c` = **20,573 bytes** at 7,282 queue rows against
+    `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`), yet `node demo/clockin-digest.test.mjs`
+    **passes** (17.9 s) because its assertion is written against the recorded production census of **5,773
+    rows**. The guard cannot see the drift it exists to catch, and the drift is monotone: queue rows only
+    grow. The same shape applies to every demo that quotes a measured number as a literal — the test is a
+    photograph, not a sensor. Consequence for landing: a suite green today can go red tomorrow with no code
+    change, and every landing would then be refused for a condition no branch caused. Fix shape: the demo
+    measures the live queue (or takes the census as an argument), and the assertion compares against the
+    same number the entry point uses.
+295. **A NEW SPOOL OP IS INVISIBLE TO A RESIDENT BROKER UNTIL IT RESTARTS, and the symptom is a dead
+    letter, not an error at the producer.** `SPOOL_OPS` (`src/broker.mjs`) is a module constant the drain
+    reads in-process, so a broker started before the edit applies the vocabulary it loaded at `START`. A
+    `queue` intent sent to an old broker is dead-lettered as `unknown op: queue` and the producer, which
+    only prints a `requestId`, sees nothing wrong until it reads `<db>.broker.inbox.error/<file>.reason`.
+    Measured shape of the working sequence (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node
+    v24.22.1, 2026-11-12T17:4xZ): `kill -TERM <broker pid>` → the keepalive re-arms within ~60 s →
+    `grep START <db>.broker.log` → *then* spool the request and poll `<db>.broker.inbox.out/<requestId>.json`.
+    Restarting is the cost; forgetting it looks like a broken op.
+296. **A CLI verb can be born with a guard that forbids the case it exists for.** The first `intent.mjs
+    --op queue --action repair-gates` required `--id`, so the "repair every stranded row" call failed
+    locally with `needs at least one --id` and never reached the broker — and because the failure is a
+    one-line JSON on stderr, a `$(...)` capture that only reads `requestId` swallows it as an empty string.
+    Measured: `node intent.mjs queue --op queue --action repair-gates --from delegate --reason …` printed
+    `{"ok":false,"error":"op queue --action repair-gates needs at least one --id"}` while a later read of
+    `.inbox.out/` showed no result file at all. Two habits: when a new verb's reply is parsed, print the
+    whole line on failure; and when a verb has a natural "everything matches" form, do not make `--id`
+    mandatory for it (only the actions with no defensible implicit set — `priority`, `cancel` — require ids).
+297. **A transient `live-tree-dirty` killed the keeper, and that is how a fleet dies quietly.** At
+    18:03–18:04Z (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1) `tools/broker-keepalive.mjs`
+    saw two consecutive `START REFUSED: live-tree-dirty` (a seat mid-write in the live tree), counted them as two
+    failed re-arms, and exited. By the time a human looked the tree was CLEAN and no broker was running: a
+    statement about one second became an outage. Fixed in `f7ed214f` — `isPreflightRefusal` makes a refusal
+    DEFERRED (retried next tick, spends none of the two-strike budget) while a start that was attempted and
+    failed still stops the loop. Same class as 295: the daemon reads the world at START, so anything that
+    changes between two 60 s ticks must be retried, not scored.
+298. **A projection can lag the write, so verify a new field at the READ the operator uses.** `RigControl.directive`
+    was written and applied correctly (`113a3307`), and `cli.mjs status --json` still showed `control` with no
+    directive — because `readRigControl` (`src/readapi.mjs`) projected only the pause fields, and because the
+    resident broker was serving the projection it had loaded at START. Two lessons in one: a new field is not
+    shipped until a read returns it (`c7ff4aab`), and the read to test is the one routed through the broker, not
+    a local one.

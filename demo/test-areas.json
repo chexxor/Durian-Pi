@@ -91,7 +91,10 @@
       "demo/workstrategy-claim.test.mjs",
       "demo/workstrategy-up.test.mjs",
       "demo/workstrategy.test.mjs",
-      "demo/execution-mode.test.mjs"
+      "demo/execution-mode.test.mjs",
+      "demo/queue-ops.test.mjs",
+      "demo/queue-control-spool.test.mjs",
+      "demo/priority-directive-scope.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",
