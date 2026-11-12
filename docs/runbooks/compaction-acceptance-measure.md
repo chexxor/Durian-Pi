@@ -24,6 +24,41 @@ tranche placed 9). So a seat whose summariser keeps hitting the output ceiling l
 its window keeps growing. That is the mechanism behind `Auto-compaction failed: … hit the token cap`, and it is why
 the count has to be re-measured rather than trusted.
 
+## Which plane the number is scored on (ruled, #6383 — lead)
+
+**The fixture gates; the live measurement never does.** A gate that cannot run reproducibly is not a gate: the
+fixture the demo builds is deterministic, needs no broker, and its numbers are comparable tree to tree. The live
+tranche with the broker resident settled 70 of 100 tasks, hit the 20 s bound on ~50 growth turns, took **1809.7 s**
+and **exited 1** — a signal that exits non-zero on the real store cannot be what a milestone is scored against.
+The **27.9 s** datum previously quoted for N18 is not reproducible while the broker is resident, so it is not a
+measurement of anything current: it stays in the archive with its provenance, and any live number gets recorded
+separately with the broker state, the tree and the resolved version labelled beside it.
+
+Re-measured 2026-11-12 in branch `item-6384` (tree `9655e761`, `@earendil-works/pi-durable` **1.3.0 from the
+lockfile** — vendor/pi-main not built, so this is NOT the same plane as the 1.5.1 built-pin run above):
+`node demo/compaction-acceptance-gate.test.mjs` exit **0** in 3052 ms — positive 100 compactions, 100 summaries
+placed, 0 truncated, 0 summariser requests; negative control 9 truncated == 9 requests, 0 placed; inverse control
+0 truncated, 9 placed, instrument exit 1.
+
+## What the instrument is counting, and the error family it belongs to
+
+The quantity is **summaries placed**, not "compactions attempted". A truncated summary is not a degraded summary:
+the harness does not place it at all. `stopReason=length` yields 9 truncations and 0 placed; the identical
+`stopReason=stop` tranche yields 9 placed. So "0 truncated" next to "0 placed" is a compaction that silently did
+not happen — the same event behind the `Auto-compaction failed: … hit the token cap` notice. A check that reports
+"compaction ran" on those two numbers is measuring the wrong thing.
+
+That is the same instrument error in three places, and it is worth naming together because the fix is the same —
+report the quantity that exists, not the quantity that would have been convenient:
+
+- **#6344** — the doc guard passing a ledger that contained duplicate D-numbers.
+- **#6366** — the suite runner manufacturing its own timeouts and reporting them as test failures.
+- **here** — a tranche that placed nothing being read as "no truncations, so the milestone is met".
+
+The gate/instrument split (#6382) is the bookkeeping half of the same idea: `tools/compaction-acceptance.mjs`'s
+exit code is a measurement of one tranche, and it is data. The thing that decides is the demo's own exit code, as
+read by the suite.
+
 ## Diagnose (read-only, no key, no model, no broker)
 
 Run the four commands **in order**. The second through fourth read the snapshot the first one wrote: a brand-new
