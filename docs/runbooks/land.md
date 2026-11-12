@@ -3,9 +3,9 @@ runbook: land
 symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
-last_verified: 2026-11-10
-verified_by: devtools
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked)"
+last_verified: 2026-11-11
+verified_by: impl
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked); #6182 owner-state rule measured 2026-11-11 on branch item-6182 (node demo/genlock-owner-state.test.mjs exit 0, 24 checks; the same probe against main 35001c3a reported {unresolvableOwnerBlocks: false, secondClaimAccepted: true, freshUnnamedSlotIsStale: true}) - SCOPED to the genlock bullet: no landing was run in that pass"
 check_rule: null
 ---
 
@@ -507,6 +507,12 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 - **genlock**: it probes `<db>.genlock.*` beside the store with `node:fs` only (no provider stack). A slot
   whose JSON names an **ALIVE** pid blocks (signal `0`; only `ESRCH` means gone — `EPERM` means alive but
   unsignalable). A partial/unreadable slot is **not** evidence of a live run and does not block.
+- **owner state, #6182**: a lease whose record names NO usable owner (pid missing, null, `NaN`, 0, negative
+  or a string) is treated as **ALIVE**, not dead — only ESRCH releases a lease. It still ages out past
+  `RESERVATION_STALE_MS` (660,000 ms) with a `GENLOCK WARNING: … UNRESOLVABLE owner … admits a second
+  writer` line, because a crashed lander must not wedge the rig. Before this, an unnamed owner released
+  *immediately*: a second writer could claim the slots while the first lease was still on disk.
+  Probe: `node demo/genlock-owner-state.test.mjs` (exit 0).
 - **slot cap** — `resolveSlotCount(repoRoot)` decides how many generation slots the lander claims, in
   this order: `DURIG_MAX_CONCURRENT_SEATS` (env) > `durig.config.json` / `.durig/config.json`
   (`DEFAULT_CONFIG_PATHS`) > the shipped defaults `durig.config.default.json` / `.durig/config.default.json`

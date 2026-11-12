@@ -32,7 +32,7 @@ import { basename, dirname, join } from "node:path";
 import { uptime as osUptime } from "node:os";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
-import { reservationBlocks } from "./genlockreserve.mjs";
+import { reservationBlocks, ownerState } from "./genlockreserve.mjs";
 
 // A legitimate generation can run to the provider stream timeout (600 s by default
 // for the openai-compatible providers). A 60 s age fallback steals such a live
@@ -67,17 +67,16 @@ function slotPaths(dbPath, slots) {
 	return Array.from({ length: slots }, (_, i) => `${dbPath}.genlock.${i}`);
 }
 
+/**
+ * #6182: "alive" means NOT CONFIRMED DEAD. A holder record that names no usable owner (missing,
+ * null, NaN, 0, negative, a string) is UNKNOWN, and unknown is not evidence that anyone is gone -
+ * only ESRCH is. The same rule the reservation layer uses (src/genlockreserve.mjs `ownerState`),
+ * shared rather than re-implemented so the two lease paths cannot drift. EPERM still means alive:
+ * the process exists but we may not signal it (another integrity level on Windows).
+ */
 export function holderAlive(holder) {
-	if (!holder || typeof holder.pid !== "number") return false;
-	try {
-		process.kill(holder.pid, 0); // signal 0 = liveness probe only
-		return true;
-	} catch (err) {
-		// EPERM means the process exists but we may not signal it (another integrity
-		// level on Windows); only ESRCH means it is gone. Anything else is treated as
-		// alive, because wrongly stealing a live holder breaks the concurrency cap.
-		return err?.code !== "ESRCH";
-	}
+	const state = ownerState(holder);
+	return state === "alive" || state === "unknown";
 }
 
 /**
@@ -274,11 +273,13 @@ export function readGenerationSlots(dbPath, slots) {
 			stale: slotIsStale(holder),
 			generatingSeat:
 				holder && holderAlive(holder)
-					? (typeof holder.seat === "string" ? holder.seat : `pid-${holder.pid}`)
+					? (typeof holder.seat === "string" ? holder.seat : holder.pid ? `pid-${holder.pid}` : "unknown-owner")
 					: null,
 			detail:
 				holder && !holderAlive(holder)
 					? `held by pid ${holder.pid}${holder.seat ? ` (${holder.seat})` : ""}, which is gone`
+					: holder && ownerState(holder) === "unknown"
+					? "held by a record that names no owner — treated as a live lease until it ages (#6182)"
 					: "",
 			name: slotIsStale(holder) ? "generation_stale" : "generation_in_flight",
 		});
