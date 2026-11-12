@@ -117,6 +117,15 @@ to `pm`; `pm` issues the transition. For each candidate:
      **coordinating** seat - one declaring no working capability, in this rig `pm` and `lead` - may release a
      parked row it did not mint, and must state the reason. Release is delegable because it is reversible;
      cancel and revise are not, and stay with the parties);
+   - **the gate target is CANCELLED, not DONE** - `release_work` REFUSES it: measured on the
+     shipped tools, "item #2 not released: its gate names #1, which is cancelled - releasing it
+     would make a row claimable whose prerequisite was dropped". Do not reach for release here. The two
+     exits that work are: `claim_work` with `itemId` (the by-id path does not consult `workable()` - see
+     `src/rig.mjs` claim-by-id branch), then close it naming the sha; or `cancel_work` if the work is no
+     longer wanted. **Do not `hold_work` first**: held + every-gate-terminal has no release path at all
+     (release refuses, defer requires a claim, revise requires queued, and no verb writes `blockedBy`).
+     Measured 2026-11-12 with scripts in `docs/evidence/2026-11-12-probe-withdrawal-offramp/` (all exit 0).
+
    - no longer worth doing → `cancel_work(<id>, reason)`;
    - genuinely still blocked → leave it, but ask `pm` to record `blockedBy` so it is queryable
      ([`WORK-ITEM-SCHEMA.md`](../WORK-ITEM-SCHEMA.md) R5) rather than prose.
