@@ -22,6 +22,15 @@
 //   node tools/process-leak-scan.mjs --strict                 # exit 1 if any orphan is found
 //   node tools/process-leak-scan.mjs --pattern 'demo/x\.test' --min-age 300
 //
+// THE LEAK HAS TWO GENERATIONS (measured 2026-11-12T13:4xZ, same host, re-measure before quoting):
+// killing the reparented `demo/broker.test.mjs` runner leaves its OWN children standing — the fixture
+// brokers those demos spawn, `node /tmp/durig-*/fake-broker.mjs <fixture.db>`. At 13:4xZ the scan found
+// 1 orphan runner while `pgrep -cf fake-broker` counted 4 fixture brokers alive, whose fixture stores
+// were already gone. The default pattern therefore includes `fake-broker\.mjs`: a fixture broker whose
+// runner is dead is reparented and gets the same verdict; one still supervised by a running demo is KEPT.
+// Suite residue on this box: 13,368 `/tmp/durig-*` fixture directories, 6.5 GB (df -h /tmp: 41 G free).
+// A re-scan 38 minutes after a clean sweep found a new orphan — the leak is recurring, not residue.
+//
 // The guard — a pid is killed only if ALL of these hold:
 //   1. its cmdline matches --pattern (default: a test/suite runner);
 //   2. NO live ancestor is a shell, node, or `timeout` — i.e. it was reparented, so nobody is watching
@@ -38,7 +47,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..");
 
 // The guard as a pure function, so a demo can pin the decisions without /proc.
-export const DEFAULT_PATTERN = "demo/(broker|cli|seatguard)\\.test\\.mjs|scripts/test\\.mjs";
+export const DEFAULT_PATTERN =
+  "demo/(broker|cli|seatguard)\\.test\\.mjs|scripts/test\\.mjs|fake-broker\\.mjs";
 
 // Order matters: a supervised process is never a candidate, however old it is.
 export function classify({ pid, selfPid, ancestors, ageS, minAgeS, isSupervised, brokerPid, cmdline }) {

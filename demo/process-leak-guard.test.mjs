@@ -51,6 +51,11 @@ assert.ok(re.test("node demo/broker.test.mjs"), "the default pattern must match 
 assert.ok(re.test("node scripts/test.mjs --all --jobs 4"), "the default pattern must match a suite runner");
 assert.ok(!re.test("node /repo/cli.mjs serve --max-duration 3600"), "the default pattern must NOT match the fleet broker");
 assert.ok(!re.test("node tools/broker-keepalive.mjs --interval 60"), "the default pattern must NOT match the keepalive loop");
+// Generation 2 of the leak: the fixture brokers a demo spawns outlive the demo (measured 2026-11-12T13:4xZ,
+// `pgrep -cf fake-broker` = 4 survivors whose /tmp/durig-* fixture stores were already deleted).
+assert.ok(re.test("node /tmp/durig-stop-live-ceFzcR/fake-broker.mjs /tmp/durig-stop-live-ceFzcR/case1.db stale-stay"), "the pattern must catch the orphaned fixture broker");
+assert.ok(!re.test("node tools/queue-drain-audit.mjs --held"), "the pattern must NOT match a read-only delegate tool");
+assert.ok(!re.test("node /home/chexxor/.nvm/versions/node/v24.22.1/bin/node /home/chexxor/Git/Durian-Pi/cli.mjs status"), "the pattern must NOT match a CLI status read");
 
 console.log(fails ? `${fails} FAILURE(S)` : "all pins hold");
 process.exit(fails ? 1 : 0);

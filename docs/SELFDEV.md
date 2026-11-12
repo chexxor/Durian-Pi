@@ -4089,3 +4089,41 @@ at `:743`). Re-measure every `path:line` before repeating it.
     into **1,378** and makes every pair look like a collision. `git merge-base main <ref>` first, then diff base→ref.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
+
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-292, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
+    old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
+    (2.42 GB RSS, available RAM 10,068 → 11,026 MB). Thirty-eight minutes later `node
+    tools/process-leak-scan.mjs` (0.04 s, 644 pids) found a new orphan, and at 13:4xZ it found **5**
+    orphans holding 310 MB — two `demo/broker.test.mjs` runners (oldest 1,612 s) and **three
+    `fake-broker.mjs` fixture brokers**, the children those demos spawn, the oldest alive **39,391 s
+    (10 h 53 m)** with its `/tmp/durig-*` fixture store long gone. Killing the runner does not kill its
+    children, and the children are *supervised by the dead runner*, so the "no live ancestor" guard
+    never fires on them while the runner is alive. **Fix applied in place:** `DEFAULT_PATTERN` now
+    includes `fake-broker\.mjs`; a fixture broker whose runner is dead is reparented and gets the same
+    verdict, one still supervised by a live demo is KEPT. `node demo/process-leak-guard.test.mjs`
+    (0.06 s, exit 0) pins both directions. After `--kill`: `pgrep -cf fake-broker` = 0. Suite residue
+    also accumulates in `/tmp`: **13,368** `durig-*` fixture directories, 6.5 GB (`df -h /tmp`, 41 G free) —
+    not a failure cause on this box, but a number to watch if `/tmp` shrinks.
+291. **A gate refusal names a demo; the merged tree may be green.** `impl` completed the landing pass
+    row (#7124) with `resultSummary`: "STOPPED: demo/backlog-burn.test.mjs failed in the scratch
+    worktree (exit 1), 4 demos ran, 1 failed" — nothing landed, batch 2 not attempted. Reproduced
+    read-only at 13:5xZ with the same 12 refs (`item-3747 6139 6161 6180 6182 6200 6207 6215 6218 6314
+    6318 6320`) chained onto `main` `99e74c7e` → scratch commit `8e9b4c19`: `node scripts/test.mjs --all
+    --jobs 4` printed **317/317 passed in 124.8 s**. Chained onto the older `main` `52f7a57b` they were
+    on at the time of the run → scratch `4602b60b`, `node demo/backlog-burn.test.mjs` exit 0. So the
+    refusal did not reproduce on a clean scratch. `scripts/land.mjs` runs demos one at a time and stops
+    at the first red, and #5793 already names the environmental class: **before blaming a branch, re-run
+    the scratch merge yourself and report the scratch commit and the suite tally.** Cheap and read-only:
+    `git merge-tree --write-tree <chain-commit> <ref>` then `git commit-tree` to promote, then
+    `git worktree add --detach /tmp/scratch <chain>` with `node_modules` symlinked. (A `--dry-run` of
+    `land.mjs` is not this — it previews cwd/model resets only.)
+292. **"main moved" is not "a landing happened", and a done row is not a landing either.** Over the
+    4 h keepalive window 09:40Z → 13:28Z, `.spike/fleet-ledger.jsonl` (one snapshot per 60 s, 31 rows)
+    shows refs **115 → 128** and worktrees **107 → 121** with `mainSha` never leaving a delegate sha:
+    **zero seat landings**, while `done` rose 4738 → 4777 (+39, 10.3/h) and `queued` rose 530 → 576
+    (+46, 12.1/h) — the fleet closed 39 rows and minted 39 more. Two things a reader can mistake for a
+    landing: a delegate doc commit moving `main`, and a `done` status on a LANDING PASS row. The proof
+    of a landing is `git merge-base --is-ancestor <sha> main` exit 0 **and** the ref disappearing, in
+    that order, with the census count falling (`node tools/branch-census.mjs --json` before and after).
