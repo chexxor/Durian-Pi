@@ -416,3 +416,8 @@ already ruled: wip/seat-prompt-files
 rows: 0
 | 2026-11-11 | `item-6344` | tip `bc9fb6e0`, 2 ahead of `main` | **OPEN — UNLANDED, no ruling** (census entry, minted during the pass) | clean worktree `item-6344`, item status `done`; `git branch -d` refuses it; `git merge-tree main item-6344` clean and its tree differs from `main` | delegate census |
 | 2026-11-11 | `item-6369` | tip `339c559a`, 2 ahead of `main` | **OPEN — UNLANDED, no ruling** (census entry, minted during the pass) | clean worktree `item-6369`, item status `done`; `git branch -d` refuses it; `git merge-tree main item-6369` clean and its tree differs from `main` | delegate census |
+
+### Delegate prune pass, 2026-11-12 (unattended fleet window, host: Linux / Fedora Linux 45 / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 / git 2.56.0)
+
+| 2026-11-12 | `item-7127` | tip `a18ede9e` (an ancestor of `main`) | **LAND (ref removed)** | `git merge-base --is-ancestor item-7127 main` exit 0; worktree `item-7127` clean; `git worktree remove /home/chexxor/Git/Durian-Pi/item-7127` exit 0; `git branch -d item-7127` exit 0 — **no `--force`**. Item #7127 status `done` (devtools, `done@2026-11-12T08:44Z`): a verification item that produced no commits, so its branch tip is a commit already on `main`. | delegate prune pass |
+| 2026-11-12 | `item-7130` | tip `ddcc0a23` (an ancestor of `main`) | **LAND (ref removed)** | `git merge-base --is-ancestor item-7130 main` exit 0; worktree `item-7130` clean; `git worktree remove` exit 0; `git branch -d item-7130` exit 0 — **no `--force`**. Item #7130 status `done` (qa, `done@2026-11-12T08:40Z`): a non-author verification item with no commits. | delegate prune pass |
