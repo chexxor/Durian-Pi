@@ -11923,3 +11923,24 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D290 — (provisional; re-mint at land from the MERGED tree — other unlanded branches already carry provisional D284 (`item-7026`), D285 (`item-7038`), D287 (`item-7082`), D288 (`item-7123`), D289 (`item-7123`)) **the landing gate keys on the PARENTS a landing advances, never on the derived merge sha; an author's own completion is not verification; and the requirement is phased - refuse on contradiction now, report absence, ratchet to refusal only after the habit exists** (architect review, item #7144, of build row #7143; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, git **2.56.0**; tree = branch `item-7144`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the landing gate (`scripts/land.mjs`, `src/landinggate.mjs`) before #7143 is built.
+
+**Context.** `src/landinggate.mjs` composes the decision from argv + changedPaths + suite exit and mentions verify/evidence **zero times**; `scripts/land.mjs` :410 runs `requireGate` before any git write, and :1038-1040 fast-forwards main to `scratchHead`, the head of a **scratch merge tree** built for multi-branch passes. Measured with `node tools/probes/landing-verify-tip-7144.mjs --db ../selfdev.sqlite` (exit 0): **102** unlanded `item-*` branches; **100** of them have their tip sha named by some done row's subject or evidence artifact; of those naming rows **91** are the author's own completion and **9** say VERIFY; only **2** unlanded branches have a DONE VERIFY-subject row naming them. `complete_work` already stores `item.evidence = {command, exitCode, artifact}` (src/rig.mjs:1111-1116) and `src/checkup.mjs:111-118` already has `verification-without-evidence` and `evidence-tree` rules.
+
+**Decision.**
+1. **The key is the parents, not the sha main lands on.** A verify row naming a branch tip does not verify a derived merge commit. Require an independent verify row per named parent tip, and require the merged tree to pass the suite gate. The refusal names both: verified parents and the derived sha.
+2. **A row counts only if it is done, comes from a seat other than the branch's author, carries `exitCode 0`, and names the tree it ran against.** 91 of 100 sha-naming rows are self-attestation; a gate that accepts them restates the defect it closes.
+3. **Content decides, ancestry is the fast path.** Reconciles #5681 (literal shas) with lead's #3337 (per-file content, ancestry a fast path): pass if `S == T`; pass if `S` is an ancestor of `T` and the verified files' content is identical at `T`; otherwise refuse.
+4. **Phase it.** Today refuse only on **contradiction** (a verify row exists and does not match the landing), report absence as `no independent verify row names <sha>; self-attested by <seat>`, and ratchet to a refusal for code-tier landings once landing entries routinely carry a verify row. Docs-only keeps the diff-checked attestation.
+5. **Fail closed on an unreadable store, and say so in the report.** Unlike the `sharedRoot` check (:277-293), which fails open deliberately, silence here means an unverified landing gets through.
+
+**Options considered.** (A) strict sha-presence refusal now — rejected, measured 100/102 refusals and it manufactures empty verify rows (a Goodhart failure worse than the one being closed). (B) contradiction-first with a reported absence, then a ratchet — chosen; reversible and legible. (C) machine-only verification (suite, no row) — rejected as the sole control: the suite proves demos pass, not that a second seat examined the change. **Trade-off accepted:** some landings proceed with only a reported absence for a while, in exchange for a gate that does not stall the rig or reward ceremony.
+
+**Consequences.**
+- The gate becomes checkable before it is built: the probe prints the pass-rate, and a gate that refuses 100 of 102 pending landings is a stalled rig, not a stronger control.
+- Landing entries must mint a verify row as part of their shape; pm's "assert on the merged tree" convention becomes enforced rather than hoped for.
+- The derived-tree problem is named once, in the same vocabulary `complete_work` already uses ("a DERIVED artifact must be named as MERGED").
+- Falsifier: the probe's verdict line (today "2 of 102 unlanded branches have a DONE VERIFY row naming the branch") must move toward 100 before the refusal is promoted from reported to blocking.
