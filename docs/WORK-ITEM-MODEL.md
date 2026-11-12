@@ -11,16 +11,42 @@ It is the third leg of the item record:
 | [`BRANCH-AND-WORKTREE-LIFECYCLE.md`](BRANCH-AND-WORKTREE-LIFECYCLE.md) | git artefacts — what exists and who retires it |
 | **this file** | **execution mode** — branch or no branch, shared or private, landing and promotion |
 
-**Status: PROVISIONAL, with round 1 of the research folded in.** Sections marked **DECIDED** are grounded in
-code that exists in this tree (path:line given, each verified with `test -e` before citing). Sections marked
-**PROVISIONAL** are the team's design decision. External evidence now exists —
-[`reviews/branch-lifecycle-llm-agent-teams.md`](reviews/branch-lifecycle-llm-agent-teams.md) is round 1, run
-by the delegate on this host (the delegate has a network path, and the taxonomy was blocking the MVP); the
-operator-routed off-host prompt in
-[`reviews/branch-lifecycle-research-prompt.md`](reviews/branch-lifecycle-research-prompt.md) is **still open**,
-and when that report lands it supersedes round 1 where they disagree. Round 1 changed two things: §5 is
-**contradicted by prior art and rewritten**, and §8's retirement rule gained a mechanism (ownership marker +
-lock + sweep) taken from a shipping agent product. §4's storage question and §7's promotion mechanics stay open.
+**Status: PROVISIONAL, with the off-host research landed (2026-11-12T03:5xZ).** Sections marked **DECIDED** are
+grounded in code that exists in this tree (path:line given, each verified with `test -e` before citing).
+Sections marked **PROVISIONAL** are the team's design decision. Three external reports now exist and the
+off-host specialist's word **supersedes** the delegate's round 1 where they disagree:
+- [`reviews/branch-lifecycle-llm-agent-teams.md`](reviews/branch-lifecycle-llm-agent-teams.md) — round 1, run by
+  the delegate on this host (14 quotes substring-checked against `inputs/fetched/`).
+- [`reviews/branch-lifecycle-research.md`](branch-lifecycle-research.md) — the specialist's main report against
+  `reviews/branch-lifecycle-research-prompt.md` (taxonomy, branchless conditions, staging vs merge queue, who
+  lands, retirement, conflicts, cooperative work, iteration architecture).
+- [`reviews/branch-lifecycle-followup-research.md`](branch-lifecycle-followup-research.md) — the specialist's
+  answer to `reviews/branch-lifecycle-followup-research-prompt.md` (merge-queue mechanics for GitHub/Trunk/
+  Mergify/Aviator, agent-product table, iteration architecture, sprawl measurement, seven numbered changes).
+- [`reviews/branch-lifecycle-llm-agent-teams-research.md`](branch-lifecycle-llm-agent-teams-research.md) — the
+  specialist's gap-closure note on GitHub merge-queue internals, which round 1 could not fetch (404s here).
+
+**What the specialist changes (accepted, with the reason):** §4 needs a distinct state for "passed against a
+tip that is no longer the tip" — all four merge queues re-validate a *synthetic* composed commit rather than
+trusting the candidate's own head, and GitHub's docs state the validated sha is the `merge_group` sha, "a
+different `sha` from the pull request". So a moved tip means **re-gate, not refuse**; refuse the candidate only
+on conflict. §4's gate needs a **deadline** (Mergify's `checks_timeout`, default `auto` = 95th-percentile
+successful-run duration with a safety margin) because a hung verify is currently indistinguishable from a
+pending one. "A merge queue is the pattern at fleet scale" is **wrong as stated**: it is four incompatible
+patterns — re-validate (GitHub), hold (Mergify), reset-all (Aviator), predictive+bisect (Trunk) — and §4 must
+name which one we are building. §7's ≤2-day bound is a **calendar bound for humans and a turn bound for agents**
+(Copilot: "maximum execution time of 59 minutes. This limit cannot be extended or bypassed"; Devin: "if you can
+do it in three hours, Devin can most likely do it"). §3's isolation predicate is confirmed as **our invention**,
+not prior art — record it that way so nobody cites it as borrowed. Sprawl is **not** measured by anyone as
+branch count or age distribution (time-to-merge is the commodity metric); ROADMAP 361 is therefore an
+invention, not a copy.
+
+**What the specialist proposes that we explicitly do NOT adopt, and why:** the anti-flake escape hatch
+(GitHub's "only merge unchecked"; Trunk's "merges once a later one passes") lands work whose own checks never
+passed — the exact failure the per-push gate exists to prevent (unchanged from ROADMAP **362**'s reasoning).
+Retirement must never be a TTL that deletes unlanded work without a `docs/DISPOSITIONS.md` row: the census
+shows refs carrying content not on trunk, so the safe operation is **decision, not deletion**.
+
 Do not treat a PROVISIONAL section as settled.
 
 | | |
