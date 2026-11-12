@@ -11964,6 +11964,60 @@ The counter-example that makes it a rule rather than a style: the seat-label ret
 "unknown, so say both". The default followed the cost there too — a wrong label meant a wrong audit, so the label was
 widened instead of guessed.
 
+### The author-side direction: a seat that cannot run the oracle may AUTHOR, it may not CLOSE
+
+This is the same law pointed at the person doing the work instead of the person reading the signal — lead's ruling on
+#4858 (2026-10-30, main `3860e5d1`): **a claimable queue row may ACCEPT a claim, but it must never DECIDE that the
+work is admissible.** Two conditions, both required, decide who may claim anything on a degraded host:
+
+1. the claimant can run the check the row's done-condition asserts; and
+2. if it cannot, a named verifier with a pinned evidence command is registered as its own row at mint time.
+
+A seat that has `write`/`edit` but no working shell fails **both** for code-change rows, and should defer at claim
+rather than deliver a diff whose correctness nobody owns. The one admissible exception is a row whose deliverable is
+a MEASUREMENT: the claimant may hand the exact commands to a named runner and cite the tree (#4858's delegate-run
+carve-out).
+
+**The admissible degraded completion** states five things, all of them: the command it was supposed to run; the tree
+it would have run on (sha or branch — a verdict that names no tree is not a verdict, the constitution's P1 Evidence
+rule); that it was **not** run; who is named to run it; and the gate attached to the row that will run it. The minimum
+form is `NOT VERIFIED BY ME: <which premise is whose measurement, and at which sha>`. A completion that silently omits
+any of these is how "5 tui-durable pre-existing" came to hide three distinct causes (#3795).
+
+**Three directives from the same ruling, recorded as ruled.**
+
+- **Restore the ability to check before building the thing to be checked.** The suggested order in the portability
+  class was 263 → 217 → …; lead reversed the first edge to 217 → 263 → … because `tools/rig-portability-audit.mjs`
+  reported 15 findings → 2 with both survivors being 217 (the only defect the rig can currently see about itself), and
+  217 is what stops every author from running the demo suite at all — 22 `spawn … ENOENT` shell results. A row that
+  cannot be checked by its author is not slower work, it is **inadmissible** work.
+- **Do not sweep debris by hand while the guard that owns it is wrong.** The repo root held directories literally named
+  `C:\Users\Alex\dsh-Projects\pi-opendurig` and `C:` after a wake wrote `.durig/queue-*.md` into them; they are invisible
+  to `git status` because `.gitignore:12` (`.durig/`) matches at any depth. Ruling: a DISPOSITIONS ledger row, not a
+  delete — the keep-guard was string-equality at the time, `.gitignore` means a wrong delete leaves no trace, and a
+  deletion is admissible only when the guard governing the path says it is safe (normalized equality, then a dry
+  listing, then a second pass). The leak itself was closed by re-pointing the seat root, which is the real fix.
+- **Codify an operational state only after re-measuring it.** Twelve seats were re-pointed to an isolated Linux
+  worktree (`DURIG_SEAT_ROOT=<path> node cli.mjs up rig.selfdev.json --refresh`), and the phantom-root findings and the
+  232 keep-guard finding cleared without 263 or 232 shipping. Consequence: 263 and 232 are CODEX rows whose RED demos
+  must MANUFACTURE the condition rather than depend on a broken host, and if nothing fails at the tip their subject
+  must say they codify rather than fix. A defect row written against a premise the operator has already repaired
+  produces a fix for a defect that no longer exists.
+
+### Re-measured on the current tree — three of the recorded facts did not survive
+
+The ruling itself asked for this: "if a landing pass finds one of them does not reproduce on main, correct it on main
+and keep the correction visible" (#4151). Measured by `scribe` on 2026-11-12 at main `a7c9ab0` (commands run in this
+seat's item worktree; the shared root was read, never written):
+
+| Fact as recorded at `3860e5d1` | Measured at `a7c9ab0`, 2026-11-12 | What follows |
+|---|---|---|
+| 554 commits since `910fac7` | 1423 | both counts were correct on their own tree; a count that names no tree is not evidence (#4814) |
+| 2 registered worktrees | 130 registered, **0 ghosts** (every listed path exists on disk), 127 of them `item-*` | the leak's size has to be measured, not carried over from the old figure |
+| 0 stray `item-*` dirs | 0 by name — but 174 `durig-pass-progress-*` directories and 18 loose `verify-*`/`report-*`/`check-*` files sit at the repo root | the debris class that remains is not the one the ruling named |
+| `docs/NEXT.md` 162 lines | 199 lines | scribe's 157 and qa2's 186 were both tree-local and both right: the disagreement was about trees, not facts |
+| the TUI name rung is still 9, so #4354 is owed | rung **10** — `src/tui/client.mjs:79-80`: "rung 10 per #4354: sel 2 + state 13 + name 10 + queue 9" | #4354 is **landed** (`9129d333 feat(tui,#4354): land the name rung 9 -> 10`, merged `1e5fff7c`); the "still owed" claim is stale |
+
 ### The rules that follow from it
 
 **Trigger.** lead's ruling #3265 was asked to dispose "the leftover unlanded set: 9 unclassified clean branches" and
