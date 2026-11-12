@@ -254,6 +254,8 @@ demo/metrics.test.mjs  drift measures + what a reading refuses to claim
 demo/converter.test.mjs  OpenRig rig.yaml -> v2 spec: rig-level edges, ids, personas
 docs/STATUS.md        start here: current state, decisions needed, resume facts
 docs/FEATURES.md      what durian-pi does today, where each piece lives, and its proof
+docs/RULES.md         the standing-rule index: each rule, its status (instrumented or prose-only),
+                      the mechanism that acts on it, its owner, and the command that verified it
 docs/ROADMAP.md       milestones + the research gap analysis
 docs/METRICS.md       metrics design: measures, surfacing, scope, traps (first cut built)
 docs/DOGFOOD.md       dogfooding log: what we ran on durian-pi, what broke, where it lands
