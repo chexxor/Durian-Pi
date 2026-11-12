@@ -63,7 +63,7 @@ import {
   registerSeat,
 } from "./src/rig.mjs";
 import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
-import { DEFAULT_STRATEGY, assertWorkStrategy, strategyNames } from "./src/workstrategy.mjs";
+import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs";
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
 import { contextConsumption } from "./src/context.mjs";
@@ -1249,6 +1249,9 @@ const QUEUE_FLAGS = {
   // unbounded version of this read reached 25 MB in a devtools scratch export.
   "--held": { kind: "flag", usage: "[--held]" },
   "--with-gates": { kind: "flag", usage: "[--with-gates]" },
+  // #7113 — the PRIORITY LEASE readout for a human. It prints TEXT, not the JSON document, which is why the
+  // byte contract of the default form survives: nothing derived is added to the dump, a second view is added.
+  "--human": { kind: "flag", usage: "[--human]" },
   "--limit": { kind: "value", usage: "[--limit <n>]", valueName: "n" },
 };
 const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
@@ -1263,12 +1266,68 @@ function refuseQueueArgument(why) {
   fail(`queue: ${why} (known flags: ${known})`);
 }
 
+// #7113 — the OPERATOR-facing priority-lease readout, reachable only through `--human`.
+//
+// WHY IT IS A SEPARATE VIEW INSTEAD OF A FIELD. `peek_queue` already renders a lease per row
+// (`priority=now until=...`, `priority=now~lapsed@...`), but `node cli.mjs queue` prints the raw fields, so a
+// human reading the store sees `priority` and `prioritySet` with no statement of whether the lease is LIVE,
+// EXPIRED, or RECORDED-BUT-INERT — and "why didn't #6193 jump the queue" becomes a question nobody can answer
+// from the readout. Adding a derived string to the JSON dump would break every script that diffs its bytes
+// (#5016 pinned the default form for exactly that reason), so the human view is TEXT, printed on stdout, and
+// the JSON form is untouched. `demo/queue-human-lease.test.mjs` compares the bare dump byte-for-byte against
+// the pre-change CLI on the same store.
+//
+// WHAT IT SAYS, and only what is provable: the lease's EFFECTIVE level (from `effectivePriority`, the same
+// function the selector uses, so the two views cannot disagree), who set it and why, whether it has lapsed,
+// and — the part a JSON field cannot say — whether the recipient's resolved claim order honours it.
+function humanQueueReadout(items, census, strategy, limit) {
+  const now = Date.now();
+  const leased = items.filter((it) => it.priority);
+  const effOf = (it) => effectivePriority(it, now);
+  const live = leased.filter((it) => !effOf(it).lapsed && !effOf(it).invalid);
+  const lapsed = leased.filter((it) => effOf(it).lapsed);
+  const invalid = leased.filter((it) => effOf(it).invalid);
+  const order = [...live].sort((a, b) => effOf(a).rank - effOf(b).rank || a.id - b.id).concat(lapsed, invalid);
+  const shown = order.slice(0, limit);
+  const lines = [];
+  lines.push(`queue — human lease view  db=${DB_PATH}  read at ${new Date(now).toISOString()}`);
+  lines.push(`rows ${census.rows} | ${Object.entries(census.counts).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
+  const liveOnTerminal = live.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length;
+  lines.push(
+    `leases: ${leased.length} row(s) carry one — ${live.length} live, ${lapsed.length} lapsed, ${invalid.length} invalid; ` +
+      `${census.rows - leased.length} carry none` +
+      (liveOnTerminal ? ` — and ${liveOnTerminal} of the live ones sit on a TERMINAL row, which orders nothing` : ""),
+  );
+  lines.push(`claim order: team ${strategy.team.strategy} (${strategy.team.source})`);
+  for (const [name, r] of Object.entries(strategy.seats ?? {})) lines.push(`  ${name}: ${r.strategy} (${r.source})`);
+  lines.push("  a lease reorders ONLY a seat whose resolved strategy is priority_first (src/workstrategy.mjs).");
+  for (const it of shown) {
+    const e = effOf(it);
+    const seat = strategy.seats?.[it.to];
+    const why = it.prioritySet?.reason ? ` reason=${JSON.stringify(it.prioritySet.reason)}` : "";
+    const by = it.prioritySet?.by ? ` by=${it.prioritySet.by}` : "";
+    let effect;
+    if (e.lapsed) effect = `INERT: the lease expired at ${e.expiresAt}; the row ranks ${e.priority} again`;
+    else if (e.invalid) effect = `INERT: ${JSON.stringify(String(e.raw))} is not a priority (valid: ${PRIORITY_VALUES.join(" | ")})`;
+    else if (TERMINAL_QUEUE_STATUSES.includes(it.status)) effect = `INERT: the row is ${it.status}, and a terminal row is never claimed — a lease on it orders nothing`;
+    else if (!seat) effect = `INERT: ${it.to} is not a registered seat, so nothing can claim this row`;
+    else if (seat.strategy !== "priority_first") effect = `INERT: ${it.to} claims ${seat.strategy} (${seat.source}), which ignores priority; the lease is recorded, not applied`;
+    else effect = `HONOURED: ${it.to} claims ${seat.strategy} (${seat.source})`;
+    lines.push(`  #${it.id} ${it.status} ${it.from}->${it.to}  ${priorityLeaseText(it, now)}${by}${why}  -> ${effect}`);
+  }
+  if (order.length > shown.length) lines.push(`  ... ${order.length - shown.length} more leased row(s) beyond --limit ${limit}`);
+  if (!leased.length) lines.push("  no row in this view carries a priority lease; `set_priority` records one with a reason and an expiry.");
+  lines.push(`  rows without a lease are not listed (the view is the leases, not the census: ${census.rows} rows exist).`);
+  return lines.join("\n") + "\n";
+}
+
 async function cmdQueue(args = []) {
   const ids = [];
   const statuses = [];
   const to = [];
   let noBody = false;
   let gates = false;
+  let human = false;
   let limit = GATE_VIEW_CAP;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
@@ -1280,6 +1339,7 @@ async function cmdQueue(args = []) {
       // #5770: `--held` is a status filter (not a separate vocabulary), so it composes with `--to`/`--id`.
       if (a === "--held") statuses.push("held");
       else if (a === "--with-gates") gates = true;
+      else if (a === "--human") human = true;
       else noBody = true;
       continue;
     }
@@ -1307,6 +1367,31 @@ async function cmdQueue(args = []) {
     }
     // a known no-op: it changes nothing, because the document is already JSON.
   }
+  // #7113 — the human lease view, before any JSON form. The scoping is the SAME filter the other forms use
+  // (one owner, src/readapi.mjs), and the storage read is whole either way: the queue is ONE document, so
+  // what narrows is the payload, never the read.
+  if (human) {
+    const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+    const census = queueCensusOf(all);
+    const scoped = filterQueueItems(all, { ids: ids.length ? ids : null, statuses, to });
+    const missing = ids.filter((id) => !all.some((it) => String(it.id) === String(id)));
+    const seatsDoc = await readData(
+      DB_PATH,
+      "document",
+      { kind: Seats.definition.kind, scope: { kind: "session" } },
+      (storage) => readSeatsDocument(storage),
+    );
+    process.stdout.write(
+      humanQueueReadout(scoped, census, workStrategyView(seatsDoc?.found ? seatsDoc.value : {}), limit),
+    );
+    // A typo'd id costs the same here as in the JSON form: exit 1, named on stderr, never an empty success.
+    if (missing.length) {
+      process.stderr.write(`queue: no such id(s): ${missing.join(", ")} — the store has ${census.rows} rows\n`);
+      process.exit(1);
+    }
+    return;
+  }
+
   const filtered = statuses.length > 0 || to.length > 0;
   // `--no-body` drops the body FIELD from the answer — nothing else. The derivation above/below still runs over
   // full rows, so a notice a body-bearing row produces survives the trim (asserted in

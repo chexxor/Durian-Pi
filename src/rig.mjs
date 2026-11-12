@@ -22,6 +22,7 @@ import {
 	DEFAULT_STRATEGY,
 	effectivePriority,
 	orderCandidates,
+	priorityLeaseText,
 	resolveStrategy,
 	validatePriorityRequest,
 } from "./workstrategy.mjs";
@@ -400,14 +401,10 @@ function queueItemLine(it) {
 	// prints as `now` would read as urgent in the queue view while ordering neutral in the selector — two
 	// views of one row disagreeing, which is how a reader concludes the selector is broken. Lapsed rows say
 	// so, with the instant, so "why did #6193 stop jumping the queue" is answerable from the line itself.
-	const priority = it.priority
-		? (() => {
-				const eff = effectivePriority(it);
-				if (eff.lapsed) return ` priority=${eff.raw}~lapsed@${eff.expiresAt}`;
-				if (eff.invalid) return ` priority=${String(eff.raw)}!invalid`;
-				return ` priority=${eff.priority}${eff.expiresAt ? ` until=${eff.expiresAt}` : ""}`;
-			})()
-		: "";
+	// The rendering lives in src/workstrategy.mjs (`priorityLeaseText`) so `peek_queue` and the operator's
+	// `queue --human` readout cannot drift apart (#7113).
+	const lease = priorityLeaseText(it);
+	const priority = lease ? ` ${lease}` : "";
 	// #6112: a row that was un-parked says WHO un-parked it and WHY in the same line the seat
 	// already reads. A release that is only a `transitions` entry is invisible to a seat scanning
 	// its queue, so the row looks as if it un-parked itself and the coordinator's action is lost.

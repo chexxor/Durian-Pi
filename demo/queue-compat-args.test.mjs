@@ -135,6 +135,11 @@ try {
     assert.ok(stdoutBytes(r) < 4096, `and it costs almost nothing: ${stdoutBytes(r)} B vs the ${bareBytes} B document`);
   }
 
+  // `--human` (#7113) is a KNOWN form and must not disturb the default bytes it sits beside.
+  const humanForm = cli(["queue", "--human"]);
+  assert.equal(humanForm.code, 0, `queue --human is a known form and exits 0: ${humanForm.stderr.slice(0, 200)}`);
+  assert.ok(!humanForm.stdout.startsWith("{"), "the human view prints text, which is how the JSON contract stays byte-identical");
+
   // A malformed VALUE for a known flag is refused too (a known flag is not a licence for anything after it).
   const missingValue = cli(["queue", "--id"]);
   assert.equal(missingValue.code, 1, "`--id` with no value exits 1");
@@ -145,7 +150,7 @@ try {
   // offending argument, EVERY known flag, and the usage line, while stdout keeps the machine contract. The known
   // set is pinned here as an exact list: adding a flag to `QUEUE_FLAGS` without adding it here (and to §4A of
   // docs/COMMANDS-AND-THE-BROKER.md, and to the accept lines above) goes RED, which is the point.
-  const KNOWN_FLAGS = ["--json", "--id"];
+  const KNOWN_FLAGS = ["--json", "--id", "--human"];
   const refused = cli(["queue", "--zork"]);
   assert.equal(refused.code, 1, "an unknown flag exits 1");
   assert.ok(refused.stderr.includes("--zork"), `stderr names the argument it refused: ${refused.stderr.slice(0, 300)}`);

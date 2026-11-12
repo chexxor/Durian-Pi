@@ -153,6 +153,7 @@
       "demo/queue-compat-args.test.mjs",
       "demo/queue-filter-attention.test.mjs",
       "demo/queue-held-gates.test.mjs",
+      "demo/queue-human-lease.test.mjs",
       "demo/queue-row-read.test.mjs",
       "demo/mutate-intent-bound.test.mjs",
       "demo/read-drain-out-of-band.test.mjs",
