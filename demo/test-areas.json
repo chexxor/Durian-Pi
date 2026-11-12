@@ -19,6 +19,7 @@
       "demo/admission-deadline.test.mjs",
       "demo/blocked.test.mjs",
       "demo/blockedby-field.test.mjs",
+    "demo/restart-limit-behaviour.test.mjs",
       "demo/cancel-notifies-sender.test.mjs",
       "demo/cli-broker-refuse.test.mjs",
       "demo/cli-help.test.mjs",
