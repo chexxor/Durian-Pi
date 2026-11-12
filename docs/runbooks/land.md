@@ -578,6 +578,14 @@ The helper's pre-flight, in code (the enforcement chokepoint):
    report, resolve it per `resolve-merge-conflict.md`, then re-run the landing.
 5. After a clean land, remove the item's worktree if it is clean (`merge.md` Do step 5). The helper
    never forces and never leaves a scratch or a mid-merge shared tree behind.
+6. **A `DECISIONS.md` entry arrives with a `D###` PLACEHOLDER — the number is derived by the landing pass,
+   not written on the branch.** Read it as an instruction, at the moment you are merging: mint at land time,
+   never hardcode a `D<number>` in a branch. Where the record lives, so a reader can check instead of taking
+   this paraphrase: `docs/DECISIONS.md:3979-3981` ("Mint note (#3075)" — the heading carries a `D###`
+   PLACEHOLDER on purpose, derive the next FREE number by scanning `docs/DECISIONS.md` at merge) and the same
+   discipline cited as #3075/#3186/#3271 at `docs/DECISIONS.md:8455`. It belongs in THIS file because the seat
+   that lands is the seat that mints. No machine enforces it — `grep -n "D-number" tools/doc-integrity-guard.mjs`
+   exits 1 — so the reader is the check.
 
 ## Verify
 ```bash
