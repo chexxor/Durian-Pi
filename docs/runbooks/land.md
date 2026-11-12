@@ -3,9 +3,9 @@ runbook: land
 symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
-last_verified: 2026-11-10
-verified_by: devtools
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked)"
+last_verified: 2026-11-12
+verified_by: scribe
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked). #6549 (2026-11-12, scribe, item worktree forked from 792aa059): the merged-tree preflight in step 2 was measured, not assumed — item-5301-resolved `git merge-tree --write-tree main item-5301-resolved` exit 1; `git show main:src/broker.mjs | grep -n candidates` exit 1 while the branch's demo asserts `dry.candidates`; item-6139 @4147a9f2 merged into main ddcc0a23 -> merged tree 6caee77a materialized in a scratch copy, demos exit 0 (test-areas, workstrategy, intent-spool-census, read-intent-starvation, watchview), scratch deleted after"
 check_rule: null
 ---
 
@@ -255,6 +255,30 @@ ask "stop or not?" or "why did --suite fail?".
    rule as written; the rule was under-specified about WHICH TREE, which is why this line exists.
    To count it yourself on any candidate: `git ls-tree -r --name-only <ref> -- demo | grep '\.test\.mjs$'`
    for both refs, and compare against the manifest rows the branch would land.
+   **A `merge-tree` exit code is not a landing verdict (pitfall 259, `docs/SELFDEV.md:3934`).** `git merge-tree
+   --write-tree main <ref>` exiting 0 proves only that the TEXTS combine. The merged tree must be **materialized**
+   in a throwaway detached worktree (or a scratch copy) and the **branch's own demo run there** before the ref is
+   accepted, and the evidence you report must **name the tree the check ran in** — a sha, a branch, or `main`.
+   Measured 2026-11-12 in this item's worktree against `main ddcc0a23`: `git merge-tree --write-tree main item-5301-resolved`
+   exits 1 (cli.mjs conflict), and the two sides cannot be unioned safely — `git show item-5301-resolved:demo/worktree-reap.test.mjs`
+   asserts `dry.candidates` at line 114, while `git show main:src/broker.mjs | grep -n candidates` returns **no hits
+   (exit 1)**: main ships no such key, so a union that keeps main's `broker.mjs` lands a demo that cannot pass. That is
+   a **re-cut for the author**, not a merge. Same shape for `item-6330`, whose change *removes* entries from a skip list
+   `main` just added: a textual union silently undoes landed work.
+   Materialize the merged tree and run the branch's demos in it:
+   ```bash
+   t=$(git merge-tree --write-tree main "$b")      # exit 0 = texts combine; NOT a landing verdict
+   mkdir -p mt && git ls-tree -r "$t" | while read m ty sha p; do mkdir -p "mt/$(dirname "$p")"; git cat-file blob "$sha" > "mt/$p"; done
+   ln -sfn <repo-root>/node_modules mt/node_modules   # demos that import pi-durable need it
+   node mt/demo/<the-branch's-demo>.test.mjs; echo "exit=$?"   # 0 = ran in the merged tree; 1 = re-cut, do not merge
+   ```
+   Run that on a real candidate (2026-11-12: `item-6139` @`4147a9f2` into `main ddcc0a23` -> merged tree `6caee77a`,
+   materialized in a scratch copy in this worktree, deleted afterwards): merge-tree exit 0 and `node mt/demo/test-areas.test.mjs` **exit 0**, `workstrategy.test.mjs`,
+   `intent-spool-census.test.mjs`, `read-intent-starvation.test.mjs`, `watchview.test.mjs` each **exit 0**. That is what
+   a passing preflight looks like: the number comes with the tree it was measured in.
+   **A landing entry closed as `done` means PROCESSED, not landed.** Say which: `LANDED at <sha>`, or
+   `ROUTED to <seat> as <id>, NOT YET LANDED`. A reader holding a gate on that entry reads a bare `done` as "it is on
+   main" (#4073).
 3. Land the clean set in ONE call — **the gate flag is required** (#6090): `node scripts/land.mjs <b1> <b2> ... --db ./selfdev.sqlite --suite` (or `--changed-suite`). Without one of the two the helper refuses before it touches git.
    Read the JSON report; `lock.reserved:true` / `lock.waitedMs` show it waited for the slots.
 4. **The `--suite` gate works again (FIXED 2026-10-19, `impl-item-2679` on `main`).** The defect was:
@@ -576,6 +600,10 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 ## Verify
 ```bash
 node demo/land-helper.test.mjs   # exit 0 — proves the helper's behaviour these steps rely on
+# the preflight the rule demands (step 2): materialize the merged tree and run the branch's own demo IN it
+t=$(git merge-tree --write-tree main <ref>)          # exit 0 = texts combine; record it, do not stop there
+git ls-tree -r "$t" | while read m ty sha p; do mkdir -p "mt/$(dirname "$p")"; git cat-file blob "$sha" > "mt/$p"; done
+node mt/demo/<the-branch's-demo>.test.mjs; echo "exit=$?"; rm -rf mt   # the artifact you report names $t
 ```
 After a real landing, confirm the branch is an **ancestor** of `main` (the worktree-prune criterion):
 ```bash
