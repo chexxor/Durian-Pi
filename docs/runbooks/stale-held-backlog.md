@@ -194,7 +194,52 @@ id") - that row is still `held` (created `held`, never transitioned), and `src/c
 such rule (grep `blockedBy` in it returns nothing). The convention is therefore **prose plus the
 `workable()` behaviour**, not enforcement.
 
+## The LANDING rows: which are already on main, row by row (#7291)
+
+`tools/queue-drain-audit.mjs` counts `LANDING (LIST|ENTRY)` rows whose cited shas sit in main's history.
+A count is not closable evidence: pm can only close rows it can see one at a time. This instrument
+prints the per-row proof:
+
+```bash
+node tools/probes/landing-ancestry-evidence.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite \
+  --out tools/probes/landing-ancestry-evidence.json
+```
+
+Per row it records every cited token, its object type, `git merge-base --is-ancestor <full-sha> refs/heads/main`
+exit code (0 = ancestor), membership in `git rev-list refs/heads/main`, the commit subject of the cited
+commit, its `blockedBy` gates and their states, and whether the row is itself a gate for another row.
+
+Three rules the sweep must honour, and the measurement behind each:
+
+1. **Ancestors are not artifacts.** For a commit sha, being an ancestor of main is landing. For a
+   *branch tip* it is not: it proves the commits are in main's history, not that a generated file named
+   on that tip is merged. Rows that name a branch and no sha are reported with the ref's tip and its
+   ancestry exit code as a LEAD, never as a verdict.
+2. **A row whose gate names another row is not correspondence.** Rows with a `blockedBy` gate, or that
+   are the target of another non-terminal row's gate, are excluded from the closable set. Measured
+   2026-11-12 (main `a7c9ab0`): 193 non-terminal LANDING rows, 146 with every cited commit in main,
+   **117 closable**, 26 held by their own gate, 6 gating another row, 6 citing no sha at all.
+3. **The audit's citation floor has a blind spot.** `queue-drain-audit.mjs` counts a token as a sha only
+   if it carries a digit *and* a letter, so a real 7-character abbreviation made only of digits
+   (`@4357707` in #3673, `@1381612` in #5765) is dropped, and those rows look like they cite nothing.
+   Conversely a date like `20261029` matches the same regex. Resolution decides: a token counts only if
+   `git cat-file -t` says it is an object, and the landing claim rests only on commits. The probe prints
+   both counts (`auditFloorVariantClosable` 140 vs 146 by resolution) so the difference is visible
+   rather than silently changing the number.
+
+Run against main `a7c9ab0` on 2026-11-12 by qa, exit **0**.
+
 ## Verify
+- **The landing-ancestry probe runs and its own numbers are internally consistent** (run 2026-11-12 by qa, exit **0**):
+
+  ```bash
+  node tools/probes/landing-ancestry-evidence.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite --out .spike/delegate/landing-ancestry.json; echo "exit=$?"
+  ```
+
+  It printed `LANDING rows non-terminal: 193`, `every cited sha in main's rev-list: 146`, `closable ... 117`,
+  and `methods disagree 0` - the two methods (`rev-list` membership and `merge-base --is-ancestor`) agreed on
+  every row, which is the check that the count is not an artefact of one git command.
+
 
 - The audit exits 0 and prints `git landing commits read: <n>` (the git pass ran) and per-seat totals that
   add up to `held`. Re-run 2026-11-11 (#6315), exit **0**:

@@ -1,0 +1,3900 @@
+{
+ "measuredAt": "2026-11-12T16:07:17.351Z",
+ "mainTip": "a7c9ab00d730407e67631abdde6e814c3ffe1fdc",
+ "command": "node tools/probes/landing-ancestry-evidence.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite",
+ "ancestryCommand": "git merge-base --is-ancestor <full-sha> refs/heads/main  (exit 0 = ancestor of main)",
+ "counts": {
+  "landingRows": 193,
+  "shaInMainRevList": 146,
+  "closableNoGate": 117,
+  "onMainButHasOwnGate": 26,
+  "onMainButGatesOthers": 6,
+  "methodsDisagree": 0,
+  "noShaCited": 6,
+  "citedObjectNotCommit": 7,
+  "rowsWithAmbiguousTokens": 12,
+  "rowsWithNonShaTokens": 12,
+  "landingRowsWithDeadGate": 9,
+  "rowsRecoverableOnlyByResolvingAllHex": 18,
+  "auditFloorVariantClosable": 140
+ },
+ "rows": [
+  {
+   "id": 2149,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add scribe-item-2124 @007f073 (docs-only: D105 rule + FEATURES row) — ORDER",
+   "citations": [
+    {
+     "cited": "007f073",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(workflows+features): state the D105 local-seat fresh-context-per-item rule "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2226,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add security-item-2220 @b3c4c3a (docs-only: security position — control-pla",
+   "citations": [
+    {
+     "cited": "b3c4c3a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(review): control-plane spool-op gate RATIFIED with 3 required shape changes"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2385,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add scribe-item-2332 @5d7a397 (rig.selfdev.json seat cleanup guidance)",
+   "citations": [
+    {
+     "cited": "5d7a397",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(selfdev): every seat's commit-discipline block: leave item worktree clean; "
+    },
+    {
+     "cited": "77d0da5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(constitution): P2 Cleanup line — leave item worktree clean; harness reaps o"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2466,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add impl-item-2322 @b8fdcc7 (broker STOP receipt observability)",
+   "citations": [
+    {
+     "cited": "b8fdcc7",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(broker): record the STOP request/signal receipt in <db>.broker.log before te"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2476,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add scribe-item-2461 @05d8615 (docs-only: ROADMAP item 78 DELIVERED)",
+   "citations": [
+    {
+     "cited": "05d8615",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(roadmap): mark item 78's pacing/legibility half DELIVERED (#2237 @3021fe2) "
+    },
+    {
+     "cited": "3021fe2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(broker): bound the inbox-driven re-trigger by the retry backoff; honor .stop"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2513,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add impl-item-2328 @ef72ab6 (WORKTREE-ROT 1/3 IGNORE BEFORE CREATE)",
+   "citations": [
+    {
+     "cited": "ef72ab6",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(worktree): ignore worktree/scratch paths BEFORE creation (#2328)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2571,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add impl-item-2329 @b36cd81 (WORKTREE-ROT 2/3 PRUNE AFTER REMOVE)",
+   "citations": [
+    {
+     "cited": "b36cd81",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(worktree): PRUNE after every removal and the broker sweep (#2329)"
+    },
+    {
+     "cited": "ef72ab6",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(worktree): ignore worktree/scratch paths BEFORE creation (#2328)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2591,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add architect-item-2520 @a05c660 (docs-only: broker review + D112 ADR)",
+   "citations": [
+    {
+     "cited": "a05c660",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(review): broker/CLI/UI/supervisor edge-case + temporal-fault review; ADR D1"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2592,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add impl-item-2330 @0ede1de (WORKTREE-ROT 3/3 PROVENANCE/OWNERSHIP)",
+   "citations": [
+    {
+     "cited": "0ede1de",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(worktree): state the provenance/ownership rule (whoever creates owns cleanu"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2636,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add impl-item-2356 @02f1a36 (S1 × D103 skill renames: driving-durian-pi / d",
+   "citations": [
+    {
+     "cited": "02f1a36",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(skills): rename the two skills to the S1 names driving-durian-pi / delegati"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2637,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add scribe-item-1257 @fe1434e (docs-only: normalize constitution-amendment.",
+   "citations": [
+    {
+     "cited": "fe1434e",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): normalize constitution-amendment.md from UTF-16 to plain text (d"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2778,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add architect-item-2730 @e08d1a9 (docs-only: devtools-decay review + ADR D1",
+   "citations": [
+    {
+     "cited": "e08d1a9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(review): devtools small-local-model decay — lead proposal A-F; ADR D115 (#2"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2841,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — scribe rebase-pass landing set (6 rebased tips; supersedes #2155/#2446/#246",
+   "citations": [
+    {
+     "cited": "a70fc27",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next): record operator feedback rulings delivered to pm"
+    },
+    {
+     "cited": "c85d210",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs+constitution: Part 2.4 remainder - stacked base, scratch line, land.md base"
+    },
+    {
+     "cited": "4754b69",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(features): derive the Proof-surface count instead of pinning it (#1565)"
+    },
+    {
+     "cited": "feccaf6",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(features): add pause/unpause rows (commands + capability) and the spool enu"
+    },
+    {
+     "cited": "0c1de2a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(rebrand): rename AGENTS.md and constitution.txt product refs to durian-pi p"
+    },
+    {
+     "cited": "170e5e0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions): record TUI pricing EXTENSION + ui.mjs FALLBACK decisions, D-num"
+    },
+    {
+     "cited": "8fa4114",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(incidents): close pi-build-version-visibility as resolved by #2412 (#2463)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 2993,
+   "status": "held",
+   "to": "qa",
+   "subject": "VERIFY (non-author, HELD — gated on the 2976 landing entry #2992) — prepare_workspace recu",
+   "citations": [
+    {
+     "cited": "e4e6244",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(worktree): run sync-pi --link BEFORE npm ci to fix ETARGET on unpublishable "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3039,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add impl-item-2545 @1e96d53 (TRACE #920 option A: wrapProviderWithTrace at ",
+   "citations": [
+    {
+     "cited": "1e96d53",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(trace): the request TRACE at the one provider seam (#2545, #920)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3103,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — add devtools-item-2587 @de9ac4d (TUI `live` view batched: one spool round-t",
+   "citations": [
+    {
+     "cited": "de9ac4d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix: batch TUI live reads via health.streaming (#2587)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3120,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (replaces closed #2992) — add devtools-item-2976 @e4e6244 (prepare_workspace ",
+   "citations": [
+    {
+     "cited": "e4e6244",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(worktree): run sync-pi --link BEFORE npm ci to fix ETARGET on unpublishable "
+    },
+    {
+     "cited": "8e4f987",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next): operator ACCEPTS R1-R7; pm applying (operator-accepts-r1-r7-2026-10-"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3673,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — impl-item-3638 @4357707: land.md gains the GENERATED-artifact r",
+   "citations": [
+    {
+     "cited": "4357707",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3638): a generated-artifact check must run on the MERGED tree (#3272 addit"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3686,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — impl-item-3634 @3fc21d2: resolve-merge-conflict.md step 2 gains",
+   "citations": [
+    {
+     "cited": "3fc21d2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3634): the rebase verb is NOT refused — correct the guard list, keep the t"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3699,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (test-only) — impl-item-3646 @9950bc3: restores the 87-line holder/branch tes",
+   "citations": [
+    {
+     "cited": "9950bc3",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "test(#3646): restore the #3174 holder tests that a DOCS commit deleted from main"
+    },
+    {
+     "cited": "595b714",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): a current NEXT SESSION at the top - TUI slice built but unlanded, qu"
+    },
+    {
+     "cited": "b4e88ff",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land impl-item-3174 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3786,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — impl-item-3735 @cf72678: local-provider-down.md gains a FOUR-ST",
+   "citations": [
+    {
+     "cited": "cf72678",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks #3735): decide local-provider health on the MODEL ID, not the port"
+    },
+    {
+     "cited": "11e87a0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): delegate clock-out - 402 provider outage, wedged broker restarted (p"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3808,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (two-commit stack, replaces #3741) — 31932a6 (cancellation notifies with the ",
+   "citations": [
+    {
+     "cited": "31932a6",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(queue): a cancellation REACHES the other party - the reason travels as a CAN"
+    },
+    {
+     "cited": "9fed68e",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(queue #3739): the structural notice flag decides - a WORK item whose free-te"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3822,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only, two-commit stack, replaces #3819) — cccccd5 (unknown-default prin",
+   "citations": [
+    {
+     "cited": "cccccd5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks #3744): land.md gains the unknown-default principle - liveness/wor"
+    },
+    {
+     "cited": "235e163",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks #3766): a fresh worktree's suite measures the LOCK, not main - nam"
+    },
+    {
+     "cited": "4357707",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3638): a generated-artifact check must run on the MERGED tree (#3272 addit"
+    },
+    {
+     "cited": "7cd542a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3656): land without --suite while main is red — with a CHECKABLE expiry, n"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3828,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — scribe-item-3785 @21fb14c: restores 595b714's doc losses (local",
+   "citations": [
+    {
+     "cited": "21fb14c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: restore the 595b714 doc losses - local-provider-down +60 (REVERSE move), b"
+    },
+    {
+     "cited": "595b714",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): a current NEXT SESSION at the top - TUI slice built but unlanded, qu"
+    },
+    {
+     "cited": "e8ce2a0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(features): add rows for --dry-run, instance key/host lock, and TUI paged ba"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3830,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — impl-item-3773 @e700d7c: CP1252-decode repair of README.md + pr",
+   "citations": [
+    {
+     "cited": "e700d7c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(docs #3773): repair the 595b714 encoding damage - decode README.md's 11 moji"
+    },
+    {
+     "cited": "595b714",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): a current NEXT SESSION at the top - TUI slice built but unlanded, qu"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3841,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-3774 @286a911: restores the P5/#110 comment above openStore() in ",
+   "citations": [
+    {
+     "cited": "286a911",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(cli #3774): restore the P5/#110 rationale above the serve probe handle - 595"
+    },
+    {
+     "cited": "595b714",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): a current NEXT SESSION at the top - TUI slice built but unlanded, qu"
+    },
+    {
+     "cited": "e700d7c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(docs #3773): repair the 595b714 encoding damage - decode README.md's 11 moji"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3864,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (replaces #3860, UNGATED — verify #3834 PASSED and the tip is unmoved at f84f",
+   "citations": [
+    {
+     "cited": "f84fde8",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#3821): a failed `sync-pi --link` is a recorded UNLINKED state, not a consol"
+    },
+    {
+     "cited": "307fc06",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#3558): a REUSED workspace names the base it is actually at, not the one ask"
+    },
+    {
+     "cited": "deb5d29",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#3807): an explicit base on the CREATE path is honoured or refused, never si"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3891,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (replaces #3717) — impl-item-3869 @565cf2c: the re-cut CARRIER (land.md +8/−2",
+   "citations": [
+    {
+     "cited": "565cf2c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3869): re-cut the --suite-less carrier — the expiry is measured in a NAMED"
+    },
+    {
+     "cited": "7cd542a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3656): land without --suite while main is red — with a CHECKABLE expiry, n"
+    },
+    {
+     "cited": "11e87a0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): delegate clock-out - 402 provider outage, wedged broker restarted (p"
+    },
+    {
+     "cited": "21fb14c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: restore the 595b714 doc losses - local-provider-down +60 (REVERSE move), b"
+    },
+    {
+     "cited": "cccccd5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks #3744): land.md gains the unknown-default principle - liveness/wor"
+    },
+    {
+     "cited": "235e163",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks #3766): a fresh worktree's suite measures the LOCK, not main - nam"
+    },
+    {
+     "cited": "30f12aa",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks #3775): the --suite-less fallback gets a REACHABLE expiry - red se"
+    },
+    {
+     "cited": "4357707",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(#3638): a generated-artifact check must run on the MERGED tree (#3272 addit"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3934,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-3929 @063e23c: three-command landing preflight (rev-parse REF",
+   "citations": [
+    {
+     "cited": "063e23c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(land): ancestry is a fast path, not a refusal - content proves landability ("
+    },
+    {
+     "cited": "c755c96",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(land): branch pre-flight - rev-parse, ancestry, and committed-conflict-mark"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3940,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING LIST (docs-only) — scribe-item-3935 @584cd2d: two citations retargeted from a revi",
+   "citations": [
+    {
+     "cited": "584cd2d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: retarget the dangling security-sec-m3-seat-tools review citation - no stan"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 3993,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-3961 @d74910a (2 commits): degraded-cwd guard (refuses relati",
+   "citations": [
+    {
+     "cited": "d74910a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(complete_work): say when the seat cwd is reset to the shared checkout, not "
+    },
+    {
+     "cited": "7cfb44a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(guard): refuse a relative-path write or a commit from a cwd degraded to the"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4025,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-4009 @30d51b2 (STACKED on #3962 @08c5c8b, land #4008 FIRST): `san",
+   "citations": [
+    {
+     "cited": "30d51b2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#4009): sanitise the DURABLE render path at its one boundary — the format cl"
+    },
+    {
+     "cited": "08c5c8b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#3962): the probe says MOST of the class was already handled — bidi override"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4031,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-3992 @734e77f (STACKED on #3994, which is NOT yet landable): ",
+   "citations": [
+    {
+     "cited": "734e77f",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(guard): refuse a SHELL command from a cwd degraded to the shared checkout ("
+    },
+    {
+     "cited": "d74910a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(complete_work): say when the seat cwd is reset to the shared checkout, not "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4035,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-3239 @be663f2: 81 lines NOT on main (sections 3c/3d + the `by",
+   "citations": [
+    {
+     "cited": "be663f2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#3239: adapt configure to the operator-only control-plane gate (D113 #1966/#2219"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4039,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-4017 @dbf4597 (3 files, +245/−49): the newline-preserving wrap EX",
+   "citations": [
+    {
+     "cited": "dbf4597",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(#4017): extract the newline-preserving wrap onto current main — the wrap wa"
+    },
+    {
+     "cited": "a22ee47",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(dispositions): re-probe 3308 behaviourally (landing path is on main - proje"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4041,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST (test-only) — devtools-item-2494 @3bd82cb: the demo ran `npm ci` while produc",
+   "citations": [
+    {
+     "cited": "3bd82cb",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "Fix demo/worktree-reuse-deps.test.mjs for npm install (#2494)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4060,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST (replaces #3994 + #4032) — devtools-item-4030 @ea93655, THREE COMMITS AS ONE ",
+   "citations": [
+    {
+     "cited": "ea93655",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "test(contract): accept the complete_work cwd note on the result (#4030)"
+    },
+    {
+     "cited": "d74910a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(complete_work): say when the seat cwd is reset to the shared checkout, not "
+    },
+    {
+     "cited": "734e77f",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(guard): refuse a SHELL command from a cwd degraded to the shared checkout ("
+    },
+    {
+     "cited": "5e4dd4d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(deps): lock the @earendil-works/* 1.3.0 line so a fresh npm ci runs the dura"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4119,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST (2 commits as one unit) — devtools-item-4099 @5f157f8: the duplicate-item rul",
+   "citations": [
+    {
+     "cited": "5f157f8",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(check): a live item that NAMES its predecessor is a SUPERSESSION, not a dupl"
+    },
+    {
+     "cited": "6c1e546",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(check): SAME-INTENT duplicate rule, fired on the non-terminal twin (#4075)"
+    },
+    {
+     "cited": "d257f22",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land scribe-item-3326 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4123,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-4073 @2d1a8c4 (2 files): `complete_work`'s description + a la",
+   "citations": [
+    {
+     "cited": "2d1a8c4",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(land): a landing entry's completion must say LANDED vs ROUTED (#4073)"
+    },
+    {
+     "cited": "6ed183a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): live pointer - TUI merge delegated, Q2 REPLACE+RETURN ruled, Fix A a"
+    },
+    {
+     "cited": "5e4dd4d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(deps): lock the @earendil-works/* 1.3.0 line so a fresh npm ci runs the dura"
+    },
+    {
+     "cited": "d257f22",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land scribe-item-3326 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4136,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-4129 @5c89926 (2 files, +134): rebase judged by ARGUMENTS — one-a",
+   "citations": [
+    {
+     "cited": "5c89926",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(#4129): the guard judges `git rebase` by its ARGUMENTS, not its verb — bran"
+    },
+    {
+     "cited": "d257f22",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land scribe-item-3326 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4142,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-4139 @51a866b: `.gitignore` family pattern `*.sqlite.broker.*",
+   "citations": [
+    {
+     "cited": "51a866b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(land): ignore the broker's WHOLE exhaust family, and refuse a STRAY worktree"
+    },
+    {
+     "cited": "5d9140f",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(land): shared-root preflight refuses UNTRACKED dirt too, names paths, and s"
+    },
+    {
+     "cited": "d257f22",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land scribe-item-3326 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4154,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-4147 @fb65ea9 (2 files): `complete_work`'s description AND th",
+   "citations": [
+    {
+     "cited": "fb65ea9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(rig): the complete_work artifact names THE TREE the check ran against (#414"
+    },
+    {
+     "cited": "d257f22",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land scribe-item-3326 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4157,
+   "status": "held",
+   "to": "devtools",
+   "subject": "LANDING LIST — devtools-item-4153 @f60928a: `evidence-tree` half (a) only — a NAMES-A-TREE",
+   "citations": [
+    {
+     "cited": "f60928a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(check): evidence-tree rule - a completion's artifact must NAME what the che"
+    },
+    {
+     "cited": "d257f22",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land scribe-item-3326 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4168,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-4164 @7898dcc (3 files, +160/−4): `--select` taught + unknown fla",
+   "citations": [
+    {
+     "cited": "7898dcc",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#4164): `tui.mjs` accepts `--select` and REJECTS unknown flags — a flag that"
+    },
+    {
+     "cited": "b4bb4c7",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): land carrier + designer-3845; stack blocked on author rebase"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4169,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING LIST — scribe-item-4162 @c63daf5 (docs/NEXT.md, +4/−3): the dangling `docs/DISPOSI",
+   "citations": [
+    {
+     "cited": "c63daf5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next): fix two stale details - the DISPOSITIONS ledger is unlanded (#4151, "
+    },
+    {
+     "cited": "dbf4597",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(#4017): extract the newline-preserving wrap onto current main — the wrap wa"
+    },
+    {
+     "cited": "595b714",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): a current NEXT SESSION at the top - TUI slice built but unlanded, qu"
+    },
+    {
+     "cited": "9c3aa02",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): qa2 put into rotation (first item ever, probe passed); duplicates ca"
+    },
+    {
+     "cited": "798836b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land revert-9c3aa02 onto main"
+    },
+    {
+     "cited": "b4bb4c7",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): land carrier + designer-3845; stack blocked on author rebase"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4230,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (reissued — I cancelled #4204 on a FALSE \"it is on main\" report) — impl-item-",
+   "citations": [
+    {
+     "cited": "c82be69",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(#4180): the suppression trace is WIRED — one line per skipped candidate wit"
+    },
+    {
+     "cited": "df055d5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land impl-item-4171 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4259,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST (STACKED — land AFTER Fix A e0efe71) — impl-item-4233 @b5f463f: the action to",
+   "citations": [
+    {
+     "cited": "e0efe71",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#3941): the landing screen fills the terminal — width absorbed by the flexib"
+    },
+    {
+     "cited": "b5f463f",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#4233): hide the action token rather than render a fragment — threshold is N"
+    },
+    {
+     "cited": "d5f7c8d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): operator approved next queue delivered to pm (P1-P7)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4344,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +1/−1) — scribe-item-4288 @17dc0e7: `land.md`'s `#### Op",
+   "citations": [
+    {
+     "cited": "17dc0e7",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): settle the deny list (pinned-tree read: ten verb families + the -"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4460,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +19) — scribe-item-4389 @1bb9705: the `git status --porc",
+   "citations": [
+    {
+     "cited": "1bb9705",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - git status --porcelain IMMEDIATELY before a landing (an"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4471,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +6/−4) — scribe-item-4398 @5a18abd: D122's ownership cla",
+   "citations": [
+    {
+     "cited": "5a18abd",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions): fix D122 ownership-clause negation (owns must NOT mean may-WRIT"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4513,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +19) — scribe-item-4431 @f19827d: the operator-confirmat",
+   "citations": [
+    {
+     "cited": "f19827d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - the landing LOCK serialises landings (no operator-confi"
+    },
+    {
+     "cited": "d8bc976",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land impl-item-4267 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4524,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +20/−1) — scribe-item-4447 @bbc8e42: the `repo`-field di",
+   "citations": [
+    {
+     "cited": "bbc8e42",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - RETIRE the repo-field reading (land.mjs on main enforce"
+    },
+    {
+     "cited": "f168339",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land devtools-item-4247 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4539,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (2 files, +82) — scribe-item-4466 @9a7817b: the verifier-independence runboo",
+   "citations": [
+    {
+     "cited": "9a7817b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): new verifier-independence runbook - a verifier's only write is a "
+    },
+    {
+     "cited": "bbc8e42",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - RETIRE the repo-field reading (land.mjs on main enforce"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4540,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +15/−6) — scribe-item-4469 @f714e78: the status check is",
+   "citations": [
+    {
+     "cited": "f714e78",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - correct the git status precondition: it is BEST-EFFORT "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4544,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +15) — scribe-item-4486 @821c034: A MERGE HAS TWO PARENT",
+   "citations": [
+    {
+     "cited": "821c034",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - a MERGE has two parents, a docs commit has one (git log"
+    },
+    {
+     "cited": "9e8710e",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): three TUI branches landed and proven; pointer carries the incident r"
+    },
+    {
+     "cited": "e6b8f33",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): measure workload imbalance; rebalance routed to pm"
+    },
+    {
+     "cited": "a022635",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land impl-item-3941 onto main"
+    },
+    {
+     "cited": "6c2e3a0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): register the new cli-broker-refuse red with pm"
+    },
+    {
+     "cited": "e0efe71",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#3941): the landing screen fills the terminal — width absorbed by the flexib"
+    },
+    {
+     "cited": "aabcacd",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land impl-item-4233 onto main"
+    },
+    {
+     "cited": "27a6a36",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT): verify cli-broker-refuse cause (#4170 casing); retract #4176"
+    },
+    {
+     "cited": "b5f463f",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#4233): hide the action token rather than render a fragment — threshold is N"
+    },
+    {
+     "cited": "e79dd2f",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land impl-item-4158 onto main"
+    },
+    {
+     "cited": "2213801",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(#4158): Enter runs the operator window — the caller the seam, launch and re"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4547,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (2 files, +76) — scribe-item-4489 @ddcf234: the per-row-marker runbook + 2 R",
+   "citations": [
+    {
+     "cited": "ddcf234",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): new per-row-marker runbook - choose a ROW-SPECIFIC marker from th"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4595,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (docs-only, 1 file, +20) — scribe-item-4578 @3d89e39: \"A STALE BRANCH CAN RE",
+   "citations": [
+    {
+     "cited": "3d89e39",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook): land.md - a STALE BRANCH can re-introduce a cleanup (impl-item-42"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 4698,
+   "status": "held",
+   "to": "scribe",
+   "subject": "LANDING ENTRY (4 files, +24/−5) — scribe-item-4692 @16b7e03: the KNOWN REDS BASELINE (caus",
+   "citations": [
+    {
+     "cited": "16b7e03",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: record the check+starter known-reds baseline (one cause: 30270c0's message"
+    },
+    {
+     "cited": "30270c0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(#4568): strip the UTF-8 BOM from docs/reviews/designer-landing-screen-spec.m"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5062,
+   "status": "deferred",
+   "to": "lead",
+   "subject": "DONE #5039: RE-CUT #5031 (execute, then STOP): fork a scratch worktree FROM item-4986, mer",
+   "citations": [
+    {
+     "cited": "e3118fa0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-5049 onto main (#5049 the context-fraction guard: a notice and "
+    },
+    {
+     "cited": "95836ec3",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook,delegate-clockin): the queue procedure changes now that a row can b"
+    },
+    {
+     "cited": "c2fc4032d2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: re-cut item-4986 onto main e3118fa0 (#5039)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5068,
+   "status": "deferred",
+   "to": "devtools",
+   "subject": "CANCELLED #5040: LANDING ENTRY (lead decision: ACCEPT item-4986): merge the re-cut row-sco",
+   "citations": [
+    {
+     "cited": "c2fc4032",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: re-cut item-4986 onto main e3118fa0 (#5039)"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5110,
+   "status": "deferred",
+   "to": "devtools",
+   "subject": "LANDING ENTRY #5090 (ACCEPTED), gate baseline attached: land SHA `4c92d550`; expect **255*",
+   "citations": [
+    {
+     "cited": "4c92d550",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5090: pin the gate itself, both directions"
+    },
+    {
+     "cited": "2690e6ac",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5083 LANDED: re-cut of item-4955 onto current main (#5079)"
+    },
+    {
+     "cited": "98216f24",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5090: promote the store-behaviour gate into tools/ where it can be re-run"
+    },
+    {
+     "cited": "bb2a3997",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "Merge branch 'item-5089' (docs/runbooks/pi-pin-update.md) — the pi pin-move runb"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5246,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — architect-item-4846 @6dc7100c (docs-only: worktree/seat-state resolution de",
+   "citations": [
+    {
+     "cited": "6dc7100c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(DECISIONS): #4846 ADR (D-<mint>, minted at land time) — one ledger reader, "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5375,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING ENTRY for architect #5208/#5254 — row-shape FOLD RULE + D-entry, branch item-5208 ",
+   "citations": [
+    {
+     "cited": "6dc1a425",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions): #5208 - D221: a roadmap row is bounded by its acceptance check,"
+    },
+    {
+     "cited": "46c28b73",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(selfdev): record D219 (the four answers, the 600s pass, 303 at 3/3) + D220 "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5381,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST + OUTCOME RECORD for #5172 (security-item-4829, branch `item-4829`): ROUTED, ",
+   "citations": [
+    {
+     "cited": "96f810f1",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): security position for the seat sandboxing substrate (#4829)"
+    },
+    {
+     "cited": "a8d770f9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): carry the host in the substrate datum; refute the preflight shell"
+    },
+    {
+     "cited": "294e1806",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): write the second-round sandbox-substrate research commission"
+    },
+    {
+     "cited": "2115decc",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: the operator's four rulings of 2026-11-05 (D210) — standing verifier spend"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5405,
+   "status": "deferred",
+   "to": "impl",
+   "subject": "CANCELLED #5403: LANDING LIST (docs-only) - NOT YET LANDED: devtools 6983614... correction",
+   "citations": [
+    {
+     "cited": "6983ed1a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): a worktree whose sync-pi link step failed gives non-comparable v"
+    }
+   ],
+   "lookLikeShaButAreNot": [
+    "6983614"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5421,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING LIST (docs-only) — item-4879 @3c4973c9: the 2026-11-07 broker specimen folded into",
+   "citations": [
+    {
+     "cited": "3c4973c9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(broker): fold the 2026-11-07 live specimen into the existing broker rows (#"
+    },
+    {
+     "cited": "b094ea54",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(research): fold the follow-up report (25/26 quotes verified), measure the f"
+    },
+    {
+     "cited": "19a3c2bc",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(correction): the dead-letter count I reported was files, not letters (6, un"
+    }
+   ],
+   "lookLikeShaButAreNot": [
+    "1673276"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": [
+    {
+     "ref": "item-4879",
+     "exists": true,
+     "tip": "dab62450b7dd",
+     "tipIsAncestorOfMain": 1
+    }
+   ]
+  },
+  {
+   "id": 5426,
+   "status": "held",
+   "to": "impl",
+   "subject": "LANDING LIST — architect item-5208 @6dc1a425: the ADR entry must be RENUMBERED at land tim",
+   "citations": [
+    {
+     "cited": "6dc1a425",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions): #5208 - D221: a roadmap row is bounded by its acceptance check,"
+    },
+    {
+     "cited": "0bce3ed5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions,roadmap,selfdev): D223 signs the measured 600s pass (303 is now t"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5440,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING ENTRY + ROUTE: devtools #5223 runbook fold @141c8307 (docs-only, unlanded) and #53",
+   "citations": [
+    {
+     "cited": "141c8307",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): metered-endpoint-unkeyed after a rotation is a HOST-CONFIG fault"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5501,
+   "status": "deferred",
+   "to": "scribe",
+   "subject": "RM-318 REGISTER ROW: close on CONTENT (318(a) path names are phantom) + landing entry for ",
+   "citations": [
+    {
+     "cited": "0060bd99",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): re-cite Round 2's Goose capacity/timeout rows to our own pin (RM-"
+    }
+   ],
+   "lookLikeShaButAreNot": [
+    "775b395"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5503,
+   "status": "deferred",
+   "to": "lead",
+   "subject": "DONE #5359: RM-318 REGISTER ROW: close it on CONTENT, not on ROADMAP 318(a)'s path names (",
+   "citations": [
+    {
+     "cited": "0060bd99",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): re-cite Round 2's Goose capacity/timeout rows to our own pin (RM-"
+    }
+   ],
+   "lookLikeShaButAreNot": [
+    "775b395"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5508,
+   "status": "deferred",
+   "to": "scribe",
+   "subject": "RM-295 REGISTER CORRECTION: credential-VALUE print is OPEN, not done (5/5 sentinels at 7e5",
+   "citations": [
+    {
+     "cited": "7e5afe39",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(ratifications): D228 for the operator's five answers, the item-5193 recover"
+    },
+    {
+     "cited": "46c28b73",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(selfdev): record D219 (the four answers, the 600s pass, 303 at 3/3) + D220 "
+    },
+    {
+     "cited": "ef29516d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "rig(selfdev): restore the verifier family on the operator-approved METERED arm ("
+    },
+    {
+     "cited": "5e6d8917",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): security position - the broker preflight prints credential VALUES"
+    },
+    {
+     "cited": "5bec571b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next,selfdev): the operator's three answers of 2026-11-07T05:4xZ, the pass "
+    },
+    {
+     "cited": "a314ddd3",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next,decisions,selfdev,runbook): the operator's \"(c) then (b)\" and the 130-"
+    }
+   ],
+   "lookLikeShaButAreNot": [
+    "20261029"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5665,
+   "status": "deferred",
+   "to": "impl",
+   "subject": "LANDING LIST — add item-5398 (clock-in digest budget, 15,117 B vs 43,967 B on the same liv",
+   "citations": [
+    {
+     "cited": "6d5c126d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(tools,runbook,next): record the aggregated clock-in digest with measured by"
+    },
+    {
+     "cited": "9ae25f09",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "feat(clockin): aggregate the deferred backlog into per-seat counts + a grep-able"
+    },
+    {
+     "cited": "c047b767",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next,decisions,selfdev,runbook): D233 — the operator's five answers of 2026"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5685,
+   "status": "held",
+   "to": "pm",
+   "subject": "LANDING LIST registration — scribe-item-5615 (outage-window deferral ruling, DECISIONS poi",
+   "citations": [
+    {
+     "cited": "44dc5cbd",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions,next): D234 - the operator's four rulings of 2026-11-08T00:3xZ (#"
+    },
+    {
+     "cited": "c047b767",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next,decisions,selfdev,runbook): D233 — the operator's five answers of 2026"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5715,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "DONE #3350: VERIFY (non-author, HELD — gated on landing entry #3349, docs-only, cheap) — t",
+   "citations": [
+    {
+     "cited": "6875bc8",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(selfdev): point the delegate at WORK-ITEM-LIFECYCLE when the next item is b"
+    },
+    {
+     "cited": "7ccb2163",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(next,decisions): D236 — the operator accepts all seventeen N9 recommendatio"
+    },
+    {
+     "cited": "defbc34",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(queue): redesign v2 — adjudicate the architect (4 blockers+13 CRs) and advo"
+    },
+    {
+     "cited": "73877161",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "advocate review #2985: queue-lifecycle-redesign (8 CRs: persisted-state-only enf"
+    },
+    {
+     "cited": "7387716",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "advocate review #2985: queue-lifecycle-redesign (8 CRs: persisted-state-only enf"
+    },
+    {
+     "cited": "5c50f346",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(review): architecture review of the queue-lifecycle redesign - 4 blockers, "
+    },
+    {
+     "cited": "328d8388",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(review): rebase architect-item-3005 onto main — add/add resolved to 3005's "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5919,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING ENTRY #5789: fleet-health census is implemented, gated and verified on branch item",
+   "citations": [
+    {
+     "cited": "e12b0387",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5789: runbook for reading the census - how to prove a failure count went down"
+    },
+    {
+     "cited": "c325b2cc",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5789: promote the fleet-health and context-window census from .spike/ into tool"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5949,
+   "status": "deferred",
+   "to": "devtools",
+   "subject": "DONE #5808: Landing entry: devtools-item #5767 (check reports UNKNOWN, not skipped, for th",
+   "citations": [
+    {
+     "cited": "6fe48480",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(check, #5767): the three runbook rules report UNKNOWN, not skipped, when no "
+    },
+    {
+     "cited": "fb463162",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-5737 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 5975,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING LIST (docs-only) — scribe-item-5912 @2050e188: spend-cap runbook gains the compact",
+   "citations": [
+    {
+     "cited": "2050e188",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5912: spend-cap-tripped runbook gains the compaction shape (209 money vs 214 wi"
+    },
+    {
+     "cited": "d37bef35",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbook,land): why a landing stalls — the branch is green, the guard allows"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": [
+    {
+     "ref": "item-5912",
+     "exists": true,
+     "tip": "2050e18821e3",
+     "tipIsAncestorOfMain": 0
+    }
+   ]
+  },
+  {
+   "id": 6006,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING ENTRY #5793: land.mjs's --suite scratch now carries node_modules; branch item-5793",
+   "citations": [
+    {
+     "cited": "63439a90",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5793: runbook line for the scratch's dependency link"
+    },
+    {
+     "cited": "d2dc4baf",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5793: the landing scratch now carries the checkout's dependencies, and a depend"
+    },
+    {
+     "cited": "429f2b5a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "gate(continuity): the milestone gate now checks whether a seat has a note to res"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6008,
+   "status": "deferred",
+   "to": "impl",
+   "subject": "CANCELLED #5713: LANDING LIST (docs-only, GATED on #5712): scribe-item-5615 @44dc5cbd — D2",
+   "citations": [
+    {
+     "cited": "44dc5cbd",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions,next): D234 - the operator's four rulings of 2026-11-08T00:3xZ (#"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6011,
+   "status": "deferred",
+   "to": "impl",
+   "subject": "DONE #5845: QUESTION #5713: LANDING LIST (docs-only, GATED on #5712): scribe-item-5615 @44",
+   "citations": [
+    {
+     "cited": "44dc5cbd",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions,next): D234 - the operator's four rulings of 2026-11-08T00:3xZ (#"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6018,
+   "status": "deferred",
+   "to": "pm",
+   "subject": "LANDING ENTRY #5801: item-4966 disposition row (docs/DISPOSITIONS.md) is written and measu",
+   "citations": [
+    {
+     "cited": "605ebf07",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(FEATURES): row for the persona-file surface the re-cut lacked (#4966)"
+    },
+    {
+     "cited": "986a9e37",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-4966 onto main"
+    },
+    {
+     "cited": "3fde09e3",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT,SELFDEV): restore the pointer contract and record D188's landed state "
+    },
+    {
+     "cited": "c4db1fd9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(clockin): landing debt is computed from REFS and resolved SHAS, never from a"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6156,
+   "status": "held",
+   "to": "pm",
+   "subject": "LANDING ENTRY (held) — #6121 close-out doc: docs/reviews/architecture-note-contract-closeo",
+   "citations": [
+    {
+     "cited": "966a4d47",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6121: D240 close-out ruling — one note contract, extension-plane owner, two lay"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6222,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — scribe-item-4878 @ 2b91c21: phantom-root disposition row",
+   "citations": [
+    {
+     "cited": "2b91c21",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#4878: DISPOSITIONS ledger row for the two phantom repo-root dirs (C: and C:\\Use"
+    },
+    {
+     "cited": "e50cf5b6",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-6082-mig onto main"
+    },
+    {
+     "cited": "3860e5d1",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(NEXT re-cut; D171): the operator's wake grant was EXECUTED and it changed t"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6307,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — architect-item-6171 @ df2f471: checkpoint policy ruling + probe",
+   "citations": [
+    {
+     "cited": "df2f471",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6171: the ruling — per-doc checkpoint predicates (queue bound 200, small sessio"
+    },
+    {
+     "cited": "a616c8c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6171: checkpoint-policy probe and its three measurement runs (queue 5k/3k, 5k/1"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6308,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — land devtools' gate-required fix (item-6090 @20d24f9d) as one unit, re-ver",
+   "citations": [
+    {
+     "cited": "20d24f9d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6090 docs: the landing procedure no longer offers a no-gate path — required gat"
+    },
+    {
+     "cited": "0dae846c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6090: the landing gate is REQUIRED - land.mjs refuses before touching git with "
+    },
+    {
+     "cited": "f47e6873",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6090 docs: land runbook - the gate is required, the docs-only lighter path is v"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6316,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — scribe-item-5428 @ 6ea5c13a: the S1-S11 seat-attention states i",
+   "citations": [
+    {
+     "cited": "6ea5c13a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5428: SELFDEV carries the S1-S11 attention-state contract (D244) - table re-mea"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6319,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — scribe-item-5565 @ b4ca9b17: verifier-independence runbook + D2",
+   "citations": [
+    {
+     "cited": "b4ca9b17",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5565: record the auditor-canary routing rule where a seat reads it (verifier-in"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6325,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST (docs-only) — scribe-item-5566 @ 2fdd42fa, STACKED on item-5565: single-famil",
+   "citations": [
+    {
+     "cited": "2fdd42fa",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5566: DECISIONS entry recording the ACCEPTED single-family rig - cross-family a"
+    },
+    {
+     "cited": "b4ca9b17",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5565: record the auditor-canary routing rule where a seat reads it (verifier-in"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6329,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — qa-item-816 @ 000e9cc2: runbook Diagnose blocks become executable CI",
+   "citations": [
+    {
+     "cited": "000e9cc2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#816: remove the fixture rig on every exit path, so a red run does not leak a th"
+    },
+    {
+     "cited": "e50cf5b6",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-6082-mig onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6338,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — scribe-item-5911 @ eddbdd16: the DURIAN_PI_DB runbook sweep",
+   "citations": [
+    {
+     "cited": "eddbdd16",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5911 follow-through on the same sweep: re-pin the DURIG_DB/DURIAN_PI_DB claims "
+    },
+    {
+     "cited": "c11ddbaa",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5911 runbook env-name sweep: 31 command lines in 14 runbooks now name DURIG_DB,"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    },
+    {
+     "cited": "44dc5cbd",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions,next): D234 - the operator's four rulings of 2026-11-08T00:3xZ (#"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6341,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — devtools-item-6125 @ 74da8562: clock-in prints the guard status line",
+   "citations": [
+    {
+     "cited": "74da8562",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6125 ROADMAP 352 (1/2): clock-in prints the compaction guard's state from the i"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6351,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — devtools-item-6127 @ 49751fa9: the 28-check guard gate inside area discover",
+   "citations": [
+    {
+     "cited": "49751fa9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6127 ROADMAP 352 (2/2): the guard's 28-check gate is now inside area discovery "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6366,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — qa-item-6104 @ 3dca9c90: the runner manufactured the reds",
+   "citations": [
+    {
+     "cited": "3dca9c90",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "item 6104: runbook for a demo that is green alone and red in the suite"
+    },
+    {
+     "cited": "2405cf7d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "item 6104: run the suite verdict off the exit code and keep the full output"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6367,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — architect-item-6185 (5 commits, ADR D257 + D258 + D259)",
+   "citations": [
+    {
+     "cited": "20308665",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(probes): #6225 fixtures made truthful, and the measurement table corrected t"
+    },
+    {
+     "cited": "84296219",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(probes): #6185 falsifiable probes for the broker receive path"
+    },
+    {
+     "cited": "a8c27274",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: #6185 position on the broker receive path — admission-only enforcement, pr"
+    },
+    {
+     "cited": "eb956c2a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): #6185 intent-stuck-in-inbox — a refused intent that never leaves"
+    },
+    {
+     "cited": "447b23f5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: #6227 the fault signal clause 4 of workable() needs — one seat-scoped mark"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6378,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — scribe-item-6105 @ fd2c6e1e: INTENDED/RESOLVED labels on the three figure s",
+   "citations": [
+    {
+     "cited": "fd2c6e1e",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6105: label the unlabelled compaction figures INTENDED vs RESOLVED without rewr"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6385,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — devtools-item-6128 @ 2bf7856d: compaction-acceptance wired into discovery w",
+   "citations": [
+    {
+     "cited": "2bf7856d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6128 (instrument fixes needed to run it as a gate): max(id) is NULL on an empty"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6388,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-6081 @ 4af786f0: provider auth is its own cause class",
+   "citations": [
+    {
+     "cited": "4af786f0",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): local-provider-down state 9 - a missing API key reads as provide"
+    },
+    {
+     "cited": "4af786f05b7cc0af34b7b5edcb88c311bbcc4b53",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): local-provider-down state 9 - a missing API key reads as provide"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6394,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — architect-item-5630 @ 3eca47b5: exit-drain review, probe and runbook Diagno",
+   "citations": [
+    {
+     "cited": "3eca47b5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: #5630 review-before-ship of RM-329 1/3 — the exit path is not yet responsi"
+    },
+    {
+     "cited": "d1c04ab9",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(probes): #5630 failing-first probe for the broker exit path and the spool"
+    },
+    {
+     "cited": "b66cce92",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(reviews): RM-329 3/3 build-ready spec - the broker marker must be legible O"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6395,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — scribe-item-6130 @ 212080d: the unfunded verifier leg runbook and a citatio",
+   "citations": [
+    {
+     "cited": "212080d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6130 (second concern): fix the stale emitter citation in verifier-model-server."
+    },
+    {
+     "cited": "7c3b159",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6130: new runbook verifier-leg-unfunded - an auditor seat's  is the HONEST stat"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6403,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — security-item-6208 @ 2e21b2e: retract the #2425 fallback claim, add F-1b an",
+   "citations": [
+    {
+     "cited": "2e21b2e",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6208: correct the position doc - the #2425 WORKTREE_ROOT seam is registered not"
+    },
+    {
+     "cited": "5686be7",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#1779: security position for ROADMAP 133+134 - fail-closed boundary guards, repo"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6406,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — impl-item-6101 @ e8822782: cooldown-suppressed wakes now log a reason",
+   "citations": [
+    {
+     "cited": "e8822782",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6101: runbook - how to read a seat that does not wake (SKIP reason=cooldown rem"
+    },
+    {
+     "cited": "e8822782d60b2cf7c952997ee2b2d849b04ca0bb",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6101: runbook - how to read a seat that does not wake (SKIP reason=cooldown rem"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6409,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — scribe-item-6216 @ 9597901d: umbrella rows are pointers, never gates",
+   "citations": [
+    {
+     "cited": "9597901d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks) #6216: record the umbrella-row convention - containers are pointe"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6424,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6110 @4aa08146 (docs-only, runbook INTENDED-vs-RESOLVED snapshot rule",
+   "citations": [
+    {
+     "cited": "4aa08146",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6110 docs(runbook): re-measure the INTENDED/RESOLVED corpus count on its own da"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    },
+    {
+     "cited": "532f5d5c",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6080 (#6077 fold): runbook rule - every number in a roadmap/spec row is tagged "
+    },
+    {
+     "cited": "e2584110",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-6080 onto main"
+    },
+    {
+     "cited": "503ff096",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "merge: land item-5995 onto main"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6433,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6064 @0bfd61a5 (compaction coherence gate, one unit incl. #6063), re-",
+   "citations": [
+    {
+     "cited": "0bfd61a5",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: the compaction gate now lists four checks and the corrected remedy triple "
+    },
+    {
+     "cited": "0bfd61a598600dd66c37f4f69a2be1371e1aa8df",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: the compaction gate now lists four checks and the corrected remedy triple "
+    },
+    {
+     "cited": "6fb7b30b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): compaction-policy-refused, and FEATURES records that the compact"
+    },
+    {
+     "cited": "ecfece5b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "gate(compaction): fold #6064's headroom rule into the #6063 gate - one gate, fou"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": [
+    {
+     "ref": "item-6064",
+     "exists": true,
+     "tip": "0bfd61a59860",
+     "tipIsAncestorOfMain": 0
+    },
+    {
+     "ref": "item-6063",
+     "exists": true,
+     "tip": "6fb7b30b90a6",
+     "tipIsAncestorOfMain": 0
+    }
+   ]
+  },
+  {
+   "id": 6464,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING LIST — scribe-item-6223 @ 07085125: DISPOSITIONS.md footnote key corrected, cite-c",
+   "citations": [
+    {
+     "cited": "07085125",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs #6223: repair the dangling [^P3] footnote in the item-5216 disposition row "
+    },
+    {
+     "cited": "23d68f60",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(decisions): amend D-5015.1 in place — the provider seam did NOT already wra"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6468,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6096 @2ff39837 (D111 pricing SOURCE amendment, docs-only, amend not m",
+   "citations": [
+    {
+     "cited": "2ff39837",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#2962 (follow-up): correct the status claim - #1135 is terminal, not held; the l"
+    },
+    {
+     "cited": "351b13e",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#2962: fold the 2026-10-19 pricing-SOURCE ruling into D111 instead of minting a "
+    },
+    {
+     "cited": "2ff3983",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#2962 (follow-up): correct the status claim - #1135 is terminal, not held; the l"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6496,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6066 @bcaa6d2b (declaredContextWindow resolver), sequenced against #6",
+   "citations": [
+    {
+     "cited": "bcaa6d2b",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): context-over-window names where the declared denominator now com"
+    },
+    {
+     "cited": "bcaa6d2b352a452d7bcacf291938d3c88ed07a9d",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs(runbooks): context-over-window names where the declared denominator now com"
+    },
+    {
+     "cited": "c1f6fb94",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(config): declaredContextWindow reads the family's own DURIG_<PROVIDER>_CONTE"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": [
+    {
+     "ref": "item-6066",
+     "exists": true,
+     "tip": "bcaa6d2b352a",
+     "tipIsAncestorOfMain": 0
+    }
+   ]
+  },
+  {
+   "id": 6504,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-3252 @4174ecc (DECISIONS entry on operator-level provider moves), lan",
+   "citations": [
+    {
+     "cited": "4174ecc",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#3252: record the lead ruling from #3242 in DECISIONS.md as a design-of-record e"
+    },
+    {
+     "cited": "2ff39837",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#2962 (follow-up): correct the status claim - #1135 is terminal, not held; the l"
+    },
+    {
+     "cited": "f192f543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs: clock-out record for the v1.5.1 landing pass (pruned item-6082-mig, live r"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6535,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-5668 @f1d7543 (push-batch boundary measured at grant time), land LAST",
+   "citations": [
+    {
+     "cited": "f1d7543",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5668: record the push-batch boundary ruling as a DECISIONS entry with a D### pl"
+    },
+    {
+     "cited": "f4554164",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "fix(cli, #5488): DURIG_MAX_CONCURRENT_SEATS gates the local/* providers too"
+    },
+    {
+     "cited": "cfef4d07",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "test(demo, #5488 #5736): prove the cap BITES at 4 — four live leases refuse the "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6538,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-5678 @b361986 (doc dependency = landing-order constraint, not a start",
+   "citations": [
+    {
+     "cited": "b361986",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5678 (second concern): make the land-order rule operable in the landing runbook"
+    },
+    {
+     "cited": "2e879c8",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#5678: record the ruling that a not-yet-landed SPEC doc is a LAND-ORDER constrai"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6540,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6111 @1d299176 (fold-before-mint rule in branch-cleanup Step 0e), seq",
+   "citations": [
+    {
+     "cited": "1d299176",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6111: write the fold rule into the runbook that governs DECISIONS minting - Ste"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6550,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6131 @07d5b4e4 (compaction-acceptance tool promoted to tools/, with p",
+   "citations": [
+    {
+     "cited": "07d5b4e4",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6131 (the move's other half): delete the old docs/evidence/2026-11-08-context-w"
+    },
+    {
+     "cited": "0281fb01",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6131: promote the compaction-acceptance instrument to tools/ (git mv from docs/"
+    },
+    {
+     "cited": "c3573499",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6131 (docs): tools/README.md indexes the instrument as operator-run and NOT the"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6553,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6132 @cf023870 (suite roots declared; tools/*-test.mjs now inside the",
+   "citations": [
+    {
+     "cited": "cf023870",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6132 (docs): run-your-area.md re-verified 2026-11-10 (283 members, roots + decl"
+    },
+    {
+     "cited": "139dbbe2",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6132: suite membership is DECLARED data, not a hard-coded directory. src/testar"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6611,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6150 @d5a07473 (park class recorded structurally), land after #6553 a",
+   "citations": [
+    {
+     "cited": "d5a07473",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "docs #6150: the park class is the metric's filter, not trigger text"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6657,
+   "status": "queued",
+   "to": "impl",
+   "subject": "LANDING ENTRY — item-6189 @a3f89ca3 (wake predicate = claim predicate), fold the driveOnce",
+   "citations": [
+    {
+     "cited": "a3f89ca3",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6189: broker-down-or-stalled gains the 'has rows but never wakes' leg - read th"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": []
+  },
+  {
+   "id": 6870,
+   "status": "queued",
+   "to": "pm",
+   "subject": "DONE #6180: LANDING LIST (docs-only) — security-item-1779 @ 5686be7: fail-closed guard pos",
+   "citations": [
+    {
+     "cited": "5686be7",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#1779: security position for ROADMAP 133+134 - fail-closed boundary guards, repo"
+    },
+    {
+     "cited": "5686be79",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#1779: security position for ROADMAP 133+134 - fail-closed boundary guards, repo"
+    },
+    {
+     "cited": "35001c3a",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "Record the audit closure: re-measured verb table, pitfall 268 (suite-spawned pro"
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": [
+    {
+     "ref": "item-6180",
+     "exists": true,
+     "tip": "8e02460de488",
+     "tipIsAncestorOfMain": 1
+    }
+   ]
+  },
+  {
+   "id": 7042,
+   "status": "queued",
+   "to": "pm",
+   "subject": "DONE #6190: LANDING LIST — item-6082 @ e1169548: per-seat note census in status",
+   "citations": [
+    {
+     "cited": "e1169548",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "#6082: per-seat continuity-note census in status - src/notecensus.mjs classifies"
+    },
+    {
+     "cited": "4c111c16",
+     "mergeBaseExit": 0,
+     "inMainRevList": true,
+     "commitSubject": "Fold branch-lifecycle research round 1 into the model: rewrite the cluster rule "
+    }
+   ],
+   "lookLikeShaButAreNot": [],
+   "gate": [],
+   "gatesOthers": false,
+   "branchRefs": [
+    {
+     "ref": "item-5301",
+     "exists": true,
+     "tip": "39f8c92ce8d4",
+     "tipIsAncestorOfMain": 1
+    }
+   ]
+  }
+ ],
+ "excluded": [
+  {
+   "id": 3377,
+   "status": "held",
+   "subject": "LANDING LIST (docs-only, GATED ON #3343 for mint order) — architect-item-2730-rebased @e3a",
+   "excludedFor": [
+    "own gate",
+    "gates another row"
+   ],
+   "gate": [
+    {
+     "id": 3343,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": true,
+   "commitCitations": [
+    "e3a67b1704",
+    "fa4e03d414",
+    "f969142",
+    "e08d1a9"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 3456,
+   "status": "held",
+   "subject": "LANDING LIST (docs-only, GATED on #3455) — scribe-item-3319 @c304976: docs/NEXT.md correct",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 3455,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "c304976",
+    "cafee74",
+    "9de833f"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 3535,
+   "status": "held",
+   "subject": "LANDING LIST — impl-item-3435 @037629dd5: revise_work now has three distinct outcomes with",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 3448,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "037629dd5",
+    "a90c41d87"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 3607,
+   "status": "held",
+   "subject": "LANDING LIST (gated on #3606 — a ref DELETER needs a non-author verify) — architect-item-3",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 3606,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "41abcaf",
+    "0a38f1f"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 3663,
+   "status": "held",
+   "subject": "LANDING LIST — impl-item-3635 @ca7c19c: every guard refusal now NAMES its verb, pinned by ",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 3660,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "ca7c19c"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5069,
+   "status": "deferred",
+   "subject": "LANDING ENTRY v2 (lead decision: ACCEPT the re-cut, at the SHA #5063 reports, NOT c2fc4032",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5063,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "c2fc4032"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5181,
+   "status": "deferred",
+   "subject": "LANDING LIST — devtools-item-5111 @8bde3ecf (worktree-removal refusal message), gated on q",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5180,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "8bde3ecf",
+    "fca4e980"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5262,
+   "status": "held",
+   "subject": "GATE (standing, lead #5194): NO seat-concurrency or verifier-slot raise lands before ROADM",
+   "excludedFor": [
+    "no sha cited"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "commitCitations": [],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5360,
+   "status": "held",
+   "subject": "LANDING LIST — security-item-4922 addendum @ f9b754ef (docs/reviews/security-sha-exemption",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5358,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "f9b754ef",
+    "2115decc"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5382,
+   "status": "deferred",
+   "subject": "TRIVIAL CONFIRM: is #5162 (YOUR row, devtools) untouched? lead's ruling row #5171 mis-cite",
+   "excludedFor": [
+    "no sha cited"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "commitCitations": [],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5406,
+   "status": "held",
+   "subject": "LANDING LIST (docs-only) REPLACES #5403, NOT YET LANDED: `6983ed1a` on branch `item-5217` ",
+   "excludedFor": [
+    "gates another row"
+   ],
+   "gate": [],
+   "gatesOthers": true,
+   "commitCitations": [
+    "6983ed1a",
+    "46c28b73"
+   ],
+   "lookLikeShaButAreNot": [
+    "4cee4286b156",
+    "467d9cf6b27c"
+   ]
+  },
+  {
+   "id": 5413,
+   "status": "deferred",
+   "subject": "VERIFY (non-author, NARROW, gated on landing entry #5406): the `worktree-unlinked-deps.md`",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5406,
+     "status": "held"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "6983ed1a",
+    "46c28b73"
+   ],
+   "lookLikeShaButAreNot": [
+    "4cee4286b156",
+    "467d9cf6b27c"
+   ]
+  },
+  {
+   "id": 5424,
+   "status": "deferred",
+   "subject": "LANDING LIST (docs-only) — rebase architect's idle-attention design note (item-5211 @756ee",
+   "excludedFor": [
+    "gates another row"
+   ],
+   "gate": [],
+   "gatesOthers": true,
+   "commitCitations": [
+    "756ee161",
+    "926a7754",
+    "0bce3ed5"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5427,
+   "status": "deferred",
+   "subject": "BUILD (held, gated on the RM-313 landing entry #5424) — Option A wake-on-delta: idle must ",
+   "excludedFor": [
+    "no sha cited"
+   ],
+   "gate": [
+    {
+     "id": 5424,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": true,
+   "commitCitations": [],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5431,
+   "status": "held",
+   "subject": "DEFECT (parked, gated on the RM-313 landing entry #5424) — the live-lease guard silently d",
+   "excludedFor": [
+    "no sha cited"
+   ],
+   "gate": [
+    {
+     "id": 5424,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5444,
+   "status": "deferred",
+   "subject": "LANDING ENTRY - scribe-item-5279 @36689f4f (docs-only runbook `block-shape-refused.md` + R",
+   "excludedFor": [
+    "gates another row"
+   ],
+   "gate": [],
+   "gatesOthers": true,
+   "commitCitations": [
+    "36689f4f"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5496,
+   "status": "held",
+   "subject": "RM-295 landing entry, doc half (gated): bounded flip of docs/NEXT.md:53 — only after #5492",
+   "excludedFor": [
+    "no sha cited"
+   ],
+   "gate": [
+    {
+     "id": 5492,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5533,
+   "status": "deferred",
+   "subject": "QUEUE HYGIENE: 10 pm rows moved to held to unblock #5395 / the 331 landing entry — 7 recor",
+   "excludedFor": [
+    "no sha cited"
+   ],
+   "gate": [],
+   "gatesOthers": false,
+   "commitCitations": [],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5703,
+   "status": "deferred",
+   "subject": "VERIFY (non-author, gated on landing entry #5607): #5398 store-budget fix - 15,117 B vs 43",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5607,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "6d5c126d",
+    "9ae25f09"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5754,
+   "status": "held",
+   "subject": "LANDING LIST (from #4835) - scribe-item-4835 @9a2c0d7: DURIG_DB spelling fix, gated on qa ",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5751,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "9a2c0d7"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5765,
+   "status": "held",
+   "subject": "LANDING LIST (from #5663) - impl-item-5663 @1381612: broker-dark exit-shape runbook, gated",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5758,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "1381612"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5791,
+   "status": "held",
+   "subject": "LANDING LIST (re-issued) - local2 registration after the #5787 re-cut, gated on the re-cut",
+   "excludedFor": [
+    "own gate",
+    "gates another row"
+   ],
+   "gate": [
+    {
+     "id": 5787,
+     "status": "deferred"
+    },
+    {
+     "id": 5757,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": true,
+   "commitCitations": [
+    "d37bef35",
+    "8fb668ec"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5816,
+   "status": "held",
+   "subject": "LANDING LIST (from #5707) - scribe-item-5707 @f458a129: §6.4 classifier caveat, gated on q",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5815,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "f458a129",
+    "a7fc5758"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5817,
+   "status": "held",
+   "subject": "LANDING LIST (from #5707) - scribe-item-5707 @f458a129: §6.4 classifier caveat, gated on q",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5815,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "f458a129",
+    "a7fc5758"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5826,
+   "status": "held",
+   "subject": "LANDING LIST (from #5740) - architect-item-5740 @29a1a985: parked-wake ADR, gated on qa ve",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5824,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "29a1a985",
+    "d37bef35"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5900,
+   "status": "held",
+   "subject": "LANDING LIST — scribe-item-4835 @9a2c0d7 (docs: DURIG_DB honored, DURIAN_PI_DB exception l",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5897,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "9a2c0d7",
+    "9a2c0d70"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5947,
+   "status": "deferred",
+   "subject": "LANDING LIST — devtools-item-5767 @6fe48480 (check renders UNKNOWN for runbook rules) — ga",
+   "excludedFor": [
+    "own gate",
+    "gates another row"
+   ],
+   "gate": [
+    {
+     "id": 5945,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": true,
+   "commitCitations": [
+    "6fe48480",
+    "fb463162"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5973,
+   "status": "deferred",
+   "subject": "LANDING LIST — scribe-item-5788 @478d5f5a (SELFDEV pitfall 87/102 mechanism correction) — ",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5968,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "478d5f5a",
+    "2b09b05e"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 5994,
+   "status": "deferred",
+   "subject": "LANDING LIST — impl-item-4354 @9129d33 (name column 9→10, fixed width 33→34) — gated on ve",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5993,
+     "status": "cancelled"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "9129d33"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 6000,
+   "status": "deferred",
+   "subject": "LANDING LIST — impl-item-5306 @db7c3b1 (nest modelOverrides inside compaction) — plumbing ",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5834,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "db7c3b1"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 6005,
+   "status": "deferred",
+   "subject": "LANDING LIST — impl-item-5699 @67ef6d2 (parked-questions line) — gated on verify #6003 and",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 6003,
+     "status": "cancelled"
+    },
+    {
+     "id": 6004,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "67ef6d2",
+    "39081534",
+    "42eaea0"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 6013,
+   "status": "deferred",
+   "subject": "LANDING LIST — impl-item-3128 @d96fb963 (shared git-object verdict) — rebase first, gated ",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5846,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "d96fb963",
+    "4551482e",
+    "8e27565f"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 6016,
+   "status": "deferred",
+   "subject": "LANDING LIST — impl-item-5724 @7182d99d (hold_work can park a queued row) — gated on verif",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 5878,
+     "status": "deferred"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "7182d99d",
+    "f5a73c61"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 6405,
+   "status": "queued",
+   "subject": "LANDING LIST — architect-item-5631 @ ea7a0d51: one liveness predicate, two consumers",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 6399,
+     "status": "queued"
+    },
+    {
+     "id": 6401,
+     "status": "queued"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "ea7a0d51",
+    "3a6f8d0d"
+   ],
+   "lookLikeShaButAreNot": []
+  },
+  {
+   "id": 6774,
+   "status": "queued",
+   "subject": "LANDING ENTRY (trivial) — item-4948 @fa1300a2 after #4935/#4936, verified on merged main",
+   "excludedFor": [
+    "own gate"
+   ],
+   "gate": [
+    {
+     "id": 4948,
+     "status": "done"
+    }
+   ],
+   "gatesOthers": false,
+   "commitCitations": [
+    "fa1300a2",
+    "31d10565"
+   ],
+   "lookLikeShaButAreNot": []
+  }
+ ],
+ "deadGateRows": [
+  {
+   "id": 3377,
+   "status": "held",
+   "gate": [
+    {
+     "id": 3343,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 3456,
+   "status": "held",
+   "gate": [
+    {
+     "id": 3455,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 3663,
+   "status": "held",
+   "gate": [
+    {
+     "id": 3660,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 5816,
+   "status": "held",
+   "gate": [
+    {
+     "id": 5815,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 5817,
+   "status": "held",
+   "gate": [
+    {
+     "id": 5815,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 5947,
+   "status": "deferred",
+   "gate": [
+    {
+     "id": 5945,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 5973,
+   "status": "deferred",
+   "gate": [
+    {
+     "id": 5968,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 5994,
+   "status": "deferred",
+   "gate": [
+    {
+     "id": 5993,
+     "status": "cancelled"
+    }
+   ]
+  },
+  {
+   "id": 6005,
+   "status": "deferred",
+   "gate": [
+    {
+     "id": 6003,
+     "status": "cancelled"
+    },
+    {
+     "id": 6004,
+     "status": "done"
+    }
+   ]
+  }
+ ],
+ "rowsWithUnclosedGate": 15
+}
