@@ -1,11 +1,11 @@
 ---
 runbook: false-green-shell-prover
-symptom: "a check reported exit 0 but the report cannot say what it proved; two reports of the same check disagree (one 0, one 1)"
+symptom: "a check reported exit 0 but the report cannot say what it proved; two reports of the same check disagree (one 0, one 1); a demo's PASS line tallies provider prefixes and never names which model each provider served"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-10
-verified_by: impl
-evidence: "#5702 (docs row for #4976); every command below was run in the item-5702 worktree at f1be5157 — §Verify has the outputs. Second mechanism ($1-empty xargs loop) measured 2026-11-10 in the item-6073 worktree at f192f543 — §Verify-2 has the outputs"
+last_verified: 2026-11-11
+verified_by: devtools
+evidence: "#5702 (docs row for #4976); every command below was run in the item-5702 worktree at f1be5157 — §Verify has the outputs. Second mechanism ($1-empty xargs loop) measured 2026-11-10 in the item-6073 worktree at f192f543 — §Verify-2 has the outputs. Third mechanism (prefix-counting assertion) measured 2026-11-11 in the item-6322 worktree, dependencySet built-pin: the OLD predicate returned true on a roster where all 12 seats serve one model (counts local=11, verifier=1), and the fixed demo exits 1 on that roster and 0 on the real one — §Verify-3 has the outputs."
 check_rule: null
 ---
 
@@ -114,6 +114,46 @@ node scripts/test.mjs > scratch/all.out 2>&1; rc=$?; tail -2 scratch/all.out; ec
 # observed 2026-11-10 in the item-6073 worktree (pi-durable 1.3.0, vendor link step FAILED):
 #   261/282 passed in 129.6s ... exit=1
 ```
+
+## Third mechanism: the assertion that counts prefixes instead of naming what it exercised (#6322)
+
+`demo/deepinfra-catalog.test.mjs` guards that every seat's model resolves. Seats whose provider prefix is a
+locally-served one are exempt — `isLocalProviderId` answers for `local`, `verifier` and `local2` together
+(`src/providers/local.mjs`, `LOCAL_PROVIDER_IDS`). The old non-vacuity assertion counted provider **prefixes**:
+`byProvider["verifier"] >= 1 && byProvider["local"] >= 1`. Two prefixes appearing is not two families. Measured
+2026-11-11 in the `item-6322` worktree against the one-family fixture roster below: the old predicate returned
+**true** with counts `local=11, verifier=1` even though every seat, under both prefixes, names the *same*
+served model `qwen3.8-flash-next-q2_0`. One blind spot, wearing two names, reported as a verdict.
+
+The fix names the exercise instead of tallying it: the guard reports every `provider -> served model` pair with
+the seats that produced it, and asserts two orthogonal things — at least two registered provider ids exercised,
+and at least two distinct served model ids. A roster can now go red on the family condition while still passing
+the prefix condition, which is exactly the case the old assertion could not see.
+
+The honest limit, printed in the demo itself: distinct model **ids** are the strongest thing a rig *file* can
+prove. Whether two ids are distinct blind-spot **families** is the documentation ruling (`src/providers/local.mjs`,
+"WHAT THIS DOES NOT PROVE"); no test here claims it.
+
+## Verify-3 (this step ran; observed output below)
+
+```bash
+node demo/deepinfra-catalog.test.mjs; echo "exit=$?"                                          # GREEN, real roster
+DURIG_RIG=demo/fixtures/rig-one-family.json node demo/deepinfra-catalog.test.mjs; echo "exit=$?"  # RED, one family
+```
+
+Observed 2026-11-11 in worktree `item-6322` (`dependencySet: "built-pin"` after `sync-pi --sync --link`), node v24.22.1:
+
+```text
+exit=0  … exemption exercised as local -> qwen3.8-flash-next-q2_0 (11 seat(s): pm, impl, qa, qa2, lead, advocate,
+        scribe, devtools, designer, security, architect); verifier -> openai/gpt-oss-120b (1 seat(s): auditor)
+        = 2 provider id(s) over 2 served model(s)
+exit=1  AssertionError: the exempt providers all resolve to the SAME served model (qwen3.8-flash-next-q2_0)
+        — two prefixes, one family, one blind spot: green but exercising nothing.
+```
+
+The fixture (`demo/fixtures/rig-one-family.json`) is the settled roster with `auditor` re-pointed from
+`verifier/openai/gpt-oss-120b` to `verifier/qwen3.8-flash-next-q2_0`. It is an **input**, not a change to the
+roster: the live rig is untouched.
 
 ## Verify (this step ran; expected output below)
 Self-contained — no branch or fixture needed:

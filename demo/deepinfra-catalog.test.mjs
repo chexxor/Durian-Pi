@@ -88,27 +88,57 @@ assert.ok(v41_1017.input.includes("image"), "vision input");
 // is registered, and a prefix nobody registers still fails the guard. The guard asserts that a seat's model
 // is resolvable by SOMETHING the rig can register — it does not, and cannot, assert that the endpoint is up:
 // that lives in gitignored `durig.config.json` (#4996's mechanism), and a test must not depend on it.
-const rig = JSON.parse(readFileSync(new URL("../rig.selfdev.json", import.meta.url), "utf8"));
-const resolvable = (seatModel) => {
+const rig = JSON.parse(
+	readFileSync(
+		process.env.DURIG_RIG
+			? new URL(process.env.DURIG_RIG, new URL("..", import.meta.url))
+			: new URL("../rig.selfdev.json", import.meta.url),
+		"utf8",
+	),
+);
+// #6322: the exemption is ONE predicate over the ids src/providers/local.mjs registers (local, verifier,
+// local2), so "both exemptions" cannot mean "two prefixes showed up". The check now NAMES what it exercised:
+// which provider id, pointed at which served model. Two prefixes serving the SAME model id are one blind spot
+// wearing two names, and a roster like that must go red.
+const exemption = (seatModel) => {
 	const slash = seatModel.indexOf("/");
-	if (slash > 0 && isLocalProviderId(seatModel.slice(0, slash))) return true; // a locally served provider, built by src/providers/local.mjs
+	if (slash > 0 && isLocalProviderId(seatModel.slice(0, slash)))
+		return { kind: "provider", provider: seatModel.slice(0, slash), servedModel: seatModel.slice(slash + 1) }; // a locally served provider, built by src/providers/local.mjs
 	const id = seatModel.startsWith("deepinfra/") ? seatModel.slice("deepinfra/".length) : seatModel;
-	return byId.has(id) || id === process.env.DURIG_MODEL;
+	return byId.has(id) || id === process.env.DURIG_MODEL ? { kind: "catalog", provider: "deepinfra", servedModel: id } : null;
+};
+const resolvable = (seatModel) => exemption(seatModel) !== null;
+
+// What a roster ACTUALLY exercises, as a named report rather than a tally: every (provider -> served model)
+// pair with the seats that put it there, plus the two orthogonal questions the guard must answer - is more
+// than one REGISTERED provider exercised, and do the exercised providers serve more than one model?
+const exerciseReport = (seats) => {
+	const exercised = new Map(); // "provider -> servedModel" -> [seat names]
+	const checked = [];
+	for (const seat of seats) {
+		if (!seat.model) continue;
+		checked.push(seat.name);
+		const ex = exemption(seat.model);
+		if (ex?.kind !== "provider") continue;
+		const key = `${ex.provider} -> ${ex.servedModel}`;
+		exercised.set(key, (exercised.get(key) ?? []).concat(seat.name));
+	}
+	const pairs = [...exercised.keys()];
+	const servedIds = [...new Set(pairs.map((p) => p.split(" -> ")[1]))];
+	const providerIds = [...new Set(pairs.map((p) => p.split(" -> ")[0]))];
+	return { checked, exercised, pairs, servedIds, providerIds };
 };
 const checkedSeats = [];
-const byProvider = new Map();
 for (const seat of rig.seats) {
 	if (!seat.model) continue;
 	checkedSeats.push(seat.name);
-	const provider = seat.model.includes("/")
-		? seat.model.slice(0, seat.model.indexOf("/"))
-		: "(default)";
-	byProvider.set(provider, (byProvider.get(provider) ?? 0) + 1);
 	assert.ok(
 		resolvable(seat.model),
 		`seat "${seat.name}" names ${seat.model}, which neither a registered provider nor the fallback catalog resolves — it would be no_model`,
 	);
 }
+const report = exerciseReport(rig.seats);
+const named = () => report.pairs.map((p) => `${p} (${report.exercised.get(p).length} seat(s): ${report.exercised.get(p).join(", ")})`).join("; ");
 
 // NON-VACUITY PAIR (#5013): the guard must still be able to BITE. Both real locally-served providers resolve,
 // while a prefix no rig registers and a catalog-absent model id both fail. A green that cannot go red is not
@@ -137,18 +167,50 @@ assert.ok(
 	checkedSeats.length >= 5,
 	`the loop actually checked ${checkedSeats.length} seat models — a guard over an empty selection is vacuous`,
 );
+// TWO ORTHOGONAL CONDITIONS, both named (#6322). (1) more than one registered local-family provider is
+// exercised — the D166 shape: the verifier provider is really used, not merely registrable. (2) those
+// providers serve more than one model id. The old assertion counted provider PREFIXES, so a roster whose
+// `verifier/` seat pointed at the same served model as every `local/` seat satisfied it while testing exactly
+// one blind spot: exit 0 read as a verdict that was never earned.
 assert.ok(
-	(byProvider.get("verifier") ?? 0) >= 1 && (byProvider.get("local") ?? 0) >= 1,
-	`real seats exercise BOTH exemptions (${[...byProvider]
-		.map(([k, v]) => `${k}=${v}`)
-		.join(", ")}) — the fix is not carried only by synthetic cases`,
+	report.providerIds.length >= 2,
+	`the roster exercises ${report.providerIds.length} registered provider id(s) (${report.providerIds.join(", ")}) — the exemption is satisfied by ONE provider, so the second family is not exercised at all: ${named()}`,
 );
+assert.ok(
+	report.servedIds.length >= 2,
+	`the exempt providers all resolve to the SAME served model (${report.servedIds.join(", ")}) — two prefixes, one family, one blind spot: green but exercising nothing. What was exercised: ${named()}`,
+);
+// NON-VACUITY for the family condition (#6322): the SAME predicate on rosters that are not this rig, so the
+// green above is provably conditional rather than a tautology.
+assert.equal(
+	exerciseReport([{ name: "a", model: "local/iq3_s" }, { name: "b", model: "verifier/iq3_s" }]).servedIds.length,
+	1,
+	"a roster where local/ and verifier/ name the SAME model is ONE family — the assertion must be able to go red on it",
+);
+assert.equal(
+	exerciseReport([{ name: "a", model: "local/qwen3.8-flash-next-q2_0" }, { name: "b", model: "verifier/openai/gpt-oss-120b" }]).servedIds.length,
+	2,
+	"the shape the real rig has: two registered providers serving two different models",
+);
+assert.equal(
+	exerciseReport([{ name: "a", model: "local/a" }, { name: "b", model: "local/b" }]).providerIds.length,
+	1,
+	"two models through ONE provider id exercise one provider, not two — the provider condition bites too",
+);
+assert.equal(
+	exerciseReport([{ name: "a", model: "local/a" }]).pairs.length,
+	1,
+	"a single-seat roster reports exactly one exercised pair — the report measures the roster, it does not assume it",
+);
+// Honest limit, stated so a later reader does not over-read this: distinct served model IDS are the strongest
+// thing a rig FILE can prove. Whether two ids are distinct blind-spot FAMILIES is the documentation ruling
+// (src/providers/local.mjs, "WHAT THIS DOES NOT PROVE"); this demo does not claim it.
 
 // The class, pinned: this fix rotting back into a hardcoded provider name is exactly how it died once. The
 // check is scoped to the guard function's own body — a whole-file check matched its own assertion text on the
 // first run, which is a trap worth naming for whoever writes the next self-lock.
 const demoSrc = readFileSync(new URL(import.meta.url), "utf8");
-const guardAt = demoSrc.indexOf("const resolvable =");
+const guardAt = demoSrc.indexOf("const exemption =");
 const guardBody = demoSrc.slice(guardAt, demoSrc.indexOf("};", guardAt));
 assert.ok(
 	guardBody.length > 200,
@@ -213,9 +275,5 @@ assert.ok(
 }
 
 console.log(
-	`DEEPINFRA CATALOG PASS (google/gemma-4-31B-it present: ${gemma4.contextWindow} ctx, $${gemma4.cost.input}/$${gemma4.cost.output}, reasoning=${gemma4.reasoning}, vision; deepseek-ai/DeepSeek-V4.1-Flash-1017 present: ${v41_1017.contextWindow} ctx; ${checkedSeats.length} rig seat models resolve across providers ${[
-		...byProvider,
-	]
-		.map(([k, v]) => `${k}=${v}`)
-		.join(", ")}; ${list.length} entries; ${catalogRefusals().length} row(s) refused by the validation layer)`,
+	`DEEPINFRA CATALOG PASS (google/gemma-4-31B-it present: ${gemma4.contextWindow} ctx, $${gemma4.cost.input}/$${gemma4.cost.output}, reasoning=${gemma4.reasoning}, vision; deepseek-ai/DeepSeek-V4.1-Flash-1017 present: ${v41_1017.contextWindow} ctx; ${checkedSeats.length} rig seat models resolve; exemption exercised as ${named()} = ${report.providerIds.length} provider id(s) over ${report.servedIds.length} served model(s); ${list.length} entries; ${catalogRefusals().length} row(s) refused by the validation layer)`,
 );
