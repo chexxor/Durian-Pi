@@ -1,5 +1,5 @@
 {
- "measuredAt": "2026-11-12T16:07:17.351Z",
+ "measuredAt": "2026-11-12T16:08:42.557Z",
  "mainTip": "a7c9ab00d730407e67631abdde6e814c3ffe1fdc",
  "command": "node tools/probes/landing-ancestry-evidence.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite",
  "ancestryCommand": "git merge-base --is-ancestor <full-sha> refs/heads/main  (exit 0 = ancestor of main)",
@@ -13,6 +13,7 @@
   "noShaCited": 6,
   "citedObjectNotCommit": 7,
   "rowsWithAmbiguousTokens": 12,
+  "closableWithNoWordOverlap": 0,
   "rowsWithNonShaTokens": 12,
   "landingRowsWithDeadGate": 9,
   "rowsRecoverableOnlyByResolvingAllHex": 18,
@@ -35,7 +36,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 14
   },
   {
    "id": 2226,
@@ -53,7 +55,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 12
   },
   {
    "id": 2385,
@@ -77,7 +80,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 27
   },
   {
    "id": 2466,
@@ -95,7 +99,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 8
   },
   {
    "id": 2476,
@@ -119,7 +124,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 2513,
@@ -137,7 +143,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 6
   },
   {
    "id": 2571,
@@ -161,7 +168,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 2591,
@@ -179,7 +187,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 6
   },
   {
    "id": 2592,
@@ -197,7 +206,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 10
   },
   {
    "id": 2636,
@@ -215,7 +225,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 8
   },
   {
    "id": 2637,
@@ -233,7 +244,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 2778,
@@ -251,7 +263,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 7
   },
   {
    "id": 2841,
@@ -305,7 +318,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 47
   },
   {
    "id": 2993,
@@ -323,7 +337,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 8
   },
   {
    "id": 3039,
@@ -341,7 +356,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 6
   },
   {
    "id": 3103,
@@ -359,7 +375,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 5
   },
   {
    "id": 3120,
@@ -383,7 +400,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 6
   },
   {
    "id": 3673,
@@ -401,7 +419,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 7
   },
   {
    "id": 3686,
@@ -419,7 +438,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 10
   },
   {
    "id": 3699,
@@ -449,7 +469,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 25
   },
   {
    "id": 3786,
@@ -473,7 +494,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 20
   },
   {
    "id": 3808,
@@ -497,7 +519,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 3822,
@@ -533,7 +556,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 44
   },
   {
    "id": 3828,
@@ -563,7 +587,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 41
   },
   {
    "id": 3830,
@@ -587,7 +612,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 20
   },
   {
    "id": 3841,
@@ -617,7 +643,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 23
   },
   {
    "id": 3864,
@@ -647,7 +674,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 15
   },
   {
    "id": 3891,
@@ -707,7 +735,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 64
   },
   {
    "id": 3934,
@@ -731,7 +760,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 15
   },
   {
    "id": 3940,
@@ -749,7 +779,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 15
   },
   {
    "id": 3993,
@@ -773,7 +804,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 18
   },
   {
    "id": 4025,
@@ -797,7 +829,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 16
   },
   {
    "id": 4031,
@@ -821,7 +854,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 16
   },
   {
    "id": 4035,
@@ -839,7 +873,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 21
   },
   {
    "id": 4039,
@@ -863,7 +898,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 32
   },
   {
    "id": 4041,
@@ -881,7 +917,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 7
   },
   {
    "id": 4060,
@@ -917,7 +954,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 23
   },
   {
    "id": 4119,
@@ -947,7 +985,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 21
   },
   {
    "id": 4123,
@@ -983,7 +1022,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 21
   },
   {
    "id": 4136,
@@ -1007,7 +1047,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 4142,
@@ -1037,7 +1078,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 20
   },
   {
    "id": 4154,
@@ -1061,7 +1103,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 12
   },
   {
    "id": 4157,
@@ -1085,7 +1128,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 14
   },
   {
    "id": 4168,
@@ -1109,7 +1153,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 12
   },
   {
    "id": 4169,
@@ -1157,7 +1202,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 47
   },
   {
    "id": 4230,
@@ -1181,7 +1227,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 13
   },
   {
    "id": 4259,
@@ -1211,7 +1258,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 19
   },
   {
    "id": 4344,
@@ -1229,7 +1277,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 19
   },
   {
    "id": 4460,
@@ -1247,7 +1296,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 4471,
@@ -1265,7 +1315,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 28
   },
   {
    "id": 4513,
@@ -1289,7 +1340,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 28
   },
   {
    "id": 4524,
@@ -1313,7 +1365,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 41
   },
   {
    "id": 4539,
@@ -1337,7 +1390,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 40
   },
   {
    "id": 4540,
@@ -1355,7 +1409,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 36
   },
   {
    "id": 4544,
@@ -1433,7 +1488,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 59
   },
   {
    "id": 4547,
@@ -1451,7 +1507,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 30
   },
   {
    "id": 4595,
@@ -1469,7 +1526,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 31
   },
   {
    "id": 4698,
@@ -1493,7 +1551,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 51
   },
   {
    "id": 5062,
@@ -1523,7 +1582,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 27
   },
   {
    "id": 5068,
@@ -1541,7 +1601,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 5
   },
   {
    "id": 5110,
@@ -1577,7 +1638,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 20
   },
   {
    "id": 5246,
@@ -1595,7 +1657,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 8
   },
   {
    "id": 5375,
@@ -1619,7 +1682,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 25
   },
   {
    "id": 5381,
@@ -1655,7 +1719,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 28
   },
   {
    "id": 5405,
@@ -1675,7 +1740,8 @@
    ],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 6
   },
   {
    "id": 5421,
@@ -1714,7 +1780,8 @@
      "tip": "dab62450b7dd",
      "tipIsAncestorOfMain": 1
     }
-   ]
+   ],
+   "sharedWordsWithCommit": 18
   },
   {
    "id": 5426,
@@ -1738,7 +1805,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 21
   },
   {
    "id": 5440,
@@ -1756,7 +1824,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 8
   },
   {
    "id": 5501,
@@ -1776,7 +1845,8 @@
    ],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 8
   },
   {
    "id": 5503,
@@ -1796,7 +1866,8 @@
    ],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 7
   },
   {
    "id": 5508,
@@ -1846,7 +1917,8 @@
    ],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 53
   },
   {
    "id": 5665,
@@ -1876,7 +1948,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 63
   },
   {
    "id": 5685,
@@ -1900,7 +1973,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 27
   },
   {
    "id": 5715,
@@ -1954,7 +2028,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 91
   },
   {
    "id": 5919,
@@ -1978,7 +2053,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 5949,
@@ -2002,7 +2078,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 14
   },
   {
    "id": 5975,
@@ -2033,7 +2110,8 @@
      "tip": "2050e18821e3",
      "tipIsAncestorOfMain": 0
     }
-   ]
+   ],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 6006,
@@ -2063,7 +2141,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 10
   },
   {
    "id": 6008,
@@ -2081,7 +2160,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 6
   },
   {
    "id": 6011,
@@ -2099,7 +2179,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 7
   },
   {
    "id": 6018,
@@ -2135,7 +2216,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 38
   },
   {
    "id": 6156,
@@ -2153,7 +2235,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 19
   },
   {
    "id": 6222,
@@ -2183,7 +2266,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 14
   },
   {
    "id": 6307,
@@ -2207,7 +2291,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 19
   },
   {
    "id": 6308,
@@ -2237,7 +2322,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 66
   },
   {
    "id": 6316,
@@ -2261,7 +2347,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 17
   },
   {
    "id": 6319,
@@ -2279,7 +2366,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 21
   },
   {
    "id": 6325,
@@ -2309,7 +2397,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 41
   },
   {
    "id": 6329,
@@ -2333,7 +2422,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 4
   },
   {
    "id": 6338,
@@ -2369,7 +2459,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 58
   },
   {
    "id": 6341,
@@ -2387,7 +2478,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 35
   },
   {
    "id": 6351,
@@ -2405,7 +2497,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 36
   },
   {
    "id": 6366,
@@ -2429,7 +2522,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 15
   },
   {
    "id": 6367,
@@ -2471,7 +2565,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 41
   },
   {
    "id": 6378,
@@ -2495,7 +2590,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 23
   },
   {
    "id": 6385,
@@ -2513,7 +2609,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 29
   },
   {
    "id": 6388,
@@ -2543,7 +2640,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 38
   },
   {
    "id": 6394,
@@ -2573,7 +2671,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 25
   },
   {
    "id": 6395,
@@ -2603,7 +2702,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 44
   },
   {
    "id": 6403,
@@ -2633,7 +2733,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 6406,
@@ -2663,7 +2764,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 22
   },
   {
    "id": 6409,
@@ -2681,7 +2783,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 6424,
@@ -2723,7 +2826,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 38
   },
   {
    "id": 6433,
@@ -2772,7 +2876,8 @@
      "tip": "6fb7b30b90a6",
      "tipIsAncestorOfMain": 0
     }
-   ]
+   ],
+   "sharedWordsWithCommit": 30
   },
   {
    "id": 6464,
@@ -2796,7 +2901,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 22
   },
   {
    "id": 6468,
@@ -2826,7 +2932,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 39
   },
   {
    "id": 6496,
@@ -2863,7 +2970,8 @@
      "tip": "bcaa6d2b352a",
      "tipIsAncestorOfMain": 0
     }
-   ]
+   ],
+   "sharedWordsWithCommit": 12
   },
   {
    "id": 6504,
@@ -2893,7 +3001,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 6535,
@@ -2923,7 +3032,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 39
   },
   {
    "id": 6538,
@@ -2947,7 +3057,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 45
   },
   {
    "id": 6540,
@@ -2965,7 +3076,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 6550,
@@ -2995,7 +3107,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 60
   },
   {
    "id": 6553,
@@ -3019,7 +3132,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 71
   },
   {
    "id": 6611,
@@ -3037,7 +3151,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 5
   },
   {
    "id": 6657,
@@ -3055,7 +3170,8 @@
    "lookLikeShaButAreNot": [],
    "gate": [],
    "gatesOthers": false,
-   "branchRefs": []
+   "branchRefs": [],
+   "sharedWordsWithCommit": 11
   },
   {
    "id": 6870,
@@ -3092,7 +3208,8 @@
      "tip": "8e02460de488",
      "tipIsAncestorOfMain": 1
     }
-   ]
+   ],
+   "sharedWordsWithCommit": 24
   },
   {
    "id": 7042,
@@ -3123,7 +3240,8 @@
      "tip": "39f8c92ce8d4",
      "tipIsAncestorOfMain": 1
     }
-   ]
+   ],
+   "sharedWordsWithCommit": 26
   }
  ],
  "excluded": [

@@ -109,6 +109,15 @@ for (const s of allShas) {
 }
 note("ancestry measured");
 
+// correspondence, not ancestry: does the cited commit say the thing the row claims it landed? Zero
+// shared words (>=4 chars) between the row and every cited commit is a flag for a human read, not a
+// verdict: a row "add the D105 rule" and a commit "docs: state the D105 rule" share tokens; a row
+// citing an unrelated sha does not.
+function sharedWords(it, commitCitations) {
+	const rowWords = new Set(((it.subject ?? "") + " " + (it.body ?? "")).toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4));
+	return commitCitations.reduce((n, p) => n + (p.commitSubject ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && rowWords.has(w)).length, 0);
+}
+
 const rows = [];
 for (const it of landing) {
 	const shas = cited[it.id];
@@ -163,6 +172,7 @@ for (const it of landing) {
 				})
 			: [],
 		closable: allOnMain && agree && gates.length === 0 && !gateTargets.has(it.id),
+		sharedWordsWithCommit: sharedWords(it, commitCitations),
 	});
 }
 
@@ -191,6 +201,7 @@ const lean = (r) => ({
 	gate: r.gate,
 	gatesOthers: r.gatesOthers,
 	branchRefs: r.branchRefEvidence.filter((b) => b.exists),
+		sharedWordsWithCommit: r.sharedWordsWithCommit,
 });
 const out = {
 	measuredAt: new Date().toISOString(),
@@ -207,6 +218,7 @@ const out = {
 		noShaCited: rows.filter((x) => !x.shas.length).length,
 		citedObjectNotCommit: rows.filter((x) => x.allOnMain && !x.allCitedAreCommits).length,
 		rowsWithAmbiguousTokens: rows.filter((x) => x.nonCitationTokens.length).length,
+		closableWithNoWordOverlap: closable.filter((x) => x.sharedWordsWithCommit === 0).length,
 		rowsWithNonShaTokens: rows.filter((x) => x.nonCitationTokens.length).length,
 		landingRowsWithDeadGate: deadGate.length,
 		rowsRecoverableOnlyByResolvingAllHex: rows.filter((x) => x.auditFloorOnly.length > 0).length,
@@ -235,6 +247,8 @@ const strictOnly = rows.filter((x) => x.allOnMain && x.shas.some((p) => !p.count
 console.log(`  rows the audit's floor counts as landed that the strict check REJECTS: ${floorOnly.length} -> ${floorOnly.map((x) => `#${x.id}`).join(" ")}`);
 for (const x of floorOnly) console.log(`    #${x.id} ${x.status} rejected tokens: ${x.shas.filter((p) => !p.inMainRevList).map((p) => `${p.cited}(type=${p.objectType}, merge-base exit ${p.mergeBaseIsAncestorOfMain})`).join(", ")}`);
 console.log(`  rows the strict check lands that the floor cannot see (all-digit shas): ${strictOnly.length} -> ${strictOnly.map((x) => `#${x.id}`).join(" ")}`);
+const noOverlap = closable.filter((x) => x.sharedWordsWithCommit === 0);
+console.log(`  closable rows whose cited commit shares NO word (>=4 chars) with the row - read the body before closing: ${noOverlap.length} -> ${noOverlap.map((x) => `#${x.id}`).join(" ")}`);
 console.log("");
 console.log("EXCLUDED (do not sweep into the rule):");
 for (const x of excluded) {
