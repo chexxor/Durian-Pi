@@ -317,12 +317,33 @@ export function isTerminalItem(item) {
  * release refusal below and the claim predicate - and a gate rule kept in two places is a rule
  * that drifts (#6112).
  */
+/**
+ * EVERY gate id on this row that names a CANCELLED row, in the order written. A CANCELLED row can never
+ * become `done` (`TERMINAL_STATUSES = {"done","cancelled"}`, `src/checkup.mjs`), so such a gate is closed
+ * forever: the dependent is not delayed, it is starved (#6215).
+ *
+ * THREE surfaces read this ONE rule, and they must not drift:
+ *   - `workable()` refuses the claim and names the id (`gate-cancelled:#<id>`);
+ *   - `enqueueItem()` refuses to WRITE the gate in the first place;
+ *   - the queue line and `durig status` print it, so a seat is not left guessing why it never wakes.
+ * An id that names no row is AMBIGUOUS and stays workable by ruling (#2673 conservative default): a typo
+ * must not silently hold real work back.
+ */
+export function deadGateIds(item, items = []) {
+	return [
+		...new Set(
+			(item?.blockedBy ?? []).filter((id) => {
+				const target = items.find((it) => it.id === id);
+				return target && target.status === "cancelled";
+			}),
+		),
+	];
+}
+
+/** The FIRST gate id on this row that names a CANCELLED row, or null when the gate is live. (Alias of
+ * `deadGateIds` [0], kept because the release refusal and the demos read the singular form.) */
 export function deadGateId(item, items = []) {
-	for (const id of item?.blockedBy ?? []) {
-		const target = items.find((it) => it.id === id);
-		if (target && target.status === "cancelled") return id;
-	}
-	return null;
+	return deadGateIds(item, items)[0] ?? null;
 }
 
 export function workable(item, seat, { items = [], capabilities = [] } = {}) {
@@ -397,9 +418,15 @@ export function selectOldestWorkable(items, seat, opts = {}) {
  * waits on, not merely that the work exists. Call this INSIDE the commit: `blockedBy` is an array
  * field, and reading a doc proxy after the commit settles throws "Cannot use a settled overlay".
  */
-function queueItemLine(it) {
+export function queueItemLine(it, items = []) {
 	const gate =
 		it.blockedBy && it.blockedBy.length ? ` blockedBy=${[...it.blockedBy].join(",")}` : "";
+	// #6215: a gate naming a CANCELLED row is printed as DEAD, not as an ordinary gate. `blockedBy=6122`
+	// reads as "waiting", and waiting is recoverable; a dead gate is not, and a seat that never wakes has
+	// no way to tell the two apart from the line it is given. The marker carries the id so the fix is
+	// actionable without opening the store.
+	const dead = deadGateIds(it, items);
+	const deadMarker = dead.length ? ` DEAD-GATE=${dead.map((id) => `#${id}`).join(",")}` : "";
 	// A PRIORITY LEASE is shown with its EFFECTIVE value, not the stored one: an expired `now` that still
 	// prints as `now` would read as urgent in the queue view while ordering neutral in the selector — two
 	// views of one row disagreeing, which is how a reader concludes the selector is broken. Lapsed rows say
@@ -418,7 +445,7 @@ function queueItemLine(it) {
 	const release = it.release
 		? ` releasedBy=${it.release.by}${it.release.reason ? ` reason=${it.release.reason}` : ""}`
 		: "";
-	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}${priority}${release}`;
+	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}${deadMarker}${priority}${release}`;
 }
 
 /**
@@ -486,6 +513,24 @@ export async function enqueueItem(
 	block = null,
 ) {
 	const queue = await tx.doc(RigQueue);
+	// #6215: A GATE MUST RESOLVE TO A ROW THAT CAN REACH `done`. `cancelled` is terminal and can never
+	// become `done` (`TERMINAL_STATUSES`, src/checkup.mjs), so a gate naming a cancelled row is closed
+	// forever: the dependent is not delayed, it is STARVED, and the only symptom a seat sees is that it
+	// never wakes. Refused at the ONE write path instead of discovered later by a seat that claims, is
+	// told `gate-cancelled:#<id>`, and has no move left. Measured on the live store before this rule
+	// existed (tools/probes/gate-starvation-census.mjs): 484 gate references, 67 of them naming a
+	// cancelled row, 19 of those on rows that are still held or deferred.
+	// An id that names NO row is deliberately NOT refused: by the #2673 conservative default an unknown
+	// gate is ambiguous and stays workable, so refusing it would hold real work back on a typo.
+	const deadGates = deadGateIds({ blockedBy }, queue.items);
+	if (deadGates.length) {
+		throw new Error(
+			`send_work refused: the gate names #${deadGates.join(", ")}, which is CANCELLED and can never reach done ` +
+			`- this item would be unclaimable forever. Gate on the row that carries the work ` +
+			`(never on a container/umbrella row), close the container with complete_work instead of ` +
+			`cancel_work, or drop the gate and re-send.`,
+		);
+	}
 	const id = queue.nextId++;
 	const gateRequires =
 		typeof requires === "string" && requires.trim().length > 0 ? requires.trim() : null;
@@ -1653,7 +1698,7 @@ const Router = defineExtension({
 					// Render to plain strings INSIDE the commit: the commit releases its overlay, and a
 					// proxy read (including an array field like `blockedBy`) after settlement throws
 					// "Cannot use a settled overlay".
-					return [filtered.map(queueItemLine), head];
+					return [filtered.map((row) => queueItemLine(row, queue.items)), head];
 				}, context);
 				// Bounded inline view for per-seat queries to avoid context bloat.
 				// Team-wide (all=true) view is uncapped so coordinators can enumerate.

@@ -38,6 +38,7 @@
       "demo/config.test.mjs",
       "demo/constitution.test.mjs",
       "demo/continuity-note.test.mjs",
+      "demo/gate-cancel-refusal.test.mjs",
       "demo/context-over-window.test.mjs",
       "demo/control-plane-gate.test.mjs",
       "demo/converter.test.mjs",
