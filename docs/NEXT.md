@@ -2,7 +2,7 @@
 
 **Last update:** 2026-11-12T06:5xZ (delegate session **N35** — the **work-strategy change implemented by hand**, the one
 thing the operator paused the lifecycle goal for: claim order is now a declared policy per team and per seat (**D266**),
-with a leased `priority` and a `ps`/`status` readout naming its source). `main` = **`69d4d2cc`**, suite **302/302** in
+with a leased `priority` and a `ps`/`status` readout naming its source). `main` = N35 (code commit **`69d4d2cc`**), suite **303/303** in
 **128.7 s** (`--jobs 4`, exit 0), refs **101** / worktrees **91** at 06:2xZ (live: 95/85 at 05:0xZ → 101/91 an hour later).
 **The lifecycle goal is PAUSED** — nothing resumed, no row minted/claimed/completed/deferred, nothing pushed. Readout
 verified against the LIVE store with the OLDER broker (pid **2997720**): `ps` exit 0 in 1.8 s, `status` exit 0 in 2.9 s.
@@ -63,7 +63,7 @@ probe false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
 cd /home/chexxor/Git/Durian-Pi
 node tools/branch-census.mjs --plan                                    # exit 0 — WITHOUT --plan the landing list is CAPPED at 15 of 41 (tools/branch-census.mjs:262)
 node tools/stranded-inbox.mjs selfdev.sqlite                           # 1 s — is the broker PARKED? hbAgeS vs progressAgeS; then COUNT LIVE: git branch --list | wc -l; git worktree list | wc -l
-node scripts/test.mjs --all --jobs 4                                 # 302/302 in 128.7 s at 69d4d2cc, exit 0
+node scripts/test.mjs --all --jobs 4                                 # 303/303 in 128.7 s at the N35 tip, exit 0
 DURIG_DB=./selfdev.sqlite node cli.mjs ps                             # 1.8 s — roster + claim ORDER (workStrategy: team/seat/default, with its source)
 node demo/offline.mjs                                                  # exit 1 — the mocked plane is still red
 ```

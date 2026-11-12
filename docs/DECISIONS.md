@@ -11868,13 +11868,21 @@ hand-editing the store). `DURIG_WORK_STRATEGY` is registered in `CONFIG_KEYS` an
 **Where it is, and how it is proven.** Policy: `src/workstrategy.mjs` (pure, no I/O). Wire: `src/rig.mjs`
 (`selectNextWork`; the `set_priority` tool; `queueItemLine`'s `priority=`/`=lapsed`/`=invalid` rendering). Readout:
 `src/readapi.mjs` (`workStrategyView`, `readWorkStrategyView`, `readSeatsDocument`), `cli.mjs` (`up`'s
-`workStrategy: {team, source, seat}`, and `ps`/`status` reading the seats DOCUMENT through the broker's existing
-generic `document` view — a view of its own would fail closed against a resident broker older than the CLI, which
-was measured: `unknown read view: roster` with 4 live generation leases → exit 1). Proof: `demo/workstrategy.test.mjs` (45 checks,
+`workStrategy: {team, source, seat}`, `ps` always and `status` under skew reading the seats DOCUMENT through the
+broker's existing generic `document` view; `status` normally gets the same derivation from `readRigHealth` in one read).
+Neither verb asks for a view of its own, because a read view is validated against the vocabulary the RESIDENT broker
+started with — measured: a new `roster` view returned `unknown read view: roster` with 4 live generation leases, so the
+client refused a direct read and `ps` exited 1. Proof: `demo/workstrategy.test.mjs` (45 checks,
 pure policy) and `demo/workstrategy-up.test.mjs` (the real CLI in faux mode, 3.3 s: declare → persist → `ps`/`status`
 read back with provenance → re-run unchanged → changed value applied → `--refresh` applies and `null` clears → a typo
 refuses before a store exists). The primer line for `set_priority` is pinned by `demo/primer.test.mjs`, which is what
 caught the first cut: a registered tool the primer does not name is a feature no seat is ever told about.
+`demo/workstrategy-claim.test.mjs` (0.3 s, memory storage + faux provider) drives the CLAIM itself through the real
+Router tool: the default reply is byte-identical (no `ORDER:` line, oldest row), `priority_first` claims a leased `now`
+row ahead of older ones and names the strategy and its source, the seat override beats the team (and `set_priority`
+says the lease is then INERT rather than reporting success), a lapsed lease ranks neutral at read time, and the
+authority / in-flight / past-expiry / over-long-lease refusals all fire, and `peek_queue` prints a live lease with
+its expiry and a lapsed one as `priority=now~lapsed@<instant>` so the queue line and the selector cannot disagree.
 
 **Residual, and what the delegate deliberately did not do.** Nothing was routed: no queue row was minted, claimed,
 completed or deferred, and the delegate remains outside the team. Nothing was pushed (the operator holds that grant).

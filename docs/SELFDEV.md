@@ -3975,7 +3975,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `last-modified` for exactly this reason; regenerate it with
     `.spike/research/fetch-manifest.py` (promote per 312) before citing anything external.
 
-## Operational pitfalls (delegate work-strategy pass, 2026-11-12 — numbered 274-279, continuing from 273; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate work-strategy pass, 2026-11-12 — numbered 274-280, continuing from 273; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 274. **A registered tool nothing documents is a dead feature, and the primer is the only reader.** `set_priority` was
     registered, tested at the policy level and reachable, and `demo/primer.test.mjs` still went **red**: "tool
@@ -4015,4 +4015,14 @@ at `:743`). Re-measure every `path:line` before repeating it.
     re-sorted 6 neighbours and escaped a unicode em-dash into the diff. (A new READ VIEW also has to pass
     `demo/broker-read.test.mjs`'s `deepEqual` on `READ_VIEWS`; see 278 for why a new view is usually the wrong answer.)
     Measured cost of the whole pass on this box: new end-to-end demo 3.3 s standalone / 6.1 s under `--jobs 4`, full
-    suite **302/302 in 127.7 s**.
+    suite **303/303 in 128.7 s**.
+280. **A pure-policy test plus an `up`/read-back test still leaves the TOOL wiring untested.** `src/workstrategy.mjs`
+    was covered 45/45 and `up -> persist -> ps/status` was covered end to end, yet nothing exercised `claim_work`
+    choosing under `priority_first` or `set_priority`'s authority/refusal branches — `node --check` was the only
+    evidence, and the handoff that preceded it had already been burned by exactly that. The cheap shape is the one
+    `demo/hold-queued-row.test.mjs` established: `MemoryStorage` + `fauxProvider`, drive the real Router tool through
+    `conversation.submit`, assert on the tool RESULT. Two traps in writing it: (1) `conversation.entries()` is
+    **newest-first**, so the result of the call you just made is `own[0]` — taking the last element silently asserts
+    against the PREVIOUS turn's result and reads as "the tool ignored me"; (2) a seat registered with no capabilities
+    counts as a COORDINATOR (`seatIsCoordinator` = "no working capability"), so an authority test must give the
+    non-coordinator a working capability (`["implement"]`) or the refusal it expects never fires. Cost: 0.27 s.

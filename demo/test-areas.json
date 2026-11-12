@@ -88,6 +88,7 @@
       "demo/trace-requests.test.mjs",
       "demo/up-model-reset.test.mjs",
       "demo/workable-claim.test.mjs",
+      "demo/workstrategy-claim.test.mjs",
       "demo/workstrategy-up.test.mjs",
       "demo/workstrategy.test.mjs"
     ],
