@@ -118,6 +118,41 @@ on a running fleet.
 
 ---
 
+### N19 — The Pool: one authoritative queue, specialisation as a predicate, work sized to the window (D275)
+
+**Outcome sought:** a seat takes its next piece of work from ONE queue the whole team shares, gets only
+work it is specialised for, and can always finish what it takes inside one context window — splitting it
+when it cannot.
+
+**Spec:** `docs/POOL-QUEUE-SPEC.md` (the implementation contract; no code is written yet).
+
+**Measured baseline, 2026-11-12T21:5xZ** (`DURIG_DB=./selfdev.sqlite node cli.mjs status --json`):
+`done 4848 · cancelled 1091 · held 342 · deferred 431 · claimed 17 · queued 796`; queued by recipient
+**impl 380**, devtools 160, pm 151, scribe 75, qa 20; **277 of the 796 queued rows are notices**; queued
+age median 0.6 d. 4 h ledger: closed 13.9/h against intake 23.7/h.
+
+**Why this and not "drain the backlog":** the single biggest mechanical cause of the queue's shape is that
+every row must be addressed to one seat, so one seat holds 380 of 796. A shared queue does not add capacity
+— it lets other eligible seats take work that is currently parked behind one seat's attention.
+
+| # | task | state |
+|---|---|---|
+| 1 | spec written and operator-approved (six design answers, D275) | done — `docs/POOL-QUEUE-SPEC.md` |
+| 2 | `requiredCapabilities()` + set semantics in `workable()` (string compat) | queued — spec §7 row 1 |
+| 3 | pool address (`to:null`+`pool:true`) through `enqueueItem`/`send_work`/`assertSendAllowed` | queued — §7 rows 2–3 |
+| 4 | pool claim: owner-of-record, `pool-claimed` transition, DONE notice to `from` | queued — §7 row 4 |
+| 5 | tier→token gate at claim + pool too-big warning | queued — §7 row 5 |
+| 6 | `split` closure (`closedAs`), children inherit `from`/`requires`/`blockedBy` | queued — §7 row 6 |
+| 7 | census (`pooled`/`pool-claimed`/`size-refused`) + two check rules | queued — §7 row 7 |
+| 8 | skill store (seat self-constructs skills; eligibility earned) | **NOT in N19** — operator ruled capabilities are assigned only |
+
+**The probe that falsifies it:** after the build, `cli.mjs queue --json` must show pooled rows claimed by
+more than one seat, and `check` must fail if a pooled row requires a capability no seat advertises. If
+`impl` still holds the majority of queued rows once pooling exists, the milestone's premise — that routing
+concentration, not capacity, is the binding constraint — is wrong.
+
+---
+
 ## What the next milestone is, and how it was chosen
 
 Written out in full in `docs/reviews/milestone-m5-solidified-2026-11-09.md`, with the decomposition, the acceptance

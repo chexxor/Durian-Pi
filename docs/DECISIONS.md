@@ -11958,3 +11958,54 @@ exists to avoid. Guarded by `demo/store-busy-timeout.test.mjs`, a static check r
 `node demo/test-areas.test.mjs` → 326 tests across 9 areas. Commit `575a67e8`. Unverified: that the 30 s grace is
 sufficient under the heaviest checkpoint (no lock longer than 5 s has been observed since), and the running broker
 was NOT restarted, so the live process still holds the old 5 s connection until its next re-arm.
+
+**D275 — the team queue is AUTHORITATIVE, specialisation is a predicate, and work is sized to the window (2026-11-12).**
+Decided by the operator across a design exchange; recorded by the delegate. Milestone **N19 "The Pool"**, spec
+`docs/POOL-QUEUE-SPEC.md`.
+
+**The measurement that forced it.** `DURIG_DB=./selfdev.sqlite node cli.mjs status --json` at 21:5xZ: `queued 796`,
+of which `impl` alone holds **380**; queued median age **0.6 d** (so this is turnover, not accumulation); the 4 h
+ledger shows **closed 13.9/h against intake 23.7/h**, backlog growing; **277 of the 796 queued rows are notices**,
+not work. The queue looked like a backlog and was actually one seat's inbox plus correspondence.
+
+**What was decided, and why each alternative lost.**
+
+1. **Pool address = `to: null` + `pool: true`, NOT a pseudo-seat named `team`.** A pseudo-seat would resolve through
+   `seatId` and leak into `Edges` and the DONE-notice chain, which routes to `from`; a nullable `to` keeps "nobody
+   owns this yet" a real state instead of a seat that must exist. Cost accepted: `to` becomes nullable and is now
+   written at claim, so every `item.to === name` comparison is a site to audit (queue-lifecycle review F6 counted
+   ~30 status-literal sites in 11 files).
+2. **`requires` becomes a SET with AND semantics, not one string.** A seat's specialisation has three axes —
+   permissions, tools, skills — and one string cannot carry them. AND, not OR, because a partial match is exactly
+   the "took work it is not specialised for" failure the operator named. Compatibility is load-bearing: a string
+   reads as a one-element set and a single requirement must keep the byte-identical reason `requires:<cap>`, which
+   six existing demos assert.
+3. **A capability is never granted by taking work.** The operator rejected "a seat earns eligibility by building a
+   skill" for this milestone: the skill store does not exist (`src/*.mjs` has no skills mechanism; `.agents/skills/`
+   holds three delegate skills), and self-service eligibility is how a permission boundary erodes. Capabilities stay
+   operator/`pm`-assigned.
+4. **The size gate uses the CLAIMER's declared window**, plus a pool-level warning when a row's tier exceeds the
+   smallest window in the roster. The alternative — a fleet-wide floor — would hide big work from every seat instead
+   of marking it as big-work-only.
+5. **The claimer splits a too-large row; the parent closes as `split`, not `done`.** Closing it `done` would assert
+   the work was finished. Children inherit `from`=splitter, `requires`, and a `blockedBy` chain.
+6. **Tier stays latched across a split**; children record their own tiers, so the ratchet history stays readable.
+   Delegated (offered, not objected to): a claimer may not bump a pool row's priority (priority stays the operator's
+   or `pm`'s; a seat may only self-defer with a clock), and `to` is owner-of-record only — the DONE notice still
+   returns to `from`.
+
+**Enforcement, not instruction.** The operator's constraint was that small-window seats must be able to finish what
+they take. The mechanism is two-level and only the first is a gate: at claim, `tier` (recorded since RANK 2 and
+**never enforced** — it is used today only for storage, the raise guard, and same-intent duplicate detection) is
+compared to `0.7 × usableWindow` and the claim is **refused** with a split instruction; at turn start the seat
+estimates and, past 70 % of its working budget, plans and splits instead of starting — the rule already written in
+`docs/reviews/ensuring-llm-task-completion-research.md:64`. A `size-refused` transition records every refusal, so a
+row that keeps being passed over says why.
+
+**Non-goals, stated:** no second queue document (the queue is ONE 10.4 MB document materialised every broker pass —
+`src/rig.mjs:202`, re-paid at `src/broker.mjs:1052`); no seventh status literal (the split is `closedAs` + a
+transition); no skill store; no resumption of the paused lifecycle goal.
+
+**Status:** spec only — no code written; `src/rig.mjs` was left untouched (a partial implementation was reverted
+before the handoff so the tree is clean). Evidence for the design: the six seams cited in spec §3 all exist and were
+read at `792445d5`.
