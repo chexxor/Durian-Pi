@@ -36,8 +36,17 @@ import { tmpdir } from "node:os";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
-import { createRegistry, DEFAULT_RESTART_LIMIT, Harness, LiveDoc, ROOT_CONVERSATION_ID } from "@earendil-works/pi-durable";
-import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+// Namespace import on purpose: a named import of DEFAULT_RESTART_LIMIT is a SyntaxError at LOAD
+// time on the lockfile plane (1.3.0 has no such export), so the plane guard below could never run and
+// the demo would die with an import error instead of naming the plane. Same for the storage subpath.
+import * as piDurable from "@earendil-works/pi-durable";
+const { createRegistry, DEFAULT_RESTART_LIMIT, Harness, LiveDoc, ROOT_CONVERSATION_ID } = piDurable;
+let openNodeSqliteStorage = null;
+try {
+	openNodeSqliteStorage = (await import("@earendil-works/pi-durable/storage/sqlite/node")).openNodeSqliteStorage;
+} catch {
+	openNodeSqliteStorage = null;
+}
 
 const ctx = BACKGROUND_CONTEXT;
 const RULED = 3;
@@ -169,7 +178,7 @@ console.log("restart-limit behaviour on " + plane());
 const seam = seamValue();
 console.log("rig seam: cli.mjs openHarness writes restartLimit=" + (seam.written ?? "nothing") + " -> effective " + (seam.effective ?? "unknown") + " (the ruled 3 bites only where the seam writes it)");
 
-if (DEFAULT_RESTART_LIMIT === undefined) {
+if (DEFAULT_RESTART_LIMIT === undefined || openNodeSqliteStorage === null) {
 	console.log("RESTART-LIMIT BEHAVIOUR FAIL - this plane has no settings.restartLimit at all, so the guard cannot be exercised here; run against the built pin (node scripts/sync-pi.mjs --sync && node scripts/sync-pi.mjs --link)");
 	process.exit(1);
 }
