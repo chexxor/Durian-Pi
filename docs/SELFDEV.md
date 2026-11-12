@@ -4070,3 +4070,22 @@ at `:743`). Re-measure every `path:line` before repeating it.
     across ledger ticks. Measured this window: refs **101 → 109 → 114** and worktrees **91 → 99 → 107** in three
     hours with **zero** landings on `main` (HEAD `ddcc0a23` unchanged) — the fleet mints ~4 refs/hour while the
     landing batches (#7124/#7126/#7128) sit `queued`.
+
+## Operational pitfalls (delegate landing-chain pass, 2026-11-12 — numbered 287-289, continuing from 286; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+287. **A dirty live tree makes `broker-serve --start` refuse, and the refusal reads as a broken broker.** Two
+    re-arms at 09:55Z and 09:57Z printed `START REFUSED: broker-degraded, live-tree-dirty` and the keepalive loop
+    gave up ("two consecutive re-arms failed; stopping so a human reads the state"). The cause was the delegate's
+    own uncommitted instrument work, not the store. **Commit before re-arming**, then `node
+    tools/broker-keepalive.mjs --once` — after commit `60380781` it re-armed cleanly (pid 3912450, PASS running,
+    seats `SKIP reason=pending`, which is normal back-pressure).
+288. **Pairwise exclusion is the wrong question; "can they be ordered" is the right one.** Excluding every ref that
+    conflicted with *any* other ref left **17 of 53** landable refs. Chained first-fit — merge the ref onto the
+    accumulated chain, promoting each merged tree with `git commit-tree` — packed **all 53 into 6 verified bins
+    (12,12,12,12,4,1)** in 12.5 s with **67** `merge-tree` calls instead of 1,378. Measured 2026-11-12T10:35Z,
+    HEAD `60380781`.
+289. **Measure the ref's changed files from the MERGE BASE, not from `main`.** `git diff --name-only main <ref> --`
+    counts every file `main` added after the base as "touched by the ref", which turns 323 real shared-file pairs
+    into **1,378** and makes every pair look like a collision. `git merge-base main <ref>` first, then diff base→ref.
+    `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
+    object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.

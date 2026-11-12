@@ -769,3 +769,29 @@ node -e "import('./scripts/clockin.mjs').then(m=>{const p=m.pointerSection(requi
 1,476 turns). That probe is gitignored; promoting it into `tools/` is a row from `lead` (ROADMAP **349**, the
 same promotion rule as **312**) — until it is promoted, the next session re-derives it, and the runbook's snippet
 in `docs/runbooks/milestone-gate.md` is the copy that survives.
+
+## 31. THE LANDING PLAN IN ONE CALLED COMMAND — AND THE TWO NUMBERS THAT PROVE THE FLEET IS NOT LANDING (2026-11-12T10:35Z, delegate; Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+Two reads tell you whether the team is closing work or only minting branches. Run them in **one** bounded call:
+
+```bash
+git rev-parse --short main; git for-each-ref refs/heads | wc -l; git worktree list | wc -l   # ~0.2 s
+```
+
+If `main` is unchanged while refs and worktrees climb tick-over-tick, nothing is landing — the ledger written by
+`tools/broker-keepalive.mjs` (`.spike/fleet-ledger.jsonl`, one JSON per minute: `refs=`, `itemBranches=`,
+`worktrees=`) is the time series to diff. Measured 2026-11-12: refs **114 → 118** and worktrees **104 → 108** in
+six minutes with `main` pinned at `60380781`.
+
+The plan itself, not the diagnosis:
+
+```bash
+node tools/landing-batch-plan.mjs --max 12      # 12.5 s, exit 0 — ~10 s is branch-census, 67 merge-tree calls
+```
+
+Prints every ref that needs a landing decision packed into **verified merge chains** with the exact
+`node scripts/land.mjs <refs> --suite` command for each bin (measured: 53 refs → bins 12,12,12,12,4,1, 101 commits
+ahead, 0 unlandable). `--pairwise` adds the O(n²) conflict-pair diagnostics if you want the pairs, not the order.
+
+**What it does not tell you:** whether a seat has actually run those commands. `main` moving is the only evidence;
+the queue rows for landing passes can sit `queued` for hours while the broker is healthy.
