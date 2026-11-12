@@ -1,18 +1,16 @@
 # NEXT.md — current state and next actions
 
-**Last update:** 2026-11-12T01:5xZ (delegate session **N33** — **branch-lifecycle research round 1 folded in**, D265,
-ROADMAP 358–362; the fleet was parked again by its own `--max-duration` and restarted as pid **2108053** with
-`--max-duration 5400`). Session **N32** — the **census close-out + the work-item model**:
-`main` = **`6d36ab0f`**, suite **300/300** in **122.9 s** (`--all --jobs 4`, exit 0, unpiped), refs **84** and
-worktrees **75** (count live — the fleet mints them; 77→81 refs in ten minutes this session), **1 ref pruned**
-(`item-6809`, provably merged), **51 OPEN rows** appended to `docs/DISPOSITIONS.md`, and `docs/WORK-ITEM-MODEL.md`
-written. A **parked** broker (pid **2876055**, heartbeat 9 s fresh, `lastPassAt` frozen **48,370 s**) was reaped with
-`kill -TERM` and the fleet restarted (pid **1948745**, `PASS 1..6` in 60 s). Nothing was pushed; the delegate claimed,
-completed or deferred no row. **Count refs/worktrees live** — the fleet mints them while you measure.)
+**Last update:** 2026-11-12T06:5xZ (delegate session **N35** — the **work-strategy change implemented by hand**, the one
+thing the operator paused the lifecycle goal for: claim order is now a declared policy per team and per seat (**D266**),
+with a leased `priority` and a `ps`/`status` readout naming its source). `main` = **`69d4d2cc`**, suite **302/302** in
+**128.7 s** (`--jobs 4`, exit 0), refs **101** / worktrees **91** at 06:2xZ (live: 95/85 at 05:0xZ → 101/91 an hour later).
+**The lifecycle goal is PAUSED** — nothing resumed, no row minted/claimed/completed/deferred, nothing pushed. Readout
+verified against the LIVE store with the OLDER broker (pid **2997720**): `ps` exit 0 in 1.8 s, `status` exit 0 in 2.9 s.
 
-**Milestone this window worked** — **a work-item lifecycle the team can run itself**: seats land their own verified
-branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless items never spawn a worktree
-(`docs/WORK-ITEM-MODEL.md`, rows **#6924–#6927** minted by `pm`). The pin move (D255 → D256, ROADMAP 353–357) is the
+**Milestone this window worked** — **a work-item lifecycle the team can run itself** (the goal the operator PAUSED):
+seats land their own verified branch into `staging`, the operator promotes `staging` → `main` in one verb, branchless
+items never spawn a worktree (`docs/WORK-ITEM-MODEL.md`, rows **#6924–#6927** minted by `pm`). The session's own work
+was the tranche pulled out of that goal before the pause: the claim-order policy, D266. The pin move (D255 → D256, ROADMAP 353–357) is the
 frame it operates in. Prior window's milestone — **no 120 s silence, and Ctrl-C actually stops the verb**
 (ROADMAP **314**, row **#6160**, decision **D262**) — baseline `e06626af` vs `main`, same 139,264 B store, same forged wedge:
 `watch --once --json` went from **120,547 ms / exit 1** (signal ignored for 119 s) to **1,518 ms / exit 130, 15 ms
@@ -27,16 +25,17 @@ the pinned-pi thread (D255 → D256, ROADMAP 353–357: pin `v1.5.1`, `pi-schema
 
 ## NEXT SESSION
 
-**Current item:** the **work-item lifecycle MVP**. `pm` cut the intent into four rows: **#6924** impl — make
-`demo/offline.mjs` green (the mocked plane is the prerequisite for everything else); **#6925** lead — does the
-PROVISIONAL taxonomy block the `staging` verb, and who routes the research prompt; **#6926** architect — where the
-seams are (mode decision, gate composition, the promote-to-main writer); **#6927** qa — inventory the 51 OPEN
-disposition rows. The branch-cleanup pass's **git half is closed** (`main` green); what is left is fleet work — the
-**item-5301 re-cut (#6174)**, the uncommitted `sync-pi --no-repair` work stranded in the `item-6057` worktree
-(**#6060**), the dirty trees named below, and the three pin-policy rows (**#6171/#6172/#6173**).
+**Current item:** the **paused lifecycle goal on the landing pass** (operator directive 2026-11-12: "Prioritize landing
+the branches in the project and cleaning them up"). It does NOT resume until the operator runs `/goal-resume`; the one
+change that was pulled out of it landed at `69d4d2cc` (D266, work strategy — `src/workstrategy.mjs`, the `set_priority`
+tool, `up` validation/persistence, `ps`/`status` readout); read that before touching claim ordering. Separately, `pm`
+routed the paused goal as the work-item lifecycle MVP: **#6924** impl — make
+`demo/offline.mjs` green; **#6926** architect — the seams, now minted by pm as **#7055** (confine must deny seats the
+blessed refs), **#7056** (bind the gate to the verifier's tip), **#7057** (the promote verb, staging → main),
+**#7058** (mint the execution mode on the row). The delegate's landing intent (delivered 05:18:19Z,
+`INTENT delivered=1`) carries the 41-ref triage and the three batch commands below.
 
-**Milestone this window worked** — the **work-item lifecycle** (above), with the branch-census pass as its
-residue-cleanup tranche.
+**Milestone this window worked** — the **work-item lifecycle** above (paused mid-way); its residue-cleanup tranche, the branch census, is where N34 stopped. This session added D266 only and left every lifecycle row as the pause found them.
 
 **Research status (changed this session):** round 1 landed — the delegate ran it itself (`node`+`curl`, this host)
 into **`docs/reviews/branch-lifecycle-llm-agent-teams.md`**, with every quote re-fetched into `inputs/fetched/` and
@@ -49,24 +48,29 @@ a reason. **Still an operator action:** routing the off-host prompt (and the rou
 Trunk/Mergify, Devin/Copilot/Sweep/Orbi/Miko/Baton/Code Conductor/Sourcegraph and every product's iteration loop
 stay unverified. D265 records the decision.
 
-**Blocker:** two, both operator-grant, neither a git one. (1) The **round-2 external research** is written
-(`docs/reviews/branch-lifecycle-followup-research-prompt.md`); the research agent is off-host with no repo access, so **routing
-that prompt is an operator action**, and `docs/WORK-ITEM-MODEL.md` §4/§7 stay PROVISIONAL until it lands. (2) The
-verifier leg: `DURIG_VERIFIER_API_KEY` spend is capped and `local2` is a shared LAN box whose 20 s preflight probe
-false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
+**Blocker:** three, and the first one is a PAUSE (not a defect): the lifecycle goal waits on `/goal-resume`. (1) **Research is no longer the blocker** — all three off-host reports
+landed (`docs/reviews/branch-lifecycle-research.md` 324 lines, `branch-lifecycle-followup-research.md` 139,
+`branch-lifecycle-llm-agent-teams-research.md` 35, committed at `ed84f0b4`); **ROADMAP 367** is now an operator ruling
+(prefix taxonomy enforced in `src/confine.mjs` vs 362's rejection of a naming linter) and the **bounded per-seat hold
+pass** the operator approved has no mechanism row yet. (2) `node demo/offline.mjs` is **exit 1** and `git rev-parse
+staging` is **exit 128** — no `staging` branch exists, so "seat lands into staging" cannot be demonstrated yet.
+(3) The verifier leg: `DURIG_VERIFIER_API_KEY` spend is capped and `local2` is a shared LAN box whose 20 s preflight
+probe false-blocks (measured 42.8 s cold / 27.2 s warm for a 64-token call).
 
 **Run these first, in this order** (every number below was measured on this box; re-measure rather than trust it):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-node scripts/suite.mjs --jobs 8                                        # 299 tests on disk; one can redden on contention
-node tools/stranded-inbox.mjs selfdev.sqlite                           # 1 s — is the broker PARKED? hbAgeS vs progressAgeS
-DURIG_DB=./selfdev.sqlite node cli.mjs worktree audit --json           # 1.1 s — total 82: seat-root 10, non-item 4, live 2, reapable 60, dirty 5, locked 1
-DURIG_DB=./selfdev.sqlite node cli.mjs queue --status claimed --json --no-body   # the payload is the filtered rows; `rows:` is the CENSUS
-git branch --list | wc -l; git worktree list | wc -l; node scripts/sync-pi.mjs --check   # COUNT LIVE: 84 refs / 75 worktrees at 6d36ab0f
+node tools/branch-census.mjs --plan                                    # exit 0 — WITHOUT --plan the landing list is CAPPED at 15 of 41 (tools/branch-census.mjs:262)
+node tools/stranded-inbox.mjs selfdev.sqlite                           # 1 s — is the broker PARKED? hbAgeS vs progressAgeS; then COUNT LIVE: git branch --list | wc -l; git worktree list | wc -l
+node scripts/test.mjs --all --jobs 4                                 # 302/302 in 128.7 s at 69d4d2cc, exit 0
+DURIG_DB=./selfdev.sqlite node cli.mjs ps                             # 1.8 s — roster + claim ORDER (workStrategy: team/seat/default, with its source)
+node demo/offline.mjs                                                  # exit 1 — the mocked plane is still red
 ```
 
-**Broker status:** resident pid **1948745** (`--no-probe --max-duration 3600 --yes-pm-wakes`, started 23:53:47Z).
+**Broker status:** resident pid **2997720** (`--no-probe --max-duration 3600 --yes-pm-wakes`, started 05:17:5xZ;
+`INTENT delivered=1 dead=0 dup=0` at 05:18:19Z, `PASS 3 ms=64`). Read `selfdev.sqlite.broker.json` for the pid — the
+pid is the identity, not `pgrep`.
 **The bound is not a hard bound, and it is now measured, not hypothesised**: a broker whose wake loop broke at
 `--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1855-1857`) with **no stop request**, so
 `graceExpired()` is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded
@@ -76,8 +80,8 @@ one-line discriminator (`hbAgeS` / `progressAgeS` / `DRAIN-STRANDED`). Account: 
 The force timer (`cli.mjs:2247`) arms only in `onSignal`, so `serve --stop` is invisible to a parked broker — four this
 window (pids 2066240, 2201485, 2390935, 2658110) lingered 34 min – 1 h 32 m past their bound until `kill -TERM <pid>` fired the fallback (`EXIT reason=deadline passes=-`). Preflight **blocks falsely** on local2: the 20 s probe at `tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0 blocking) and verify seats generate. Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`. Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
 
-**What the residue is now** (`cli.mjs worktree audit --json`, 1.1 s, re-measured at `6d36ab0f`): **82 entries** —
-seat-root 10, non-item 4, locked 1, **live 2**, **reapable 60**, dirty 5. `git worktree list | wc -l` counts 75
+**What the residue is now** (`cli.mjs worktree audit --json`, re-measured 05:2xZ at `ed84f0b4`): **88 entries** —
+seat-root 10, non-item 2, locked 1, **live 3**, **reapable 67**, dirty 5. `git worktree list | wc -l` counts 88
 (the audit counts the shared repo too). 60 reapable trees is the residue the lifecycle is meant to stop producing;
 row **#6927** is the inventory of the 51 OPEN `docs/DISPOSITIONS.md` rows behind it. Reap recipe (idempotent, never
 `--force`): `cli.mjs worktree audit --json > .spike/wt.json`, then remove every entry whose `keepReason` is
@@ -99,9 +103,7 @@ and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `m
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
 **D261** false — it says there is no post-mint gate write path; `revise_work` would create one.
 
-**State at clock-out** (measured live, re-count before trusting): refs **84**, worktrees **75**, `main` `6d36ab0f`, queue
-census **6,927 rows** — the fleet minted **#6924–#6927** from the delegate's lifecycle intent within two minutes of the
-broker restart.
+**State at clock-out** (measured live 06:2xZ, re-count before trusting): refs **101**, worktrees **91**, `main` `69d4d2cc`, queue census **7,101 rows** (4,711 done / 933 cancelled / 427 held / 524 deferred / 11 claimed / 495 queued) via `status --json --no-notes` exit 0. Broker pid **2997720** is alive and current (`hbAgeS=7 progressAgeS=519`, `drainStranded=0`, last pass 06:18:10Z) but still runs PRE-`69d4d2cc` code, so `status` pays one extra round-trip for `workStrategy` until it restarts; `ps` is correct either way.
 
 **Hazards the next session must not mistake for green** (all re-measured 00:4xZ against `main` `14ae744a`):
 (1) **`item-5301` / `item-5301-resolved` are not landable by a delegate** — `cli.mjs` conflicts, and the branch's own
@@ -139,9 +141,9 @@ DURIG_DB=./selfdev.sqlite node cli.mjs status         # must answer in under 10 
 
 ## Current item (priority order)
 
-1. **Close the three pin-policy rows** (ROADMAP 355): `checkpointWhen` per rig doc (**#6171**, architect),
-   `persistWithinMs` 1,000 ms + `watchDoc()` or 0 + transaction load (**#6172**, lead), `restartLimit = 3` at the
-   single `openHarness()` seam in `cli.mjs` pinned by a demo (**#6173**, impl).
+1. **Land the 41 refs** (operator directive 2026-11-12): three pairwise-clean batches, commands in
+   `.spike/landing-batch-plan.json`; each pass is `node scripts/land.mjs <refs> --suite`. Pairwise-clean is NOT a
+   proof a 28-way merge composes — a pass must drop the member that conflicts and re-gate.
 2. **Re-cut `item-5301`** (**#6174**) — four defects, measured on the merged tree, listed in
    `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md` §8 and pitfall **232**. Do not land until all four close.
 3. **Close the install gap** (ROADMAP **352**, rows **#6125/#6127**): nothing at session start runs
