@@ -195,6 +195,36 @@ const emptySnapshot = formatSnapshot({ db: "./wrong.sqlite", health: { seats: []
 assert.match(emptySnapshot, /No seats in this database/);
 assert.match(emptySnapshot, /node cli\.mjs config/, "and it names the way out");
 
+// THE CLAIM ORDER on the dashboard (D266): only a non-default strategy earns a line, so a rig that
+// declares nothing renders byte-for-byte as before (pinned by the snapshots above, which carry no
+// `workStrategy` at all). The value is read from the resolved view, never re-derived here.
+{
+	const base = formatSnapshot({ db: "./rig.sqlite", health: healthWith([]), width: 90, at: "12:00:00" });
+	assert.ok(!/^order:/m.test(base), "no order line when nothing is declared — the default stays quiet");
+	const declared = formatSnapshot({
+		db: "./rig.sqlite",
+		health: {
+			...healthWith([]),
+			workStrategy: {
+				default: "oldest_first",
+				team: { strategy: "priority_first", source: "team" },
+				seats: {
+					pm: { strategy: "priority_first", source: "team" },
+					impl: { strategy: "oldest_first", source: "seat" },
+				},
+			},
+		},
+		width: 90,
+		at: "12:00:00",
+	});
+	assert.match(declared, /^order: pm priority_first \(team\) — a leased `priority` is honoured here$/m,
+		"the dashboard names the seat, its strategy and the source");
+	assert.ok(!declared.includes("impl oldest_first"),
+		"a seat that OVERRIDES back to the default is not listed: the line is for what differs from the default");
+	// And the counts footer is untouched, so the order line cannot displace a count a reader relies on.
+	assert.match(declared, /queue 0 queued · 0 claimed · 0 done/);
+}
+
 console.log("--- screen writer ---");
 
 // Clearing is reserved for a real terminal; a pipe must keep the appended

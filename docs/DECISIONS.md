@@ -11887,9 +11887,21 @@ its expiry and a lapsed one as `priority=now~lapsed@<instant>` so the queue line
 **Residual, and what the delegate deliberately did not do.** Nothing was routed: no queue row was minted, claimed,
 completed or deferred, and the delegate remains outside the team. Nothing was pushed (the operator holds that grant).
 Not built here, named rather than implied: the wake gate (`src/driver.mjs`, `queuedVerdicts`) asks only WHETHER a seat
-has a workable row, so it is order-agnostic by construction and needs no change; what is unbuilt is the read surface
-elsewhere — the TUI/`watch` roster does not yet print the resolved strategy, and `peek_queue` (via `queueItemLine`)
-shows `priority=` to seats while the operator's `queue` dump carries the raw field only. Rejected with a reason: an integer priority (a typo or an inverted convention becomes silently either "highest"
+has a workable row, so it is order-agnostic by construction and needs no change; the `watch`/TUI dashboard now prints a
+footer line ONLY for seats whose strategy differs from the default (so a rig that declares nothing renders byte-identical
+to before), while `peek_queue` (via `queueItemLine`) shows `priority=now until=...` and `~lapsed@<instant>` to seats and the operator's `queue` dump
+still carries the raw field only — routed to `pm` as an intent rather than added here, because a derived string in that
+22 MB JSON contract would change its bytes for every script that diffs it. Rejected with a reason: an integer priority (a typo or an inverted convention becomes silently either "highest"
 or "ignored"; a closed vocabulary can be refused by name), and an unbounded priority flag (`hold` already demonstrates
 the unbounded-park pathology — 197 rows, median 564.9 h — and a second unbounded reordering mechanism would be harder
 to see because the row still looks normal).
+
+**Status.** RATIFIED by the operator at session N35 close (2026-11-12), which accepted five of this session's recommendations
+as built: the closed `now|next|later` vocabulary with a mandatory lease of at most 30 days (not integers, not an unbounded
+pin), the rig-file-over-`DURIG_WORK_STRATEGY` precedence, the order-agnostic wake gate, and letting the broker recycle at
+`--max-duration` rather than restarting it under four live generation leases (it did exit on its own at 06:43:53Z,
+`reason=max-duration passes=210`, so its next start runs this code). Two read-surface gaps — a human-visible priority view
+on the operator's `queue` path without changing the JSON byte contract, and a MONITORED artifact for leases (the #2643
+rule) — were routed to `pm` as an intent (`selfdev.sqlite.broker.inbox`, one `message` intent to `pm`); the delegate minted
+no row, since routing is `pm`'s. The push of the three commits was accepted CONDITIONALLY on one live seat claim, which
+cannot happen while the broker is down and must not be manufactured by the delegate: no row was sent to make a seat claim.

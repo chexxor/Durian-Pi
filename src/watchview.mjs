@@ -117,7 +117,18 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 		if (counts[item.status] !== undefined) counts[item.status] += 1;
 	}
 	const attention = (health.attention ?? []).map((a) => `${a.seat ?? a.scope} ${a.kind}`);
+	// THE CLAIM ORDER, shown only where it DIFFERS from the default. A rig that declares nothing renders
+	// byte-for-byte as before (that stability is what the golden renders depend on), while a rig that opted
+	// into `priority_first` — or one seat that did — says so on the dashboard instead of only in `ps`/JSON.
+	// The value is `health.workStrategy` (readapi's resolved view), never re-derived here: one producer.
+	const ws = health?.workStrategy;
+	const orderRows = ws
+		? Object.entries(ws.seats ?? {})
+				.filter(([, s]) => s.strategy !== ws.default)
+				.map(([name, s]) => `${name} ${s.strategy} (${s.source})`)
+		: [];
 	lines.push(rule);
+	if (orderRows.length) lines.push(paint("dim", `order: ${orderRows.join(" · ")} — a leased \`priority\` is honoured here`));
 	lines.push(
 		paint(
 			"dim",

@@ -4015,7 +4015,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     re-sorted 6 neighbours and escaped a unicode em-dash into the diff. (A new READ VIEW also has to pass
     `demo/broker-read.test.mjs`'s `deepEqual` on `READ_VIEWS`; see 278 for why a new view is usually the wrong answer.)
     Measured cost of the whole pass on this box: new end-to-end demo 3.3 s standalone / 6.1 s under `--jobs 4`, full
-    suite **303/303 in 128.7 s**.
+    suite **303/303 in 117.0 s** (re-measured; 126.6-130.6 s on the same box across four runs, so treat ~2 min as the shape).
 280. **A pure-policy test plus an `up`/read-back test still leaves the TOOL wiring untested.** `src/workstrategy.mjs`
     was covered 45/45 and `up -> persist -> ps/status` was covered end to end, yet nothing exercised `claim_work`
     choosing under `priority_first` or `set_priority`'s authority/refusal branches — `node --check` was the only
