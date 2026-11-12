@@ -24,6 +24,7 @@ import {
   planCancel,
   planPriority,
   planQueueAction,
+  planRelease,
   planRepairGates,
   confirmGate,
   strandedGates,
@@ -143,7 +144,26 @@ console.log("\n=== 5. A CANCEL NAMES WHAT IT WOULD STRAND — the defect that cr
   console.log("  ok   dependents named (not stranded), same-apply cancels excluded, claimed/unknown/reasonless refused");
 }
 
-console.log("\n=== 6. BLAST RADIUS, AND THE DISPATCH ===");
+console.log("\n=== 6. RELEASE UN-PARKS A ROW AND RECORDS WHO IT WAS WAITING ON ===");
+{
+  // 493 rows were `deferredTo: "human"` on the live rig (median age 5 days, 84 of them landing work). A
+  // row parked on a human for a decision the human has already given is not waiting — it is stuck.
+  const rows = [item(60, "deferred", { deferredTo: "human" }), item(61, "held"), item(62, "claimed"), item(63, "queued"), item(64, "done")];
+  const plan = planRelease(rows, { ids: ["60", "61"], reason: "the decision this waited on is the standing directive", at: AT, from: "delegate" });
+  assert.equal(plan.ok, true);
+  assert.deepEqual(plan.changes.map((c) => [c.id, c.from, c.to]), [["60", "deferred", "queued"], ["61", "held", "queued"]], "deferred and held rows both return to queued");
+  assert.equal(plan.transitions[0].event, "released");
+  assert.equal(plan.transitions[0].from, "human", "the transition records the audience it LEFT, so the park is not erased from the record");
+  assert.equal(plan.transitions[1].from, undefined, "a held row had no audience, and none is invented");
+  assert.equal(plan.transitions[0].authority, "delegate (operator-authorised)");
+  assert.equal(planRelease(rows, { ids: ["62"], reason: "x", at: AT }).ok, false, "a CLAIMED row is refused: it is in flight");
+  assert.match(planRelease(rows, { ids: ["62"], reason: "x", at: AT }).refusal, /claimed/);
+  assert.equal(planRelease(rows, { ids: ["64"], reason: "x", at: AT }).ok, false, "a terminal row is refused");
+  assert.equal(planRelease(rows, { ids: ["60"], at: AT }).ok, false, "a release without a reason is refused");
+  console.log("  ok   deferred/held -> queued with the audience recorded; claimed/terminal/reasonless refused");
+}
+
+console.log("\n=== 7. BLAST RADIUS, AND THE DISPATCH ===");
 {
   const many = Array.from({ length: CONFIRM_THRESHOLD + 1 }, (_, i) => item(1000 + i, "queued"));
   const big = planPriority(many, { ids: many.map((r) => r.id), priority: "now", reason: "x", expiresAt: SOON, at: AT });

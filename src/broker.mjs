@@ -864,6 +864,11 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
           };
         } else if (action === "cancel") {
           item.status = "cancelled";
+        } else if (action === "release") {
+          // Un-park: back to `queued`, and the park's audience is cleared so nothing reads it as still
+          // waiting on someone. The transition records who it was waiting on.
+          item.status = "queued";
+          item.deferredTo = null;
         }
         (item.transitions ??= []).push(reply.transitions[i]);
       }

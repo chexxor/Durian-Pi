@@ -244,6 +244,40 @@ export function planDirective(request = {}) {
 }
 
 /**
+ * PLAN: RELEASE rows — take them out of a park (held / deferred-to-an-audience) and back to `queued`, so a
+ * seat can claim them.
+ *
+ * WHY THIS IS THE MISSING VERB (measured 2026-11-12T20:1xZ): **493 rows were `deferredTo: "human"`**, median
+ * age 5 days, and **84 of them were landing work** — parked on an operator who was away. Nothing in the
+ * delegate plane could un-park them: `cancel` is terminal, `priority` only reorders claimable rows, and
+ * `hold`/`defer` are seat tools. A row parked "on the operator" with a decision the operator has ALREADY
+ * given ("landing is the priority") is not waiting on anything; it is stuck.
+ *
+ * Refuses a `claimed` row (it is in flight) and a terminal row. Records `released` with the audience it
+ * left, so the park is not silently erased from the record.
+ */
+export function planRelease(items, request = {}) {
+  const { by, authority } = authorityOf(request);
+  const at = request.at ?? new Date().toISOString();
+  const reason = String(request.reason ?? "").trim();
+  if (reason === "") return { ok: false, refusal: "a release needs a reason (a park the reader can explain)" };
+  const ids = (request.ids ?? []).map(String);
+  if (ids.length === 0) return { ok: false, refusal: "release needs at least one --id" };
+  const sel = selectRows(items, ids, { allow: ["queued", "held", "deferred"] });
+  if (!sel.ok) return { ok: false, refusal: sel.refusal };
+  const changes = sel.rows.map((item) => ({ id: String(item.id), from: item.status, to: "queued", wasDeferredTo: item.deferredTo ?? null }));
+  const transitions = sel.rows.map((item) => ({
+    at,
+    event: "released",
+    by,
+    authority,
+    reason,
+    ...(item.deferredTo ? { from: item.deferredTo } : {}),
+  }));
+  return { ok: true, changes, transitions };
+}
+
+/**
  * PLAN: cancel rows — and NAME WHAT THIS WOULD STRAND.
  *
  * The stranding warning is the whole point. Cancelling #3377 is what put #3503 and #5885 in limbo, and the
@@ -328,7 +362,8 @@ export function planQueueAction(action, items, request = {}) {
   if (action === "priority") return planPriority(items, request);
   if (action === "cancel") return planCancel(items, request);
   if (action === "directive") return planDirective(request);
+  if (action === "release") return planRelease(items, request);
   if (action === "directive-clear") return { ok: true, directive: null, changes: [{ id: "control", to: "directive:none" }], transitions: [] };
   if (action === "stranded") return { ok: true, changes: [], transitions: [], census: strandedGates(items) };
-  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, directive, directive-clear, stranded)` };
+  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, release, directive, directive-clear, stranded)` };
 }

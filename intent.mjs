@@ -42,6 +42,7 @@ usage:
   node intent.mjs queue --op queue --action repair-gates|stranded [--id N …] [--apply]
   node intent.mjs queue --op queue --action priority --id N [--id N …] --priority now|next|later --reason <text> --until <iso> [--apply]
   node intent.mjs queue --op queue --action cancel --id N [--id N …] --reason <text> [--apply] [--confirm]
+  node intent.mjs queue --op queue --action release --id N [--id N …] --reason <text> [--apply] [--confirm]
   node intent.mjs queue --op queue --action directive --seat S [--seat S2 …] [--subject <substr>] --priority now --reason <text> --until <iso> [--apply]
   node intent.mjs queue --op queue --action directive-clear [--apply]
 
@@ -140,7 +141,7 @@ const confirm = args.includes("--confirm");
 if (op === "queue" && !action) fail("op queue needs --action repair-gates|priority|cancel|stranded");
 // repair-gates with NO --id means "repair every stranded row" (the census is the selection); priority and
 // cancel must name their targets, because neither has a defensible implicit set.
-if (op === "queue" && (action === "priority" || action === "cancel") && ids.length === 0)
+if (op === "queue" && (action === "priority" || action === "cancel" || action === "release") && ids.length === 0)
   fail(`op queue --action ${action} needs at least one --id`);
 if (op === "queue" && action === "directive" && (!priority || !reason || !expiresAt))
   fail("op queue --action directive needs --priority, --reason and --until (it is a lease), plus --seat and/or --subject");
