@@ -30,7 +30,7 @@ function dirnameOf(p) {
 	return p.split("/").slice(0, -1).join("/");
 }
 
-const { rearmVerdict, countIntentFiles, snapshot, brokerBoundSeconds, parseBound } = await import(TOOL);
+const { rearmVerdict, countIntentFiles, snapshot, brokerBoundSeconds, parseBound, isPreflightRefusal } = await import(TOOL);
 const { intentInboxDir, writeBrokerState } = await import("../src/broker.mjs");
 
 console.log("=== 1. THE TRUTH TABLE (every case is a state this rig has actually been in) ===");
@@ -78,6 +78,19 @@ console.log("  ok   11 states decided; the idle-broker false positive is refused
 // A missing heartbeat with a live pid is a fresh broker, not a dead one.
 assert.equal(rearmVerdict({ brokerAlive: true, heartbeatAgeS: null, lastPassAgeS: null, pendingIntents: 0 }, 300).shouldRearm, false, "a broker that has not written its state file yet is not re-armed");
 console.log("  ok   a state file with no ages yet is a fresh broker, not a dead one");
+
+console.log("\n=== 1b. A PREFLIGHT REFUSAL IS DEFERRED, NOT COUNTED AS A FAILED RE-ARM ===");
+{
+  // Measured 2026-11-12T18:03Z on this box: `START REFUSED: live-tree-dirty` twice, 60 s apart, because a
+  // seat was mid-write in the live tree. Two "failures" made the loop exit and the fleet went down; the
+  // tree was clean again seconds later. A refusal describes THIS SECOND, so it must not spend the budget
+  // that exists for a re-arm which was ATTEMPTED and failed.
+  assert.equal(isPreflightRefusal("START REFUSED: live-tree-dirty\n  BLOCK  live-tree-dirty: 1 tracked file(s)"), true, "a dirty-tree refusal is a refusal");
+  assert.equal(isPreflightRefusal("START REFUSED: broker-degraded"), true, "the parked-broker refusal is a refusal too");
+  assert.equal(isPreflightRefusal("spawn failed: ENOENT"), false, "a start that never reached the preflight IS a failure");
+  assert.equal(isPreflightRefusal(""), false, "an empty reply is not a refusal to defer on");
+  console.log("  ok   refusals are deferrable; a failed spawn still spends the two-strike budget");
+}
 
 console.log("\n=== 2. THE SPOOL COUNT IS A COUNT OF INTENTS, NOT OF FILES ===");
 const base = mkdtempSync(join(tmpdir(), "durig-keepalive-rule-"));

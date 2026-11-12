@@ -141,6 +141,19 @@ function brokerBoundSeconds(pid) {
 	return parseBound(brokerCmdline(pid));
 }
 
+/**
+ * Did the re-arm fail because the broker's PREFLIGHT refused the tree, rather than because the start
+ * failed? Pure, so the distinction is testable without a broker.
+ *
+ * Measured 2026-11-12T18:03Z on this box: `START REFUSED: live-tree-dirty` twice, 60 s apart, because a
+ * seat was mid-write in the live tree; the loop counted two failures and exited, and the tree was clean
+ * again by the time a human looked. A preflight refusal is a statement about THIS SECOND, not a broken
+ * re-arm — the documented remedy is to retry once the tree settles.
+ */
+function isPreflightRefusal(text) {
+	return /START REFUSED/.test(String(text || ""));
+}
+
 function countIntentFiles(dir) {
 	if (!existsSync(dir)) return 0;
 	try {
@@ -246,7 +259,7 @@ async function restart(db, maxDuration) {
 	return { ok: r.status === 0, out: r.stdout.trim().slice(-500), err: r.stderr.trim().slice(-500), stop: s.how };
 }
 
-export { rearmVerdict, countIntentFiles, snapshot, providerEnv, isResidentBroker, stopBroker, brokerBoundSeconds, parseBound };
+export { rearmVerdict, countIntentFiles, snapshot, providerEnv, isResidentBroker, stopBroker, brokerBoundSeconds, parseBound, isPreflightRefusal };
 
 // A demo imports this file to test the RULE; only a command-line run drives a broker. (First version
 // ran the loop at import time, which is why the guard is a block and not a process.exit — exiting on
@@ -284,8 +297,15 @@ while (Date.now() < until) {
 				: `STRANDED (no pass ${snap.lastPassAgeS}s, ${snap.pendingIntents} intent(s) waiting)`;
 		console.log(`${snap.at} broker ${why} -> re-arming`);
 		const r = await restart(db, maxDuration);
-		fails = r.ok ? 0 : fails + 1;
-		console.log(`  re-arm ${r.ok ? "ok" : "FAILED"} (stop leg: ${r.stop ?? "-"}): ${r.out || r.err}`);
+		// A PREFLIGHT REFUSAL is not a failed re-arm: the broker's own preflight said "not on this tree
+		// right now" (most often `live-tree-dirty` — a seat mid-write, measured 2026-11-12T18:03Z, when two
+		// consecutive 60 s checks caught a transient edit and THIS loop exited, leaving the fleet down).
+		// Counting it as a failure is how a transient state becomes an outage: the tree cleaned itself
+		// seconds later. So a refusal is DEFERRED — retried on the next tick — and only a re-arm that was
+		// ATTEMPTED and failed counts toward the two-strike stop.
+		const refused = isPreflightRefusal(`${r.out || ""}\n${r.err || ""}`);
+		fails = r.ok || refused ? 0 : fails + 1;
+		console.log(`  re-arm ${r.ok ? "ok" : refused ? "DEFERRED (preflight refused; retrying next tick)" : "FAILED"} (stop leg: ${r.stop ?? "-"}): ${r.out || r.err}`);
 		if (fails >= 2) {
 			console.error("two consecutive re-arms failed; stopping so a human reads the state");
 			process.exit(1);
