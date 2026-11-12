@@ -4,8 +4,8 @@ position: security-fail-closed-guard-decision-point
 symptom: "a guard that cannot evaluate lets the action through, and nothing names that as a decision"
 writes: false
 precondition: "read-only probe of src/seatguard.mjs, src/confine.mjs, src/genlockreserve.mjs and the guard demos"
-last_verified: 2026-11-09
-verified_by: security
+last_verified: 2026-11-11
+verified_by: impl
 evidence: "item #1779, worktree item-1779 @HEAD: `node demo/seatguard.test.mjs` exit 0, `node demo/confine.test.mjs` exit 0, `node demo/commit-secrets.test.mjs` exit 0; fail-open sites at src/seatguard.mjs:42,50,282,355-374 and src/genlockreserve.mjs:78. Re-checked at main f192f543 (#6208): lines 42,50,362,78 hold verbatim; the collapse-detector catch moved 281 -> 282, which is why every citation here carries a re-check date; `git show --stat 5686be7` = 1 file, docs only; `grep -rn WORKTREE_ROOT --include=*.mjs src/` exit 1 (the #2425 seam does not exist yet)"
 check_rule: null
 ---
@@ -32,6 +32,16 @@ The danger is not that a heuristic fails open. The danger is that a heuristic's 
 ## Findings
 
 ### F-1 — the root resolver fails open, and the fallback is the shared tree
+**CLOSED for this site on 2026-11-11 (#6181, branch `item-6181` @ `439d82a7`)**: `seatGraphRoot` no longer
+falls back when the read fails — it returns null and the caller refuses, naming the rule
+(`seat-root-unresolvable`), the decision (`not-evaluated`) and the remedy (`prepare_workspace`). Measured:
+`node demo/seatguard-degraded-root.test.mjs` exit 0 on the branch; the SAME file run in a scratch worktree
+at main `35001c3a` exits 1 with 10 failures, which is the fail-open this row was describing. The bare-read
+hatch (#4790) is preserved and asserted. The lines cited below are the pre-fix text, kept so the record
+still shows what was measured; `src/seatroot.mjs:11` remains the shared chain, and the boundary states a
+session with NO recorded cwd (never prepared a workspace) from a session whose read FAILED — only the
+second is denied.
+
 `src/seatguard.mjs:42` — "A snapshot that cannot be served leaves the fallback — fail-open, never blocking a write because the guard's own read hiccuped"; `:50` logs `SEATGUARD WARNING: seat cwd snapshot failed, using fallback root`.
 
 - **Severity:** medium-high.
@@ -112,6 +122,7 @@ Ran on this worktree (`item-1779`, pi-durable 1.3.0 from the lockfile; **not** v
 
 ```bash
 node demo/seatguard.test.mjs        # exit 0 — "PASS — the guard holds"
+node demo/seatguard-degraded-root.test.mjs   # exit 0 — #6181: the failed read DENIES, the read hatch stays, the states stay distinct
 node demo/confine.test.mjs          # exit 0 — "PASS — all confine canaries held"
 node demo/commit-secrets.test.mjs   # exit 0 — includes the ratified fail-open assertion at :151
 grep -n "fail-open\|fail-closed" src/seatguard.mjs src/confine.mjs src/genlockreserve.mjs src/worktree.mjs src/gitobject.mjs
