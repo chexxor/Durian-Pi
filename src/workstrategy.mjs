@@ -231,9 +231,15 @@ function rankUnderDirective(directive, item, rank) {
 		if (!seats.includes(item?.to)) return null;
 		return rank;
 	}
-	if (typeof contains === "string" && contains !== "") {
-		const subject = String(item?.subject ?? "").toLowerCase();
-		return subject.includes(contains.toLowerCase()) ? rank : null;
+	// `subjectContains` is a string OR a list: landing work is named "LANDING ENTRY", "Land item-6162",
+	// "enforce … at land times" and "MERGE ORDER", so one substring cannot scope it honestly. Any match
+	// scopes the row (this is an OR, never an AND — a directive that needed every token would match
+	// nothing and read as "applied").
+	const tokens = Array.isArray(contains) ? contains : typeof contains === "string" ? [contains] : [];
+	const subject = String(item?.subject ?? "").toLowerCase();
+	for (const token of tokens) {
+		const needle = String(token ?? "").trim().toLowerCase();
+		if (needle !== "" && subject.includes(needle)) return rank;
 	}
 	return null;
 }

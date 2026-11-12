@@ -31,7 +31,7 @@ import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-wor
 
 import { RigControl, RigQueue, registerSeat, selectNextWork } from "../src/rig.mjs";
 import { orderCandidates } from "../src/workstrategy.mjs";
-import { planDirective } from "../src/queueops.mjs";
+import { planDirective, scopeMatches } from "../src/queueops.mjs";
 import { drainIntentInbox, readIntentResult, writeIntent } from "../src/broker.mjs";
 
 const AT = Date.parse("2026-11-12T18:00:00.000Z");
@@ -103,6 +103,32 @@ console.log("\n=== 4. SCOPE IS REQUIRED AND NARROW; THE LEASE RULES ARE THE ROW 
   assert.equal(planned.directive.authority, "delegate (operator-authorised)", "the directive carries its AUTHORITY");
   assert.equal(planned.directive.priority, "now");
   console.log("  ok   seat or subject scope required; reason, expiry and the 30-day cap all enforced");
+}
+
+console.log("\n=== 4b. LANDING WORK IS NAMED SEVERAL WAYS, SO SCOPE TAKES A LIST — AND REPORTS ITS BLAST RADIUS ===");
+{
+  // Measured on the live queue 2026-11-12T18:1xZ: of 440 real queued rows, 43 say "LANDING", 29 say
+  // "land"/"Land item", 7 say "MERGE ORDER", 2 say "PRUNE" — one substring cannot scope that honestly.
+  const items = [
+    row(30, "impl", "LANDING ENTRY — item-a"),
+    row(31, "impl", "Land item-6162: it has no landing-list row naming its tip"),
+    row(32, "impl", "Enforce the ledger citation at entry generation in land.mjs"),
+    row(33, "impl", "MERGE ORDER: item-a before item-b"),
+    row(34, "impl", "unrelated chore"),
+    row(35, "impl", "STALE b y"),
+  ];
+  const single = planDirective({ priority: "now", reason: "landing", expiresAt: UNTIL, subjectContains: "LANDING", at: new Date(AT).toISOString() });
+  assert.equal(single.ok, true);
+  assert.deepEqual(scopeMatches(single.directive, items).map((r) => r.id), ["30", "31"], "one token catches only the rows that happen to use that WORD (#31 mentions \"landing-list\", #32/#33 do not) — two of the four names in use");
+
+  const list = planDirective({ priority: "now", reason: "landing", expiresAt: UNTIL, at: new Date(AT).toISOString(), subjectContains: ["LANDING", "land item", "in land.mjs", "MERGE ORDER"] });
+  assert.equal(list.ok, true);
+  assert.deepEqual(list.directive.subjectContains, ["LANDING", "land item", "in land.mjs", "MERGE ORDER"], "the list is stored, so a reader can check the scope");
+  const matched = scopeMatches(list.directive, items).map((r) => r.id);
+  assert.deepEqual(matched, ["30", "31", "32", "33"], "every naming of landing work is caught, and the unrelated chore is not");
+  assert.deepEqual(ids(orderCandidates(items, { strategy: "priority_first", now: AT, directive: list.directive })), ["30", "31", "32", "33", "34", "35"], "and the claim order puts all of them ahead of the chore");
+  assert.equal(scopeMatches(list.directive, [row(40, "impl", "a terminal row", { status: "done" })]).length, 0, "terminal rows are never counted in a scope's blast radius");
+  console.log("  ok   a scope LIST catches the four ways landing work is named; the propose can report matchedNow");
 }
 
 console.log("\n=== 5. THE BROKER APPLIES IT TO THE CONTROL DOC, AND NOWHERE ELSE ===");

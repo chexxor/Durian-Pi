@@ -220,8 +220,13 @@ export function planDirective(request = {}) {
   if (until <= Date.parse(at)) return { ok: false, refusal: "directive expiresAt must be in the future (a lease, not a flag)" };
   if (until - Date.parse(at) > 30 * 24 * 3600 * 1000) return { ok: false, refusal: "directive expiresAt may be at most 30 days out" };
   const seats = Array.isArray(request.seats) ? request.seats.map(String).filter((x) => x !== "") : [];
-  const subjectContains = typeof request.subjectContains === "string" ? request.subjectContains.trim() : "";
-  if (seats.length === 0 && subjectContains === "")
+  const requestedSubjects = Array.isArray(request.subjectContains)
+    ? request.subjectContains
+    : typeof request.subjectContains === "string"
+      ? [request.subjectContains]
+      : [];
+  const subjectContains = requestedSubjects.map((x) => String(x ?? "").trim()).filter((x) => x !== "");
+  if (seats.length === 0 && subjectContains.length === 0)
     return { ok: false, refusal: "a directive needs a SCOPE: --seat <name> (repeatable) and/or --subject <substring>; an unscoped directive would reorder the whole queue" };
   const directive = {
     priority,
@@ -231,7 +236,9 @@ export function planDirective(request = {}) {
     by,
     authority,
     ...(seats.length > 0 ? { seats } : {}),
-    ...(subjectContains !== "" ? { subjectContains } : {}),
+    // One token is stored as one string (the readable shape); several as a list.
+    ...(subjectContains.length === 1 ? { subjectContains: subjectContains[0] } : {}),
+    ...(subjectContains.length > 1 ? { subjectContains } : {}),
   };
   return { ok: true, directive, changes: [{ id: "control", to: `directive:${priority}` }], transitions: [] };
 }
@@ -291,6 +298,28 @@ export function confirmGate(plan, request = {}) {
     return { ok: false, refusal: `this plan touches ${n} rows (threshold ${CONFIRM_THRESHOLD}); re-send with confirm=true if that is intended` };
   }
   return { ok: true };
+}
+
+/**
+ * How many CURRENT rows does this scope catch? A directive's blast radius must be visible BEFORE it is
+ * applied: "prioritise landing work" is a claim about a set, and the set is whatever matches right now
+ * plus whatever is minted later. Pure, so it is testable and the proposal can print it.
+ */
+export function scopeMatches(directive, items = []) {
+  if (!directive || typeof directive !== "object") return [];
+  const seats = Array.isArray(directive.seats) ? directive.seats : [];
+  const tokens = Array.isArray(directive.subjectContains)
+    ? directive.subjectContains
+    : typeof directive.subjectContains === "string"
+      ? [directive.subjectContains]
+      : [];
+  const needles = tokens.map((t) => String(t ?? "").trim().toLowerCase()).filter((t) => t !== "");
+  return items.filter((item) => {
+    if (isTerminal(item)) return false;
+    if (seats.length > 0 && seats.includes(item.to)) return true;
+    const subject = String(item?.subject ?? "").toLowerCase();
+    return needles.some((n) => subject.includes(n));
+  });
 }
 
 /** Dispatch by action name — the single entry the broker calls, so the op has no second rule. */

@@ -20,7 +20,7 @@ import { CompactionEntry, configure } from "@earendil-works/pi-durable";
 
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
 import { dispatchRead } from "./brokerread.mjs";
-import { planQueueAction, confirmGate } from "./queueops.mjs";
+import { planQueueAction, confirmGate, scopeMatches } from "./queueops.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { isLocalProviderId } from "./providers/local.mjs";
@@ -796,9 +796,23 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
       // A DIRECTIVE lives on the control doc, not on the rows: one leased statement of policy that
       // `orderCandidates` evaluates at claim time, so rows minted after it are covered (src/queueops.mjs
       // `planDirective` explains why a fan-out of `now` is the wrong shape).
-      const plan = planQueueAction(action, [], { priority: request.priority, reason: request.reason, expiresAt: request.expiresAt, seats: request.seats, subjectContains: request.subjectContains, from: request.from });
+      // The CURRENT queue is read so a propose can report the SCOPE's blast radius: "prioritise landing
+      // work" is a claim about a set, and a set the operator cannot see is a set they cannot check.
+      const liveQueue = await harness.snapshot(RigQueue, undefined, context);
+      const plan = planQueueAction(action, liveQueue?.items ?? [], { priority: request.priority, reason: request.reason, expiresAt: request.expiresAt, seats: request.seats, subjectContains: request.subjectContains, from: request.from });
       if (!plan.ok) throw new Error(`queue ${action}: ${plan.refusal}`);
-      const reply = { op, action, proposed: 1, changes: plan.changes, transitions: [], strands: [], directive: plan.directive, applied: 0 };
+      const matched = plan.directive ? scopeMatches(plan.directive, liveQueue?.items ?? []) : [];
+      const reply = {
+        op,
+        action,
+        proposed: 1,
+        changes: plan.changes,
+        transitions: [],
+        strands: [],
+        directive: plan.directive,
+        scope: { matchedNow: matched.length, ids: matched.slice(0, 40).map((r) => String(r.id)) },
+        applied: 0,
+      };
       if (request.apply !== true) return reply;
       await harness.commit(async (tx) => {
         const control = await tx.doc(RigControl);

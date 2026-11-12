@@ -130,8 +130,11 @@ const untilAt = args.indexOf("--until");
 const expiresAt = untilAt === -1 ? undefined : args[untilAt + 1];
 const seats = [];
 for (let i = 0; i < args.length; i += 1) if (args[i] === "--seat") seats.push(String(args[i + 1]));
-const subjectAt = args.indexOf("--subject");
-const subjectContains = subjectAt === -1 ? undefined : args[subjectAt + 1];
+const subjects = [];
+for (let i = 0; i < args.length; i += 1) if (args[i] === "--subject") subjects.push(String(args[i + 1]));
+// One --subject is stored as a string, several as a list: "landing work" is named more than one way
+// ("LANDING ENTRY", "Land item-6162", "enforce … at land times", "MERGE ORDER").
+const subjectContains = subjects.length === 0 ? undefined : subjects.length === 1 ? subjects[0] : subjects;
 const apply = args.includes("--apply");
 const confirm = args.includes("--confirm");
 if (op === "queue" && !action) fail("op queue needs --action repair-gates|priority|cancel|stranded");
