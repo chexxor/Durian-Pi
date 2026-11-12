@@ -4090,7 +4090,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `git merge-tree --write-tree` also **cannot** take a tree object (measured: "expected commit type, but the
     object dereferences to tree type", exit 1) — the scratch-commit promotion in 288 is what makes chaining legal.
 
-## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-299, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate unattended-fleet pass 2, 2026-11-12 — numbered 290-301, continuing from 289; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 290. **The test-runner leak is recurring, not residue, and its second generation is not caught by the
     old pattern.** A clean sweep at 12:3xZ removed 30 reparented `node demo/broker.test.mjs` runners
@@ -4186,3 +4186,19 @@ at `:743`). Re-measure every `path:line` before repeating it.
     the propose's `matchedNow` after a minting pass); and treat "a directive that matches no row" as a
     defect to report, not a quiet rig — a policy that reorders nothing looks exactly like a policy that is
     obeyed.
+300. **"Terminal" is two states, and `check`'s `duplicate-item` prescription is wrong for one of them.**
+    The rule pairs a live row with a TERMINAL twin and says "cancel #id as a duplicate of #twin". Measured
+    2026-11-12T19:3xZ on this rig (7,502 rows): of 18 exact-subject pairs, **17 twins were `cancelled` and
+    1 was `done`**. A cancelled twin means the live row is the RE-ISSUE and the SURVIVOR — following the
+    rule would have destroyed 17 live intents. The discriminator is the twin's STATUS: `done` ⇒ overtaken
+    (safe), `cancelled` ⇒ never cancel. `tools/overtaken.mjs` + `src/overtaken.mjs` classify it, and the
+    lesson generalizes: before acting on a prescription in a tool's output, read the evidence field the
+    prescription was derived from.
+301. **A notice row is not work, and its subject pairs it with someone else's row.** 410 non-terminal
+    notice rows exist (pm mints one per cancellation, so cancellations GROW the queue: measured
+    cancelled +35 ⇒ queued +19). Because a notice's subject reads `CANCELLED #2712: …`, the duplicate
+    matcher pairs the notice with #2712 and the first pass of `tools/overtaken.mjs` filed **7 of 14**
+    "safe to cancel" ids as notices. Notices are records: their lifecycle is the retention rule (#7279),
+    and they must be classified BEFORE any work-row verdict. Also: `cli.mjs queue --status done` is ~5 MB
+    — a `spawnSync` with the default 1 MB `maxBuffer` truncates it and the failure surfaces as
+    "Unterminated string in JSON", which reads like store corruption.

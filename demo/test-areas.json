@@ -93,7 +93,8 @@
       "demo/workstrategy.test.mjs",
       "demo/queue-ops.test.mjs",
       "demo/queue-control-spool.test.mjs",
-      "demo/priority-directive-scope.test.mjs"
+      "demo/priority-directive-scope.test.mjs",
+      "demo/overtaken.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",
