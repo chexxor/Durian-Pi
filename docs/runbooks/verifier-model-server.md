@@ -26,6 +26,17 @@ change its context window, or free room for a second model; or `check` reports `
 disturbed if the broker is down. But it *does* take a model away from any seat already running on it: do this
 while the broker is down or with the affected seats idle, and never in the middle of a `gate.mjs` run.
 
+## Diagnose (read-only)
+What the rig itself can tell you, before you touch the model server:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs check                        # roster faults: single-model-rig, dead pointer, unfunded leg
+DURIG_DB=./selfdev.sqlite node cli.mjs config | grep -iE "MODEL|CONTEXT"   # what the config CLAIMS each family is
+node tools/verifier-arm-probe.mjs --model=<model> --base=<endpoint> # armable or not; refuses with cause:spec_incomplete if the family is unnamed
+```
+
+**The limit, named:** everything else in this runbook reads the model server's own state - `GET /api/v1/models`, `loaded_instances[]`, `context_length`, a quantization variant, the GPU's room - and that is a live local endpoint. The harness classifies any `curl`/`http://` line as a gap ("needs a live network endpoint") and refuses `python3` and `npm` as non-read-only verbs, so CI can verify the rig-side reads above and nothing past them. The server-side numbers in this runbook are dated and must be re-measured by hand before you trust them.
+
 ## Do it in this order
 
 1. **Read the truth, not the config.** `GET /api/v1/models` — per model: `publisher`, `key`, `quantization`,

@@ -65,6 +65,19 @@ resort that cannot see a delta.
 - **`LIKE '%"id":2993%'` matches `"id":29930`.** Substring matching on JSON ids silently returns the wrong
   rows. Anchor the match (`"id":2993,` / `"id":2993}`) or parse the JSON and compare the parsed number.
 
+Read it through the rig first; the SQL is the last resort, not the first probe:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs status --json                              # the rig's own read of the queue
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --json | grep -c deferredTo         # 0 = nobody deferred. Exit 1 from grep is a verdict, not a broken command
+```
+
+**The limit, named:** the namespace trap this runbook exists for is demonstrated against `documents` /
+`document_revisions`, and there is no read-only SQL reader the harness will run - `sqlite3` is not on the box and
+no SQL verb is in `src/runbookdiagnose.mjs`'s allowlist, and a delta-encoded revision cannot be read as a
+snapshot by any command line. So CI executes the rig-side half above; the `pragma_table_info` / equality-vs-LIKE
+probe in `Do` is a script you run by hand.
+
 ## Do
 1. **Decide which namespace you mean before you query.** A queue item id is NOT a task id, even when both
    are small integers and both exist.

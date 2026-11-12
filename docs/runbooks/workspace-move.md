@@ -22,6 +22,17 @@ one of them cost work (`docs/incidents/2026-10-26-worktree-and-scratch-sweep.md`
 DURIG_DB=./selfdev.sqlite node broker.mjs status      # expect: not running / stale pidfile
 ```
 
+## Diagnose (read-only)
+The three divergences that are readable without a broker and without writing anything:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs ps        # the cwd the store carries for each seat, and the worktree rows it believes exist
+git worktree list --porcelain                    # what git on THIS machine actually registered
+node tools/rig-portability-audit.mjs             # exit 1 with findings, naming which layer supplied each seat's root
+```
+
+**The limit, named:** two of Step 1's five checks cannot be executed by the harness, and that is a property of the check, not of the runbook. `node scripts/sync-pi.mjs` is a build (it writes), and `python3 - <<'PY'` is control flow plus a verb outside the read-only allowlist - both reported as gaps. The sha-resolution count also needs `.spike/delegate/queue-audit.json`, a live export the throwaway fixture does not contain. Those two are run by hand, and their numbers are as current as the last time someone ran them.
+
 ## Step 1 — measure the four divergences (read-only)
 
 ```bash

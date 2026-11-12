@@ -33,10 +33,15 @@ work; the fix is retiring the corrupt document and restarting, which is cheap on
 The broker is **stopped and verified** (see `broker-safe-change.md` step 1–2). No live generation.
 
 ## Diagnose (read-only)
-The error names the conversation (`unreadable pi.live for conversation <N>`). `status`/`log` prints it
-once on **stderr** and keeps rendering the other seats; the store otherwise opens. When the broker is
-alive, read `.spike/serve.err` — repeated `PathError: unresolvable path: [...]` for one conversation is
-the seat-level signature. Confirm no `genlock.*` is held before the write.
+The error names the conversation (`unreadable pi.live for conversation <N>`). `status`/`log` prints it once on **stderr** and keeps rendering the other seats; the store otherwise opens.
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs status      # the per-seat read. An unreadable pi.live prints on stderr and still exits 0
+DURIG_DB=./selfdev.sqlite node cli.mjs ps          # which seats the store knows and what root it carries for each
+ls -l selfdev.sqlite                               # the store file itself. The corrupt pi.live is inside it, not beside it
+```
+
+**The limit, named:** the two live-state signals this runbook keys on are not in the fixture and cannot be - `.spike/serve.err` (the broker's own log, where repeated `PathError: unresolvable path: [...]` for one conversation is the seat-level signature) and `genlock.*` (held only while a generation runs). The harness reports them as gaps, not passes; on a live rig you read them directly before any write.
 
 ## Do
 1. Stop the broker and confirm it exited (runbook `broker-safe-change.md` step 1–2). **`stopped:true` is NOT exit** — the pid can linger in its F11 drain for minutes. Do NOT run `resume`, `repair-pi-live`, or any other write while that process is alive: a second writer at that moment leaves the corrupt partial this runbook exists to fix. On 2026-10-19 a `resume` run during the drain poisoned `devtools` conv 4930 (`unresolvable path: ["generation","message","content",0]`). Confirm no `cli.mjs serve` process remains — kill the lingering pid (`taskkill /F /PID <pid>`) only when no `genlock.*` is held — BEFORE the write.

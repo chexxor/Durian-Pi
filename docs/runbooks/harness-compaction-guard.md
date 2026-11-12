@@ -85,6 +85,17 @@ Caps are env-tunable per run: `COMPACT_GUARD_INPUT_CHARS`, `COMPACT_GUARD_PREVIO
 `COMPACT_GUARD_OUTPUT_TOKENS`, `COMPACT_GUARD_SUMMARY_CHARS`. Every takeover is logged to
 `.spike/compaction-guard.log.jsonl`. `/compaction-guard` prints caps and what the guard has done this session.
 
+## Diagnose (read-only)
+Before touching anything, establish that the guard is the thing that is missing - both halves run with no model, no key, no network and no broker (D213):
+
+```bash
+node tools/compaction-guard-install.mjs --check   # 0 installed and current, 1 missing or stale
+node tools/compaction-guard-test.mjs              # 28 checks on the pure logic. No model, no key, no broker
+DURIG_DB=./selfdev.sqlite node cli.mjs status     # the seat's own read of what is stuck
+```
+
+**The limit, named:** the end-to-end proof (`node tools/compaction-guard-e2e.mjs`) and the provider probe in section 1 need the local model server on `127.0.0.1:8080` - a live endpoint, which the read-only harness refuses (it reports such lines as "needs a live network endpoint"), and the guard's per-session log is `.spike/compaction-guard.log.jsonl`, which the throwaway fixture cannot contain. CI can therefore prove the wiring and the logic, never the model's behaviour.
+
 ## 3. Verify it (fast loop first)
 
 ```bash

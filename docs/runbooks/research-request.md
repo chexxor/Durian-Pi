@@ -26,8 +26,15 @@ produces reaches us through the operator, and the **delegate** is the landing pa
 agent for *content to copy*, never for commits or repo writes.
 
 ## Diagnose (read-only)
-Check whether it has already been asked/answered: search `docs/reviews/` for the topic, and
-`docs/DECISIONS.md` for a ruling.
+Before commissioning anything, check whether the question has already been answered in the tree.
+
+```bash
+ls docs/reviews/ | grep -i research                                          # prompts and briefs already landed
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --json | grep -c research       # a question already in the queue. Exit 1 = none
+DURIG_DB=./selfdev.sqlite node cli.mjs check                                 # what the rig itself reports as unresolved
+```
+
+**The limit, named:** the research agent is not on this machine and has no write access to this repo (operator, 2026-10-28), so no read-only command in the tree can tell you whether IT has an answer. The fence above is the in-tree half - prior art, prior prompts, prior requests. The off-box half is a question to the operator.
 
 ## Do
 1. Write the prompt to `docs/reviews/<topic>-research-prompt.md`, in this shape (see the worked example
