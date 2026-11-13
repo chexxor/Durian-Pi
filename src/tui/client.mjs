@@ -22,7 +22,7 @@ import { extractEntryText } from "../rigstory.mjs";
 import { ANSI } from "../ansi.mjs";
 import { sanitizeTerminalText } from "../sanitize.mjs";
 import { textWidth, sliceToWidth, wrapLines } from "../textwidth.mjs";
-import { projectLanding } from "../readapi.mjs";
+import { projectLanding, queueSplit } from "../readapi.mjs";
 
 function formatToolName(call) {
 	return call?.name ?? "tool";
@@ -104,12 +104,14 @@ function briefCap(width) {
 
 /**
  * The per-seat queue column (spec §1): `12q` normally, `0q · 1p` when the seat also
- * holds parked work. `q` = queued + claimed, `p` = deferred + held — the broker's live
- * status set, so a parked seat can never read as an idle row.
+ * holds parked work. The two numbers are the SPLIT RULE's poles - `queueSplit()` in
+ * src/readapi.mjs (`active` = queued + claimed, `parked` = deferred + held). They are NOT
+ * re-added here: a column that adds its own poles is a second copy of the rule, and a second
+ * copy is exactly how the landing row's size and the row's rendering drift apart (#4812).
  */
 function queueColumn(row) {
-	const q = row.queue.queued + row.queue.claimed;
-	const p = row.queue.deferred + row.queue.held;
+	const q = row.queue.active;
+	const p = row.queue.parked;
 	return p > 0 ? `${q}q · ${p}p` : `${q}q`;
 }
 
@@ -490,14 +492,12 @@ function renderStatusBar(health, seats, queueItems, width, color = false) {
 	const seatCount = seats?.length ?? 0;
 	const uptime = health?.uptime != null ? `${Math.round(health.uptime / 60)}m` : "?";
 
-	// LIVE work only, split the way the landing rows split it: `queue` = queued + claimed (work
-	// waiting or in hand), `parked` = deferred + held (work stopped on a question or a gate).
-	const live = { queued: 0, claimed: 0, deferred: 0, held: 0 };
-	for (const item of queueItems ?? []) {
-		if (Object.hasOwn(live, item.status)) live[item.status] += 1;
-	}
-	const activeCount = live.queued + live.claimed;
-	const parkedCount = live.deferred + live.held;
+	// LIVE work only, split by THE SAME rule the landing rows use: `queue` = queued + claimed
+	// (work waiting or in hand), `parked` = deferred + held (work stopped on a question or a
+	// gate). ONE call to the shared rule, not a status list written in this file (#4812).
+	const split = queueSplit(queueItems);
+	const activeCount = split.active;
+	const parkedCount = split.parked;
 
 	const parts = [paint("bold", `seats: ${seatCount}`, color)];
 	// HIDE-WHEN-ZERO (the #2804 rule the bar keeps, spec #3307 §6.2): a bare `queue: 0` is
