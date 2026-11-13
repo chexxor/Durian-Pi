@@ -3,9 +3,9 @@ runbook: worktree-unlinked-deps
 symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-11
+last_verified: 2026-11-13
 verified_by: devtools
-evidence: "#6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
+evidence: "#5819 (2026-11-13, worktree item-5819 at main 657d8c60): demo/commit-discipline-personas.test.mjs exit 1 unlinked (ERR_MODULE_NOT_FOUND on @earendil-works/pi-schema, 6 checks) and exit 0 after `sync-pi --sync` + `--link` (dependencySet=built-pin); `grep -c earendil-works/pi-schema package-lock.json` = 0 while every other pin package has hits. #6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
 check_rule: null
 ---
 
@@ -43,6 +43,28 @@ error; close and reopen it`. Demos that do not take the broker wake path pass in
 (`demo/clockin-digest.test.mjs` exit 0 in 28.5 s; `demo/provenance.test.mjs` and `demo/seat-turn-shape.test.mjs`
 both exit 0). So a red set of that shape is a graph artefact - and the citation must say so: quote
 `dependencySet` from `node scripts/sync-pi.mjs` (#5400) next to the count.
+
+**The one pin package the lockfile cannot supply at all (#5819, measured 2026-11-13 in worktree
+`item-5819` at main `657d8c60`).** `src/rig.mjs:13` imports `@earendil-works/pi-schema`. That package is in
+the pin's package set (`pi-main.pin.json`) but appears **zero** times in `package-lock.json` - grep every
+other pin package and each has hits (pi-durable 3, pi-ai 6, pi-tui 4, pi-mcp 3, pi-codemode 4,
+pi-telemetry 3, chord 4, pi-agent-core 3, pi-coding-agent 3). A `lockfile-released` worktree therefore has
+no `pi-schema` in its own `node_modules`. The import still resolves, by accident: Node walks UP from the
+worktree directory into the shared checkout's `node_modules`, where the pin IS linked. Any demo that
+copies `src/` into a `/tmp` scratch and symlinks the worktree's `node_modules` into it loses that accident.
+Measured, same tree, same commit:
+
+- unlinked (`dependencySet=lockfile-released`): `node demo/commit-discipline-personas.test.mjs` -> **exit 1**,
+  6 checks failed, `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@earendil-works/pi-schema'
+  imported from /tmp/durig-discipline-personas-<rand>/src/rig.mjs`
+- `node scripts/sync-pi.mjs --sync` (exit 0) then `--link` (exit 0, `dependencySet=built-pin`,
+  `node_modules/@earendil-works/pi-schema` present): the same demo -> **exit 0**, PASS.
+
+Classification: **environmental, not behavioural** - the tool under test is fine; the scratch could not
+load its own dependency graph. The consequence is a PRECONDITION, not a nicety: `#3235` registers
+`sync-pi --link` as a post-landing action and nobody runs it, yet a suite verdict taken from an unlinked
+worktree is not a measurement of the tree. Run `--sync` then `--link` before you quote a red set, and
+name `dependencySet` with it.
 
 ## Preconditions
 
@@ -195,6 +217,19 @@ Ran 2026-11-11 in `item-6196`: the demo exits 0 in 3.7s (5 assertions, all ok); 
 linked tree because the lockfile still declares 1.3.0 against the pin's 1.5.1 - the summary line names
 the packages, and the same tree before `--sync --link` printed `dependencySet=lockfile-released` with the
 FALLBACK line and exited 0.
+
+**The pi-schema pair, run 2026-11-13 in `item-5819` (main `657d8c60`)** - this Verify step can fail, which
+is the point:
+
+```bash
+node scripts/sync-pi.mjs --unlink; echo "exit=$?"                      # exit 0, dependencySet=lockfile-released
+node demo/commit-discipline-personas.test.mjs; echo "exit=$?"          # exit 1 - ERR_MODULE_NOT_FOUND pi-schema
+node scripts/sync-pi.mjs --sync; node scripts/sync-pi.mjs --link       # both exit 0, dependencySet=built-pin
+node demo/commit-discipline-personas.test.mjs; echo "exit=$?"          # exit 0 - PASS
+```
+
+Same file, same commit, opposite verdicts, and the only difference is the dependency set. That is why
+the count and the `dependencySet` travel together.
 
 ## If it fails
 
