@@ -4277,3 +4277,24 @@ at `:743`). Re-measure every `path:line` before repeating it.
     OUTPUT OF THE COMMANDS (the body contained a full `ps` listing of the session). The commit still
     "succeeded", which is what makes it dangerous. Use `git commit -F <file>` for any message that quotes a
     command, a flag or an error string — this repo's house style quotes all three.
+
+## Operational pitfalls (2026-11-13, N19 "The Pool" implementation, delegate)
+
+313. **A new `check` rule cannot land without a negative control.** `demo/starter.test.mjs` keeps a
+    `CONTROL_FOR` ledger asserting every id in `RULES` has a demo that makes it FAIL. Adding two rules
+    (`pool-dead-gate`, `pool-claim-without-capability`) without entries turned the check area red
+    (14/15, measured 2026-11-13, Linux Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1).
+    Register `id -> demo path` in the SAME commit as the rule.
+314. **`cli.mjs status --json` on this store is 18.4 s, not the 5.9 s quoted in AGENTS.md.** Measured at
+    HEAD `6567a568` over 7,655 queue rows with a resident broker earlier in the session. A bounded
+    `timeout 60` call that pipes the whole payload into `jq` is fine; two of them in one call is not. For a
+    pool number, project the field: `status --json | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.stringify(JSON.parse(s).pool)))'`.
+315. **"No size refusals" does not mean the gate is broken.** A seat is size-gated only if it declares a
+    `usableWindow`, which `up` writes from the model's declared context window minus the compaction
+    reserve/keep-recent. All 12 seats on this rig predate row 5, so `poolCensus` reports
+    `seatsWithoutWindow: [all 12]` and gates nothing - the conservative default, not a defect. Probe:
+    `status --json` -> `pool.seatsWithoutWindow` and `pool.tooBig`.
+316. **The `edit` tool rejects a long multi-line replacement as a JSON string when the array is not
+    bracketed correctly.** Two calls failed with "expected object, got string" on a 4 KB docs insertion.
+    For a section that long, write it to gitignored `.spike/<name>.md` and insert with
+    `python3 - <<'PY' ... anchor replace ... PY`; it also lets you assert the anchor is unique before writing.
