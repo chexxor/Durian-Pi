@@ -362,3 +362,53 @@ capability-**grant** verb (`pm` assigns via the roster, recorded as a transition
 **Definition of done for N19:** the three §1 criteria hold on the live store, every §7 row is landed with
 its demo green, `node scripts/test.mjs --area rig` and `--area broker` are green, and `docs/MILESTONES.md`
 N19 records the measured before/after.
+
+## 12. What shipped (2026-11-13) — the spec reconciled with the code
+
+One commit per §7 row on `main`, each landed with its own demo green. The shas are the record; the right-hand
+column is the wording the code actually uses, because prose in a spec and strings in a tree drift, and this
+section exists so a reader can tell which one is true.
+
+| row | commit | what landed, in the code's own words |
+|---|---|---|
+| 0 | `a4502733` | `DURIG_TIER_TOKENS` in `src/config.mjs` + `tierTokenTable()` that **fails loudly** on a malformed value; `usableContextBudget()` = declared window − compaction reserve − keep-recent; `up` writes both into the roster. `tools/tier-token-calibration.mjs` (24.4 s, exit 0) read 1,538 claim→done windows from `selfdev.sqlite.spend.jsonl`: p25 trivial **3410**, small **6101**, feature **6245**; **project** has 4 rows, which the ledger cannot answer, so it keeps an explicit **120000** |
+| 1 | `b454d1ea` | `requiredCapabilities(requires)`: string → `[s]`, array deduped, anything else → `[]` (#2673). Single-capability reason byte-identical (`requires:landing`); multi names every missing cap (`requires:a,b`) |
+| 2 | `4b4ac11a` | `assertSendAllowed(tx, from, to, requires)`: `to === null` is a pool send — Edges and per-seat caps are skipped, `seatId(tx, from)` still runs; a named send names EVERY missing capability |
+| 3 | `a28fe142` | `send_work` takes `pool`, optional `to`; `pool` + `to` refused, neither refused; `enqueueItem` gained its 13th arg `pool` |
+| 4 | `6eac7919` | `openPoolRow(item)` = `pool === true && to == null`; named pool claims run `workable()`; owner-of-record written in the same commit as the `pool-claimed` transition; the queue line reads `to=POOL`, or `to=<seat> poolOwner=true` |
+| 5 | `f4cb2c32` | `POOL_SIZE_GATE_FRACTION = 0.7`, `sizeVerdict()`, `splitInstruction()`, refusal reason exactly `too-big:<tier>(<estimate> tokens > 70% of the <usable>-token usable window)`; `size-refused` transition on **named** claims only; `poolCensus()` in `src/readapi.mjs` |
+| 6 | `785f214e` | `complete_work({itemId, split: [...]})` → parent `cancelled` + `closedAs: "split"` + `split` transition with `children: [<ids>]`; children pooled, inherit the splitter and the parent's set unless they name their own; zero children refused; a child gated on the row being split refused |
+| 7 | `6567a568` | `pool-dead-gate` and `pool-claim-without-capability`, both severity `error`, reading the SAME predicates (`openPoolRow`, `requiredCapabilities`) the claim path uses; `status --json` / `queue --human` carry the census |
+| 8 | this commit | `docs/WORK-ITEM-LIFECYCLE.md` §2a, `docs/WORK-ITEM-MODEL.md` §3a, `docs/FEATURES.md` five rows, `docs/RULES.md` two rows, `docs/MILESTONES.md` N19 before/after |
+
+**Where the shipped behaviour is deliberately NOT what §6 or §10 proposed, and why:**
+
+1. **§10 Q2** recommended `peek_queue` show only pool rows a seat is eligible for. Shipped: **every open pool
+   row is visible to every seat** (`src/rig.mjs:2077`). Eligibility-gated visibility means an ineligible seat
+   reads an empty queue and concludes the pool is empty — the opposite of the milestone's purpose. Visibility
+   is wider than eligibility on purpose; the skip report then names why a row cannot be taken.
+2. **§6.4** named the census fields `pooled`, `pool-claimed`, `size-refused`. The JSON keys are `pooled`,
+   `open`, `claimed`, `ownerOfRecord`, `sizeRefused`, `tooBig`, `seatsWithoutWindow`, `fraction`. `claimed` is
+   the human name, `ownerOfRecord` the precise one; the human line reads
+   `pool: <open> open, <claimed> claimed, <sizeRefused> size-refused (gate: ... 70% ...)`.
+3. **`size-refused` is recorded only on named claims.** The wake selector runs every pass for every seat; a
+   transition per seat per row per pass would be a write storm and would bury the row's real history. The
+   census therefore counts refusals a seat actually attempted.
+4. **A seat with no declared window is not gated.** §6.3 said "refuse with 'no usable budget declared'". The
+   shipped rule warns and does not refuse: absence of a declaration is not a measurement, and refusing every
+   tiered row on a guessed number starves real work (#2673). The warning for a zero-or-negative usable window
+   is `no usable budget declared (usable -11808 tokens; the compaction settings leave nothing to work in)` —
+   the number is real: pi-durable's defaults (reserve 16 384 + keepRecent 20 000) exceed a 24 576-token
+   verifier window. **No division by zero or by a negative is possible anywhere in the gate**; the limit is
+   `fraction * usableWindow` and a non-positive window short-circuits before it.
+5. **The `pool` field is provenance, not eligibility.** A claimed pool row keeps `pool: true`. Treating that as
+   eligibility would let a second seat claim a row that already has an owner — the race P5 exists to close.
+
+**Not built, per the boundaries:** the skill store (§9 item 3 — the operator ruled capabilities are
+assigned, not earned) and a capability-grant verb (`pm` assigns through the roster; the two `check` rules in
+§6.4 are what make a vocabulary mistake red rather than invisible).
+
+**The probe that would falsify the milestone, and its state:** `docs/MILESTONES.md`'s falsification test is
+"pooled rows claimed by more than one seat". Measured 2026-11-13, `pool.rows` is **0** on this rig: the
+predicate is shipped and proven by demos, but no seat has pooled a row yet, and the 12 existing seats carry no
+`usableWindow` until the next `up` re-records them. That is a follow-up measurement, not a hole in rows 0–8.

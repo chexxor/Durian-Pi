@@ -124,12 +124,27 @@ on a running fleet.
 work it is specialised for, and can always finish what it takes inside one context window — splitting it
 when it cannot.
 
-**Spec:** `docs/POOL-QUEUE-SPEC.md` (the implementation contract; no code is written yet).
+**Spec:** `docs/POOL-QUEUE-SPEC.md` (the implementation contract; §12 now records what shipped against it).
 
 **Measured baseline, 2026-11-12T21:5xZ** (`DURIG_DB=./selfdev.sqlite node cli.mjs status --json`):
 `done 4848 · cancelled 1091 · held 342 · deferred 431 · claimed 17 · queued 796`; queued by recipient
 **impl 380**, devtools 160, pm 151, scribe 75, qa 20; **277 of the 796 queued rows are notices**; queued
 age median 0.6 d. 4 h ledger: closed 13.9/h against intake 23.7/h.
+
+**Measured after, 2026-11-13** (same command; host Linux / Fedora Linux 45 (Forty Five) / kernel
+`7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0): rows **7,655**; `done 4913 · cancelled 1115 ·
+held 328 · deferred 431 · claimed 22 · queued 846`; queued by recipient **impl 393**, pm 183, devtools 165,
+scribe 78, qa 24, advocate 1, security 1, architect 1. **Pool: `pooled 0, open 0, claimed 0, size-refused 0`**
+and `tierTokens {trivial: 3400, small: 6100, feature: 6200, project: 120000}`. 40 rows carry a `requires`, none
+of them an array — the widening is shipped and unused. The census reports `seatsWithoutWindow` = all 12 seats,
+so nothing is size-gated yet: those seats were created before row 5 and acquire a `usableWindow` at the next
+`up`.
+
+**What that means for the premise below:** the distribution claim — pooling moves rows off `impl` — is **not yet
+testable**, because no seat has pooled a row. What is provable today, and is proven in the suite: a seat claims
+only rows whose capability set it advertises, a seat is refused a row bigger than 70 % of its usable window with
+a split instruction, every removal from the pool is named in the row's own transition trail, and `check` fails
+when the pool contains work nobody can do.
 
 **Why this and not "drain the backlog":** the single biggest mechanical cause of the queue's shape is that
 every row must be addressed to one seat, so one seat holds 380 of 796. A shared queue does not add capacity
@@ -138,12 +153,13 @@ every row must be addressed to one seat, so one seat holds 380 of 796. A shared 
 | # | task | state |
 |---|---|---|
 | 1 | spec written and operator-approved (six design answers, D275) | done — `docs/POOL-QUEUE-SPEC.md` |
-| 2 | `requiredCapabilities()` + set semantics in `workable()` (string compat) | queued — spec §7 row 1 |
-| 3 | pool address (`to:null`+`pool:true`) through `enqueueItem`/`send_work`/`assertSendAllowed` | queued — §7 rows 2–3 |
-| 4 | pool claim: owner-of-record, `pool-claimed` transition, DONE notice to `from` | queued — §7 row 4 |
-| 5 | tier→token gate at claim + pool too-big warning | queued — §7 row 5 |
-| 6 | `split` closure (`closedAs`), children inherit `from`/`requires`/`blockedBy` | queued — §7 row 6 |
-| 7 | census (`pooled`/`pool-claimed`/`size-refused`) + two check rules | queued — §7 row 7 |
+| 2 | `requiredCapabilities()` + set semantics in `workable()` (string compat) | **done** — `b454d1ea`, `demo/workable-claim.test.mjs` green |
+| 3 | pool address (`to:null`+`pool:true`) through `enqueueItem`/`send_work`/`assertSendAllowed` | **done** — `4b4ac11a` (gate) + `a28fe142` (args), `demo/pool-address.test.mjs` |
+| 4 | pool claim: owner-of-record, `pool-claimed` transition, DONE notice to `from` | **done** — `6eac7919`, same demo |
+| 5 | tier→token gate at claim + pool too-big warning | **done** — `f4cb2c32` + calibration `a4502733`, `demo/pool-size-gate.test.mjs` |
+| 6 | `split` closure (`closedAs`), children inherit `from`/`requires`/`blockedBy` | **done** — `785f214e`, split section of `demo/pool-address.test.mjs` |
+| 7 | census (`pooled`/`pool-claimed`/`size-refused`) + two check rules | **done** — `6567a568`, `demo/check-pool-gate.test.mjs` |
+| 8 | docs: WORK-ITEM-MODEL §3a, WORK-ITEM-LIFECYCLE §2a, FEATURES rows, spec §12 reconciliation | **done** — this commit |
 | 8 | skill store (seat self-constructs skills; eligibility earned) | **NOT in N19** — operator ruled capabilities are assigned only |
 
 **The probe that falsifies it:** after the build, `cli.mjs queue --json` must show pooled rows claimed by

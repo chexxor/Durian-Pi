@@ -147,6 +147,50 @@ the merged result) is the expensive leg, and it is run **once per promotion**, n
 
 ---
 
+## 3a. The other claim-time question: can this seat *hold* the row? (DECIDED — shipped, N19/D275)
+
+§3 decides **where** the work happens. N19 "The Pool" adds the question asked at the same instant: **is this
+seat the one that can take it?** Two predicates now run at claim, in one function (`workable()`, `src/rig.mjs`),
+so the selector, the wake and the verb cannot disagree:
+
+1. **Specialisation.** `requires` is a capability **SET** with AND semantics. A seat missing any one of the set
+   is refused, and the refusal names every capability it lacks (`requires:landing,verify`). A row requiring
+   nothing is open to everyone. A one-capability row is still stored as the plain string it always was, so
+   every pre-N19 row keeps its meaning byte-for-byte.
+2. **Size.** The row's `tier` estimate is compared with the claiming seat's **usable** window (declared context
+   window minus the compaction reserve and the keep-recent budget). If the estimate exceeds **70 %** of that
+   window the claim is refused and the refusal carries the split instruction. 70 % is the same fraction the
+   turn rule uses (P6b), so the gate and the turn cannot disagree about what "too big" means.
+
+The tier table in force is `DURIG_TIER_TOKENS` (`src/config.mjs`, fail-loudly on a malformed value), written
+into the roster by `up` and reported by `status --json` as `tierTokens`. Calibrated 2026-11-13 from 1,538
+claim→done windows in `selfdev.sqlite.spend.jsonl` by `node tools/tier-token-calibration.mjs` (24.4 s, exit 0):
+p25 trivial **3410**, small **6101**, feature **6245**; **project** has 4 rows in the store, which the ledger
+cannot answer, so it keeps an explicit **120000** default rather than a number the evidence does not support.
+
+| Case | What happens | Why |
+|---|---|---|
+| estimate ≤ 70 % of the usable window | claim allowed | the seat can finish inside one context |
+| estimate > 70 % | refused, with `complete_work(..., split: [...])` spelled out | a row nobody can finish is a sizing problem, not a queue problem |
+| seat declared **no** window | not gated; a warning says "no usable window declared" | absence of a declaration is not a measurement (#2673) |
+| usable window ≤ 0 (pi-durable's defaults on a 24 576-token verifier) | not gated; "no usable budget declared", never a division | refusing every tiered row would starve the rig |
+| `tier` absent or not in the table | not gated, warning only | unmodellable is not infinitely big |
+
+Splitting closes the parent as `cancelled` with `closedAs: "split"`, records the children in the parent's own
+transition trail, and enqueues each child as a pool row with its own tier. **No `split` status exists** - the
+parent's tier stays latched (P9) and the children carry theirs.
+
+```bash
+node demo/pool-size-gate.test.mjs      # 0.12 s, exit 0 - the gate itself, no store, no model
+node demo/pool-address.test.mjs        # 0.3 s, exit 0 - pool address, claim, owner-of-record, split
+node cli.mjs status --json | jq .pool  # pooled / open / claimed / size-refused, live
+```
+
+**Measured on this rig 2026-11-13** (Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
+node v24.22.1, git 2.56.0): the pool census reports `pooled 0` because the 12 seats predate row 5 and declare
+no `usableWindow`; they acquire one at the next `up`. That is the honest state: the predicate is shipped and
+proven; the fleet has not yet used it.
+
 ## 4. What "branchless" means concretely (PROVISIONAL — the mechanism is the open part)
 
 A seat cannot run state-mutating git. `src/confine.mjs:206-217` denies `checkout`, `switch`, `reset`,

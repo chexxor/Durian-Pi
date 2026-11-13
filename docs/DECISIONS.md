@@ -12024,3 +12024,28 @@ estimate refuses real work and the refusal reads like an unlucky claim rather th
 (9) **Who implements: "fresh context, not a seat in the team, but a different LLM model".** The implementer has no
 capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
 part of N19 may assume otherwise. It edits files and runs demos.
+
+**D275 addendum — the five calls the build had to make (2026-11-13), recorded because each is a rule a reader cannot recover from the code alone.**
+(a) **Visibility is wider than eligibility.** Every OPEN pool row appears in every seat's `peek_queue`
+(`src/rig.mjs:2077`), even a row that seat cannot take. The spec's recommendation was the opposite; the build
+rejected it because eligibility-gated visibility makes an ineligible seat read an empty queue and conclude the
+pool is empty - the exact silence this milestone exists to remove. The skip report then names why the row is not
+claimable, so the wider view costs nothing in clarity.
+(b) **A seat with no declared window is not size-gated.** §6.3 said "refuse with 'no usable budget declared'";
+the shipped rule warns and lets the claim through. A guessed threshold produces false negatives that starve real
+work (#2673), and 12 of this rig's 12 seats currently declare no window. Refusing on a guess would have stopped
+the rig the day the gate shipped.
+(c) **`size-refused` transitions are written only on named claims.** The wake selector runs every pass for every
+seat; writing a transition per seat per row per pass is a write storm on the one 10 MB queue document (F13) and
+would bury the row's real history. The census therefore counts refusals a seat actually attempted, not every
+seat that *could have* been refused.
+(d) **The tier table lives in config, is fail-loudly read, and is copied into the roster by `up`.** Claim-time
+code reads `seats.tierTokens`, not the config file, so one read of the roster carries the table in force; the
+`up` path also writes each seat's `usableWindow`, `contextWindow`, `compactionReserve` and `compactionKeepRecent`.
+A setting nobody reads is the defect class `src/config.mjs` exists to prevent, so a malformed `DURIG_TIER_TOKENS`
+throws rather than silently falling back.
+(e) **The `project` tier keeps an explicit default (120 000) rather than a derived number.** The spend ledger has
+1,538 claim→done windows, enough to fix trivial/small/feature at p25 (3 410 / 6 101 / 6 245) and four project
+rows, which is not a measurement. Saying "the ledger cannot answer this" and keeping an explicit default is
+honest; deriving 120 000 from four rows and printing it as calibrated would be the opposite.
+

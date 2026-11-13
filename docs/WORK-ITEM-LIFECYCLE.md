@@ -103,6 +103,57 @@ So a gate discovered *after* a row is minted has nowhere to go. Writing it into 
 check authority **before** terminality, so a `done` row answers "not yours to revise" — the misreading
 `release_work` fixed for itself in #5778 (`src/rig.mjs:1254`).
 
+## 2a. The pool: a row with no recipient until a seat claims it (N19, D275, shipped 2026-11-13)
+
+`send_work` may now carry `pool: true` **instead of** `to`. The row is stored `to: null, pool: true` in the
+same queue document as every other row - the pool is a **view over the same rows**, not a second queue
+(spec P7, D275), so nothing here adds a status, a table or a document.
+
+| Field | Meaning | Where |
+|---|---|---|
+| `pool: true` | provenance: the row entered through the pool. It survives the claim. | `enqueueItem` 13th arg, `src/rig.mjs` |
+| `to: null` | no owner-of-record yet - the row is **open** | `openPoolRow()`, `src/rig.mjs` |
+| `to: <seat>` after a claim | owner-of-record, set at CLAIM, never at send (P5) | `claim_work`, `src/rig.mjs` |
+| `requires: [a, b]` | a capability SET with AND semantics; one capability is stored as the plain string it always was | `requiredCapabilities()`, `src/rig.mjs` |
+| `tier` | the row's size class, read against the claimer's usable window | `sizeVerdict()`, `src/rig.mjs` |
+
+Eligibility runs on **both** claim paths. `claim_work` with no `itemId` picks the first row that is either
+addressed to the seat or open in the pool **and** workable for it; `claim_work({itemId})` of a pool row runs
+the same `workable()` predicate - capability set, gates, size. An addressed row is still a promise the author
+made to that seat, so it is not re-gated the way a pool row is. A refused pool claim names the row and the
+reason (`CLAIM_REFUSED: #12 is in the POOL but you cannot claim it (requires:landing)`), and pool rows a seat
+cannot take show up in the skip report as `POOL ROWS NOT WORKABLE FOR YOU: #12 (<reason>)` rather than silently
+absent.
+
+Every way a row leaves the pool is **named in the row's own transition trail** - no side document:
+
+| Cause | What is written | Effect |
+|---|---|---|
+| a seat claims it | `{"event": "pool-claimed", "by": <seat>}` plus `to = <seat>`, same commit | no longer open for anyone else |
+| the size gate refuses it for that seat | `{"event": "size-refused", "by", "reason"}` (named claims only - the wake selector runs every pass, so it records nothing) | that seat is refused, the row stays open |
+| the claimer splits it | `closedAs: "split"`, `children: [<ids>]`, a `split` transition and the ordinary `cancelled` one | parent `cancelled`; children are pooled rows with their own tiers |
+| a seat cancels it | the normal `cancelled` transition with a reason | terminal |
+
+There is **no `split` status** (spec §4, P9): the parent's tier stays latched and the children carry their own.
+
+The size gate at claim: a row whose tier estimate exceeds 70 % of the claiming seat's usable window is refused
+with the split instruction - the reason string is exactly
+`too-big:project(120000 tokens > 70% of the 12288-token usable window)`. A seat with **no declared window** is
+not gated (absence of a declaration is not a measurement, the #2673 conservative default) and says so in a
+warning; a seat whose compaction settings leave it a non-positive window gets "no usable budget declared" and
+never divides. See `docs/POOL-QUEUE-SPEC.md` §6.2-§6.3.
+
+**Measured on this rig, 2026-11-13** (`DURIG_DB=./selfdev.sqlite node cli.mjs status --json`, host Linux /
+Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0):
+`pool: {rows: 0, pooled: 0, open: 0, claimed: 0, sizeRefused: 0, fraction: 0.7}` and
+`tierTokens: {trivial: 3400, small: 6100, feature: 6200, project: 120000}`. **The mechanism is live; no seat has
+pooled a row yet**, because the rig's 12 seats were created before row 5 and carry no `usableWindow` - they get
+one the next time `up` runs them. Fleet-wide distribution is the follow-up, not this milestone's claim.
+
+**Proof:** `node demo/pool-address.test.mjs`, `node demo/pool-size-gate.test.mjs`,
+`node demo/check-pool-gate.test.mjs` (each exit 0); `node cli.mjs check` exits 1 on a pool row whose `requires`
+names a capability no seat advertises.
+
 ## 3. Why `held` exists at all (and why it is the orphan shape)
 
 `held` was added so a "registered, do not start" **backlog/roadmap registration** could sit in the queue
@@ -127,7 +178,10 @@ See [`incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md`](incidents/20
 
 The driver wakes a seat for three conditions (`selectWakes`, `src/driver.mjs:71-130`):
 
-- **`hasQueued`** — a `queued` item addressed to it (suppressed while `paused`), or
+- **`hasQueued`** — a `queued` item addressed to it, **or an open pool row it is eligible for** (N19 row 4:
+  `selectWakes` uses the same `to === name || openPoolRow(it)` predicate as `claim_work`, and a pool row the
+  seat cannot take is counted in a `pool-gated:<n>` skip reason instead of silently producing no wake),
+  suppressed while `paused`, or
 - **`hasStalledClaim`** — a `claimed` item it holds with no in-flight submission, no live lease, and no
   operator stop,
 - **`hasParked`** — no queued work AND no stalled claim, but the seat has at least one non-terminal
@@ -151,7 +205,8 @@ that the wake's `reason` is `parked`.
 
 So:
 
-> A `queued` item eventually wakes its seat. A `claimed`-but-stalled item re-wakes its seat. A `held` item
+> A `queued` item addressed to it - or an open pool row it advertises - eventually wakes its seat. A pool row
+> it does **not** advertise does not wake it: the pass logs `pool-gated:<count>` so the silence is attributable. A `claimed`-but-stalled item re-wakes its seat. A `held` item
 > wakes nobody to CLAIM — it wakes its seat only to say the row is parked; it becomes claimable through
 > `release_work`. A `deferred` item wakes its seat the same parked way, plus a `QUESTION` item is queued to
 > the seat named in `deferredTo` (§3), and `deferredTo: human` is surfaced by attention (§5).
