@@ -307,6 +307,7 @@
     "check": [
       "demo/check-autodiscover.test.mjs",
       "demo/check-evidence.test.mjs",
+      "demo/check-pool-gate.test.mjs",
       "demo/check.test.mjs",
       "demo/checkup-citation.test.mjs",
       "demo/commit-message-encoding.test.mjs",

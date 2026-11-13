@@ -372,6 +372,9 @@ export function poolCensus(items, seats = [], tierTokens = DEFAULT_TIER_TOKENS, 
 		rows: pooled.length,
 		pooled: pooled.length,
 		open: open.length,
+		// `claimed` is the count the human report and the contract name; `ownerOfRecord` is the same number
+		// spelled out for a reader who needs to know WHY a claimed pool row is no longer open (P5).
+		claimed: pooled.length - open.length,
 		ownerOfRecord: pooled.length - open.length,
 		sizeRefused: rows.filter((it) => (it.transitions ?? []).some((t) => t.event === "size-refused")).length,
 		tooBig: tooBig,

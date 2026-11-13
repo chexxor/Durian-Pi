@@ -62,7 +62,9 @@ Verified 2026-11-12 in worktree `item-6587`: `node cli.mjs check rig.v2.json` �
 | A commit message carries a BOM / NUL / stray CR | instrumented | `commit-message-encoding` (#4349) | the committing seat | `node demo/commit-message-encoding.test.mjs` exit 0 | a trailer corrupted invisibly |
 | A tracked file's newline structure collapsed or its encoding broke | instrumented | `text-integrity` (#4305) | the editing seat | `node demo/text-integrity.test.mjs` exit 0 | a file `node --check` cannot see is broken |
 | A seat moved more tokens than its own window allows | instrumented | `context-over-window` (#5049) | qa | `node demo/context-over-window.test.mjs` exit 0 | a consumed fraction that was never read |
-| A doc states a count the code does not declare | instrumented | `doc-count-drift` (#6155) | scribe | `node demo/doc-count-drift.test.mjs` exit 0 — "23 rules declared, 6 measures, 2 doc claims read, all consistent" | a number with no source |
+| An OPEN pool row requires a capability no seat advertises | instrumented | `pool-dead-gate` (N19 row 7, D275) | operator | `node demo/check-pool-gate.test.mjs` exit 0 — measured 2.0 s, Linux Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1 (2026-11-13) | pooled work nobody can claim, invisible to every wake |
+| A pool row is owned by a seat that cannot do it | instrumented | `pool-claim-without-capability` (N19 row 7) | pm | same demo, exit 0 | a seat holding work it is not eligible for while the pool stays shut |
+| A doc states a count the code does not declare | instrumented | `doc-count-drift` (#6155) | scribe | `node demo/doc-count-drift.test.mjs` exit 0 — "27 rules declared, 6 measures, 2 doc claims read, all consistent" | a number with no source |
 
 ### B. Instrumented — mechanisms outside `check`
 

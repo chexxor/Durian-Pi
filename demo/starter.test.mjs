@@ -247,6 +247,8 @@ try {
 		"doc-count-drift": "demo/doc-count-drift.test.mjs",
 		"stranded-gate": "demo/queue-ops.test.mjs",
 		"human-deferral-past-clock": "demo/human-defer-lease.test.mjs",
+		"pool-dead-gate": "demo/check-pool-gate.test.mjs",
+		"pool-claim-without-capability": "demo/check-pool-gate.test.mjs",
 	};
 	for (const rule of RULES) {
 		assert.ok(

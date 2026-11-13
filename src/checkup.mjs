@@ -43,6 +43,10 @@ import { strandedGates } from "./queueops.mjs";
 // The escalation census lives with the lease that produces it (src/deferlease.mjs), so `check` reports
 // exactly the rows `selectWakes` escalates — one rule, one census.
 import { escalations, escalationText } from "./deferlease.mjs";
+// N19 row 7: the pool predicates are the SAME functions the claim path uses (src/rig.mjs), not a second
+// spelling of them. A rule that re-derives "open pool row" or "requires" in prose is exactly the pair of
+// spellings #5047 un-paired: the audit and the gate drift apart and both look correct.
+import { openPoolRow, requiredCapabilities } from "./rig.mjs";
 
 export { VERIFIER_TERMS, seatsAreVerifier };
 
@@ -157,6 +161,25 @@ export const RULES = [
     id: "stranded-gate",
     severity: "fix-now",
     what: "a non-terminal item is gated on a CANCELLED item, so it can never be claimed and nothing repairs it",
+  },
+  {
+    // N19 "The Pool" (docs/POOL-QUEUE-SPEC.md §6.1-§6.4, D275) makes eligibility a capability SET checked at
+    // CLAIM. A pooled row nobody can claim is not slow work - it is INVISIBLE work: `status` counts it as
+    // queued, every seat's claim skips it, and no wake fires for it. The dead-gate rule (#6215) is the closest
+    // analogue and is fix-now because a human can release a gate; a capability no seat has is a roster decision
+    // the operator has to make, so the pool cannot be trusted until it is closed.
+    id: "pool-dead-gate",
+    severity: "error",
+    what: "an OPEN pool row requires a capability NO seat in the roster advertises, so nobody can ever claim it",
+  },
+  {
+    // The invariant the claim gate guarantees. It holds by construction for every row claimed after N19, so a
+    // finding here means the roster changed AFTER the claim, or the row predates the gate and was handed to a
+    // seat that cannot do it. Either way a seat is holding work it is not eligible for - the false positive the
+    // pool exists to remove.
+    id: "pool-claim-without-capability",
+    severity: "error",
+    what: "a pool row is owned by a seat that does not advertise every capability the row requires",
   },
   {
     id: "shared-tree-on-main",
@@ -860,6 +883,69 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
         escalationText(census),
         "lead decides: release one whose question is answerable from the standing rulings, re-route it to the seat that owns the decision, or answer it — and the park becomes bounded for every NEW deferral automatically",
       );
+    }
+  }
+
+  // 13d. POOL DEAD GATE (N19 row 7) - the pool's version of the dead-gate rule. `workable()` refuses a row
+  //      whose `requires` SET names a capability the seat does not list, so a capability nobody advertises makes
+  //      the row unclaimable by EVERY seat: it is counted as queued work while no wake, no claim and no skip
+  //      line ever surfaces it. Capabilities are read from the rig file's seat entries - the same declarations
+  //      `up` writes into the roster - so the audit and the gate read one source.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "pool-dead-gate",
+      why: "the queue could not be read, so pool rows cannot be inspected",
+    });
+  } else if (seats.length === 0) {
+    skipped.push({
+      id: "pool-dead-gate",
+      why: "the rig file declares no seats, so capability coverage cannot be judged",
+    });
+  } else {
+    const advertised = new Set();
+    for (const s of seats) for (const cap of requiredCapabilities(s.capabilities)) advertised.add(cap);
+    for (const it of queueItems) {
+      if (!openPoolRow(it) || isTerminalStatus(it)) continue; // a DONE/CANCELLED row is history, not a live gate
+      const needed = requiredCapabilities(it.requires);
+      if (needed.length === 0) continue; // nothing required: any eligible seat may take it
+      const missing = needed.filter((cap) => !advertised.has(cap));
+      if (missing.length > 0) {
+        add(
+          "pool-dead-gate",
+          `#${it.id}`,
+          `#${it.id} (${it.status}, in the POOL) requires ${missing.join(", ")} and NO seat advertises it — roster: ${seats.map((s) => `${s.name}:[${requiredCapabilities(s.capabilities).join("|") || "none"}]`).join(" ")}; the row is queued, invisible to every claim, and no wake can fire for it`,
+          `either advertise the capability in the rig file (seats[].capabilities) and run: node cli.mjs up ${rig}, or split the row into pieces an existing seat can take (send_work pool:true with the capability that seat has)`,
+        );
+      }
+    }
+  }
+
+  // 13e. POOL CLAIM WITHOUT CAPABILITY (N19 row 7) - the gate's invariant, checked over the rows as they are
+  //      now rather than reconstructed from history (P7: no side document). A pool row WITH an owner-of-record
+  //      must be one that owner advertises. Two ways this can be true without the code being wrong: the roster
+  //      changed after the claim, or the row was minted before the gate existed.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "pool-claim-without-capability",
+      why: "the queue could not be read, so claimed pool rows cannot be inspected",
+    });
+  } else {
+    const capBySeat = new Map(seats.map((s) => [s.name, requiredCapabilities(s.capabilities)]));
+    for (const it of queueItems) {
+      if (it.pool !== true || !it.to || isTerminalStatus(it)) continue;
+      const needed = requiredCapabilities(it.requires);
+      if (needed.length === 0) continue;
+      const caps = capBySeat.get(it.to);
+      if (caps === undefined) continue; // an owner the rig file does not declare is owned by store-missing-seat / dangling-edge
+      const missing = needed.filter((cap) => !caps.includes(cap));
+      if (missing.length > 0) {
+        add(
+          "pool-claim-without-capability",
+          `#${it.id}`,
+          `#${it.id} (${it.status}, taken from the POOL by ${it.to}) requires ${missing.join(", ")} which ${it.to} does not advertise — the seat holds work it is not eligible for, so no other seat can take it either`,
+          `give the seat the capability in the rig file and run: node cli.mjs up ${rig} — or re-send the row to a seat that has it and cancel this one (a row is POOL-addressed only while its "to" is null)`,
+        );
+      }
     }
   }
 

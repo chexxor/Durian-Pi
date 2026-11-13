@@ -290,7 +290,7 @@ because an unattributable movement is not evidence.
 **Done:** the operator can state the change, the measure, the direction predicted, and
 whether it moved - or say `unknown`, which is a legitimate outcome.
 
-**Capability:** `check` (25 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"` - the `doc-count-drift` rule (#6155) runs this line against that declaration and goes red on disagreement), `metrics` (six measures, as declared in `src/metrics.mjs` `MEASURES`), config provenance
+**Capability:** `check` (27 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"` - the `doc-count-drift` rule (#6155) runs this line against that declaration and goes red on disagreement), `metrics` (six measures, as declared in `src/metrics.mjs` `MEASURES`), config provenance
 (`DURIAN_PI_STREAM_TIMEOUT_MS` and friends), and a drill - **which does not exist** (item 2's
 other half). Without the drill a passive window is *confounded*: it cannot separate "the
 rig got worse" from "the work changed". So today this loop is honest but only
