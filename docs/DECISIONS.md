@@ -12123,7 +12123,13 @@ so the quotation comes from a run anyone can repeat:
 queued and open with one `size-refused` transition. What this does NOT prove: that a live seat would attempt such a
 claim — on this tier table only `project` can be refused, and the fleet's claim path skips it before attempting. The
 honest sentence is "the gate refuses correctly for every seat on the live roster", not "the gate was observed
-refusing live work", and the difference is recorded here so no later session inherits the stronger claim. **What IS
+refusing live work", and the difference is recorded here so no later session inherits the stronger claim.
+**The strongest artifact a delegate can produce without pooling a live row** is
+`tools/pool-gate-live-probe.mjs`: it copies the live store, keeps its roster entries and tier table, mints one
+`project` row through the shipped `send_work` IN THE COPY and prints each seat's refusal for ITS window (measured
+row #7696: impl 164320 → `too-big:project(120000 tokens > 70% of the 164320-token usable window)`, auditor 12288 →
+the same class with 12288), with the source's main file byte-identical afterwards. That is a refusal from the live
+store's data and the shipped path, not from a live working turn, and it is recorded as such. **What IS
 live and verbatim:** the seats' own decline of the open pool row, once the broker was restarted onto the attributable
 skip line (pid 540123, 2026-11-13T20:42Z) — `SKIP auditor reason=pool-gated:1 #7660(requires:docs)` on six seats,
 every pass. That is the row id and the reason from the live scheduler, and the old count-only line could not say it.

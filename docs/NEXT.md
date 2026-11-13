@@ -2,13 +2,25 @@
 (`git rev-parse --short HEAD`); the milestone objects on `main` are listed below, all after the team's landing merge
 `657d8c60`. Ahead of `origin/main`, **nothing pushed** — the push grant stays with the operator.
 
-**Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE.** Every shipped sha:
-`655c44e2` (`revise_work` takes `requires`), `1782b495` (doctrine in the shared constitution), `4ed6b8d0` +
-`36f57a36` (`tools/pool-migrate.mjs` + the roster-shape fix; `36f57a36` is an AMEND of `01ff4c91`, which is not on
-`main`), `517dc58d` (`up --refresh` records every seat's window — the gate armed), `99250682` (docs: spec §13,
-FEATURES, D275 addenda, NEXT), `78bc0364` (the live `check` finding + pitfall 324), `1c0c5920` (the gate proven on
-the real roster + `pool-gated:<n> #<id>(<reason>)`), `2bfb9e43` (NEXT broker note), and this commit (authority
-narrowed back to the contract, numbers reconciled, skip-line and reconciliation records). Read
+**Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE.** Every shipped sha, one
+line each, in commit order:
+
+| sha | what it shipped |
+|---|---|
+| `655c44e2` | `revise_work` takes `requires` (normalised, transitioned, two refusals) |
+| `1782b495` | the pool doctrine in the shared `constitution.txt` + `peek_queue`/`WAKE_CONTENT`/`queueItemLine` aligned |
+| `4ed6b8d0` | `tools/pool-migrate.mjs` — the read-only proposal instrument |
+| `36f57a36` | the roster-shape fix in that tool (an AMEND of `01ff4c91`, which is not on `main`) |
+| `517dc58d` | the window seam: `up --refresh` records `usableWindow` for all 12 seats (the gate armed) |
+| `99250682` | docs: spec §13, FEATURES row, D275 addenda (f)–(k), pitfalls, this pointer's first rewrite |
+| `78bc0364` | the live `check rig.selfdev.json` finding on #7660 + pitfall 324 (the bare `check` audits `./rig.json`) |
+| `1c0c5920` | the gate proven on the roster + `pool-gated:<n> #<id>(<reason>)` (skip-line attribution) |
+| `2bfb9e43` | the frozen-broker note in this pointer |
+| `f6177f21` | authority narrowed to the contract, gate number 115023, spec §13.3b reconciliation, this pointer's sha/broker record |
+| `02105352` | the demo prints the refusal and reads the LIVE roster; three broker windows recorded; the live decline line |
+| `HEAD` | the commit that carries this pointer (`git rev-parse --short HEAD`; it is the one object this list cannot name) |
+
+Read
 `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** for the shipped wording quoted from the code and the number
 reconciliation, and `docs/reviews/2026-11-13-capability-ownership-ruling.md` for the FIVE decisions the operator now
 owes.
@@ -83,13 +95,14 @@ node demo/pool-doctrine.test.mjs                      # 0.3 s — every seat is 
 node demo/declared-window-seam.test.mjs               # 0.13 s — the window seam the gate depends on
 node demo/pool-gate-live-roster.test.mjs              # 0.4 s — the 70 % gate refusing THIS rig's roster (impl + auditor) with the split instruction
 node demo/pool-gated-reason.test.mjs                  # 0.05 s — the SKIP line names the pool row and the reason
+node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite   # 7.3 s — the gate refusing a project row for the LIVE seats' own windows, from a byte-copy (source sha-verified unchanged)
 node tools/pool-migrate-test.mjs                      # 1 s — every verdict class non-vacuous, store bytes identical, the LIST/DOCUMENT roster trap
 node scripts/test.mjs --all --jobs 4                  # ~131 s — the whole suite; main must be green before the next landing
 ```
 
-**Broker status (measured 19:49:21Z):** **resident**, pid **311912**, `--max-duration 3600` from 19:11:56Z (deadline
-~20:11:56Z), re-armed by `tools/broker-keepalive.mjs` after the previous one (pid 98022) stranded at 2350 s with no
-pass. Restart recipe (the 20 s preflight probe false-blocks on `local2`, stated not hidden):
+**Broker status (measured 20:5xZ):** **resident, pid `540123`** (started `20:42:21.398Z`, `--max-duration 1800`,
+passes advancing; pid 311912 exited at `20:42:10.249Z`). Liveness is the last ` PASS ` line, not the pid. Restart
+recipe (the 20 s preflight probe false-blocks on `local2`, stated not hidden):
 `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`.
 
 **Exact next command for the MIGRATION goal** (applying the proposal to real rows — a later, separately gated goal;

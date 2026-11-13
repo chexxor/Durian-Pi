@@ -646,6 +646,31 @@ transition with the claimant and the reason, and `poolCensus(...).tooBig` lists 
 instrument a seat-less session should read. The same demo then proves the gate does not starve: a `small` pool row
 is claimed by `devtools`, a non-conventional owner, with its `pool-claimed` transition.
 
+**`tools/pool-gate-live-probe.mjs` — the refusal produced from a byte-copy of the LIVE store (7.3 s, exit 0).** The
+demo above proves the gate on the live ROSTER but on an empty fixture. This probe closes the gap a delegate can close
+without pooling a live row: it copies `selfdev.sqlite` (+ its `-wal`/`-shm`), opens the COPY with pi-durable, keeps
+the store's own roster entries and tier table, mints ONE `project`-tier pool row through the shipped `send_work`, and
+lets two real seats' entries name it. Measured 2026-11-13T21:2xZ on the 767 MB store (Linux / Fedora Linux 45 /
+kernel `7.2.15-300.fc45.x86_64` / node v24.22.1), row **#7696** in the copy:
+
+> `CLAIM_REFUSED (impl, live window 164320, row #7696):`
+> `CLAIM_REFUSED: #7696 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of the 164320-token usable window)). It was sent by pm. Close the prerequisite, or ask pm to address it to a seat that can. Split it: send_work the pieces (each with its own tier and requires), then close #7696 with complete_work(itemId: 7696, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a queue problem.`
+
+> `CLAIM_REFUSED (auditor, live window 12288, row #7696):`
+> `... (too-big:project(120000 tokens > 70% of the 12288-token usable window)) ... complete_work(itemId: 7696, closedAs: "split", children: [...]) ...`
+
+Both seats' refusals carry **their own** window; the row stays queued and OPEN with one `size-refused` transition per
+attempt; the census reports it `unclaimableByAnyone` across all 12; a refused claim leaves the census unchanged; and
+the source store's main file is **byte-identical** before and after (the `-wal`/`-shm` are the live broker's, and the
+tool says so rather than claiming them as evidence). `tools/pool-gate-live-probe-test.mjs` drives the probe against a
+fixture store (0.6 s): refusal per seat, split instruction, source untouched, and a roster with an undeclared window
+makes the probe exit 2 rather than report a false "refused for everyone".
+
+**What is still not claimed:** that a LIVE seat was refused during a working turn. The team never minted the one live
+`project` row — `pm` and `lead` were asked six times (17:52Z, 19:08Z, 19:49Z, 19:53Z, 20:43Z, 21:11Z) and were busy
+landing — and a delegate may not pool a row. That is the objective's own fallback, and the seats' live decline of the
+open pool row is quoted immediately below.
+
 **The live rig's own decline evidence, verbatim.** After the broker was restarted onto this code (pid 540123,
 2026-11-13T20:42Z), every pass prints the row and the reason the seats cannot take it — no claim, no query:
 
