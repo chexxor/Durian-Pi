@@ -12114,10 +12114,13 @@ and `lead` were asked seven times (17:52Z, 19:08Z, 19:49Z, 19:53Z, 20:43Z, 21:11
 21:20:16Z) to mint the one `project`-tier pool row that would make the refusal observable live; the first six went
 unanswered while pm landed dozens of other rows, and a delegate may never pool a row itself — the contract anticipated
 exactly this ("a team that declines is NOT a blocker — report the count and the seats' own reasons verbatim"). The row
-now exists live: **#7700** (`from=pm`, `pool:true`, `tier:"project"`) is OPEN, and the live scheduler refuses it for
-every seat by name — measured `SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens
-> 70% of the 12288-token usable window))` and the same with 164320 for the wide seats — while a live `CLAIM_REFUSED`
-WITH the `Split it:` sentence still needs one seat to claim it BY ID. So
+now exists live: **#7700** (`from=pm`, `pool:true`, `tier:"project"`) — and **the gate FIRED on two live seats**:
+`size-refused by=architect 2026-11-13T22:04:21.104Z` and `by=pm 22:44:08.942Z`, both
+`too-big:project(120000 tokens > 70% of the 164320-token usable window)`, with the full `CLAIM_REFUSED … Split it: …
+complete_work(itemId: 7700, closedAs: "split", children: [...])` reply in architect's transcript. The census reads
+`sizeRefused: 1`; the row is still open (`to: null`), because a refusal is not a claim. So the criterion "ONE real seat
+is refused a `project`-tier row with the exact split instruction" is met ON THE LIVE RIG, and the roster demo plus the
+byte-copy probe are corroboration. So
 `demo/pool-gate-live-roster.test.mjs` drives the SHIPPED verbs against this rig's LIVE roster — the twelve seats'
 capability sets and declared windows plus the tier table `up` wrote, READ from `./selfdev.sqlite` through the broker
 seam on every run, with a recorded copy only as the no-store fallback — on a fixture store, and it PRINTS the refusal

@@ -682,13 +682,23 @@ That is the size gate's own string, on a live `project`-tier pool row, for real 
 first time it has appeared in the live log. What it does not carry is the `Split it: …` sentence, which is rendered
 only when a seat CLAIMS BY ID.
 
-**The live row now EXISTS, and the live refusal is one named claim away.** `pm` minted it on the seventh ask:
-**#7700** (`from=pm`, `pool: true`, `tier: "project"`, no `requires`, queued `2026-11-13T21:20:16.789Z`) sits OPEN in
-the live pool. Every seat's wake selector SKIPS it rather than attempting it (`pool-gated:<n>` with the too-big reason
-now named), and `size-refused` is written only on a NAMED claim — so the remaining step is one seat calling
-`claim_work({itemId: 7700})`. A delegate may not claim a row, so that call is owed by the team; the row and its live
-census are the measurement in the meantime. **What is still not claimed:** that a LIVE seat was refused during a
-working turn. The seats' live decline of the other open pool row is quoted immediately below.
+**THE GATE HAS FIRED ON LIVE SEATS — this is the measurement the milestone asked for.** `pm` minted the row on the
+seventh ask: **#7700** (`from=pm`, `pool: true`, `tier: "project"`, no `requires`, queued `2026-11-13T21:20:16.789Z`).
+Two real seats then claimed it BY ID and were refused; the row carries both transitions (read from the store, read-only):
+
+```
+#7700  queued        by=pm        2026-11-13T21:20:16.789Z
+#7700  size-refused  by=architect 2026-11-13T22:04:21.104Z  too-big:project(120000 tokens > 70% of the 164320-token usable window)
+#7700  size-refused  by=pm        2026-11-13T22:44:08.942Z  too-big:project(120000 tokens > 70% of the 164320-token usable window)
+```
+
+and architect's live transcript (its own tool result) carries the whole reply, verbatim:
+
+> `CLAIM_REFUSED: #7700 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of the 164320-token usable window)). It was sent by pm. Close the prerequisite, or ask pm to address it to a seat that can. Split it: send_work the pieces (each with its own tier and requires), then close #7700 with complete_work(itemId: 7700, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a queue problem.`
+
+The census moved to **`sizeRefused: 1`**, the row is still `queued` with `to: null` (a refusal is not a claim), and the
+`Split it: …` instruction names the row it was refused on. The byte-copy probe below and the roster demo are now
+CORROBORATION of a live fact, not a substitute for it.
 
 **The live rig's own decline evidence, verbatim.** After the broker was restarted onto this code (pid 540123,
 2026-11-13T20:42Z), every pass prints the row and the reason the seats cannot take it — no claim, no query:

@@ -45,19 +45,21 @@ every one tonight hit `--max-duration` and lingered in read-drain.
 
 ## NEXT SESSION
 
-**Current item:** **the N19 pool is CLOSED out — usable, alive, gate proven, every number reconciled.** The gate's
-refusal is measured three ways: hermetic (`demo/pool-size-gate.test.mjs`), against the LIVE roster
-(`demo/pool-gate-live-roster.test.mjs` reads the 12 seats from `./selfdev.sqlite`, prints the refusal), and from a
-byte-copy of the LIVE store (`node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite`, 7–19 s: impl 164320 and
-auditor 12288 each refused with `Split it: …`, source sha-identical). **Live proof:** `pm` minted **#7700**
-(`pool:true, tier:"project"`, `21:20:16.789Z`) and the live scheduler refuses it by name for every seat —
-`SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
-usable window))` (113 such lines by 21:47Z). **One seat calling `claim_work({itemId: 7700})` is all that remains** for
-the live `CLAIM_REFUSED` text (pm `4a02376a`, architect `0a7255d4` hold the ask; a delegate may not claim).
+**Current item:** **the N19 pool is CLOSED — usable, alive, and the gate has fired on a LIVE seat.** `pm` minted
+**#7700** (`pool:true, tier:"project"`, `21:20:16.789Z`); the live scheduler refuses it by name for every seat
+(`SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
+usable window))`, 113 lines by 21:47Z); and **two real seats claimed it by id and were REFUSED** — `size-refused` on
+the row `by=architect` `22:04:21.104Z` and `by=pm` `22:44:08.942Z`, reason
+`too-big:project(120000 tokens > 70% of the 164320-token usable window)`. Their live transcript carries the whole
+string, verbatim: `CLAIM_REFUSED: #7700 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of
+the 164320-token usable window)). It was sent by pm. … Split it: send_work the pieces …, then close #7700 with
+complete_work(itemId: 7700, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a
+queue problem.` Census: **`sizeRefused: 1`**. Corroborated by `demo/pool-gate-live-roster.test.mjs` (live roster) and
+`tools/pool-gate-live-probe.mjs` (byte-copy of the live store: impl and auditor each refused with `Split it: …`).
 
 **State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only):
-`pool {rows:4, pooled:4, open:2, claimed:2, sizeRefused:0, seatsWithoutWindow:[]}`. Open: **#7660** (`small`,
-`requires:"docs"`, no seat advertises it) and **#7700** (`project`, unclaimed). Claimed and `done`: **#7667**
+`pool {rows:4, pooled:4, open:2, claimed:2, sizeRefused:1, seatsWithoutWindow:[]}`. Open: **#7660** (`small`,
+`requires:"docs"`, no seat advertises it) and **#7700** (`project`, unclaimed, refused twice). Claimed and `done`: **#7667**
 (`pool-claimed by=advocate`) and **#7669** (`pool-claimed by=security`, 18:36:48.521Z) — both name
 `docs/DECISIONS.md`, which `ownership` gives to `advocate` ALONE, so security's claim is the milestone's cross-owner
 probe on a live row. Seats: 11 × 164320, auditor 12288; `tierTokens {3400,6100,6200,120000}`; gate limits 115023 / 8601,
@@ -85,7 +87,7 @@ make rows claimable by seats the `ownership` map does not cover: **104 of 163 pr
 claimant** (src-tools-harness 88, workflow-docs 19; 34 name no path; list `.spike/pool-ownership-gaps.txt`).
 Consequence: **no migration applied** — the tool stays a proposal; decisions 1–2 are the operator's. (2) Nothing
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
-`pool-dead-gate`); #7700 needs one seat's by-id claim; the FIVE rulings below are owed.
+`pool-dead-gate`); the FIVE rulings below are owed.
 
 **Known red, do not fix here (objective OUT):** `node demo/offline.mjs` exits **1** —
 `ASSERT FAIL: the fresh context should be short, got 7 messages` (pm's #6924). Recorded, not touched.
