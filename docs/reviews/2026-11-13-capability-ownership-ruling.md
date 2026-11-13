@@ -3,7 +3,8 @@
 **Prepared by**: the delegate (not a seat). **Date**: 2026-11-13. **Status**: OPEN — four decisions, none of
 which the delegate may take.
 **Host for every number**: Linux / Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` /
-node v24.22.1 / git 2.56.0. HEAD `517dc58d` + the pool-instrument commit `01ff4c91`.
+node v24.22.1 / git 2.56.0. HEAD `517dc58d` + the pool-instrument commit `36f57a36` (an amend of `01ff4c91`, which is NOT on `main` — the
+amend is the shipped object; `git merge-base --is-ancestor 01ff4c91 HEAD` exits 1).
 
 **Why you are being asked.** The N19 pool (D275, `docs/POOL-QUEUE-SPEC.md`) is shipped, armed and alive: rows
 #7667 and #7669 were minted `pool: true` by `lead` and claimed by `advocate` and **`security`**. The second claim
@@ -117,13 +118,39 @@ the only way to see a claim happen.
 **Recommendation: (c).** It is the only option that adds signal without adding a row or a wake, and it is a
 read-side change (no new status literal, no new notice class).
 
+## Decision 5 — who may annotate `requires` on a row that already exists
+
+The objective's contract for the new verb is **"author or `pm` only"**. The first build implemented it as
+`seatIsCoordinator` — the rig's usual predicate for "a seat whose job is deciding who does what" — which is TRUE for
+`lead` (`decide`, `adjudicate`) and for any future capability-less seat. An independent audit of 2026-11-13 called
+that what it is: an unrequested widening of who may route work, taken by a build the contract told to write the
+decision request and not answer it. **The verb is now narrowed back to the contract** (`ANNOTATE_REQUIRES_SEAT = "pm"`,
+`lead` refused, pinned in `demo/revise-requires.test.mjs`), and this is the question that remains.
+
+- **(a) Keep it at "author or `pm`" (status quo).** *Pro*: matches the contract, matches `pm`'s remit (intake,
+decomposition, routing), and keeps ONE seat accountable for what the pool can route. *Con*: `lead` is woken for
+escalations and rules on scope — when a row's requirement is the thing blocking it, `lead` must ask `pm`, a
+round trip.
+- **(b) Open it to every coordinator (`seatIsCoordinator`).** *Pro*: `lead` can repair a dead annotation in the same
+  turn it rules on it; consistent with `release`, which a coordinator already holds. *Con*: the predicate is
+  capability-derived, so it widens itself every time a seat is created WITHOUT a working capability — authority that
+  grows by roster drift, which is the class the audit objected to.
+- **(c) Keep the narrow rule and give `lead` a specific, named exception.** *Pro*: one accountable seat plus one
+  ruling seat, no self-widening predicate. *Con*: a second exception is how the first one stops being reviewable, and
+  it needs the same store-recorded transition discipline `pm` grants have (D275 addendum (7)).
+
+**Recommendation: (a).** The verb exists to fix a row's REQUIREMENT, which is a routing decision; `pm` owns routing
+and is reachable in one intent. If `lead` hits the case, "ask pm" is one message, and the dead-gate `check` rule makes
+the row visible in the meantime. Choose (c) only if the round trip is measured to cost real turns.
+
 ## What only you can do
 
-1. The `ownership` ruling (Decision 1) and any capability grant or class split (Decision 2) — the roster is
+1. The annotation authority (Decision 5) — it changes who may route work.
+2. The `ownership` ruling (Decision 1) and any capability grant or class split (Decision 2) — the roster is
    read-only to this goal, and D275 addendum (7) makes capability assignment a *team* power with a store
    transition per grant, so even `pm` may do it only if you want the vocabulary to move.
-2. The `send_work` refusal question (Decision 3): it changes what a sender may do, which is authority.
-3. Push. Nothing in this goal was pushed; `main` is ahead of `origin/main` and the operator holds that grant.
+3. The `send_work` refusal question (Decision 3): it changes what a sender may do, which is authority.
+4. Push. Nothing in this goal was pushed; `main` is ahead of `origin/main` and the operator holds that grant.
 
 ## What the delegate deliberately did NOT do
 

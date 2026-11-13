@@ -4326,7 +4326,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `DURIG_DB=./selfdev.sqlite node cli.mjs ps --json | node -e '…print name+usableWindow…'` — a `null` on any seat
     means the gate is off for that seat, whatever the tier table says.
 320. **"The gate is armed" is not "the gate has fired", and on this rig only ONE tier can fire.** 70 % of 164320 is
-    117891 and 70 % of 12288 is 8601; `project` (120000) is the only tier above either, and the backlog holds exactly
+    115023 and 70 % of 12288 is 8601; `project` (120000) is the only tier above either, and the backlog holds exactly
     one `tier: "project"` row (a notice). `sizeRefused` also counts only NAMED claims (D275 addendum (c)), and the
     broker's wake selector records a skip as `pool-gated:<n>` without a row id. So the cheap live probe is the skip
     line and the census, not `sizeRefused`: read `sizeRefused` alone and you will report a working gate as unexercised.

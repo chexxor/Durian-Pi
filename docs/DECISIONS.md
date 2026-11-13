@@ -12052,14 +12052,23 @@ honest; deriving 120 000 from four rows and printing it as calibrated would be t
 
 **D275 addendum — tranche 1 and tranche 2 of "make the pool usable and alive" (2026-11-13), recorded because each is a rule a reader cannot recover from the code alone.**
 Host for every number below: **Linux / Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` / node
-v24.22.1 / git 2.56.0**. Commits: `655c44e2` (verb), `1782b495` (doctrine), `4ed6b8d0` + `01ff4c91`
+v24.22.1 / git 2.56.0**. Commits: `655c44e2` (verb), `1782b495` (doctrine), `4ed6b8d0` + `36f57a36` (the amend of `01ff4c91`, which is not
+on `main`)
 (instrument), `517dc58d` (window seam).
-(f) **Annotation is a VERB, not a classifier.** The temptation was a scheduled pass that infers a `requires` set
-per backlog row from its addressee and writes it. Rejected: `requires` decides who may take work, so an inferred
-value is a routing claim made by a process nobody authorised. `revise_work` puts that claim where a seat can be
-held to it, with the author-or-coordinator authority split (subject/body stay with the parties, because the
-#6112 coordinator grant lets a coordinator RELEASE a parked row, not rewrite one). The instrument
+(f) **Annotation is a VERB, not a classifier — and its authority is the contract's words, not a predicate.** The
+temptation was a scheduled pass that infers a `requires` set per backlog row from its addressee and writes it.
+Rejected: `requires` decides who may take work, so an inferred value is a routing claim made by a process nobody
+authorised. `revise_work` puts that claim where a seat can be held to it, with subject/body staying with the
+parties (the #6112 coordinator grant lets a coordinator RELEASE a parked row, not rewrite one). The instrument
 (`tools/pool-migrate.mjs`) therefore PROPOSES and never writes, and `--apply` is refused by name.
+**CORRECTION (2026-11-13, after an independent audit):** the first build opened `requires` to the author **or**
+`seatIsCoordinator`, which is true for `lead` and would also admit any future capability-less seat. The
+objective's contract says "author or `pm` only", and anything that changes who may do what is the operator's
+ruling — so the predicate is now the named constant `ANNOTATE_REQUIRES_SEAT = "pm"`, `lead` is refused (pinned in
+`demo/revise-requires.test.mjs`), and the question "should a coordinator hold this?" is decision 5 of
+`docs/reviews/2026-11-13-capability-ownership-ruling.md`. The lesson is worth the entry: a predicate that reads
+WIDER than the contract is the same defect as a classifier that writes — an authority change nobody asked for,
+discoverable only by diffing the refusal text against the requirement.
 (g) **The doctrine goes in ONE shared surface, not twelve personas.** "Pool" appeared 0 times in the 12
 `prompts/*.md` and 0 times in `rig.selfdev.json`. It now lives in `constitution.txt` — the
 `durig-constitution` system-prompt section every seat receives on every request. Twelve persona copies would
@@ -12073,7 +12082,7 @@ here) while the rig declares its windows on the provider specs (`DURIG_LOCAL_CON
 already written down in `docs/evidence/2026-11-08-context-window/README.md` §11 and was not read before the
 first run; the seam is now pinned by `demo/declared-window-seam.test.mjs`.
 (i) **The gate's arithmetic is a one-tier gate, and saying so is part of the decision.** 70 % of 164320 is
-117891 and 70 % of the auditor's 12288 is 8601; only the `project` tier (120000) exceeds either, so on this rig
+115023 and 70 % of the auditor's 12288 is 8601; only the `project` tier (120000) exceeds either, so on this rig
 the size gate can bite ONLY on a `project` row, and the live backlog contains exactly one `tier: "project"` row
 (and it is a notice). "The gate is armed" therefore means "armed against exactly one tier", and a claim that it
 refuses ordinary oversized work would be false until the tier table or the windows change.

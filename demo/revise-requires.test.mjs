@@ -1,5 +1,5 @@
 // demo/revise-requires.test.mjs — N19 "The Pool" row 3: `requires` can be put on a row that ALREADY
-// exists, by the seat that made the row or by a coordinating seat, and NOTHING ELSE changes.
+// exists, by the seat that made the row or by `pm` (the contract's authority, exactly), and NOTHING ELSE changes.
 //
 // WHY THIS EXISTS (a measurement, not a wish). `send_work` was the only writer of `requires`, so the
 // backlog could never be annotated: on the live store 7,655 rows exist, 7 carry `requires` and 0 carry
@@ -12,7 +12,8 @@
 //                Identical to what `enqueueItem` writes, so an annotated backlog row is indistinguishable
 //                from a freshly sent one to the claim predicate, the census and the check rules.
 //   authority    subject/body stays with the PARTIES (the #6112 boundary is untouched); `requires` is
-//                ROUTING, so its author or a coordinating seat (route/plan/decide/adjudicate) may set it.
+//                ROUTING, so its author or `pm` may set it — and no other seat, not even a coordinator that is
+//                not pm: `seatIsCoordinator` would admit lead, which is an operator ruling this build must not take.
 //   the guard    a set NO seat on the roster advertises is REFUSED at the moment of writing — the pool's
 //                version of a gate naming a cancelled row, which `check` reports as `pool-dead-gate`.
 //   the limits   a claimed row is refused; the row is NOT pooled by this call; no seat's capability set
@@ -25,7 +26,7 @@
 // Run: node demo/revise-requires.test.mjs  (exit 0 = pass)
 import assert from "node:assert/strict";
 
-import { applyRevise, registerSeat, requiredCapabilities, reviseMessage, RigQueue, Router, Seats, storeRequires, workable } from "../src/rig.mjs";
+import { ANNOTATE_REQUIRES_SEAT, applyRevise, registerSeat, requiredCapabilities, reviseMessage, RigQueue, Router, Seats, storeRequires, workable } from "../src/rig.mjs";
 import { seatIsCoordinator } from "../src/seattools.mjs";
 
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -105,6 +106,7 @@ await harness.commit(
 		await mk("pm", "program manager", ["route", "plan"]);
 		await mk("impl", "implementation engineer", ["implement", "code"]);
 		await mk("qa", "independent verifier", ["verify", "review"]);
+		await mk("lead", "lead — scope and priority rulings", ["decide", "adjudicate"]);
 	},
 	ctx,
 );
@@ -163,17 +165,24 @@ try {
 	check("subject/body untouched", after.subject === "Add the pool census" && after.body === "the numbers a seat needs");
 	check("THE ROSTER IS BYTE-IDENTICAL before and after the annotation — this path cannot grant a capability", (await capsOf()) === rosterBefore, await capsOf());
 
-	/* B. a working seat that is neither author nor recipient is refused; a coordinator is not. */
+	/* B. the contract's authority, EXACTLY: the author, or `pm`. Not a working seat, and NOT a coordinator that is
+	 *    not pm — `lead` holds decide/adjudicate and `seatIsCoordinator` would admit it, which is the widening the
+	 *    2026-11-13 audit rejected. Widening is an operator ruling (decision 5), so it is refused here. */
 	await call("impl", "send_work", { to: "qa", subject: "Verify the census", body: "run the check", tier: "trivial" });
 	const qaRow = (await queueOf()).length;
 	await call("qa", "revise_work", { itemId: qaRow, requires: "verify" });
 	const outsider = await toolReply("qa", "revise_work");
-	check("qa may not annotate a row it did not author", /only its author .* or a coordinating seat/.test(outsider), outsider.slice(0, 220));
+	check("qa may not annotate a row it did not author", /only its author .* or pm may set the capability requirement/.test(outsider), outsider.slice(0, 220));
 	check("...and the row is unchanged", !("requires" in await itemOf(qaRow)), JSON.stringify(await itemOf(qaRow)));
+
+	await call("lead", "revise_work", { itemId: qaRow, requires: "verify" });
+	const leadSay = await toolReply("lead", "revise_work");
+	check("THE CONTRACT: lead (decide/adjudicate, a coordinator) may NOT annotate either — `author or pm only`", /only its author .* or pm may set the capability requirement/.test(leadSay), leadSay.slice(0, 260));
+	check("...and lead's refusal wrote nothing", !("requires" in await itemOf(qaRow)), JSON.stringify(await itemOf(qaRow)));
 
 	await call("pm", "revise_work", { itemId: qaRow, requires: "verify" });
 	const coordinatorSay = await toolReply("pm", "revise_work");
-	check("pm, the coordinating seat, MAY annotate a row it did not mint", /revised \(requires\)/.test(coordinatorSay), coordinatorSay.slice(0, 240));
+	check("pm MAY annotate a row it did not mint (the contract names pm)", /revised \(requires\)/.test(coordinatorSay), coordinatorSay.slice(0, 240));
 	await call("pm", "revise_work", { itemId: qaRow, body: "pm rewriting the request" });
 	const pmBodySay = await toolReply("pm", "revise_work");
 	check("pm's subject/body revise is refused: not yours to revise", /not yours to revise/.test(pmBodySay), pmBodySay.slice(0, 220));
@@ -230,13 +239,17 @@ try {
 	check("a claimed row refuses the annotation with the existing reason", /not queued \(status=claimed\)/.test(claimedSay), claimedSay.slice(0, 220));
 	check("...and its requirement survived the refused call", JSON.stringify((await itemOf(qaRow)).requires) === JSON.stringify("verify"), JSON.stringify(await itemOf(qaRow)));
 
-	/* G. the authority is capability-derived, not name-derived. */
-	check("the guard's authority test is capability-derived, not role-derived", seatIsCoordinator({ name: "pm", role: "program manager", capabilities: ["route", "plan"] }) && !seatIsCoordinator({ name: "impl", role: "implementation engineer", capabilities: ["implement", "code"] }));
+	/* G. the authority is the CONTRACT's, and the contract names one seat. `seatIsCoordinator` — the rig's usual
+	 *    predicate for routing authority — is deliberately NOT what this verb asks: it is TRUE for `lead`, and the
+	 *    2026-11-13 audit called the build that used it an unrequested widening. The predicate is asserted here so a
+	 *    future refactor that reaches for it fails this demo instead of quietly re-widening the verb. */
+	check("the annotation seat is the contract's constant, not a capability predicate", ANNOTATE_REQUIRES_SEAT === "pm");
+	check("...and `seatIsCoordinator` WOULD admit lead, which is exactly why the verb does not use it", seatIsCoordinator({ name: "lead", role: "lead", capabilities: ["decide", "adjudicate"] }) === true && seatIsCoordinator({ name: "impl", role: "implementation engineer", capabilities: ["implement", "code"] }) === false);
 
 	assert.ok(true);
 	console.log(
 		failures === 0
-			? "\nREVISE-REQUIRES PASS (requires can be annotated on an existing row, in the pool shape, by the author or a coordinator, guarded against a dead set, and it changes nothing else)"
+			? "\nREVISE-REQUIRES PASS (requires can be annotated on an existing row, in the pool shape, by its author or pm ONLY, guarded against a dead set, and it changes nothing else)"
 			: `\nREVISE-REQUIRES FAIL — ${failures} check(s)`,
 	);
 } catch (err) {

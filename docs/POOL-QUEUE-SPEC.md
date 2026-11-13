@@ -436,17 +436,26 @@ git 2.56.0**. HEAD before these commits: `517dc58d`.
 data to act on. `revise_work` now takes `requires`, and its description says what it is:
 
 > "You may ALSO set `requires` - the capability SET a claimant must advertise (N19 'The Pool', P2) - on a
-> queued row that already exists: its author or a coordinating seat (route/plan/decide) may annotate it, a
-> working seat that is neither may not. Annotating a row never pools it (`pool` is decided when the row is
-> sent) and never changes any seat's own capabilities."
+> queued row that already exists: its author or `pm` may annotate it; no other seat may (that is a routing
+> decision, and widening it is an operator ruling, not a tool's). Annotating a row never pools it (`pool` is
+> decided when the row is sent) and never changes any seat's own capabilities."
 
-**The authority is SPLIT, not widened.** `subject`/`body` stay with the parties (`from` or `to`) — the
-#6112 coordinator grant lets a coordinator *release* a parked row, not rewrite one. `requires` is routing,
-so it is open to the author **or** `seatIsCoordinator` (route/plan/decide/adjudicate). The refusal names who
-is missing:
+**The authority is SPLIT, not widened — and it is the CONTRACT's, exactly.** `subject`/`body` stay with the
+parties (`from` or `to`) — the #6112 coordinator grant lets a coordinator *release* a parked row, not rewrite
+one. `requires` is routing, and the objective's words are "author or `pm` only", so that is what shipped
+(`ANNOTATE_REQUIRES_SEAT`). **This was first built with `seatIsCoordinator` and an independent audit of
+2026-11-13 rejected it**: that predicate is TRUE for `lead` (`decide|adjudicate`) and for any future
+capability-less seat, so it widened who may route work without a ruling — precisely what the contract says to
+write a decision request about instead of answering. The verb is narrowed back; whether a coordinator (or
+`lead` specifically) should hold this is decision 5 in
+`docs/reviews/2026-11-13-capability-ownership-ruling.md`. The refusal names who is missing:
 
-> `item #<id>: only its author (<from>) or a coordinating seat (route/plan/decide) may set the capability
-> requirement; you are neither (from=<from> to=<to>)`
+> `item #<id>: only its author (<from>) or pm may set the capability requirement; you are neither
+> (from=<from> to=<to>)`
+
+and `demo/revise-requires.test.mjs` now asserts the hard half: **`lead` is refused**, and the demo also pins
+that `seatIsCoordinator` WOULD admit lead, so a later refactor that reaches for the wide predicate fails the
+demo instead of silently re-widening the verb.
 
 **Two refusals exist because a bad annotation is the pool's version of a dead gate.** A set no seat
 advertises makes a row unclaimable forever; catching it in a `check` costs the row, catching it at the write
@@ -513,7 +522,7 @@ byte-identically to before, which is what keeps the queue-compat demos green). `
 `constitutionInline` is the generated mirror, re-mirrored with `tools/mirror-constitution.mjs`. Evidence:
 `demo/pool-doctrine.test.mjs` (24 checks, exit 0), `--area docs` 8/8 in 48.5 s.
 
-### 13.3 `tools/pool-migrate.mjs` — the denominator, read-only (commit `4ed6b8d0`, corrected `01ff4c91`)
+### 13.3 `tools/pool-migrate.mjs` — the denominator, read-only (commit `4ed6b8d0`, corrected `36f57a36` — the amend of `01ff4c91`, which never reached `main`)
 
 `--dry-run` only; `--apply` is refused by name; there is no write path in the file. Seven classes, applied in
 order so each row lands in exactly one and the classes sum to the queued count:
@@ -539,6 +548,49 @@ list** for the artifact they name (src-tools-harness 88, workflow-docs 19; 34 ro
 is possible). That list is the trigger for the operator's ownership ruling; the roster is read-only to this
 tool.
 
+### 13.3b The milestone's starting numbers, reconciled (every delta explained)
+
+The objective required the live `267 / 311 / 85 / 393`-class numbers to be "reproduced or every difference
+explained". Reproduced below from ONE read (`node .spike/pool-reconcile2.mjs`, READ-ONLY, 3.6 s, broker seam), at
+**7,687 rows / 858 queued** on 2026-11-13T20:3xZ:
+
+| class | baseline (846 queued) | now (858 queued) | why it moved |
+|---|---|---|---|
+| impl | 393 | **403** | +10 minted; impl advertises `code`, which no other seat has, so **0 of its rows are capability-clean** |
+| pm | 183 | **190** | +7 minted; `route`/`plan` are pm's alone, so 0 clean |
+| devtools | 165 | **162** | −3 closed; all 162 clean (its set `implement` is shared) |
+| scribe | 78 | **75** | −3 closed; all 75 clean |
+| qa | 24 | **25** | +1; all 25 clean (`verify`,`review` shared with qa2/architect/security) |
+| advocate / security | 1 / 1 | 1 / 1 | unchanged |
+| architect | 1 | **0** | its row closed |
+| (no addressee) | 0 | **1** | the open pool row #7660 — a pooled row has `to: null` by design |
+| **total** | **846** | **858** | +12 = +10 impl, +7 pm, +1 qa, +1 pool, −3 devtools, −3 scribe, −1 architect |
+
+**`267` is exactly `devtools 165 + scribe 78 + qa 24`** — the seats whose capability set at least one other seat
+also advertises. It is **262** now (`devtools 162 + scribe 75 + qa 25`), i.e. the −5 is the drift above, not a
+classifier change. And **`267 → 165` is not a shrinkage at all**: the capability-clean tranche is not the migratable
+tranche, and the classifier subtracts from it in first-match order —
+
+| the 262 clean rows | count |
+|---|---|
+| **migratable** | **165** |
+| a notice (a DONE/CANCELLED ack is not work) | 53 |
+| blocked on an open `blockedBy` gate | 42 |
+| untiered, so the size gate has nothing to measure | 2 |
+| **sum** | **262** |
+
+The whole-census classes reconcile the same way and balance against the queued count
+(`balance: OK, 858 = 858`): already-pooled 1 (that is #7660), **notice 313** (= 311 + 2; the flag is the structural
+one, and **28 of the 44 untiered rows are notices**, which is why the untiered class is 16 and not 44 — first match
+wins), **blocked 85** (unchanged; no notice carries a `blockedBy`), **untiered-or-oversized 16** (44 raw untiered
+minus the 28 notices), **single-owner 278**, **migratable 165**, **unaddressed 0**. The single `tier: "project"` row
+is **#7438**, and it is a notice — so it is classified `notice` before the size class is reached, exactly as §13.4
+predicts for the gate.
+
+**The `393`-row impl tranche** (403 now) is out of scope for the same reason it always was: pooling it would propose
+claimants who cannot advertise `code`, which is the operator's `ownership`/capability question (decision 2 in
+`docs/reviews/2026-11-13-capability-ownership-ruling.md`), not a classifier bug.
+
 ### 13.4 Tranche 2 — the gate is ARMED, and the pool has rows (commit `517dc58d`)
 
 `up --refresh` wrote `usableWindow: null` for all 12 seats. Cause, named in
@@ -555,7 +607,8 @@ After `node cli.mjs up rig.selfdev.json --refresh` (0.915 s): **11 seats usable 
 without a window**, `pool {rows:0, pooled:0, open:0, claimed:0, sizeRefused:0}`. `git diff rig.selfdev.json`
 for the refresh is empty outside the size fields — no capability, edge or ownership entry moved.
 
-Gate arithmetic in force: 70 % of 164320 = **117891** (11 seats), 70 % of 12288 = **8601** (auditor). Only the
+Gate arithmetic in force: `Math.floor(0.7 * 164320)` = **115023** (11 seats — not 115024: `0.7` is not exactly
+representable and the product lands a hair below, which is why the rig floors), 70 % of 12288 = **8601** (auditor). Only the
 `project` tier (120000) exceeds both — so the gate bites only on `project` rows, and the backlog contains
 exactly one `tier: "project"` row.
 

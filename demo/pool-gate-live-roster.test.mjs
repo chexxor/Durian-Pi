@@ -18,7 +18,7 @@
 // runs in 0.4 s with no network.
 //
 // Run: node demo/pool-gate-live-roster.test.mjs   (exit 0 = pass)
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { createModels } from "@earendil-works/pi-ai/models";
@@ -44,8 +44,8 @@ function check(label, ok, detail = "") {
 /** The roster in force, read from the live store on 2026-11-13 and recorded here. Every seat declares a window
  *  (that is what `up --refresh` fixed this session); the auditor is the verifier-class seat whose 12288 usable
  *  tokens are the tightest budget on the rig. */
-const LIVE_TIER_TOKENS = { trivial: 3400, small: 6100, feature: 6200, project: 120000 };
-const LIVE_SEATS = {
+const RECORDED_TIER_TOKENS = { trivial: 3400, small: 6100, feature: 6200, project: 120000 };
+const RECORDED_SEATS = {
 	pm: { role: "program manager", capabilities: ["route", "plan"], usableWindow: 164320 },
 	impl: { role: "implementation engineer", capabilities: ["implement", "code"], usableWindow: 164320 },
 	qa: { role: "verifier", capabilities: ["verify", "review"], usableWindow: 164320 },
@@ -59,6 +59,38 @@ const LIVE_SEATS = {
 	qa2: { role: "second verifier", capabilities: ["verify", "review"], usableWindow: 164320 },
 	architect: { role: "architecture", capabilities: ["design", "review"], usableWindow: 164320 },
 };
+
+// THE ROSTER IS READ LIVE WHEN THE LIVE STORE IS THERE, and the recorded copy is only the hermetic fallback.
+// The first version hardcoded the twelve seats, which is a TRANSCRIPTION of the rig rather than the rig: a roster
+// change (`up --refresh` after a model swap) would leave the demo asserting yesterday's windows and still green.
+// The read goes through the broker seam when one is resident (src/readclient.mjs), so it never becomes a second
+// store writer. In a checkout with no `./selfdev.sqlite` the recorded values are used and the source is printed.
+async function rosterSource() {
+	const live = join(process.cwd(), "selfdev.sqlite");
+	if (!existsSync(live)) return { seats: RECORDED_SEATS, tierTokens: RECORDED_TIER_TOKENS, source: "recorded (no ./selfdev.sqlite in cwd)" };
+	try {
+		const { readData } = await import("../src/readclient.mjs");
+		const { readSeatsDocument } = await import("../src/readapi.mjs");
+		const { Seats: SeatsDoc } = await import("../src/rig.mjs");
+		const doc = await readData(live, "document", { kind: SeatsDoc.definition.kind, scope: { kind: "session" } }, (st) => readSeatsDocument(st));
+		const value = doc?.found ? doc.value : doc;
+		const seats = Object.fromEntries(
+			Object.entries(value?.seats ?? {}).map(([name, s]) => [
+				name,
+				{ role: s.role ?? "", capabilities: s.capabilities ?? [], usableWindow: s.usableWindow ?? null },
+			]),
+		);
+		if (Object.keys(seats).length === 0 || Object.values(seats).some((s) => !Number.isFinite(s.usableWindow))) {
+			return { seats: RECORDED_SEATS, tierTokens: RECORDED_TIER_TOKENS, source: "recorded (the live store has seats without a window)" };
+		}
+		return { seats, tierTokens: value?.tierTokens ?? RECORDED_TIER_TOKENS, source: `LIVE (${Object.keys(seats).length} seats read from ./selfdev.sqlite via the broker seam)` };
+	} catch (err) {
+		return { seats: RECORDED_SEATS, tierTokens: RECORDED_TIER_TOKENS, source: `recorded (live read failed: ${err?.message ?? err})` };
+	}
+}
+const live = await rosterSource();
+const LIVE_SEATS = live.seats;
+const LIVE_TIER_TOKENS = live.tierTokens;
 
 const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
 const models = createModels();
@@ -99,7 +131,8 @@ async function call(name, toolName, toolArgs) {
 }
 
 console.log("\n=== the fixture IS this rig's roster: 12 seats, every window declared, the live tier table ===");
-check("12 seats registered with their live capability sets", Object.keys(roster).length === 12 && JSON.stringify(roster.impl.capabilities) === JSON.stringify(["implement", "code"]), JSON.stringify(Object.keys(roster)));
+console.log(`  roster source: ${live.source}`);
+check("every seat registered with its live capability set", Object.keys(roster).length === Object.keys(LIVE_SEATS).length && JSON.stringify(roster.impl.capabilities) === JSON.stringify(["implement", "code"]), JSON.stringify(Object.keys(roster)));
 check("every seat declares a usable window (the state `up --refresh` produced)", Object.values(roster).every((s) => Number.isFinite(s.usableWindow) && s.usableWindow > 0));
 check("the tier table in force is the one `up` wrote", JSON.stringify((await harness.snapshot(Seats, undefined, ctx)).tierTokens) === JSON.stringify(LIVE_TIER_TOKENS));
 const censusEmpty = poolCensus(await queue(), Object.entries(roster).map(([name, s]) => ({ name, usableWindow: s.usableWindow })), LIVE_TIER_TOKENS);

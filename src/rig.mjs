@@ -29,6 +29,26 @@ import {
 	validatePriorityRequest,
 } from "./workstrategy.mjs";
 
+/**
+ * WHO MAY ANNOTATE `requires` ON A ROW THAT ALREADY EXISTS (N19 row 3).
+ *
+ * The operator's contract for this verb is explicit and NARROW: "author or `pm` only", and "the path must not be
+ * able to change a SEAT's advertised set (a row's requirements are not a grant)". So this is the author, or the
+ * seat NAMED `pm` — nothing else.
+ *
+ * WHY NOT `seatIsCoordinator`, which is the rig's usual predicate for "a seat whose job is deciding who does what"
+ * (`src/seattools.mjs`): that predicate is TRUE for `lead` (`decide|adjudicate`) and for any future
+ * capability-less seat, and the shipped version of this verb used it. An independent audit of 2026-11-13 called
+ * that what it is — an unrequested WIDENING of who may route work, taken by a build that the contract told to
+ * write the decision request and not answer it. Narrowing to the named seat restores the contract exactly; whether
+ * `lead` (or every coordinator) SHOULD hold this is an operator ruling, requested in
+ * `docs/reviews/2026-11-13-capability-ownership-ruling.md` (decision 5), not decided here.
+ *
+ * A name is a weaker anchor than a capability — the `seattools` comment's point — and that is deliberate here: the
+ * contract names one seat, and a predicate that guesses wider is how authority grows without a ruling.
+ */
+export const ANNOTATE_REQUIRES_SEAT = "pm";
+
 /** Seat roster: name -> conversation id + role text. Session singleton. */
 export const Seats = defineDoc({
 	kind: "durig.seats",
@@ -2027,7 +2047,7 @@ const Router = defineExtension({
 			name: "revise_work",
 			description:
 				"Update the subject and/or body of a QUEUED item you sent or were sent, before it is claimed. A claimed item is being acted on and is not revised. " +
-				"You may ALSO set `requires` - the capability SET a claimant must advertise (N19 'The Pool', P2) - on a queued row that already exists: its author or a coordinating seat (route/plan/decide) may annotate it, a working seat that is neither may not. " +
+				"You may ALSO set `requires` - the capability SET a claimant must advertise (N19 'The Pool', P2) - on a queued row that already exists: its author or `pm` may annotate it; no other seat may (that is a routing decision, and widening it is an operator ruling, not a tool's). " +
 				"Annotating a row never pools it (`pool` is decided when the row is sent) and never changes any seat's own capabilities.",
 			parameters: obj({
 				itemId: num(),
@@ -2053,22 +2073,17 @@ const Router = defineExtension({
 					// grant stops: a coordinator may RELEASE a parked row, it may not rewrite one.
 					if ((args.subject !== undefined || args.body !== undefined) && !isParty)
 						return `item #${args.itemId} is not yours to revise (from=${item.from} to=${item.to})`;
-					// N19 row 3 - `requires` is ROUTING, not authorship of the request. Who may say which seat
-					// can take a row: the seat that made the row, and the seats whose job IS deciding who does
-					// what (`seatIsCoordinator`: route/plan/decide/adjudicate). A working seat annotating
-					// someone else's row is the spoof the party check exists to stop, so the authority is SPLIT
-					// rather than widened - subject/body stays with the parties, the capability set with the
-					// author plus coordinators. That is why pm-release-authority remains green.
+					// N19 row 3 - `requires` is ROUTING, not authorship of the request, and the operator's contract
+					// is narrow: "author or `pm` only" (ANNOTATE_REQUIRES_SEAT). A working seat annotating someone
+					// else's row is the spoof the party check exists to stop, so the authority is SPLIT rather than
+					// widened - subject/body stays with the parties, the capability set with the author plus `pm`.
+					// `seatIsCoordinator` was used here first and admitted `lead`; that widening is an operator
+					// decision (decision 5 in docs/reviews/2026-11-13-capability-ownership-ruling.md), not a build
+					// choice, so the verb is narrowed back to the contract and the question is asked instead.
 					let claimableNote = "";
 					if (args.requires !== undefined) {
-						const meSeat = seats.seats?.[me] ?? {};
-						const coordinating = seatIsCoordinator({
-							name: me,
-							role: meSeat.role,
-							capabilities: meSeat.capabilities ? [...meSeat.capabilities] : [],
-						});
-						if (item.from !== me && !coordinating)
-							return `item #${args.itemId}: only its author (${item.from}) or a coordinating seat (route/plan/decide) may set the capability requirement; you are neither (from=${item.from} to=${item.to})`;
+						if (item.from !== me && me !== ANNOTATE_REQUIRES_SEAT)
+							return `item #${args.itemId}: only its author (${item.from}) or ${ANNOTATE_REQUIRES_SEAT} may set the capability requirement; you are neither (from=${item.from} to=${item.to})`;
 						// THE DEAD-GATE GUARD, applied at the moment of writing. A `requires` set NO seat on the
 						// roster advertises makes the row unclaimable forever - the pool's version of a gate naming
 						// a cancelled row (docs/POOL-QUEUE-SPEC.md §6.4), reported by `check` as `pool-dead-gate`.

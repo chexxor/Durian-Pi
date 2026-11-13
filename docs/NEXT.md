@@ -1,20 +1,29 @@
-**Last update:** 2026-11-13T19:5xZ (delegate). `main` = **`657d8c60`** (a team landing merge on top of this session's
-`36f57a36`), ahead of `origin/main`, **nothing pushed** — the push grant stays with the operator.
+**Last update:** 2026-11-13T20:4xZ (delegate). `HEAD` = the commit carrying this pointer
+(`git rev-parse --short HEAD`); the milestone objects on `main` are listed below, all after the team's landing merge
+`657d8c60`. Ahead of `origin/main`, **nothing pushed** — the push grant stays with the operator.
 
-**Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE** (tranche 1 `655c44e2`,
-`1782b495`, `4ed6b8d0`; tranche 2 `517dc58d`; instrument fix `36f57a36`): `revise_work` can annotate `requires` on an
-existing row with a split authority (author or coordinator), the pool doctrine is one paragraph in the shared
-`constitution.txt` reaching all 12 seats, `tools/pool-migrate.mjs --dry-run` classifies the backlog read-only, the 70 %
-size gate is ARMED (`up --refresh` records a usable window per seat), and **three real pool rows exist** — two of them
-claimed, one by a seat the `ownership` map does not cover. Read `docs/POOL-QUEUE-SPEC.md` **§13** for the shipped
-wording quoted from the code, and `docs/reviews/2026-11-13-capability-ownership-ruling.md` for the four decisions the
-operator now owes.
+**Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE.** Every shipped sha:
+`655c44e2` (`revise_work` takes `requires`), `1782b495` (doctrine in the shared constitution), `4ed6b8d0` +
+`36f57a36` (`tools/pool-migrate.mjs` + the roster-shape fix; `36f57a36` is an AMEND of `01ff4c91`, which is not on
+`main`), `517dc58d` (`up --refresh` records every seat's window — the gate armed), `99250682` (docs: spec §13,
+FEATURES, D275 addenda, NEXT), `78bc0364` (the live `check` finding + pitfall 324), `1c0c5920` (the gate proven on
+the real roster + `pool-gated:<n> #<id>(<reason>)`), `2bfb9e43` (NEXT broker note), and this commit (authority
+narrowed back to the contract, numbers reconciled, skip-line and reconciliation records). Read
+`docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** for the shipped wording quoted from the code and the number
+reconciliation, and `docs/reviews/2026-11-13-capability-ownership-ruling.md` for the FIVE decisions the operator now
+owes.
 
-**Broker caveat (2026-11-13T20:17Z):** the resident broker **pid 311912** is past its `--max-duration 3600` deadline
-and FROZEN (heartbeat advancing, `lastPass` 20:10:17Z, 428 s and climbing) — `broker-serve.mjs --start` refuses
-`broker-degraded`, and its four `genlock` slots are held, so the runbook precondition says do NOT terminate it. It
-also predates the skip-line fix, so the `pool-gated:1` lines in `selfdev.sqlite.broker.log` are the OLD shape; the
-next broker start (keepalive re-arms a stranded one) prints `pool-gated:<n> #<id>(<reason>)`.
+**Broker windows this session, each with what it replaced** (the objective requires the record):
+1. pid **98022**, started `2026-11-13T17:32:55Z`, reason: **no broker resident** — it replaced a window whose last
+   exit was `2026-11-13T05:57:09Z reason=deadline` (pid 3453151). `--no-probe --yes-pm-wakes --max-duration 3600`;
+   the 20 s preflight probe false-blocks on `local2` and is stated, not silently skipped. Its own exit:
+   `2026-11-13T19:11:54.118Z EXIT pid=98022 reason=deadline`.
+2. pid **311912**, started `2026-11-13T19:11:56.488Z` by `tools/broker-keepalive.mjs`, reason: **broker STRANDED**
+   (no pass for 2350 s with 1 intent waiting) after replacing 98022's deadline exit above. `--max-duration 3600` →
+   deadline ~`20:11:56Z`; it FROZE past it (`lastPass 20:10:17Z`, heartbeat still advancing) and `--start` now
+   refuses `broker-degraded` with four `genlock` slots held, so the runbook precondition says do NOT terminate it.
+   It also predates the skip-line fix, so its log still shows the OLD `pool-gated:1` shape; the next start prints
+   `pool-gated:<n> #<id>(<reason>)`.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -24,24 +33,26 @@ next broker start (keepalive re-arms a stranded one) prints `pool-gated:<n> #<id
 
 **Liveness:** the last ` PASS ` line, not the pid or the heartbeat (pitfall 304).
 
-**Current item:** **the N19 pool is CLOSED out — gate proven, skip line attributable, four rulings with the
-operator.** The `too-big:project(...)` refusal is now measured against this rig's REAL roster:
-`demo/pool-gate-live-roster.test.mjs` (0.4 s, exit 0) drives the shipped verbs and gets `impl` (164320) refused
-`too-big:project(120000 tokens > 70% of the 164320-token usable window)` and the `auditor` (12288) refused with ITS
-window, each with the split instruction naming the row, each leaving the row queued and open with one `size-refused`
-transition; `tooBigFor: [all 12]` + `unclaimableByAnyone: true` come from the census without any claim. On a FIXTURE
-store — the live fleet never minted the one `project` row that would make it observable live (`pm`/`lead` asked five
-times, both landing), and a delegate may not pool a row. D275 addendum (m) records exactly that gap. The skip line now
-names what it counts: `pool-gated:<n> #<id>(<reason>)[ +N more]` (`src/driver.mjs` `poolGatedSkipLine`,
-`demo/pool-gated-reason.test.mjs` 16 checks), so `grep pool-gated <db>.broker.log` answers "which pool row, why" —
-it did not before, and #7660 sat there saying `pool-gated:1` for hours.
+**Current item:** **the N19 pool is CLOSED out — usable, alive, gate proven, and every number reconciled.** The
+`too-big:project(...)` refusal is measured against this rig's REAL roster (`demo/pool-gate-live-roster.test.mjs`, 0.4 s,
+exit 0): `impl` (164320 usable) is refused `too-big:project(120000 tokens > 70% of the 164320-token usable window)` and
+the `auditor` (12288) the same class quoting ITS window, each with the split instruction naming the row, each leaving
+the row queued and open with one `size-refused` transition, with `tooBigFor: [all 12]` / `unclaimableByAnyone: true`
+from the census and no claim at all; a `small` row is then claimed by `devtools`. It is proven on a FIXTURE store
+carrying the live roster — the live fleet never minted the one `project` row that would make it observable live (asked
+five times; D275 addendum (m) records the gap). **The annotation authority is the contract's, exactly**: author or
+`pm` (`ANNOTATE_REQUIRES_SEAT`), with `lead` REFUSED — the first build used `seatIsCoordinator` and an audit called
+that an unrequested widening, so the question is now decision 5 for the operator. **Every starting number is
+reconciled** in §13.3b (267 = devtools 165 + scribe 78 + qa 24; 262 clean rows = 165 migratable + 53 notices + 42
+blocked + 2 untiered; 313 notices = 311 + 2; 44 untiered − 28 notices = 16; impl 393 → 403, 0 clean because `code` is
+impl-only). **The skip line names what it counts**: `pool-gated:<n> #<id>(<reason>)[ +N more]`.
 
 **State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only):
 `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[], seatsWithoutWindow:[]}`.
 #7667 `pool-claimed by=advocate` 18:35:43Z; **#7669 `pool-claimed by=security` 18:36:48Z** — both name
 `docs/DECISIONS.md` (`ownership` → `advocate` alone), so security's claim is the milestone's falsification probe
 passing on a live row. Seats: 11 × `usableWindow` 164320, auditor 12288; tier table
-`{"trivial":3400,"small":6100,"feature":6200,"project":120000}`. Gate limits: 117891 and 8601, so **only `project`
+`{"trivial":3400,"small":6100,"feature":6200,"project":120000}`. Gate limits: 115023 and 8601, so **only `project`
 (120000) can be refused** (D275 addendum (i)).
 
 **Backlog rate, before → after the pool went live** (`node tools/backlog-burn.mjs`, keepalive ledger, no store open):
@@ -75,13 +86,25 @@ node scripts/test.mjs --all --jobs 4                  # ~131 s — the whole sui
 pass. Restart recipe (the 20 s preflight probe false-blocks on `local2`, stated not hidden):
 `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`.
 
+**Exact next command for the MIGRATION goal** (applying the proposal to real rows — a later, separately gated goal;
+`tools/pool-migrate.mjs` has NO write path by design and `--apply` is refused by name):
+
+```bash
+cd /home/chexxor/Git/Durian-Pi
+node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --json .spike/pool-migrate-live.json --limit 5   # 1.7 s — re-measure the denominator first
+node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --seat devtools --limit 10                       # the 162-row clean tranche, by id
+```
+The first WRITE of that goal is not a tool run: once decisions 1–2 are ruled, it is `pm` annotating chosen rows with
+`revise_work({itemId, requires})` (author or `pm` — the contract), one `revised` transition per row, and then the pooled
+row is claimed by whoever advertises the set. Do not add an `--apply` to the tool before that ruling.
+
 **Blocker:** none for the milestone. Two things are owed by others, neither of them build work: (1) **#7660** is OPEN
 in the pool with `requires: "docs"` and no seat advertises `docs` — only its author `lead` or a coordinator can clear
 it (`revise_work({itemId: 7660, requires: []})`); `check rig.selfdev.json` reports `pool-dead-gate` until then and
 every pass logs it by id. (2) The four operator rulings below.
 
 **Operator decisions owed** (full options/pros/cons in `docs/reviews/2026-11-13-capability-ownership-ruling.md`):
-(1) what `ownership` is FOR — advisory (recommended, plus a `check` that names disjoint owner/claimant pairs) or
+(0) the annotation authority (decision 5): author-or-`pm` as shipped, every coordinator, or a named `lead` exception. (1) what `ownership` is FOR — advisory (recommended, plus a `check` that names disjoint owner/claimant pairs) or
 enforced at claim; (2) `devtools` vs `code` — split the `src-tools-harness` artifact class and/or grant `code`
 (recommended: split the class first); (3) should `send_work` refuse a `requires` set no seat advertises (recommended:
 no — warn, keep `check` red, let the author repair; **#7660 is the live example**); (4) a pool claim still does not
