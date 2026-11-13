@@ -454,9 +454,11 @@ export const ITEMS = [
     // src/driver.mjs). The invariant is unchanged: the mutant deletes the `!paused` guard, so a paused
     // rig still wakes a seat to claim. Anchors are pinned to `main`'s TEXT, so every merge that touches
     // the guarded line must re-anchor this entry — `buildCorpus` throws `anchor not on main` otherwise.
-    anchor: "const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);",
-    find: "const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);",
-    replace: "const hasQueued = queuedVerdicts.some((v) => v.workable);",
+    // RE-ANCHORED 2026-11-13 (N19 row 4): the verdicts now carry `{verdict, pool}`, so the guarded line reads
+    // `v.verdict.workable`. The invariant is unchanged - delete `!paused` and a paused rig still wakes seats.
+    anchor: "const hasQueued = !paused && queuedVerdicts.some((v) => v.verdict.workable);",
+    find: "const hasQueued = !paused && queuedVerdicts.some((v) => v.verdict.workable);",
+    replace: "const hasQueued = queuedVerdicts.some((v) => v.verdict.workable);",
     truth:
       "The `!paused` guard is gone, so a PAUSED rig still wakes seats with the 'call claim_work' prompt and they take new work while paused — pause is supposed to gate TAKING work while letting in-flight work settle.",
     groups: [
