@@ -14,7 +14,7 @@
 // The provider families are owned by src/providers/local.mjs; the compaction override map needs them so a
 // "family/*" key resolves against the SAME prefix set that builds the provider ids, instead of a second,
 // hand-written list that can drift (see `overrideKeysForFamily`).
-import { LOCAL_ENV_PREFIXES, localProviderSpecs, providerIdForPrefix } from "./providers/local.mjs";
+import { LOCAL_ENV_PREFIXES, declaredLocalWindow, localProviderSpecs, providerIdForPrefix } from "./providers/local.mjs";
 
 export const DEFAULT_CONFIG_PATHS = ["durig.config.json", ".durig/config.json"];
 
@@ -737,7 +737,15 @@ export function effectiveCompactionPolicy(config = {}, modelKey = null) {
  * @returns {{window: number|null, reserveTokens: number, keepRecentTokens: number, usable: number|null}}
  */
 export function usableContextBudget(config = {}, modelKey = null) {
-	const window = declaredContextWindow(config, modelKey);
+	// N19 row 5 (docs/POOL-QUEUE-SPEC.md §6.2). Measured 2026-11-13 on this rig: `up --refresh` wrote
+	// `usableWindow: null` for all 12 seats because `declaredContextWindow` reads ONLY `DURIG_CONTEXT_WINDOW`,
+	// which is unset here - the fleet's windows are declared on the provider specs instead
+	// (`DURIG_LOCAL_CONTEXT` 204800, `DURIG_VERIFIER_CONTEXT` 24576). The trap is named in
+	// docs/evidence/2026-11-08-context-window/README.md §11: an instrument calling `declaredContextWindow`
+	// alone reports "window not declared" for a fleet that HAS declared windows. A missing wire disarms the
+	// size gate exactly as a missing declaration would, so fall back to the provider declaration rather than
+	// guessing.
+	const window = declaredContextWindow(config, modelKey) ?? declaredLocalWindow(localProviderSpecs(config), modelKey);
 	if (window === null) {
 		return { window: null, reserveTokens: null, keepRecentTokens: null, usable: null };
 	}
