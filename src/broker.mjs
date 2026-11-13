@@ -18,7 +18,7 @@ import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { CompactionEntry, configure } from "@earendil-works/pi-durable";
 
-import { RigControl, RigQueue, Seats } from "./rig.mjs";
+import { RigControl, RigQueue, Seats, openPoolRow } from "./rig.mjs";
 import { dispatchRead } from "./brokerread.mjs";
 import { planQueueAction, confirmGate, scopeMatches } from "./queueops.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
@@ -122,10 +122,10 @@ export function planLocalContextBoundaries({
     // BETWEEN items only: a claimed, deferred or held item means the seat is mid-item — never
     // reset it (#2337: deferred/held are reachable through the live pass and are still mid-item).
     if ((items ?? []).some((it) => it.to === name && MID_ITEM_STATUSES.has(it.status))) continue;
-    // The item this wake will claim: the OLDEST queued item addressed to the seat
-    // (claim_work's own rule), so the boundary is drawn before the seat works it.
+    // The item this wake will claim: the OLDEST queued item this seat could take - addressed to it, or an
+    // OPEN pool row (N19 row 4), so the boundary is drawn before the seat works THAT item.
     const next = (items ?? [])
-      .filter((it) => it.to === name && it.status === "queued")
+      .filter((it) => (it.to === name || openPoolRow(it)) && it.status === "queued")
       .sort((a, b) => a.id - b.id)[0];
     if (!next) continue; // no NEW work to draw a boundary for
     if (seat.contextItemId === next.id) continue; // one boundary per NEW item

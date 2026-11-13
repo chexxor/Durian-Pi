@@ -18,12 +18,15 @@ import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-wor
 
 import {
 	enqueueItem,
+	openPoolRow,
 	queueItemLine,
 	registerSeat,
 	RigQueue,
 	Router,
 	Seats,
+	selectNextWork,
 } from "../src/rig.mjs";
+import { selectWakes } from "../src/driver.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
@@ -140,6 +143,116 @@ check(
 	addressedLine?.includes("to=impl") && !addressedLine?.includes("POOL"),
 	addressedLine,
 );
+
+console.log("\n=== CLAIM: eligibility decides, and the claimant becomes owner-of-record (row 4, P1 + P5) ===");
+const poolId = pool.id;
+
+// An INELIGIBLE seat naming the row by id is REFUSED with a reason, not silently handed the row.
+await call("qa", "claim_work", { itemId: poolId });
+const qaRefusal = await transcript("qa");
+check(
+	"a seat missing BOTH capabilities is refused by name",
+	qaRefusal.includes("CLAIM_REFUSED"),
+	qaRefusal.match(/CLAIM_REFUSED[^"\\]{0,160}/)?.[0] ?? qaRefusal.slice(-300),
+);
+check(
+	"...and the refusal names every capability it lacks (P2 AND semantics)",
+	qaRefusal.includes("requires:implement,code"),
+	qaRefusal.match(/requires:[a-z,]+/)?.[0] ?? "(no reason printed)",
+);
+const stillOpen = await itemById(poolId);
+check("a refused claim does NOT take ownership", stillOpen?.to === null && stillOpen?.status === "queued", JSON.stringify({ to: stillOpen?.to, status: stillOpen?.status }));
+
+// An ELIGIBLE seat takes it: `to` becomes the claimant, `pool` stays true, the pair is in the row's history.
+await call("impl", "claim_work", { itemId: poolId });
+const claimed = await itemById(poolId);
+check("the claimant is recorded as owner-of-record (`to` = impl)", claimed?.to === "impl", JSON.stringify(claimed?.to));
+check("`pool: true` SURVIVES the claim — provenance the census needs (P5)", claimed?.pool === true, JSON.stringify(claimed?.pool));
+check("the author is unchanged, so the DONE notice still returns to pm (P5)", claimed?.from === "pm", JSON.stringify(claimed?.from));
+check("the row is claimed", claimed?.status === "claimed", JSON.stringify(claimed?.status));
+check(
+	"a `pool-claimed` transition records the (seat, row) pair in the row's own history (P7: no side document)",
+	(claimed?.transitions ?? []).some((t) => t.event === "pool-claimed" && t.by === "impl"),
+	JSON.stringify(claimed?.transitions),
+);
+check("...and the ordinary `claimed` transition is still there too", (claimed?.transitions ?? []).some((t) => t.event === "claimed"));
+check("a claimed pool row is no longer OPEN for anyone else", openPoolRow(claimed) === false, JSON.stringify({ to: claimed?.to, pool: claimed?.pool }));
+
+// A second seat naming the same id now gets a plain refusal, not the row.
+await call("qa", "claim_work", { itemId: poolId });
+check("another seat cannot claim a row that already has an owner", !(await transcript("qa")).includes("ITEM #" + poolId));
+
+console.log("\n=== the queue line a seat reads after a pool claim says WHO took it ===");
+const linesAfterClaim = await harness.commit(async (tx) => {
+	const q = await tx.doc(RigQueue);
+	return q.items.map((row) => queueItemLine(row, q.items));
+}, ctx);
+check(
+	"a claimed pool row renders `to=<owner> poolOwner=true`",
+	linesAfterClaim.find((l) => l.includes("Fix the pool claim path"))?.includes("to=impl poolOwner=true"),
+	linesAfterClaim.find((l) => l.includes("Fix the pool claim path")),
+);
+
+console.log("\n=== claim_work with NO itemId picks the first POOL row the seat is eligible for ===");
+const verifyPoolId = await harness.commit(async (tx) =>
+	enqueueItem(tx, "pm", null, "Pool row needing verify", "qa should take this", null, false, "trivial", false, null, ["verify"], null, true),
+	ctx);
+await call("qa", "claim_work", {});
+const qaTook = await itemById(verifyPoolId);
+check("qa took the open pool row it advertises for", qaTook?.to === "qa" && qaTook?.status === "claimed", JSON.stringify({ to: qaTook?.to, status: qaTook?.status }));
+
+// A pool row the seat CANNOT take is skipped, and the skip is LABELED as a pool skip rather than silently
+// dropped — otherwise "why is this row never claimed" is unanswerable from the seat's own reply.
+const landingPoolId = await harness.commit(async (tx) =>
+	enqueueItem(tx, "pm", null, "Pool row needing landing", "older than impl's own row", null, false, "trivial", false, null, "landing", null, true),
+	ctx);
+await call("pm", "send_work", { to: "impl", subject: "Impl's own addressed row", body: "claimable", requires: "implement" });
+// impl's OLDEST workable row is the addressed one from the earlier section, so this claim renders exactly as
+// it always did - no pool line, byte-identical for every seat that has no pool work in its scan.
+await call("impl", "claim_work", {});
+const firstClaim = await transcript("impl");
+check("an addressed-only claim still renders the old header with no pool line", /ITEM #\d+ \| from=pm \| subject=Ordinary addressed row \| status=claimed(?![^\n]*POOL)/.test(firstClaim), firstClaim.match(/ITEM #[^"\\]{0,120}/)?.[0] ?? "(no claim header)");
+// NOW the scan reaches the pool row impl cannot take, and the skip is LABELED as a pool skip rather than
+// silently dropped - otherwise "why is this row never claimed" is unanswerable from the seat's own reply.
+await call("impl", "claim_work", {});
+const implReply = await transcript("impl");
+check(
+	"the ineligible pool row is reported as a POOL skip, with its reason",
+	implReply.includes("POOL ROWS NOT WORKABLE FOR YOU") && implReply.includes(`#${landingPoolId} (requires:landing)`),
+	implReply.match(/POOL ROWS NOT WORKABLE FOR YOU[^"\\]{0,120}/)?.[0] ?? "(no pool skip line)",
+);
+check("...and the row is NOT taken", (await itemById(landingPoolId))?.status === "queued");
+check("...and impl's addressed row is the one it claimed", implReply.includes("Impl's own addressed row"));
+
+console.log("\n=== the DONE notice from a pool claim returns to the AUTHOR, not to the pool ===");
+await call("impl", "complete_work", { itemId: poolId, resultSummary: "pool claim path implemented" });
+const doneNotice = (await queue()).items.find((it) => it.subject === `DONE #${poolId}: Fix the pool claim path`);
+check("a DONE notice exists", doneNotice !== undefined, "no notice row");
+check("...and it is addressed to pm (the author), not left in the pool", doneNotice?.to === "pm" && doneNotice?.pool === undefined, JSON.stringify({ to: doneNotice?.to, pool: doneNotice?.pool }));
+check("...and it was sent BY the claimant", doneNotice?.from === "impl", JSON.stringify(doneNotice?.from));
+
+console.log("\n=== the WAKE selector uses the SAME predicate (no wake for work a seat cannot claim) ===");
+const wakeItems = [
+	{ id: 9001, to: null, pool: true, status: "queued", requires: ["implement"] },
+];
+const wakeSkips = [];
+const wakes = selectWakes({
+	seats: {
+		impl: { conversationId: 1, capabilities: ["implement"] },
+		qa: { conversationId: 2, capabilities: ["verify"] },
+	},
+	items: wakeItems,
+	onSkip: (s) => wakeSkips.push(s),
+});
+check("an eligible seat wakes for an open pool row", wakes.some((w) => w.name === "impl" && w.reason === "queued"), JSON.stringify(wakes));
+check("an ineligible seat does NOT wake for it", !wakes.some((w) => w.name === "qa"), JSON.stringify(wakes));
+check("...and the suppression is LOGGED as a pool gate, not as 'no work'", wakeSkips.some((s) => s.seat === "qa" && s.reason.includes("pool-gated:")), JSON.stringify(wakeSkips));
+
+console.log("\n=== selectNextWork: an open pool row is a candidate; a claimed one is not ===");
+const pickedForImpl = selectNextWork([{ id: 1, to: null, pool: true, status: "queued", requires: ["implement"] }], "impl", { capabilities: ["implement"] });
+check("eligible seat sees the pool row", pickedForImpl.item?.id === 1, JSON.stringify(pickedForImpl.item));
+const pickedForImpl2 = selectNextWork([{ id: 1, to: "impl", pool: true, status: "queued", requires: ["landing"] }], "qa", { capabilities: ["verify"] });
+check("a claimed/ addressed pool row is not a candidate for another seat", pickedForImpl2.item === null, JSON.stringify(pickedForImpl2.item));
 
 console.log("\n=== enqueueItem's 13th argument (the write path a coordinator uses) ===");
 const directId = await harness.commit(async (tx) =>

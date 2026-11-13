@@ -16,7 +16,7 @@
 // re-deriving it from a status literal (#6189). A gate rule kept in two places is a rule that drifts
 // (#6112), and the drift here is invisible: the seat wakes, `claim_work` refuses, and the log says
 // nothing about why.
-import { workable } from "./rig.mjs";
+import { workable, openPoolRow } from "./rig.mjs";
 import { escalations, escalationSignature } from "./deferlease.mjs";
 
 /**
@@ -151,11 +151,16 @@ export function selectWakes({
     // THE CLAIMABILITY GATE (#6189). `workable` is the predicate `claim_work` already uses, so the wake
     // and the verb cannot disagree. Verdicts are kept because the SKIP line must NAME the reason: a seat
     // that never wakes is otherwise indistinguishable from a seat with nothing in its queue.
+    // N19 row 4 (P1): an OPEN pool row is a wake candidate for every seat, gated by the SAME predicate the
+    // claim path uses - so a seat never wakes for pool work it cannot claim, and the wake and the verb cannot
+    // disagree. Pool rows are counted separately rather than spelled out one by one: a fleet-sized pool would
+    // otherwise put hundreds of reason codes in a single SKIP line.
     const queuedVerdicts = (items ?? [])
-      .filter((it) => it.to === name && it.status === "queued")
-      .map((it) => workable(it, name, { items, capabilities: seat.capabilities ?? [] }));
-    const gatedReasons = queuedVerdicts.filter((v) => !v.workable).map((v) => v.reason);
-    const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);
+      .filter((it) => (it.to === name || openPoolRow(it)) && it.status === "queued")
+      .map((it) => ({ verdict: workable(it, name, { items, capabilities: seat.capabilities ?? [] }), pool: openPoolRow(it) }));
+    const gatedReasons = queuedVerdicts.filter((v) => !v.verdict.workable && !v.pool).map((v) => v.verdict.reason);
+    const poolGatedCount = queuedVerdicts.filter((v) => !v.verdict.workable && v.pool).length;
+    const hasQueued = !paused && queuedVerdicts.some((v) => v.verdict.workable);
     // A stalled claim: the item is claimed but nothing is advancing it (no
     // submission in flight, no live lease) and the operator did not stop the seat's
     // run (its latest submission did not settle `aborted:<reason>`).
@@ -181,11 +186,9 @@ export function selectWakes({
     if (!hasQueued && !hasStalledClaim && !hasParked && !escalationRelevant) {
       // `queued-gated:<code>` is reported ahead of `no-work` so the log distinguishes "this seat has rows
       // it cannot claim yet" from "this seat has nothing". Both were `no-work` before #6189.
-      const reason = gatedReasons.length
-        ? `queued-gated:${gatedReasons.join(",")}`
-        : parkedUnchanged
-          ? "parked-deduped"
-          : "no-work";
+      const reason = [gatedReasons.length ? `queued-gated:${gatedReasons.join(",")}` : "", poolGatedCount ? `pool-gated:${poolGatedCount}` : ""]
+        .filter(Boolean)
+        .join(" ") || (parkedUnchanged ? "parked-deduped" : "no-work");
       onSkip({ seat: name, reason });
       continue;
     }

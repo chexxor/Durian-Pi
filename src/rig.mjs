@@ -402,6 +402,21 @@ export function requiredCapabilities(requires) {
 }
 
 /**
+ * IS THIS ROW OPEN IN THE POOL? (N19 "The Pool", row 4, P1 + P5.)
+ *
+ * A row is OPEN only while it has NO owner-of-record: `pool: true` AND `to` null. Once a seat claims it,
+ * `to` is set to the claimant (P5) and the row is no longer a candidate for anyone else - the pool is a
+ * VIEW over the same rows (P7), not a second queue, so ownership is expressed by `to`, never by a status.
+ *
+ * WHY NOT JUST `item.pool === true`: a claimed pool row still carries `pool: true` (provenance - the census
+ * and the reporting need to know the row came from the pool). Treating provenance as eligibility would let a
+ * second seat claim a row that already has an owner, which is the exact race P5 exists to close.
+ */
+export function openPoolRow(item) {
+	return item?.pool === true && (item?.to === null || item?.to === undefined);
+}
+
+/**
  * MAY THIS SEAT CLAIM THIS ROW? Status, capability SET and gate - and nothing else (P1).
  *
  * N19 row 1: the capability check is now a SET test. The reason string for a SINGLE missing capability is
@@ -454,10 +469,17 @@ export function selectNextWork(items, seat, { capabilities = [], strategy = DEFA
 	// most urgent, and may never make an ineligible one claimable. Keeping the two apart is the same
 	// separation the header above describes (#6112), and it is what makes a directive safe to grant.
 	for (const candidate of orderCandidates(items, { strategy, now, directive })) {
-		if (candidate.to !== seat || candidate.status !== "queued") continue;
+		if (candidate.status !== "queued") continue;
+		// N19 row 4 (P1): an OPEN pool row is a candidate for EVERY seat; an addressed row is a candidate only
+		// for the seat it is addressed to. Eligibility itself stays in `workable()` - the selector orders, it
+		// never decides - so a capability or gate rule cannot drift between the two (the header above, #6112).
+		if (candidate.to !== seat && !openPoolRow(candidate)) continue;
 		const verdict = workable(candidate, seat, { items, capabilities });
 		if (verdict.workable) return { item: candidate, skipped };
-		skipped.push({ id: candidate.id, reason: verdict.reason });
+		// `pool: true` tags a POOL skip so the claim reply can tell "addressed to you but not workable" apart from
+		// "in the pool and not workable for you". It is added ONLY for pool rows: the `{id, reason}` shape every
+		// existing demo asserts stays byte-identical.
+		skipped.push({ id: candidate.id, reason: verdict.reason, ...(openPoolRow(candidate) ? { pool: true } : {}) });
 	}
 	return { item: null, skipped };
 }
@@ -1029,7 +1051,7 @@ const Router = defineExtension({
 		defineTool({
 			name: "claim_work",
 			description:
-				"Claim a work item addressed to you. With no `itemId`, claims the oldest QUEUED item; pass `itemId` to claim that specific item (must be queued and addressed to you). Returns its subject and body.",
+				"Claim your next work item: with no `itemId`, the first QUEUED row you are ELIGIBLE for - one addressed to you, or an open POOL row (`pool: true`, no owner yet) whose `requires` capability SET you advertise. Pass `itemId` to claim a specific row; a pool row named by id is refused with the reason if you are not eligible. Returns its subject and body.",
 			parameters: obj({ itemId: opt(num()) }),
 			replay: "safe",
 			execute: async (args, api, context) => {
@@ -1044,6 +1066,12 @@ const Router = defineExtension({
 					if (paused && args.itemId !== undefined) {
 						return { kind: "paused", by: control?.pausedBy ?? null, reason: control?.reason ?? null };
 					}
+					// N19 row 4: the roster is read ONCE, above both claim paths. It used to be read only inside the
+					// selection branch; a NAMED claim of a pool row must run the same predicate (P1), and a capability
+					// check inside one branch and not the other is exactly how a gate rule drifts.
+					const seatsDoc = await tx.doc(Seats);
+					const seatEntry = seatsDoc.seats[me] ?? {};
+					const capabilities = seatEntry.capabilities ?? [];
 					// Claim by id (lead #214 / #239): a seat names a specific item, so
 					// operator-priority work can be picked up even when older queued work
 					// sits ahead of it. The status whitelist is IDENTICAL to the oldest
@@ -1054,12 +1082,34 @@ const Router = defineExtension({
 					// and silently claiming another would be a lie.
 					if (args.itemId !== undefined) {
 						const named = queue.items.find(
-							(it) => it.id === args.itemId && it.to === me && it.status === "queued",
+							(it) =>
+								it.id === args.itemId &&
+								it.status === "queued" &&
+								(it.to === me || openPoolRow(it)),
 						);
 						if (!named) return null;
+						// A NAMED POOL CLAIM IS GATED, NOT ASSUMED (P1). The by-id path historically skipped `workable()`
+						// because an addressed row is a promise the author already made to this seat; a pool row carries
+						// no author-to-seat promise, so its capability SET and gates are the only thing deciding whether
+						// this seat may take it. That is the point of the pool: a seat that lacks `landing` must not get
+						// a `requires:landing` row and discover it at the end of the work.
+						if (openPoolRow(named)) {
+							const verdict = workable(named, me, { items: queue.items, capabilities });
+							if (!verdict.workable) {
+								return { kind: "refused", id: named.id, reason: verdict.reason, from: named.from, pool: true };
+							}
+						}
+						const at = new Date().toISOString();
+						if (named.pool === true) {
+							// P5: ownership is RECORDED, not routed. `to` becomes the owner-of-record; `from` stays the
+							// author so the DONE notice still returns to whoever asked for the work. `pool` stays true:
+							// it is provenance, and the census needs it after the row is claimed.
+							if (openPoolRow(named)) named.to = me;
+							named.transitions.push({ at, event: "pool-claimed", by: me });
+						}
 						named.status = "claimed";
 						named.transitions.push({
-							at: new Date().toISOString(),
+							at,
 							event: "claimed",
 							by: me,
 						});
@@ -1078,9 +1128,6 @@ const Router = defineExtension({
 					let queued;
 					let order = null;
 					if (!paused) {
-						const seatsDoc = await tx.doc(Seats);
-						const seatEntry = seatsDoc.seats[me] ?? {};
-						const capabilities = seatEntry.capabilities ?? [];
 						// WHICH ORDER is a POLICY, resolved where the roster already lives: the seat's own override
 						// beats the team's, which beats `oldest_first`. An unknown name THROWS here (with the valid
 						// set in the message) instead of quietly claiming oldest-first — a strategy that silently did
@@ -1091,7 +1138,6 @@ const Router = defineExtension({
 							teamStrategy: seatsDoc.workStrategy,
 							defaultStrategy: DEFAULT_STRATEGY,
 						});
-						const control = await tx.doc(RigControl);
 						const picked = selectNextWork(queue.items, me, {
 							capabilities,
 							strategy: resolved.strategy,
@@ -1102,9 +1148,17 @@ const Router = defineExtension({
 						order = resolved;
 					}
 					if (queued) {
+						const at = new Date().toISOString();
+						if (queued.pool === true) {
+							// P5, identical to the named path above: owner-of-record on the row, author unchanged, and a
+							// `pool-claimed` transition so the pair (seat, row) lives in the row's own history rather than
+							// in a side document (P7).
+							if (openPoolRow(queued)) queued.to = me;
+							queued.transitions.push({ at, event: "pool-claimed", by: me });
+						}
 						queued.status = "claimed";
 						queued.transitions.push({
-							at: new Date().toISOString(),
+							at,
 							event: "claimed",
 							by: me,
 						});
@@ -1164,6 +1218,16 @@ const Router = defineExtension({
 							"`unpause`. Work you ALREADY hold still completes: use complete_work / defer_work.",
 					);
 				}
+				// N19 row 4: a NAMED pool claim that fails the predicate is a REFUSAL THAT NAMES THE REASON, never a
+				// silent null. The reason is the SAME string the selection path reports (`requires:<caps>`,
+				// `gate-open:#<id>(<status>)`, `gate-cancelled:#<id>`), so the seat learns what to fix instead of
+				// re-trying the same id every pass.
+				if (found?.kind === "refused") {
+					return toolText(
+						`CLAIM_REFUSED: #${found.id} is in the POOL but you cannot claim it (${found.reason}). ` +
+							`It was sent by ${found.from}. Close the prerequisite, or ask pm to address it to a seat that can.`,
+					);
+				}
 					// #4732: THIS BLOCK MUST PRECEDE `if (!found)`. `{ kind: "none", mine }` is TRUTHY, so `!found` is
 					// FALSE and the HEADER rendering below (`ITEM #${found.id} | …`) would run against it — producing
 					// `ITEM #undefined | from=undefined | subject=undefined`, the string two passes attributed to a
@@ -1199,9 +1263,19 @@ const Router = defineExtension({
 				// logged — an item starved behind an unclosed gate is otherwise indistinguishable
 				// from an empty queue, which is how these rows escalated to the operator.
 				const skipped = found.skipped ?? [];
-				const skippedLine = skipped.length
-					? `\n\nSKIPPED (addressed to you, not workable yet): ${skipped.map((s) => `#${s.id} (${s.reason})`).join(", ")}`
-					: "";
+				// N19 row 4: the pool made the skip list wider than "addressed to you", so the two kinds are labelled
+				// separately. An addressed-only claim renders byte-identically to before (the wake log and demos assert
+				// that string); pool skips are a separate line rather than a reworded old one.
+				const addressedSkips = skipped.filter((s) => !s.pool);
+				const poolSkips = skipped.filter((s) => s.pool);
+				const skipParts = [];
+				if (addressedSkips.length) {
+					skipParts.push(`SKIPPED (addressed to you, not workable yet): ${addressedSkips.map((s) => `#${s.id} (${s.reason})`).join(", ")}`);
+				}
+				if (poolSkips.length) {
+					skipParts.push(`POOL ROWS NOT WORKABLE FOR YOU: ${poolSkips.map((s) => `#${s.id} (${s.reason})`).join(", ")}`);
+				}
+				const skippedLine = skipParts.length ? `\n\n${skipParts.join("\n\n")}` : "";
 				// A NON-DEFAULT order is announced, and only then: `WAKE_CONTENT` tells the seat to take "the oldest
 				// item addressed to you" (fixed string, ROADMAP 33 / #4557), so a seat handed a LATER row must be
 				// told why or it will read the claim as the harness ignoring its instructions. The default path
@@ -1793,7 +1867,10 @@ const Router = defineExtension({
 				const [lines, header] = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
 					const filtered = queue.items.filter((it) =>
-						!isTerminalItem(it) && (args.all || it.to === me || it.from === me),
+						// N19 row 4: an OPEN pool row is visible to every seat - a seat cannot claim what it cannot see.
+						// Visibility is deliberately WIDER than eligibility (which is `workable()`), so a seat sees that
+						// the pool exists instead of reading an empty queue.
+						!isTerminalItem(it) && (args.all || it.to === me || it.from === me || openPoolRow(it)),
 					);
 					const counts = {};
 					for (const it of filtered) counts[it.status] = (counts[it.status] || 0) + 1;
