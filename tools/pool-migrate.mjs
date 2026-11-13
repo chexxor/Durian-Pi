@@ -46,11 +46,32 @@ import { fileURLToPath } from "node:url";
 
 import { brokerAlive, readBrokerState } from "../src/broker.mjs";
 import { tierTokenTable } from "../src/config.mjs";
-import { deadGateIds, POOL_SIZE_GATE_FRACTION, requiredCapabilities } from "../src/rig.mjs";
+import { deadGateIds, POOL_SIZE_GATE_FRACTION, requiredCapabilities, Seats } from "../src/rig.mjs";
 import { poolCensus, readQueueItems, readSeatsDocument } from "../src/readapi.mjs";
 import { readData } from "../src/readclient.mjs";
 
 export const VERDICTS = ["already-pooled", "notice", "blocked", "unaddressed", "untiered-or-oversized", "single-owner", "migratable"];
+
+/**
+ * THE SHAPE TRAP, found on contact 2026-11-13 (measured: verdicts read 268 single-owner / 167
+ * migratable with no broker resident, then 438 single-owner / 0 migratable through a resident broker —
+ * the same store, the same rows, the only difference was which read served it).
+ *
+ * A resident broker serves the `seats` VIEW as `readSeatList` — an ARRAY of seat rows, no tier table.
+ * The no-broker fallback is `readSeatsDocument` — `{found, value}` with the roster as an OBJECT keyed
+ * by name. Reading one as the other silently empties the roster: `capsOf` then returns `[]` for every
+ * seat, `others.length === 0` for every row, and the tool reports the whole backlog as single-owner
+ * while printing a perfectly balanced arithmetic. A silently empty roster is worse than an error, so
+ * BOTH shapes are normalized here, and the source is printed.
+ */
+export function rosterOf(doc) {
+	if (Array.isArray(doc)) {
+		const named = doc.filter((s) => s && s.name);
+		return { seats: Object.fromEntries(named.map((s) => [s.name, s])), tierTokens: null, source: "seats view (list)" };
+	}
+	const value = doc && doc.found ? doc.value : doc;
+	return { seats: value?.seats ?? {}, tierTokens: value?.tierTokens ?? null, source: "seats document" };
+}
 
 /** The artifact classes the rig's `ownership` block can name, matched from a path in the row's own text.
  *  This is a PROPOSAL, not a rig rule: there is no check rule for it yet, and the tool prints that in
@@ -218,16 +239,24 @@ async function main() {
 	let items, seatsDoc, rigSpec;
 	try {
 		items = await readData(args.db, "queue", {}, (storage) => readQueueItems(storage));
-		seatsDoc = await readData(args.db, "seats", {}, (storage) => readSeatsDocument(storage));
+		// The DOCUMENT view, not the `seats` list view: this tool needs `tierTokens` and each seat's
+		// `usableWindow`, and the list view carries neither. `readSeatsDocument` remains the fallback for
+		// the no-broker path (src/readclient.mjs chooses).
+		seatsDoc = await readData(
+			args.db,
+			"document",
+			{ kind: Seats.definition.kind, scope: { kind: "session" } },
+			(storage) => readSeatsDocument(storage),
+		);
 	} catch (err) {
 		console.error(`pool-migrate: cannot read ${args.db}: ${err.message}`);
 		console.error("If the broker is wedged, copy the store and run against the copy: cp selfdev.sqlite /tmp/pool-audit.sqlite");
 		return 1;
 	}
 
-	const roster = seatsDoc?.found ? seatsDoc.value : seatsDoc; // readSeatsDocument wraps the doc in {found, value}
-	const seats = roster?.seats ?? {};
-	const tierTokens = roster?.tierTokens ?? tierTokenTable();
+	const roster = rosterOf(seatsDoc);
+	const seats = roster.seats;
+	const tierTokens = roster.tierTokens ?? tierTokenTable();
 	let ownership = null;
 	const rigPath = resolve(args.rig);
 	if (existsSync(rigPath)) {
@@ -252,6 +281,7 @@ async function main() {
 	console.log(`host: ${hostLine()}`);
 	console.log(`tier table in force: ${JSON.stringify(tierTokens)}   gate: ${Math.round(POOL_SIZE_GATE_FRACTION * 100)}% of the usable window`);
 	console.log("");
+	console.log(`roster: ${Object.keys(seats).length} seats, from ${roster.source}${roster.tierTokens ? " (tier table from the roster)" : " (tier table: the shipped default — the serving view carried no tier table)"}`);
 	console.log(`rows read: ${proposal.totalRows}   queued: ${proposal.queued}   pool census (same read): ${census.rows} pooled, ${census.open} open, ${census.claimed} claimed, ${census.sizeRefused} size-refused, seats without a declared window: ${census.seatsWithoutWindow.length}`);
 	console.log("");
 	console.log(`verdicts over the ${proposal.queued} queued rows (first match wins, so each row is in exactly one class):`);

@@ -21,7 +21,7 @@ import { createRegistry, Harness, configure } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 
 import { enqueueItem, registerSeat, RigQueue, Router, Seats } from "../src/rig.mjs";
-import { poolProposal, VERDICTS } from "../tools/pool-migrate.mjs";
+import { poolProposal, rosterOf, VERDICTS } from "../tools/pool-migrate.mjs";
 
 const ctx = BACKGROUND_CONTEXT;
 const dir = mkdtempSync(join(process.env.TMPDIR || "/tmp", "pool-migrate-"));
@@ -158,6 +158,21 @@ check("the ownership gap is named, per row, with the non-owning claimant", propo
 check("the gap list is scoped to rows actually proposed for pooling: a blocked row with the same shape is not counted", proposal.rows.find((r) => r.id === 11)?.verdict === "blocked" && proposal.rows.find((r) => r.id === 11)?.ownershipGap?.join(",") === "devtools", JSON.stringify(proposal.rows.find((r) => r.id === 11)));
 check("no seat is reported as window-less when every seat declares one", proposal.seatsWithoutWindow.length === 0 && proposal.largestWindow === 20000, JSON.stringify({ seatsWithoutWindow: proposal.seatsWithoutWindow, largestWindow: proposal.largestWindow }));
 check("the gate is DISARMED when no seat declares a window, and says so", poolProposal({ items: [{ id: 1, status: "queued", to: "impl", subject: "project sized row", tier: "project", transitions: [] }], seats: { impl: { capabilities: ["implement", "code"] }, qa: { capabilities: ["implement", "code"] } }, tierTokens: { project: 120000 } }).rows[0].reason.includes("no seat declares a usable window"));
+
+// THE SHAPE TRAP, pinned. Measured 2026-11-13 on the live store: the SAME 846 queued rows classified as
+// 268 single-owner / 167 migratable when no broker was resident (document read) and as 438 single-owner /
+// 0 migratable through a resident broker (the `seats` VIEW, a LIST). One shape, read as the other, empties
+// the roster and the tool still prints balanced arithmetic. Both shapes must classify identically.
+const listShape = [
+  { name: "impl", role: "implement", capabilities: ["implement", "code"], usableWindow: 20000 },
+  { name: "devtools", role: "tooling", capabilities: ["implement", "code"], usableWindow: 10000 },
+];
+const oneRow = [{ id: 1, status: "queued", from: "pm", to: "impl", subject: "patch src/tools/harness.mjs", tier: "small", transitions: [] }];
+check("the trap is real: the LIST view unwrapped the old way has NO roster, so every row reads as single-owner", Object.keys((listShape?.found ? listShape.value : listShape)?.seats ?? {}).length === 0 && poolProposal({ items: oneRow, seats: Object.keys((listShape?.found ? listShape.value : listShape)?.seats ?? {}), tierTokens: { small: 6100 } }).rows[0].verdict === "single-owner", JSON.stringify(poolProposal({ items: oneRow, seats: {}, tierTokens: { small: 6100 } }).rows[0]));
+const fromList = poolProposal({ items: oneRow, seats: rosterOf(listShape).seats, tierTokens: { small: 6100 } });
+const fromDoc = poolProposal({ items: oneRow, seats: rosterOf({ found: true, value: { seats: Object.fromEntries(listShape.map((s) => [s.name, s])), tierTokens: { small: 6100 } } }).seats, tierTokens: { small: 6100 } });
+check("rosterOf makes the broker LIST view classify identically to the DOCUMENT view", rosterOf(listShape).seats.impl?.usableWindow === 20000 && fromList.rows[0].verdict === "migratable" && fromList.rows[0].claimants?.join(",") === "devtools" && fromList.rows[0].verdict === fromDoc.rows[0].verdict && fromList.largestWindow === fromDoc.largestWindow, JSON.stringify({ list: fromList.rows[0], doc: fromDoc.rows[0], largestWindow: fromList.largestWindow }));
+check("rosterOf reads the {found, value} document shape, including its tier table, and an absent doc reads as an empty roster", (() => { const doc = rosterOf({ found: true, value: { seats: { impl: { capabilities: ["code"] } }, tierTokens: { small: 6100 } } }); const absent = rosterOf({ found: false, value: null }); return doc.seats.impl?.capabilities?.join(",") === "code" && doc.tierTokens?.small === 6100 && Object.keys(absent.seats).length === 0; })());
 
 console.log(failures === 0 ? "\nPOOL-MIGRATE TOOL PASS (all classes occur, the arithmetic balances, nothing was written)" : `\nPOOL-MIGRATE TOOL FAIL — ${failures} check(s)`);
 rmSync(dir, { recursive: true, force: true });
