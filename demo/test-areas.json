@@ -355,6 +355,7 @@
       "demo/pi-symbol-migration.test.mjs",
       "demo/probe-metered-ledger.test.mjs",
       "demo/probe-shim-import-form.test.mjs",
+      "tools/pool-migrate-test.mjs",
       "demo/second-local-provider.test.mjs",
       "demo/spend-cap-guard.test.mjs",
       "demo/store-behaviour-gate.test.mjs",
