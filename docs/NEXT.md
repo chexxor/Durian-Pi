@@ -20,7 +20,13 @@ in order:
 | `02105352` | demo prints the refusal + reads the LIVE roster; broker windows; live decline line |
 | `c4b0ea7e` | `tools/pool-gate-live-probe.mjs` + test (refusal from a byte-copy of the live store) |
 | `d37bd216` | the gate-proof demo's header: 117891 → 115023 |
-| `5363e377` … `35ff79f2` | audit corrections: sha table, lifecycle field table, live #7700, broker record, rate window, blocker 1 |
+| `5363e377` | pointer sha table names every object, no "this commit" |
+| `7008d11d` | pointer re-cut to fit the clockin digest budget (115 lines) |
+| `ac6b7a8a` | lifecycle field table gives `requires` its own row; live census |
+| `4f9e87d9` | the LIVE scheduler refuses #7700 by name for every seat |
+| `8abc961e` | flake recorded (restart-limit under --jobs 4) |
+| `35ff79f2` | broker windows 4-5, blocker (1) TRIGGERED, rate window closed at 22:13Z |
+| `446c4084` | the gate FIRED live: #7700 refused by architect and pm; spec/D275 corrected |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the number reconciliation; the live evidence)
 and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
@@ -79,7 +85,7 @@ node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.
 node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5       # 1.7-10 s — read-only denominator, balance line
 node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite                   # 7-19 s — the gate refusing the LIVE roster's seats
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
-node scripts/test.mjs --all --jobs 4                                        # 141-154 s — 337/337 at 8abc961e
+node scripts/test.mjs --all --jobs 4                                        # 145 s — 337/337 at 446c4084
 ```
 
 **Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would

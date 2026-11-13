@@ -622,19 +622,23 @@ exactly one `tier: "project"` row.
 - Census at that moment: `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[]}`
   (four rows and two open by 21:3xZ, with #7700 added and #7667/#7669 closed `done`).
 
-**The gate now BITES, against this rig's LIVE roster (2026-11-13, `demo/pool-gate-live-roster.test.mjs`, 0.5 s, exit
-0).** The demo READS the twelve seats and the tier table from `./selfdev.sqlite` through the broker seam (it prints
+**THE GATE HAS FIRED ON THE LIVE RIG.** On `2026-11-13`, row **#7700** (`tier: "project"`, minted by `pm` at
+`21:20:16.789Z`) was refused for **two real seats** — `size-refused by=architect` at `22:04:21.104Z` and
+`size-refused by=pm` at `22:44:08.942Z`, both
+`too-big:project(120000 tokens > 70% of the 164320-token usable window)` — and the census reads `sizeRefused: 1`. The
+full reply is quoted further down, from architect's own tool result. That is the milestone's falsification criterion
+met on the live store, not on a model of it.
+
+**Why it took a minted `project` row, stated once:** only the `project` tier (120000) exceeds 70 % of ANY window here
+(115023 for the eleven 164320-token seats, 8601 for the auditor), so no ordinary backlog row CAN be refused; the wake
+selector pre-filters through `workable()`, so an oversized pool row is skipped rather than attempted; and `size-refused`
+is written only on a NAMED claim (D275 addendum (c)). So the gate is observable exactly one way — a seat names a
+`project` row — and that is what happened, twice.
+
+**Two corroborating artifacts, both of which read the LIVE roster.** `demo/pool-gate-live-roster.test.mjs` (0.5 s)
+READS the twelve seats and the tier table from `./selfdev.sqlite` through the broker seam (it prints
 `roster source: LIVE (12 seats read from ./selfdev.sqlite via the broker seam)`) and falls back to a recorded copy only
-when that store is absent, so a roster change cannot leave it asserting yesterday's windows.
-It could not be observed on the live store, and the reasons are structural rather than accidental: (a) only the
-`project` tier (120000) exceeds 70 % of ANY window here — 115023 for the eleven 164320-token seats, 8601 for the
-auditor — so no ordinary backlog row can ever be refused; (b) the wake selector pre-filters through `workable()`,
-so an oversized pool row is SKIPPED rather than attempted, and `size-refused` is written only on a NAMED claim
-(D275 addendum (c)). The delegate asked `pm` and `lead` five times to mint the one `project` row that would make it
-observable and neither did (they were landing; pm minted nine other rows), and a delegate may not pool a row. So the
-gate is proven against the **real roster** — the twelve seats' names, capability sets and declared windows, and the
-tier table `up` wrote, read from `./selfdev.sqlite` via the broker seam — driven through the **shipped** verbs on a
-fixture store:
+when that store is absent, driving the shipped verbs on a fixture store:
 
 | seat | row | verbatim refusal |
 |---|---|---|
