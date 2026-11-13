@@ -98,7 +98,8 @@
       "demo/queue-control-spool.test.mjs",
       "demo/priority-directive-scope.test.mjs",
       "demo/overtaken.test.mjs",
-      "demo/human-defer-lease.test.mjs"
+      "demo/human-defer-lease.test.mjs",
+      "demo/pool-send-gate.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",

@@ -78,8 +78,25 @@ export const RigControl = defineDoc({
  * Gate for send_work: organizational edges (who may send to whom) and
  * capability requirements (A2A-style advertised tags). Throws with a
  * model-readable reason so the sending seat can self-correct.
+ *
+ * N19 row 2 — TWO shapes of send now reach this gate:
+ *  - A NAMED send (`to` is a seat): unchanged, plus `requires` is tested as a SET (P2) - the seat must
+ *    advertise EVERY named capability. The single-capability message keeps its exact wording so the six
+ *    demos and the wake log that assert it are untouched.
+ *  - A POOL send (`to === null`, `pool: true`): there is no target seat yet, so there is no edge to check
+ *    and no capability to compare against. The requirement travels WITH the row and is enforced at claim
+ *    time by `workable()` - refusing it here would refuse a row for a seat that has not been chosen.
+ *    What IS still checked is the author: a pool row must have a real seat as its `from`, because P5 makes
+ *    `from` the party the DONE notice returns to.
  */
 export async function assertSendAllowed(tx, from, to, requires) {
+	const needed = requiredCapabilities(requires);
+	if (to === null) {
+		// `seatId` throws `unknown seat: <name>` - the same failure shape a named send produces for a
+		// mistyped recipient, so a mistyped author is not silently accepted into the pool.
+		await seatId(tx, from);
+		return null;
+	}
 	const targetId = await seatId(tx, to);
 	const edges = await tx.doc(Edges);
 	if (edges.edges.length > 0) {
@@ -92,12 +109,17 @@ export async function assertSendAllowed(tx, from, to, requires) {
 			);
 		}
 	}
-	if (requires) {
+	if (needed.length > 0) {
 		const seats = await tx.doc(Seats);
 		const caps = seats.seats[to]?.capabilities ?? [];
-		if (!caps.includes(requires)) {
+		const missing = needed.filter((cap) => !caps.includes(cap));
+		if (missing.length > 0) {
+			// ONE missing capability reads exactly as it always did; several name them all, so the seat
+			// knows what to route around rather than retrying the same send with one capability fixed.
 			throw new Error(
-				`seat ${to} lacks required capability "${requires}" (has: ${caps.join(", ") || "none"})`,
+				missing.length === 1
+					? `seat ${to} lacks required capability "${missing[0]}" (has: ${caps.join(", ") || "none"})`
+					: `seat ${to} lacks required capabilities ${missing.map((c) => `"${c}"`).join(", ")} (has: ${caps.join(", ") || "none"})`,
 			);
 		}
 	}
