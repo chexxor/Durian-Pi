@@ -29,6 +29,8 @@ in order:
 | `446c4084` | the gate FIRED live: #7700 refused by architect and pm; spec/D275 corrected |
 | `06de1bba` | deleted the sentences that still DENIED the live firing (spec §13.4, D275 (m)) |
 | `18c7a3b8` | pool census re-read (5 pooled / 3 open; #7722 minted organically) |
+| `3fb50030` | pause/unpause evidence + refresh timing; pointer arithmetic (104 = 85+19) and shas |
+| `HEAD` | the commit carrying this pointer (`git rev-parse --short HEAD`) — the table cannot name itself |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the number reconciliation; the live evidence)
 and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
