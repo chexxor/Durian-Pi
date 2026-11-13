@@ -17,6 +17,7 @@
 // (#6112), and the drift here is invisible: the seat wakes, `claim_work` refuses, and the log says
 // nothing about why.
 import { workable, openPoolRow } from "./rig.mjs";
+import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { escalations, escalationSignature } from "./deferlease.mjs";
 
 /**
@@ -107,6 +108,10 @@ export function selectWakes({
   busySeats = new Set(),
   stoppedConvIds = new Set(),
   paused = false,
+  // N19 row 5: the size gate reads the same tier table the claim path reads, so a seat is never WOKEN for a
+  // row it will be refused for. The table rides in the roster (written by `up`); without it the shipped
+  // defaults stand and no seat is gated on a guess.
+  tierTokens = DEFAULT_TIER_TOKENS,
   // #4171: THE SUPPRESSION TRACE. Nothing recorded WHY a candidate seat was skipped, so a ten-hour
   // outage and a two-second wait looked identical in the log. `onSkip` is called once per skipped
   // candidate per pass with the REASON, and for `pending` the AGE of the submission that caused it —
@@ -157,7 +162,15 @@ export function selectWakes({
     // otherwise put hundreds of reason codes in a single SKIP line.
     const queuedVerdicts = (items ?? [])
       .filter((it) => (it.to === name || openPoolRow(it)) && it.status === "queued")
-      .map((it) => ({ verdict: workable(it, name, { items, capabilities: seat.capabilities ?? [] }), pool: openPoolRow(it) }));
+      .map((it) => ({
+        verdict: workable(it, name, {
+          items,
+          capabilities: seat.capabilities ?? [],
+          tierTokens: tierTokens ?? DEFAULT_TIER_TOKENS,
+          usableWindow: seat.usableWindow ?? null,
+        }),
+        pool: openPoolRow(it),
+      }));
     const gatedReasons = queuedVerdicts.filter((v) => !v.verdict.workable && !v.pool).map((v) => v.verdict.reason);
     const poolGatedCount = queuedVerdicts.filter((v) => !v.verdict.workable && v.pool).length;
     const hasQueued = !paused && queuedVerdicts.some((v) => v.verdict.workable);

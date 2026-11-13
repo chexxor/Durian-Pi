@@ -100,7 +100,8 @@
       "demo/overtaken.test.mjs",
       "demo/human-defer-lease.test.mjs",
       "demo/pool-send-gate.test.mjs",
-      "demo/pool-address.test.mjs"
+      "demo/pool-address.test.mjs",
+      "demo/pool-size-gate.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",

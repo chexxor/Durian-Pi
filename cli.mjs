@@ -62,7 +62,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS } from "./src/config.mjs";
 import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs";
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
@@ -92,7 +92,7 @@ import { readDocCountClaims } from "./src/doccounts.mjs";
 import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs";
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
 import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS } from "./src/readclient.mjs";
@@ -658,6 +658,26 @@ async function buildSeatPrompt(models, seat, providerId) {
 // of existing seats, so a fix to the primer, the edges policy, or a
 // per-seat model reaches a database created by an earlier durig version.
 // Edges and the constitution are always re-applied from the spec.
+/**
+ * Record ONE seat's USABLE context window in the roster (N19 row 5, docs/POOL-QUEUE-SPEC.md §6.2).
+ *
+ * Why it lives in the Seats document and not in the config: the claim path runs inside the rig extension, which
+ * has no config object - the roster is the only place it can read (the same reason `workStrategy` is persisted
+ * there, documented above in the work-strategy block). Absence is meaningful: a seat created before N19 carries
+ * no `usableWindow`, and the size gate treats that as "nothing declared" rather than guessing a number.
+ *
+ * `usable` can be NEGATIVE - the measured trap the gate exists to survive: pi-durable's default reserve (16,384)
+ * plus keepRecent (20,000) exceed a 24,576 verifier-class window. The gate reports that instead of dividing.
+ */
+function recordSeatSizeBudget(seatEntry, seatModel, cfg) {
+  if (!seatEntry) return;
+  const budget = usableContextBudget(cfg, `${seatModel?.provider}/${seatModel?.modelId}`);
+  seatEntry.contextWindow = budget.window;
+  seatEntry.usableWindow = budget.usable;
+  seatEntry.compactionReserve = budget.reserveTokens;
+  seatEntry.compactionKeepRecent = budget.keepRecentTokens;
+}
+
 async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false } = {}) {
   // #1589: `up` opens a full harness — a second OWNER — and `--refresh` writes
   // (re-applies prompts/models, resets conversations). While a resident broker
@@ -826,6 +846,11 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
       // declaration of how these seats claim, and a `up` that silently kept an old order would be the same
       // class of invisible no-op. A per-seat override below is applied only where the spec declares one.
       if (seatsDoc.workStrategy !== teamWorkStrategy) seatsDoc.workStrategy = teamWorkStrategy;
+      // N19 row 5 (docs/POOL-QUEUE-SPEC.md §6.2): the tier -> token TABLE IN FORCE is written into the roster on
+      // every `up`, for the same reason `workStrategy` is: the rig file is not present at claim time, so the
+      // claim path can only read what the roster carries. Re-written every `up` so a change to
+      // DURIG_TIER_TOKENS takes effect on the next `up` instead of lingering as an invisible old number.
+      seatsDoc.tierTokens = tierTokenTable(CFG);
       for (const seat of spec.seats) {
         // Prompts were resolved once above (detection pass) and are REUSED here —
         // a second buildSeatPrompt would run the optimizer twice (DURIG_OPTIMIZE=on).
@@ -862,6 +887,7 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
             if (seat.workStrategy === null) delete seatsDoc.seats[seat.name].workStrategy;
             else seatsDoc.seats[seat.name].workStrategy = seat.workStrategy;
           }
+          recordSeatSizeBudget(seatsDoc.seats[seat.name], prompt.seatModel, CFG);
           refreshed.push(seat.name);
           continue;
         }
@@ -890,6 +916,7 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
         if (seat.workStrategy) {
           seatsDoc.seats[seat.name].workStrategy = seat.workStrategy;
         }
+        recordSeatSizeBudget(seatsDoc.seats[seat.name], prompt.seatModel, CFG);
         created.push(seat.name);
       }
       if (spec.edges) {
@@ -1288,7 +1315,7 @@ function refuseQueueArgument(why) {
 // WHAT IT SAYS, and only what is provable: the lease's EFFECTIVE level (from `effectivePriority`, the same
 // function the selector uses, so the two views cannot disagree), who set it and why, whether it has lapsed,
 // and — the part a JSON field cannot say — whether the recipient's resolved claim order honours it.
-function humanQueueReadout(items, census, strategy, limit) {
+function humanQueueReadout(items, census, strategy, limit, pool = null) {
   const now = Date.now();
   const leased = items.filter((it) => it.priority);
   const effOf = (it) => effectivePriority(it, now);
@@ -1300,6 +1327,25 @@ function humanQueueReadout(items, census, strategy, limit) {
   const lines = [];
   lines.push(`queue — human lease view  db=${DB_PATH}  read at ${new Date(now).toISOString()}`);
   lines.push(`rows ${census.rows} | ${Object.entries(census.counts).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
+  // N19 rows 5 + 7: the POOL is reported APART from the status counts. A pooled row is `queued`, so counting it
+  // under `queued` makes a rig look busy while every seat is idle - the exact failure the pool exists to remove.
+  if (pool && pool.rows > 0) {
+    lines.push(
+      `pool: ${pool.open} open, ${pool.ownerOfRecord} claimed, ${pool.sizeRefused} size-refused ` +
+        `(gate: a row is refused when its tier estimate exceeds ${Math.round(pool.fraction * 100)}% of the seat's usable window)`,
+    );
+    for (const t of pool.tooBig) {
+      const who = t.tooBigFor.join(", ");
+      const note = t.unclaimableByAnyone ? " - no seat with a declared window can hold it; split it" : "";
+      lines.push(`  pool: too-big-for-${who} -> #${t.id} tier ${t.tier} ~${t.estimate} tokens${note}`);
+    }
+    if (pool.seatsWithoutWindow.length) {
+      lines.push(
+        `  pool: ${pool.seatsWithoutWindow.join(", ")} declared no usable window; those seats are not size-gated ` +
+          "(nothing was measured), not silently excluded",
+      );
+    }
+  }
   const liveOnTerminal = live.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length;
   lines.push(
     `leases: ${leased.length} row(s) carry one — ${live.length} live, ${lapsed.length} lapsed, ${invalid.length} invalid; ` +
@@ -1389,8 +1435,19 @@ async function cmdQueue(args = []) {
       { kind: Seats.definition.kind, scope: { kind: "session" } },
       (storage) => readSeatsDocument(storage),
     );
+    const seatsValue = seatsDoc?.found ? seatsDoc.value : {};
     process.stdout.write(
-      humanQueueReadout(scoped, census, workStrategyView(seatsDoc?.found ? seatsDoc.value : {}), limit),
+      humanQueueReadout(
+        scoped,
+        census,
+        workStrategyView(seatsValue),
+        limit,
+        poolCensus(
+          all,
+          Object.entries(seatsValue.seats ?? {}).map(([name, s]) => ({ name, usableWindow: s.usableWindow })),
+          seatsValue.tierTokens ?? DEFAULT_TIER_TOKENS,
+        ),
+      ),
     );
     // A typo'd id costs the same here as in the JSON form: exit 1, named on stderr, never an empty success.
     if (missing.length) {

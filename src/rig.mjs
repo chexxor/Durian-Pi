@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
+import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { validateHumanDefer } from "./deferlease.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
@@ -417,6 +418,113 @@ export function openPoolRow(item) {
 }
 
 /**
+ * THE POOL SIZE GATE (N19 "The Pool", row 5, P6a) - docs/POOL-QUEUE-SPEC.md §6.2-§6.3.
+ *
+ * THE RULE IN ONE SENTENCE: a seat may not start work whose tier estimate is bigger than 70 % of the context
+ * it will actually have when it starts.
+ *
+ * WHY 0.7 AND NOT 1.0: §6.3 fixes it, and P6b (the seat's own estimate at turn start) uses the same 70 % of
+ * the working budget, so the claim gate and the turn rule cannot disagree about what "too big" means.
+ *
+ * THREE OUTCOMES, and only one of them is a refusal:
+ *   gated      - estimate > fraction * usableWindow -> refuse, and the refusal carries the split instruction.
+ *   no window  - the seat declared no context window at all. ABSENCE OF A DECLARATION IS NOT A MEASUREMENT, so
+ *                the row is NOT refused (the #2673 conservative default: a false negative starves real work);
+ *                the warning says so out loud instead of guessing a number.
+ *   usable <= 0 - the measured trap this exists to survive: pi-durable's defaults (reserve 16,384 + keepRecent
+ *                20,000) exceed a 24,576 verifier-class window, so `usable` is NEGATIVE. Refusing every tiered
+ *                row on such a seat would starve the rig, so we report "no usable budget declared" and never
+ *                divide - there is nothing to divide by.
+ *
+ * No division happens anywhere in this function: the limit is `fraction * usableWindow`, which is why a
+ * negative or zero window can never produce a nonsense threshold.
+ */
+export const POOL_SIZE_GATE_FRACTION = 0.7;
+
+/**
+ * @param {object} item a queue row (its `tier` may be absent - an untiered row is not size-gated)
+ * @param {{tierTokens?: Record<string, number>, usableWindow?: number|null, fraction?: number}} opts
+ * @returns {{gated: boolean, reason: string|null, warning: string|null, estimate: number|null, usable: number|null, limit: number|null}}
+ */
+export function sizeVerdict(item, { tierTokens = DEFAULT_TIER_TOKENS, usableWindow = null, fraction = POOL_SIZE_GATE_FRACTION } = {}) {
+	const tier = item?.tier;
+	if (tier === undefined || tier === null || String(tier).trim() === "") {
+		return { gated: false, reason: null, warning: null, estimate: null, usable: usableWindow ?? null, limit: null };
+	}
+	const estimate = tierTokens?.[tier];
+	if (!Number.isFinite(estimate) || estimate <= 0) {
+		// A tier with no number in the table is UNMODELABLE, not infinitely big: conservative default, warn.
+		return {
+			gated: false,
+			reason: null,
+			warning: `no token estimate for tier "${tier}" in DURIG_TIER_TOKENS`,
+			estimate: null,
+			usable: usableWindow ?? null,
+			limit: null,
+		};
+	}
+	if (usableWindow === null || usableWindow === undefined) {
+		return {
+			gated: false,
+			reason: null,
+			warning: "no usable window declared for this seat",
+			estimate,
+			usable: null,
+			limit: null,
+		};
+	}
+	if (usableWindow <= 0) {
+		return {
+			gated: false,
+			reason: null,
+			warning: `no usable budget declared (usable ${usableWindow} tokens; the compaction settings leave nothing to work in)`,
+			estimate,
+			usable: usableWindow,
+			limit: null,
+		};
+	}
+	const limit = Math.floor(fraction * usableWindow);
+	if (estimate > limit) {
+		return {
+			gated: true,
+			reason: `too-big:${tier}(${estimate} tokens > ${Math.round(fraction * 100)}% of the ${usableWindow}-token usable window)`,
+			warning: null,
+			estimate,
+			usable: usableWindow,
+			limit,
+		};
+	}
+	return { gated: false, reason: null, warning: null, estimate, usable: usableWindow, limit };
+}
+
+/**
+ * What the claim path needs from the roster to run the size gate: the tier table in force (written by `up`
+ * from the loaded config) and this seat's usable window (also written by `up`). Both fall back to the shipped
+ * defaults / "no window declared", so a seat created before N19 is gated by NOTHING rather than by a guess.
+ */
+/**
+ * THE SPLIT INSTRUCTION a too-big refusal carries (N19 row 5, §6.3). Single-owned because the refusal appears
+ * in the claim reply, and a seat that is refused without being told what to DO next simply retries.
+ *
+ * It names the two verbs that close the loop (row 6 implements `closedAs: "split"`), and it never lowers the
+ * parent's tier (P9): the parent is closed, the children carry their own tiers.
+ */
+export function splitInstruction(item) {
+	return (
+		`Split it: send_work the pieces (each with its own tier and requires), then close #${item.id} with ` +
+		`complete_work(itemId: ${item.id}, closedAs: "split", children: [...]) - a row nobody can finish is a ` +
+		`sizing problem, not a queue problem.`
+	);
+}
+
+export function seatSizeBudget(seatsDoc, seatEntry) {
+	return {
+		tierTokens: seatsDoc?.tierTokens ?? DEFAULT_TIER_TOKENS,
+		usableWindow: seatEntry?.usableWindow ?? null,
+	};
+}
+
+/**
  * MAY THIS SEAT CLAIM THIS ROW? Status, capability SET and gate - and nothing else (P1).
  *
  * N19 row 1: the capability check is now a SET test. The reason string for a SINGLE missing capability is
@@ -424,7 +532,7 @@ export function openPoolRow(item) {
  * a two-capability row names every missing one (`requires:landing,verify`) so the seat can see what it is
  * short of rather than guessing.
  */
-export function workable(item, seat, { items = [], capabilities = [] } = {}) {
+export function workable(item, seat, { items = [], capabilities = [], tierTokens = DEFAULT_TIER_TOKENS, usableWindow = null } = {}) {
 	if (!item) return { workable: false, reason: "missing-item" };
 	if (item.status !== "queued") return { workable: false, reason: `not-queued:${item.status}` };
 	const missing = requiredCapabilities(item.requires).filter((cap) => !capabilities.includes(cap));
@@ -439,7 +547,11 @@ export function workable(item, seat, { items = [], capabilities = [] } = {}) {
 		if (target.status === "cancelled") return { workable: false, reason: `gate-cancelled:#${id}` };
 		return { workable: false, reason: `gate-open:#${id}(${target.status})` };
 	}
-	return { workable: true, reason: null };
+	// N19 row 5 (P6a): the SIZE gate rides on the SAME predicate as the capability and gate checks, so the
+	// selector, the wake and the verb cannot disagree about what "too big for this seat" means.
+	const size = sizeVerdict(item, { tierTokens, usableWindow });
+	if (size.gated) return { workable: false, reason: size.reason, size };
+	return { workable: true, reason: null, size };
 }
 
 /**
@@ -463,7 +575,7 @@ export function workable(item, seat, { items = [], capabilities = [] } = {}) {
  * `strategy` is REQUIRED to be one of the implemented names: an unknown name throws (see
  * `assertWorkStrategy`) rather than silently ordering oldest-first. `now` is injected for tests only.
  */
-export function selectNextWork(items, seat, { capabilities = [], strategy = DEFAULT_STRATEGY, now = Date.now(), directive = null } = {}) {
+export function selectNextWork(items, seat, { capabilities = [], strategy = DEFAULT_STRATEGY, now = Date.now(), directive = null, tierTokens = DEFAULT_TIER_TOKENS, usableWindow = null } = {}) {
 	const skipped = [];
 	// The DIRECTIVE enters the ORDER only, never `workable()`: a policy may say which eligible row looks
 	// most urgent, and may never make an ineligible one claimable. Keeping the two apart is the same
@@ -474,7 +586,7 @@ export function selectNextWork(items, seat, { capabilities = [], strategy = DEFA
 		// for the seat it is addressed to. Eligibility itself stays in `workable()` - the selector orders, it
 		// never decides - so a capability or gate rule cannot drift between the two (the header above, #6112).
 		if (candidate.to !== seat && !openPoolRow(candidate)) continue;
-		const verdict = workable(candidate, seat, { items, capabilities });
+		const verdict = workable(candidate, seat, { items, capabilities, tierTokens, usableWindow });
 		if (verdict.workable) return { item: candidate, skipped };
 		// `pool: true` tags a POOL skip so the claim reply can tell "addressed to you but not workable" apart from
 		// "in the pool and not workable for you". It is added ONLY for pool rows: the `{id, reason}` shape every
@@ -1072,6 +1184,7 @@ const Router = defineExtension({
 					const seatsDoc = await tx.doc(Seats);
 					const seatEntry = seatsDoc.seats[me] ?? {};
 					const capabilities = seatEntry.capabilities ?? [];
+					const budget = seatSizeBudget(seatsDoc, seatEntry);
 					// Claim by id (lead #214 / #239): a seat names a specific item, so
 					// operator-priority work can be picked up even when older queued work
 					// sits ahead of it. The status whitelist is IDENTICAL to the oldest
@@ -1094,9 +1207,15 @@ const Router = defineExtension({
 						// this seat may take it. That is the point of the pool: a seat that lacks `landing` must not get
 						// a `requires:landing` row and discover it at the end of the work.
 						if (openPoolRow(named)) {
-							const verdict = workable(named, me, { items: queue.items, capabilities });
+							const verdict = workable(named, me, { items: queue.items, capabilities, tierTokens: budget.tierTokens, usableWindow: budget.usableWindow });
 							if (!verdict.workable) {
-								return { kind: "refused", id: named.id, reason: verdict.reason, from: named.from, pool: true };
+								// N19 row 5: a SIZE refusal is recorded on the row. Only a NAMED claim writes it: the wake
+							// selector runs this predicate every broker pass for every seat, and appending a transition per
+							// scan would dirty the 10.4 MB queue document for a row nobody actually tried to take (P7).
+								if (verdict.size?.gated) {
+									named.transitions.push({ at: new Date().toISOString(), event: "size-refused", by: me, reason: verdict.reason });
+								}
+								return { kind: "refused", id: named.id, reason: verdict.reason, from: named.from, pool: true, size: verdict.size ?? null };
 							}
 						}
 						const at = new Date().toISOString();
@@ -1142,6 +1261,8 @@ const Router = defineExtension({
 							capabilities,
 							strategy: resolved.strategy,
 							directive: control?.directive ?? null,
+							tierTokens: budget.tierTokens,
+							usableWindow: budget.usableWindow,
 						});
 						queued = picked.item ?? undefined;
 						skipped.push(...picked.skipped);
@@ -1223,9 +1344,10 @@ const Router = defineExtension({
 				// `gate-open:#<id>(<status>)`, `gate-cancelled:#<id>`), so the seat learns what to fix instead of
 				// re-trying the same id every pass.
 				if (found?.kind === "refused") {
+					const split = found.size?.gated ? ` ${splitInstruction({ id: found.id })}` : "";
 					return toolText(
 						`CLAIM_REFUSED: #${found.id} is in the POOL but you cannot claim it (${found.reason}). ` +
-							`It was sent by ${found.from}. Close the prerequisite, or ask pm to address it to a seat that can.`,
+							`It was sent by ${found.from}. Close the prerequisite, or ask pm to address it to a seat that can.` + split,
 					);
 				}
 					// #4732: THIS BLOCK MUST PRECEDE `if (!found)`. `{ kind: "none", mine }` is TRUTHY, so `!found` is

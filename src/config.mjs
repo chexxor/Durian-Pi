@@ -431,25 +431,33 @@ export function declaredContextWindow(config, modelKey = null) {
 	const raw = config?.DURIG_CONTEXT_WINDOW;
 	if (raw === undefined || raw === null || raw === "") return null;
 	if (typeof raw === "number") return Number.isFinite(raw) && raw > 0 ? raw : null;
-	const text = String(raw).trim();
-	if (text === "") return null;
-	if (text.startsWith("{")) {
-		let map;
-		try {
-			map = JSON.parse(text);
-		} catch {
-			return null;
+	// A config FILE may hold a real object; an ENVIRONMENT variable cannot, so the JSON-string spelling is
+	// also accepted. Before this, an object in a config file stringified to "[object Object]", parsed to NaN
+	// and read as "no window declared" - the declaration was there and silently lost.
+	let map = null;
+	if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+		map = raw;
+	} else {
+		const text = String(raw).trim();
+		if (text === "") return null;
+		if (text.startsWith("{")) {
+			try {
+				map = JSON.parse(text);
+			} catch {
+				return null;
+			}
+		} else {
+			const n = Number(text);
+			return Number.isFinite(n) && n > 0 ? n : null;
 		}
-		if (!map || typeof map !== "object") return null;
-		const bare = modelKey != null && String(modelKey).includes("/") ? String(modelKey).slice(String(modelKey).indexOf("/") + 1) : null;
-		for (const key of [modelKey, bare].filter((k) => k != null)) {
-			const value = Number(map[key]);
-			if (Number.isFinite(value) && value > 0) return value;
-		}
-		return null;
 	}
-	const n = Number(text);
-	return Number.isFinite(n) && n > 0 ? n : null;
+	if (!map || typeof map !== "object" || Array.isArray(map)) return null;
+	const bare = modelKey != null && String(modelKey).includes("/") ? String(modelKey).slice(String(modelKey).indexOf("/") + 1) : null;
+	for (const key of [modelKey, bare].filter((k) => k != null)) {
+		const value = Number(map[key]);
+		if (Number.isFinite(value) && value > 0) return value;
+	}
+	return null;
 }
 
 /**

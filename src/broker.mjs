@@ -1625,6 +1625,9 @@ export async function drivePass(
   const actioned = await driveOnce(harness, {
     seats,
     items: queueDoc?.items,
+    // N19 row 5: the tier table written by `up` travels to the wake selector so a seat is never woken for a
+    // row the claim path will refuse as too big. Absent (a rig created before N19) the shipped defaults stand.
+    tierTokens: seatsDoc?.tierTokens,
     pendingConvIds,
     busySeats,
     stoppedConvIds,

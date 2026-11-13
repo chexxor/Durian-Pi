@@ -13,11 +13,13 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
+import { openPoolRow, POOL_SIZE_GATE_FRACTION } from "./rig.mjs";
 import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
 import { strandedMsSetting, declaredContextWindow, compactionSettings } from "./config.mjs";
+import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { DEFAULT_STRATEGY, resolveStrategy } from "./workstrategy.mjs";
 import { contextConsumption } from "./context.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
@@ -90,6 +92,10 @@ function seatRowsFrom(value) {
 		// resolved value — a reader that wants the effective one asks `readWorkStrategyView`.
 		...(s.capabilities === undefined ? {} : { capabilities: s.capabilities }),
 		...(s.workStrategy === undefined ? {} : { workStrategy: s.workStrategy }),
+		// N19 row 5: the window this seat can actually work in, recorded by `up`. Omitted when unset, so a
+		// seat created before N19 reads byte-identically to before.
+		...(s.usableWindow === undefined ? {} : { usableWindow: s.usableWindow }),
+		...(s.contextWindow === undefined ? {} : { contextWindow: s.contextWindow }),
 	}));
 }
 
@@ -325,6 +331,52 @@ export function queueCensusOf(items) {
 		counts,
 		terminal: rows.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
 		active: rows.filter((it) => !TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
+	};
+}
+
+/**
+ * THE POOL CENSUS (N19 "The Pool", rows 5 + 7) - docs/POOL-QUEUE-SPEC.md §6.4.
+ *
+ * WHY IT IS SEPARATE FROM `queueCensusOf`: a pooled row is not "someone else's row" - it is work with NO owner
+ * yet. Counting it under `queued` makes a rig look busy while every seat is idle, which is exactly the failure
+ * the pool is meant to remove. So the three numbers the operator needs - how many rows are in the pool, how
+ * many were taken from it, and how many were REFUSED because they are too big - are reported apart from the
+ * status counts.
+ *
+ * `tooBig` answers "is this row invisible to half the fleet?": the row's tier estimate is compared with the
+ * LARGEST usable window among seats that declared one. A row bigger than every seat's budget is big-work-only
+ * and must say so; a row bigger than ONE seat's budget is simply not for that seat, which the per-seat gate
+ * already handles.
+ *
+ * A seat with NO declared `usableWindow` (created before N19, or a model with no declared context window) is
+ * NOT assumed small - it is counted in `seatsWithoutWindow` and excluded from the comparison, because refusing
+ * work on a guessed number is the false-negative class #2673 rules against.
+ */
+export function poolCensus(items, seats = [], tierTokens = DEFAULT_TIER_TOKENS, fraction = POOL_SIZE_GATE_FRACTION) {
+	const rows = items ?? [];
+	const seatList = seats ?? [];
+	const pooled = rows.filter((it) => it.pool === true);
+	const open = pooled.filter(openPoolRow);
+	const withWindow = seatList.filter((s) => Number.isFinite(s.usableWindow) && s.usableWindow > 0);
+	const tooBig = open
+		.map((it) => {
+			const estimate = tierTokens?.[it.tier];
+			if (!Number.isFinite(estimate) || estimate <= 0) return null; // untiered or unmodelled: nothing to warn about
+			if (!withWindow.length) return null; // nothing measured -> no warning, per the conservative default
+			const cantHold = withWindow.filter((s) => estimate > fraction * s.usableWindow).map((s) => s.name);
+			if (!cantHold.length) return null;
+			return { id: it.id, tier: it.tier, estimate, tooBigFor: cantHold, unclaimableByAnyone: cantHold.length === withWindow.length };
+		})
+		.filter(Boolean);
+	return {
+		rows: pooled.length,
+		pooled: pooled.length,
+		open: open.length,
+		ownerOfRecord: pooled.length - open.length,
+		sizeRefused: rows.filter((it) => (it.transitions ?? []).some((t) => t.event === "size-refused")).length,
+		tooBig: tooBig,
+		seatsWithoutWindow: seatList.filter((s) => !Number.isFinite(s.usableWindow) || s.usableWindow <= 0).map((s) => s.name),
+		fraction,
 	};
 }
 
@@ -605,6 +657,11 @@ export async function readRigHealth(
 		// The order each seat will claim in, and where that choice came from (seat > team > default).
 		// Additive to the JSON contract; `status` gets it via `...health`, `ps` via the same view.
 		workStrategy: workStrategyView(seatsValue),
+		// N19 rows 5 + 7: the tier -> token table IN FORCE (written by `up`) and the pool census over the rows
+		// this read already has. Additive to the JSON contract; the claim path reads the same table from the
+		// roster, so status and the gate cannot disagree about what a `project` row costs.
+		tierTokens: seatsValue?.tierTokens ?? DEFAULT_TIER_TOKENS,
+		pool: poolCensus(queueItems, seats, seatsValue?.tierTokens ?? DEFAULT_TIER_TOKENS),
 		queueItems,
 		// ROADMAP 131: the rig-level paused state, so `status`/`watch` report it and the
 		// operator KNOWS whether new work is being taken.
