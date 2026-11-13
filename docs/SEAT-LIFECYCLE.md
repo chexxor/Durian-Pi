@@ -141,7 +141,7 @@ not make it *work* — only the base-ref capability does. Landing guidance for s
 
 1. **Wake.** A seat is woken by `send <seat>`, `run`, or the resident broker `serve` when it has queued
    work (or a stalled claim). See `COMMANDS-AND-THE-BROKER.md`.
-2. **Claim.** `claim_work` takes the oldest item addressed to the seat; the item becomes `claimed`.
+2. **Claim.** `claim_work` takes the oldest row the seat is ELIGIBLE for — one addressed to it, or an OPEN pool row (no owner of record) whose `requires` capability SET it advertises in full and whose tier fits inside 70 % of its usable context window. The row becomes `claimed`; a pool claim also records the seat as owner-of-record (`to`) while `from` stays the author. An ineligible claim is refused with the reason rather than silently skipped.
 3. **Prepare.** `prepare_workspace` creates/points at `<root>/item-<id>` and confines the seat to it.
 4. **Work.** Read/write/edit/shell inside the worktree; commit with **explicit file paths only** (never
    `git add -A` / `.`), one concern per commit.

@@ -27,7 +27,7 @@ import { escalations, escalationSignature } from "./deferlease.mjs";
  * WHICH item from `claim_work`, not from the wake.
  */
 export const WAKE_CONTENT =
-  "You have queued work. Call claim_work to take the oldest item addressed to you, then act on it.";
+  "You have queued work. Call claim_work to take the oldest item you are ELIGIBLE for - one addressed to you, or an open pool row whose capability set you advertise - then act on it; an ineligible claim is refused with the reason.";
 
 /**
  * The wake a seat is sent when its CLAIM IS STALLED rather than when it has QUEUED work (#4557).

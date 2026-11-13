@@ -668,7 +668,12 @@ export function queueItemLine(it, items = []) {
 			: it.pool === true
 				? `to=${it.to} poolOwner=true`
 				: `to=${it.to}`;
-	return `#${it.id} ${it.status} from=${it.from} ${addressed} ${it.subject}${gate}${deadMarker}${priority}${release}`;
+	// N19 row 3+4: the capability SET a row demands is shown in the line a seat already reads. A seat
+	// cannot choose work it is capable of from a view that hides the requirement, and the claim
+	// refusal alone tells you after you tried. Rows with no requirement render exactly as before.
+	const needs = requiredCapabilities(it.requires);
+	const requiresMarker = needs.length ? ` requires=${needs.join(",")}` : "";
+	return `#${it.id} ${it.status} from=${it.from} ${addressed}${requiresMarker} ${it.subject}${gate}${deadMarker}${priority}${release}`;
 }
 
 /**
@@ -2148,7 +2153,7 @@ const Router = defineExtension({
 		defineTool({
 			name: "peek_queue",
 			description:
-				"List your queue work: non-terminal items addressed to or sent by you. Pass all=true for every item (any status, any seat) — oversight and debugging.",
+				"List your queue work: non-terminal items addressed to you, sent by you, or OPEN in the shared pool (`pool: true`, no owner of record yet) - every open pool row is visible to every seat, eligible or not; the claim is what decides. Pass all=true for every item (any status, any seat) — oversight and debugging.",
 			parameters: obj({ all: opt(bool()) }),
 			replay: "safe",
 			execute: async (args, api, context) => {

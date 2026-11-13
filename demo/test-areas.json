@@ -327,6 +327,7 @@
       "demo/commit-model.test.mjs",
       "demo/deepinfra-catalog.test.mjs",
       "demo/next-pointer.test.mjs",
+      "demo/pool-doctrine.test.mjs",
       "demo/runbook-diagnose.test.mjs",
       "demo/runbook-rules.test.mjs",
       "demo/seat-commit-instructions.test.mjs"
