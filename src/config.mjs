@@ -159,6 +159,11 @@ export const CONFIG_KEYS = [
 	"DURIG_STREAM_TIMEOUT_MS",
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",
+	// THE POOL SIZE GATE (N19 "The Pool", docs/POOL-QUEUE-SPEC.md §6.2, build row 0). Registered so a config
+	// file may set the tier→token estimates the claim gate reads; an unregistered key here would be REFUSED by
+	// `assertNoUnknownFileKeys` and the remedy the gate prints would be unactionable in a file (RM-323 class).
+	// Values are JSON, e.g. {"feature": 12000}; unknown tier names REFUSE rather than sit inert.
+	"DURIG_TIER_TOKENS",
 	"DURIG_SEAT_ROOT",
 	// THE CLAIM ORDERING POLICY (priority-first selection, `src/workstrategy.mjs`). Registered because a key
 	// absent from this inventory is REFUSED in a config file by `assertNoUnknownFileKeys` (`:237`) — which made
@@ -588,6 +593,148 @@ export function compactionSettings(config) {
 	// Nothing set means NO override, so pi-durable's documented defaults stand rather than a made-up
 	// durian-pi number - the same honesty rule as `streamSettings({})` returning `{}`.
 	return out;
+}
+
+/**
+ * pi-durable's OWN compaction defaults, in one place. They are quoted here only to compute a seat's
+ * *usable* window when durian-pi declares no compaction policy - they are NOT a durian-pi policy.
+ * The same numbers `compactionSettings`'s header documents as pi-durable's built-ins.
+ */
+export const PI_DURABLE_COMPACTION_DEFAULTS = {
+	reserveTokens: 16384,
+	keepRecentTokens: 20000,
+	backgroundTokens: 32768,
+};
+
+/**
+ * The tier -> TOKEN table the pool size gate reads (N19 "The Pool", docs/POOL-QUEUE-SPEC.md §6.2, build row 0).
+ *
+ * HOW THESE FOUR NUMBERS WERE OBTAINED - the re-runnable derivation, as row 0's contract requires:
+ *   node tools/tier-token-calibration.mjs --db ./selfdev.sqlite --json .spike/tier-token-calibration.json
+ * Measured 2026-11-13: 24.4 s wall clock, exit 0, host Linux / Fedora Linux 45 / kernel 7.2.15-300.fc45.x86_64 /
+ * node v24.22.1 / git 2.56.0. 1,538 claim->done windows attributed across 7,622 queue rows; 152 overlapping
+ * windows; 1,879 notice rows skipped (a DONE notice is an acknowledgement, not work).
+ *
+ * WHAT THE SPEND LEDGER CANNOT ANSWER, stated plainly: `selfdev.sqlite.spend.jsonl` (2,248 lines measured) has
+ * NO item or tier linkage - its keys are at, model, host, authKeyEnv, prompt_tokens, completion_tokens,
+ * reasoning_tokens, cached_tokens, priceSource, priceAsOf, usd, totalBefore, totalAfter, status, note. Per-row
+ * tokens therefore come from the DURABLE store, not the ledger: the instrument joins a row's claim->done
+ * transitions with the per-turn `usage` in the store's `entries`. Definition used:
+ *   additiveTokens = (usage.output + usage.reasoning of every assistant turn in the window)
+ *                  + (bytes of `pi.tool-result` entries in that window) / 4
+ *
+ * Measured per tier (rows, p10, p25, p50, p75, p90):
+ *   trivial 318 | 2,191 | 3,410 | 10,214 | 31,831 | 76,765
+ *   small   1050 | 3,421 | 6,101 | 15,761 | 47,990 | 125,466
+ *   feature  166 | 3,673 | 6,245 | 15,795 | 71,615 | 204,542
+ *   project    4 | 6,359 | 13,610 | 29,527 | 401,736 | 401,736   <- NOT ANSWERABLE: 4 rows is not a distribution
+ *
+ * WHY THE SHIPPED VALUE IS p25 AND NOT THE MEDIAN: a gate that refuses on the median refuses HALF the real
+ * work of a tier, and a refused claim looks like an unlucky start, not a wrong constant - the spec names this
+ * as the failure mode (§6.2, "a wrong `feature` estimate silently blocks real work"). p25 keeps the ordinary
+ * case of every tier claimable while still refusing the tiers no seat of that window can hold. p50/p75 stay
+ * here because the pool-level "too big for this seat" warning (§6.3) is a WARNING, and a warning should use the
+ * typical case, not the floor.
+ *
+ * HONESTY NOTE: `small` and `feature` are indistinguishable at p25 (6,101 vs 6,245); they separate only at p75
+ * (47,990 vs 71,615). `project` keeps an EXPLICIT default rather than an interpolation, exactly as §6.2 and
+ * §9.1 item 8 allow for a tier the store cannot answer.
+ *
+ * `DURIG_TIER_TOKENS` (JSON) overrides any of these per tier; an unknown tier name REFUSES rather than sitting
+ * inert, because a key no row can match is the inert-by-name class `assertNoUnknownFileKeys` exists for.
+ * The tier names must match `RATCHET_TIERS` (src/rig.mjs) - `demo/pool-size-gate.test.mjs` pins that equality.
+ */
+export const DEFAULT_TIER_TOKENS = {
+	trivial: 3400,
+	small: 6100,
+	feature: 6200,
+	project: 120000,
+};
+
+/**
+ * The tier -> token table in force: the measured defaults, overridden by `DURIG_TIER_TOKENS`.
+ * Fails loudly on a malformed value (the `compactionSettings` rule: a key an operator wrote meant to change
+ * something, and a silently ignored spelling is the defect this repo keeps paying for).
+ *
+ * @param {Record<string, unknown>} [config]
+ * @returns {Record<string, number>} every tier of `DEFAULT_TIER_TOKENS`, with the operator's overrides applied
+ */
+export function tierTokenTable(config = {}) {
+	const table = { ...DEFAULT_TIER_TOKENS };
+	const raw = config?.DURIG_TIER_TOKENS;
+	if (raw === undefined || raw === null || raw === "") return table;
+	let map = raw;
+	if (typeof map === "string") {
+		try {
+			map = JSON.parse(map);
+		} catch {
+			throw new Error(`DURIG_TIER_TOKENS must be JSON, got: ${raw}`);
+		}
+	}
+	if (!map || typeof map !== "object" || Array.isArray(map)) {
+		throw new Error(`DURIG_TIER_TOKENS must be an object of tier -> tokens, got: ${JSON.stringify(raw)}`);
+	}
+	for (const [tier, value] of Object.entries(map)) {
+		if (!Object.keys(DEFAULT_TIER_TOKENS).includes(tier)) {
+			throw new Error(
+				`DURIG_TIER_TOKENS["${tier}"] names a tier this rig does not have (known: ${Object.keys(DEFAULT_TIER_TOKENS).join(", ")}) - an entry no row can match is inert, not a default`,
+			);
+		}
+		const n = Number(value);
+		if (!Number.isFinite(n) || n <= 0) {
+			throw new Error(`DURIG_TIER_TOKENS["${tier}"] must be a positive number of tokens, got: ${value}`);
+		}
+		table[tier] = n;
+	}
+	return table;
+}
+
+/**
+ * The compaction numbers that ACTUALLY apply to one seat's model, layering the same way pi-durable does:
+ * per-model override > harness-wide policy > pi-durable's documented defaults.
+ *
+ * @param {Record<string, unknown>} [config]
+ * @param {string|null} [modelKey] the seat's resolved `provider/modelId`
+ * @returns {{reserveTokens: number, keepRecentTokens: number, fromOverrides: boolean}}
+ */
+export function effectiveCompactionPolicy(config = {}, modelKey = null) {
+	const settings = compactionSettings(config);
+	const policy = settings?.compaction ?? {};
+	const overrides = policy.modelOverrides ?? {};
+	const bare = modelKey != null && String(modelKey).includes("/")
+		? String(modelKey).slice(String(modelKey).indexOf("/") + 1)
+		: null;
+	let override = null;
+	for (const key of [modelKey, bare]) {
+		if (key != null && overrides[key]) { override = overrides[key]; break; }
+	}
+	return {
+		reserveTokens: override?.reserveTokens ?? policy.reserveTokens ?? PI_DURABLE_COMPACTION_DEFAULTS.reserveTokens,
+		keepRecentTokens: override?.keepRecentTokens ?? policy.keepRecentTokens ?? PI_DURABLE_COMPACTION_DEFAULTS.keepRecentTokens,
+		fromOverrides: override != null,
+	};
+}
+
+/**
+ * ONE seat's USABLE context budget: the declared window minus what compaction must keep free and keep
+ * verbatim (docs/POOL-QUEUE-SPEC.md §6.2). `usable` is null when NO window is declared - there is nothing to
+ * measure, and a gate that guesses a window is worse than a gate that says so.
+ *
+ * The measured trap this function exists to survive: the verifier-class window (24,576) is SMALLER than
+ * pi-durable's default reserve (16,384) plus keepRecent (20,000), so `usable` can be <= 0. A caller must then
+ * report "no usable budget declared" and NEVER divide by it.
+ *
+ * @param {Record<string, unknown>} [config]
+ * @param {string|null} [modelKey]
+ * @returns {{window: number|null, reserveTokens: number, keepRecentTokens: number, usable: number|null}}
+ */
+export function usableContextBudget(config = {}, modelKey = null) {
+	const window = declaredContextWindow(config, modelKey);
+	if (window === null) {
+		return { window: null, reserveTokens: null, keepRecentTokens: null, usable: null };
+	}
+	const { reserveTokens, keepRecentTokens } = effectiveCompactionPolicy(config, modelKey);
+	return { window, reserveTokens, keepRecentTokens, usable: window - reserveTokens - keepRecentTokens };
 }
 
 /**

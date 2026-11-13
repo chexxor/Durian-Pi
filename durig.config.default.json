@@ -5,6 +5,12 @@
   "DURIG_OPTIMIZE": "off",
   "DURIG_LOCAL_CONTEXT": "200000",
   "DURIG_LOCAL_MAX_TOKENS": "16384",
+  "DURIG_TIER_TOKENS": {
+    "trivial": 3400,
+    "small": 6100,
+    "feature": 6200,
+    "project": 120000
+  },
   "DURIG_COMPACTION_MODEL_OVERRIDES": {
     "local/*": {
       "reserveTokens": 20480
