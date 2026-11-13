@@ -1,4 +1,4 @@
-**Last update:** 2026-11-13T22:2xZ (delegate). `HEAD` = the commit carrying this pointer (`git rev-parse --short HEAD`);
+**Last update:** 2026-11-13T23:5xZ (delegate). `HEAD` = the commit carrying this pointer (`git rev-parse --short HEAD`);
 every milestone object is in the sha table below. Ahead of `origin/main`, **nothing pushed** — the push grant is the
 operator's.
 
@@ -27,6 +27,8 @@ in order:
 | `8abc961e` | flake recorded (restart-limit under --jobs 4) |
 | `35ff79f2` | broker windows 4-5, blocker (1) TRIGGERED, rate window closed at 22:13Z |
 | `446c4084` | the gate FIRED live: #7700 refused by architect and pm; spec/D275 corrected |
+| `06de1bba` | deleted the sentences that still DENIED the live firing (spec §13.4, D275 (m)) |
+| `18c7a3b8` | pool census re-read (5 pooled / 3 open; #7722 minted organically) |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the number reconciliation; the live evidence)
 and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
@@ -44,6 +46,16 @@ every one tonight hit `--max-duration` and lingered in read-drain.
 5. `899525` START `22:13:26.113Z` (keepalive `--once`) — reason: 774849 stranded; replaced the exit above. **This is the
    window a next session inherits.** Liveness is the last ` PASS ` line (pitfall 304), so read
    `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` and `cat selfdev.sqlite.broker.json` BEFORE acting.
+
+**Pause / unpause, measured (the tranche-2 quiescence constraint).** `cli.mjs pause` was applied BY THE BROKER at
+`23:46:33.518Z` (requestId `44a1d6c7…`, audit `allowed / operator-control-plane`) and `unpause` at `23:50:33Z`
+(`157fe026…`); `status --json --local` read `paused:true, pausedBy:operator` after the pause, but a later `--local`
+read returned `paused:false` while the broker said applied — **control state read on a second connection under a
+resident broker is stale; trust the broker's requestId + audit line.** `node cli.mjs up rig.selfdev.json --refresh`
+REFUSED under the resident broker (`up refuses to run while a resident broker is driving … pid 899525`), a guard in
+place since `c2fa6ee3` — so the roster size write that armed the gate CAN only have run broker-free, and today's first
+broker START is `17:32:55.451Z` with no earlier window, so the refresh preceded it. The store records no timestamp for
+that document write; this is the inference, stated as one.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -90,8 +102,8 @@ node scripts/test.mjs --all --jobs 4                                        # 14
 ```
 
 **Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would
-make rows claimable by seats the `ownership` map does not cover: **104 of 163 proposed pool rows name a non-owner
-claimant** (src-tools-harness 88, workflow-docs 19; 34 name no path; list `.spike/pool-ownership-gaps.txt`).
+make rows claimable by seats the `ownership` map does not cover: **104 of 164 proposed pool rows name a non-owner
+claimant** (src-tools-harness 85 + workflow-docs 19 = 104; 34 name no path; list `.spike/pool-ownership-gaps.txt`).
 Consequence: **no migration applied** — the tool stays a proposal; decisions 1–2 are the operator's. (2) Nothing
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.

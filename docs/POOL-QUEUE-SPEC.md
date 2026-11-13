@@ -607,6 +607,23 @@ After `node cli.mjs up rig.selfdev.json --refresh` (0.915 s): **11 seats usable 
 without a window**, `pool {rows:0, pooled:0, open:0, claimed:0, sizeRefused:0}`. `git diff rig.selfdev.json`
 for the refresh is empty outside the size fields — no capability, edge or ownership entry moved.
 
+**Pause / unpause, and when the refresh could have run (the quiescence constraint, measured 2026-11-13T23:5xZ).**
+`node cli.mjs pause "…"` was applied **by the broker** at `23:46:33.518Z` (requestId `44a1d6c7-17d6-4d4d-8077-bf258b6d71a1`,
+audit line `decision: allowed, code: operator-control-plane`); `status --json --local` then read `paused:true,
+pausedBy:operator`, and `node cli.mjs unpause` was applied by the broker at `23:50:33Z` (requestId `157fe026-99e4-41fb-879c-7c5c4bdde5d9`).
+Two facts about the pause path, both worth knowing:
+1. **`up --refresh` REFUSES while a resident broker drives the store** — verbatim: `up refuses to run while a resident
+   broker is driving /home/chexxor/Git/Durian-Pi/selfdev.sqlite (pid 899525): a second owner crashes the broker and
+   corrupts run-control docs.` That guard has been in `cli.mjs` since `c2fa6ee3` (2026-10-16), so the refresh that
+   armed the gate **cannot** have run under a broker. Today's first broker START is `17:32:55.451Z` and there is no
+   earlier window, so the write preceded window 1 — i.e. it ran with the fleet **quiesced by construction** (no broker
+   driving). The store records no timestamp for that document write; this is an inference from the guard plus the log,
+   and it is stated as one rather than as a measured time.
+2. **Control state read on a second connection is STALE.** After the broker applied a second `pause` (`paused:true`,
+   requestId `b9b9c156-b963-40c6-87c5-4e6fd663f374`) a `status --json --local` read returned `paused:false,
+   pausedAt:null` — the `--local` path opens its own connection while the broker owns the store. Trust the
+   broker-applied requestId and its audit line, not a `--local` control read (pitfall 326).
+
 Gate arithmetic in force: `Math.floor(0.7 * 164320)` = **115023** (11 seats — not 115024: `0.7` is not exactly
 representable and the product lands a hair below, which is why the rig floors), 70 % of 12288 = **8601** (auditor). Only the
 `project` tier (120000) exceeds both — so the gate bites only on `project` rows, and the backlog contains

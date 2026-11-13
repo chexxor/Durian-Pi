@@ -4362,3 +4362,12 @@ at `:743`). Re-measure every `path:line` before repeating it.
     that had never fired. Fixed in `src/driver.mjs` (`poolGatedSkipLine`): `pool-gated:<n> #<id>(<reason>)[ +N more]`,
     bounded at two rows, count first. Probe: `grep "pool-gated" <db>.broker.log | tail -3` — if the line has no `#`,
     you are reading an un-upgraded broker (it outlives the code on disk; restart it).
+326. **Control state read on a SECOND connection is stale while the broker owns the store.** Measured 2026-11-13:
+    `node cli.mjs pause "…"` was applied by the broker (`appliedBy: broker`, requestId `b9b9c156…`, audit
+    `allowed / operator-control-plane`) and `node cli.mjs status --json --local` then printed
+    `paused:false, pausedAt:null` — the `--local` path opens its own connection and sees a snapshot that predates the
+    broker's commit. The same verb had printed `paused:true, pausedBy:operator` minutes earlier for a different pause,
+    so the flapping is the READ, not the state. Trust the broker-applied `requestId` plus
+    `selfdev.sqlite.broker.audit.log`; read control through the broker (no `--local`) when you need the current value.
+    Related, same run: `up --refresh` REFUSES under a resident broker (`a second owner crashes the broker`), so a
+    roster write must happen broker-free — which is what "pause the fleet to change it" exists to make possible.
