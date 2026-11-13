@@ -14367,3 +14367,24 @@ a reason. **Still an operator action:** routing the off-host prompt (and the rou
 `docs/reviews/branch-lifecycle-followup-research-prompt.md`) to the research agent — GitHub merge-queue internals,
 Trunk/Mergify, Devin/Copilot/Sweep/Orbi/Miko/Baton/Code Conductor/Sourcegraph and every product's iteration loop
 stay unverified. D265 records the decision.
+
+### Cut from the live pointer, 2026-11-13 (delegate) — verbatim
+
+**Broker status:** resident pid **56117** (re-armed **11:48Z**). The fleet went **unattended** at
+11:37Z: the old keepalive loop (pids 3912747/3912749) exited 1 after two consecutive `START REFUSED:
+broker-degraded` re-arms (11:22Z, 11:37Z) and broker 3912450 died. **Cause:** a loop that breaks at
+`--max-duration` never reads the `serve --stop` flag, so the pid lingers and the next `--start` refuses. Fixed in
+place in `tools/broker-keepalive.mjs` (**`9655e761`**): stop → poll `brokerProcessAlive(pid)` → SIGTERM only a pid the
+state file names **and** whose cmdline matches `cli.mjs serve` → wait ≤20 s → start; pinned by
+`demo/broker-keepalive-stop-guard.test.mjs`. Detached loop pid **56057** (`--until 2026-11-13T06:00:00Z`, log
+`.spike/keepalive.log`). Read `selfdev.sqlite.broker.json` for the pid — the pid is the identity, not `pgrep`.
+**The bound is not a hard bound, and it is now measured, not hypothesised**: a broker whose wake loop broke at
+`--max-duration` sets `stoppedBy = "max-duration"` (`src/broker.mjs:1855-1857`) with **no stop request**, so
+`graceExpired()` is false and the drain takes the **unbounded** `await h.waitForIdle(context)` (`:2218`; the bounded
+leg `:2216 settleWithin(...)` fires only on `deadline`). pid 2876055 sat in that state for **13 h 26 m** while its
+heartbeat stayed fresh and the read pump kept answering — `node tools/stranded-inbox.mjs selfdev.sqlite` is the
+one-line discriminator (`hbAgeS` / `progressAgeS` / `DRAIN-STRANDED`). Account: `docs/incidents/2026-11-11-parked-broker-strands-a-mutating-intent.md`.
+The force timer (`cli.mjs:2247`) arms only in `onSignal`, so `serve --stop` is invisible to a parked broker — four this
+window (pids 2066240, 2201485, 2390935, 2658110) lingered 34 min – 1 h 32 m past their bound until `kill -TERM <pid>` fired the fallback (`EXIT reason=deadline passes=-`). Preflight **blocks falsely** on local2: the 20 s probe at `tools/broker-serve.mjs:304` vs a measured **42.8 s cold / 27.2 s warm** 64-token completion — use `--no-probe` (0 blocking) and verify seats generate. Restart recipe: `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`. Dead-letters in the spool are read and explained in `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md` §G.
+
+**Queue-control seam (history):** see `docs/DECISIONS.md` D273 and `docs/SELFDEV.md` pitfalls 287–312.
