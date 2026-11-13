@@ -10,6 +10,12 @@ claimed, one by a seat the `ownership` map does not cover. Read `docs/POOL-QUEUE
 wording quoted from the code, and `docs/reviews/2026-11-13-capability-ownership-ruling.md` for the four decisions the
 operator now owes.
 
+**Broker caveat (2026-11-13T20:17Z):** the resident broker **pid 311912** is past its `--max-duration 3600` deadline
+and FROZEN (heartbeat advancing, `lastPass` 20:10:17Z, 428 s and climbing) — `broker-serve.mjs --start` refuses
+`broker-degraded`, and its four `genlock` slots are held, so the runbook precondition says do NOT terminate it. It
+also predates the skip-line fix, so the `pool-gated:1` lines in `selfdev.sqlite.broker.log` are the OLD shape; the
+next broker start (keepalive re-arms a stranded one) prints `pool-gated:<n> #<id>(<reason>)`.
+
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
 `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
