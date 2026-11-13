@@ -12049,3 +12049,45 @@ throws rather than silently falling back.
 rows, which is not a measurement. Saying "the ledger cannot answer this" and keeping an explicit default is
 honest; deriving 120 000 from four rows and printing it as calibrated would be the opposite.
 
+## D276 — 2026-11-13: **a row whose artifact is provably on main is CLOSED with a DISPOSITION, never CANCELLED; cancellation stays with the parties, and any authority to close a row a seat is not a party to is a trust boundary that must be checked by the broker, not asserted by the caller** (lead ruling #7657, recorded by `security`, item #7669; the sweep rows are #7668/#7670 for `impl` and the sweep itself is `pm`'s once the verb exists)
+
+(1) **DONE plus disposition, not cancelled.** A LANDING row whose cited sha is an ancestor of `main` is closed
+with `complete_work` and a disposition line naming it: `LANDED at <sha>` (or, if the artifact was routed and has
+not landed, `ROUTED to <seat> as <id>, NOT YET LANDED`). Rule #4073 already makes plain `done` on a landing entry
+read as landed, so leaving the disposition out is an ambiguity the census cannot recover from. The close must carry
+re-runnable `evidence`: `{command: "git merge-base --is-ancestor <sha> refs/heads/main", exitCode: 0, artifact: "main"}`.
+`cancelled` means "no longer worth doing"; a row that landed is, by definition, not that. Measured on the live store
+in this run (`node cli.mjs queue --json`, exit 0): 1116 rows are `cancelled`, and a CANCELLED row named as a gate
+starves its dependents forever — `demo/gate-cancel-refusal.test.mjs` (exit 0) pins the semantics: `workable()`
+refuses the claim with `gate-cancelled:#<id>`, 50 claim passes claim it 0 times, and `enqueueItem` THROWS on such a
+gate. A sweep that cancels already-landed rows therefore converts a housekeeping win into permanently unclaimable
+work.
+
+(2) **Who may close a row.** `cancel_work`, `revise_work` and a tier RAISE stay with the row's parties, because they
+are irreversible — `demo/pm-release-authority.test.mjs` (exit 0) pins #6112 and shows a non-party `pm` refused on
+cancel, revise and tier-raise while a coordinator RELEASE with a recorded reason succeeds. Reversibility is the
+authority test: a sweeper may report and may release a parked row with a reason; it may never cancel a row it is
+not a party to. Any new verb that lets a designated sweeper close a row it did not mint is therefore a NEW trust
+boundary, not a convenience. The gates that make it defensible are app-layer and falsifiable (OS identity is a
+norm here, not a control — D-ENV-AUTH): the ancestry check is RUN by the broker and the refusal is returned, not
+delegated to the caller's word; the verb refuses when the sha is not an ancestor of `main`, when the cited token is
+not a git object (`git cat-file -t`), and when the row still has an open gate; and it refuses silently-failing
+checks rather than accepting an unverified close.
+
+(3) **No new terminal literal.** `src/queue-lifecycle.mjs` fixes STAGES = open|active|deferred|closed and
+`src/checkup.mjs` fixes TERMINAL_STATUSES = {done, cancelled}; the disposition rides on the transition as a field,
+in the same shape as `closedAs: "split"`. A seventh status literal would drift every reader that enumerates
+statuses, including the census and the `check` rules.
+
+(4) **Containers close as work.** Umbrella/container rows close with `complete_work`, never `cancel_work` (#6214):
+cancelling a container makes its children's gates dead by rule (1).
+
+Non-goals: this records the DISPOSITION and the AUTHORITY rule; it does not authorise this seat to sweep, and it
+does not clear the 9 existing rows whose `blockedBy` names a CANCELLED id (3377→3343, 3456→3455, 5816→5815 among them) — that is the
+clear-gate verb in #7668, and clearing a dead gate is a verb, not a status change.
+
+Number check, re-runnable: `grep -cE '^## D[0-9]+' docs/DECISIONS.md` counts 267 entries after this commit
+(266 before); `grep -n 'D283' docs/DECISIONS.md` returns no match, so the rule pm was quoting is not in this file —
+the shipped gate rule is `deadGateIds` in `src/rig.mjs` (`gate-cancelled:#<id>`), pinned by
+`demo/gate-cancel-refusal.test.mjs` and `demo/workable-claim.test.mjs`. There is no `demo/decisions-numbering.test.mjs`.
+
