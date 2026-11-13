@@ -135,6 +135,14 @@ MUST BE KEPT, because section 2d (the linked-worktree / shared-root refusal, #42
 the fixture sections and they assert different things. A resolution recorded as a step gets applied where it
 is not needed; recorded as a condition, it fires when it should.
 
+**State measured 2026-11-13 against main `2bfb9e43`: the trigger is spent, not pending.** Both named shas
+ARE now ancestors of `main` (`git merge-base --is-ancestor 5d9140f refs/heads/main` exits **0**; the same for
+`51a866b` exits **0**), and `demo/land-helper.test.mjs` carries NO unresolved markers (`node --check` exits
+**0**; the three `<<<<<<<` hits at lines 6, 290 and 309 are comment/fixture strings, not a mid-merge tree).
+So the condition never fired. Read it by the **shas**, not by row status: row #4142 is `cancelled`, and a
+cancelled row never reaches `done`, so a condition keyed on the ID can never be satisfied even when the
+artifact is on main - gate hygiene (#5085) in the shape of a sentence.
+
 **A STALE BRANCH CAN RE-INTRODUCE A CLEANUP.** When a landing is refused for a fault the author did not
 create, check whether the file is CLEAN on `main` and DIRTY on the branch — that is not a pre-existing wart
 being carried forward, it is a REGRESSION being applied backwards. Measured: `land.mjs impl-item-4286` was
