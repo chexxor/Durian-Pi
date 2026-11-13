@@ -140,6 +140,11 @@ notify the row's `from` (recommended: annotate the author's own `peek_queue` ins
 roster (`capabilities`/`edges`/`ownership`) was READ-ONLY to this goal: `git diff rig.selfdev.json` is empty outside
 the size fields `up --refresh` wrote.
 
+**Suite flake seen once, recorded:** at 21:4xZ `--all --jobs 4` reported `336/337`, failing
+`demo/restart-limit-behaviour.test.mjs`; it passed standalone twice (exit 0) and the NEXT full run was **337/337 in
+153.6 s**. Treat that test's failure under `--jobs 4` as the box (it spawns fixtures and asserts a charge count), not
+the code — re-run it standalone before chasing it (pitfall class: a red at high concurrency that is green alone).
+
 **Cost:** **$0.00** — every model call this window went to the loopback provider (priced 0/0); the spend ledger is
 unchanged. Wall clock shape: the pool build was ~3 h of the window; the two broker windows cost ~40 min of waiting for
 seats; the suite is ~131 s at `--jobs 4`. **Speed-up worth adopting:** `node .spike/pool-rows.mjs` (0.8 s) answers
