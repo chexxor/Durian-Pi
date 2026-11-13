@@ -63,9 +63,10 @@ complete_work(itemId: 7700, closedAs: "split", children: [...]) - a row nobody c
 queue problem.` Census: **`sizeRefused: 1`**. Corroborated by `demo/pool-gate-live-roster.test.mjs` (live roster) and
 `tools/pool-gate-live-probe.mjs` (byte-copy of the live store: impl and auditor each refused with `Split it: …`).
 
-**State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only):
-`pool {rows:4, pooled:4, open:2, claimed:2, sizeRefused:1, seatsWithoutWindow:[]}`. Open: **#7660** (`small`,
-`requires:"docs"`, no seat advertises it) and **#7700** (`project`, unclaimed, refused twice). Claimed and `done`: **#7667**
+**State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only — re-read it, the team keeps
+minting): at `23:33Z` `pool {rows:5, pooled:5, open:3, claimed:2, sizeRefused:1, seatsWithoutWindow:[]}`. Open:
+**#7660** (`small`, `requires:"docs"`, no seat advertises it), **#7700** (`project`, refused twice, still open) and
+**#7722** (`small`, minted by `architect` at 23:2xZ — organic use, not asked for by this goal). Claimed and `done`: **#7667**
 (`pool-claimed by=advocate`) and **#7669** (`pool-claimed by=security`, 18:36:48.521Z) — both name
 `docs/DECISIONS.md`, which `ownership` gives to `advocate` ALONE, so security's claim is the milestone's cross-owner
 probe on a live row. Seats: 11 × 164320, auditor 12288; `tierTokens {3400,6100,6200,120000}`; gate limits 115023 / 8601,
