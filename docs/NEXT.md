@@ -62,8 +62,10 @@ from the census and no claim at all; a `small` row is then claimed by `devtools`
 the LIVE store (`node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite`, 7-19 s, row #7700 at 21:2xZ: impl 164320 and
 auditor 12288 each refused with the split instruction, source sha unchanged). **And the live fleet finally minted the
 row**: **#7700** (`from=pm, pool:true, tier:"project"`, queued 21:20:16.789Z) is OPEN in the pool — pm did it after six
-asks. It is refused by every seat's wake selector (they skip it rather than name it), so the LIVE `CLAIM_REFUSED` still
-needs one seat to claim it by id; a delegate may not. **The annotation authority is the contract's, exactly**: author or
+asks. The LIVE scheduler refuses it for every seat by name (`SKIP auditor reason=pool-gated:2
+#7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token usable window))`, 21:36:31Z), so the
+gate's string is now in the live log; the `Split it:` sentence needs one seat to claim it BY ID — pm has the ask
+(`4a02376a`, 21:34Z) and a delegate may not claim a row. **The annotation authority is the contract's, exactly**: author or
 `pm` (`ANNOTATE_REQUIRES_SEAT`), with `lead` REFUSED — the first build used `seatIsCoordinator` and an audit called
 that an unrequested widening, so the question is now decision 5 for the operator. **Every starting number is
 reconciled** in §13.3b (267 = devtools 165 + scribe 78 + qa 24; 262 clean rows = 165 migratable + 53 notices + 42

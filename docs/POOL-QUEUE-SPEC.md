@@ -667,6 +667,21 @@ tool says so rather than claiming them as evidence). `tools/pool-gate-live-probe
 fixture store (0.6 s): refusal per seat, split instruction, source untouched, and a roster with an undeclared window
 makes the probe exit 2 rather than report a false "refused for everyone".
 
+**The LIVE scheduler refuses #7700 for every seat, by name, with the too-big reason** (pid 774849,
+2026-11-13T21:36:31Z — one line per seat per pass):
+
+```
+SKIP auditor   reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token usable window))
+SKIP architect reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 164320-token usable window))
+SKIP designer  reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 164320-token usable window))
+SKIP qa2       reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 164320-token usable window))
+SKIP security  reason=queued-gated:gate-open:#6933(queued) pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 164320-token usable window))
+```
+
+That is the size gate's own string, on a live `project`-tier pool row, for real seats with their real windows — the
+first time it has appeared in the live log. What it does not carry is the `Split it: …` sentence, which is rendered
+only when a seat CLAIMS BY ID.
+
 **The live row now EXISTS, and the live refusal is one named claim away.** `pm` minted it on the seventh ask:
 **#7700** (`from=pm`, `pool: true`, `tier: "project"`, no `requires`, queued `2026-11-13T21:20:16.789Z`) sits OPEN in
 the live pool. Every seat's wake selector SKIPS it rather than attempting it (`pool-gated:<n>` with the too-big reason
