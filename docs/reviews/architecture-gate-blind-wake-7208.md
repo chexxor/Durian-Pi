@@ -52,14 +52,13 @@ does, `done→cancelled` does. A parked row whose gate is done is a *release can
 different message and a different verb.
 
 **F3. The dedup consumes a change it never delivered (the bug #7205 would inherit).**
-`parkedUnchanged` is computed at src/driver.mjs:177, before the pending/busy guards at 189–195. `parkedChanged`
+`parkedUnchanged` is computed at src/driver.mjs:176, before the pending/busy guards at 189–195. `parkedChanged`
 (src/scheduler.mjs:148) records the new signature on the call, so a seat whose run is in flight when its gate is
 cancelled has the strand signature recorded and the wake suppressed. Every later pass reads "unchanged" and skips
 with `parked-deduped`. Probe checks 3a/3b: pass 1 (seat pending) issues 0 wakes yet
 `scheduler.parkedSignatureOf("impl") === "101:held"`; pass 2 (seat free) skips with `parked-deduped`. The gate
 death is never reported, and the log reads as "nothing here".
-This is the same ordering the escalation path already rules on (src/driver.mjs, the comment "the dedup is NOT
-consulted here … the signature is taken at the PUSH, where the wake actually issues").
+This is the same ordering the escalation path already rules on (src/driver.mjs:205-207, "The wake is about to ISSUE, so this is where the escalation set is marked as told").
 **Fix:** compute `parkedSig`, use it only for the skip reason, and call `parkedChanged(name, parkedSig)` at the
 point the wake is issued. One line, reversible, mirrors an existing ruling.
 **Recovery:** probe 3 re-run with the fix must show pass 2 issuing a wake. That is the acceptance test for #7205 —

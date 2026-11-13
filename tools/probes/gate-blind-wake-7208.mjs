@@ -57,17 +57,19 @@ check(
 const sched = new WakeScheduler({ minIntervalMs: 0, now: () => 0 });
 const seats = { impl: { conversationId: 7, capabilities: [] } };
 const stranded = legacy.map((it) => (it.id === 100 ? { ...it, status: "cancelled" } : it));
-const pass = selectWakes({ seats, items: stranded, pendingConvIds: new Set([7]), parkedChanged: sched.parkedChanged, onSkip: (s) => console.log(`   skip ${s.seat} reason=${s.reason}`) });
+const skips1 = [];
+const wakes1 = selectWakes({ seats, items: stranded, pendingConvIds: new Set([7]), parkedChanged: (seat, sig) => sched.parkedChanged(seat, sig), onSkip: (s) => { skips1.push(s); console.log(`   skip ${s.seat} reason=${s.reason}`); } });
 check(
   "3-signature-recorded-while-wake-suppressed",
-  pass.wakes.length === 0 && sched.parkedSignatureOf("impl") === after,
-  `wakes=${pass.wakes.length} recorded=${sched.parkedSignatureOf("impl")} expected=${after}`,
+  wakes1.length === 0 && sched.parkedSignatureOf("impl") === after,
+  `wakes=${wakes1.length} recorded=${sched.parkedSignatureOf("impl")} expected=${after}`,
 );
-const pass2 = selectWakes({ seats, items: stranded, pendingConvIds: new Set(), parkedChanged: sched.parkedChanged, onSkip: (s) => console.log(`   skip ${s.seat} reason=${s.reason}`) });
+const skips2 = [];
+const wakes2 = selectWakes({ seats, items: stranded, pendingConvIds: new Set(), parkedChanged: (seat, sig) => sched.parkedChanged(seat, sig), onSkip: (s) => { skips2.push(s); console.log(`   skip ${s.seat} reason=${s.reason}`); } });
 check(
   "3-strand-never-told-after-the-run-finishes",
-  pass2.wakes.length === 0 && pass2.skips.some((s) => s.reason === "parked-deduped"),
-  `wakes=${pass2.wakes.length} skips=${JSON.stringify(pass2.skips)}`,
+  wakes2.length === 0 && skips2.some((s) => s.reason === "parked-deduped"),
+  `wakes=${wakes2.length} skips=${JSON.stringify(skips2)}`,
 );
 
 /* ── 4. What a coarse gate bucket does. `open` / `closed` / `dead`, derived from BOTH surfaces.
