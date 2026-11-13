@@ -18,6 +18,8 @@ line each, in commit order:
 | `2bfb9e43` | the frozen-broker note in this pointer |
 | `f6177f21` | authority narrowed to the contract, gate number 115023, spec §13.3b reconciliation, this pointer's sha/broker record |
 | `02105352` | the demo prints the refusal and reads the LIVE roster; three broker windows recorded; the live decline line |
+| `c4b0ea7e` | `tools/pool-gate-live-probe.mjs` + its test — the refusal from a byte-copy of the LIVE store; the pointer's sha table, live broker pid, and demo-number fixes |
+| `d37bd216` | the gate-proof demo's own header carried the stale 117891; it now says 115023 |
 | `HEAD` | the commit that carries this pointer (`git rev-parse --short HEAD`; it is the one object this list cannot name) |
 
 Read
