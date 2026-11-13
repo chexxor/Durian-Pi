@@ -13,6 +13,14 @@ Host: Fedora 44, node v24.22.1 (D131: Linux is the rig's operating system). **Re
 same branch, tip `96f810f1` (main tip then `fca4e980`)** — the substrate probes in *Re-runnable probes* and G5(b) were
 re-run at that tree, not at `294e1806fd21`.
 
+**Re-anchored 2026-11-13T01:24Z in worktree `item-7601` @`9611c45d`** (no `vendor/pi-main`; `@earendil-works/pi-durable`
+1.3.0 from the lockfile, so this run is not comparable with a deps-linked seat root): the shell datum still
+reproduces exactly, `tools/channel-preflight.mjs:468` and `:234` still read as written, and the registry anchor has
+moved `:179` -> `:257`. Only the pin was stale, not the verdict — which is G11 working as intended: the number aged,
+the check did not.
+
+One anchor this tree CANNOT re-verify, recorded as such rather than repeated: `vendor/pi-main/packages/durable/src/tools/bash.ts:169` does not exist in a lockfile-only worktree (`ls vendor` → exit 2). Anyone citing the "pinned build default" line must read it in the deps-linked set; in this tree it is UNKNOWN, not confirmed.
+
 **Shell datum, read from the product's own registry rather than inferred from a PATH list** (`node -e
 'import("./src/shellregistry.mjs").then(m=>{const s=m.seatShellSelection; …})'`, exit **0**):
 `{platform:"linux", name:"bash", degraded:false, programs:["bash"], startedBy:"/usr/bin/bash"}`. `pwsh` and
@@ -295,7 +303,10 @@ owns host-level steps.
     false "cannot" leaves a needed control unworked; a false "can" gets one skipped — both are security defects,
     because the queue and the audit read instruments rather than reasoning. Live instance at writing time, named so
     it can be re-checked: `tools/channel-preflight.mjs:468` prints the definitive **"NO SHELL CAN START HERE"** while
-    `src/shellregistry.mjs:179` selects `bash` at `/usr/bin/bash` (`degraded:false`, exit 0). The instrument derives
+    `src/shellregistry.mjs:257` (`export const seatShellSelection = selectSeatShell();`) selects `bash` at
+    `/usr/bin/bash` (`degraded:false`, exit 0). The anchor is grep-derived rather than a number to trust:
+    `grep -n "seatShellSelection =" src/shellregistry.mjs`. It was `:179` at writing time and is `:257` at main
+    `9611c45d` — caught by qa while verifying #5267. The instrument derives
     its program list from the pinned build default (`vendor/pi-main/packages/durable/src/tools/bash.ts:169`,
     `options?.programs ?? ["pwsh", "powershell"]`) with the same Windows pair repeated as its own fallback at
     `tools/channel-preflight.mjs:234`, and it never imports the registry —
@@ -347,6 +358,7 @@ stale by construction (G11):
 node -e 'import("./src/shellregistry.mjs").then(m=>{const s=m.seatShellSelection;console.log(JSON.stringify({platform:s.platform,name:s.name,degraded:s.degraded,programs:s.programs,startedBy:s.startedBy}))})'
 # this tree, 2026-11-06: exit 0, {"platform":"linux","name":"bash","degraded":false,"programs":["bash"],"startedBy":"/usr/bin/bash"}
 # degraded:true is the UNKNOWN case — nothing can start, and the rig must SAY SO instead of asserting a host fact.
+grep -n "seatShellSelection =" src/shellregistry.mjs   # the :NNN cited in G11 must equal the line this prints (257 at 9611c45d)
 grep -c -E 'shellregistry|seatShellSelection' tools/channel-preflight.mjs
 # 0 matches, exit 1 = the instrument still does not read the registry, so its §7 shell verdict stays refuted.
 ```
