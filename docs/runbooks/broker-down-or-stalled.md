@@ -110,6 +110,15 @@ each spooled intent has been waiting**, and **whether the provider each seat nam
   loop is IDLE, not stuck — and that is why a restart alone cannot help a suppressed seat: the startup
   pass runs the same `placed`-only filter (`src/broker.mjs:829`) and the pending set still suppresses
   it. Restart is NECESSARY-but-INSUFFICIENT for a suppressed seat (it is right for a wedged loop).
+  **The health verdicts, in the code's own words (idle vs degraded):** a pass runs on a STORE-COMMIT
+  SIGNAL, so a quiet store yields no passes — stale progress alone is NOT evidence of a wedge.
+  `state: "idle"` with `idle: "no wakeable work"` means the broker is QUIET, not broken — nothing is owed
+  an investigation. `state: "degraded"` with `reason: "no pass within the progress timeout"` means there
+  IS wakeable work and no pass has run — that is the case worth chasing, unchanged. And `wakeable: null`
+  means the count is UNKNOWN, and unknown is not zero — it reads `degraded` deliberately, so a state
+  written before this change cannot be mistaken for a quiet rig. THE LESSON: A FRESH HEARTBEAT WITH STALE
+  PROGRESS AND ZERO WORK WAS REPORTED AS `degraded` AT CLOCK-OUT, AND THE BROKER WAS MERELY IDLE — a
+  verdict that names the wrong fault costs the same as no verdict.
   **The one-seat variant:** a SINGLE seat silent while others work is NOT "broker down" — it is a
   per-seat suppression, and no broker-level remedy fixes it. **The remedy TODAY:** stop the broker,
   `resume` (which WITHDRAWS the stranded submission — `resume` must run with the broker STOPPED), then
