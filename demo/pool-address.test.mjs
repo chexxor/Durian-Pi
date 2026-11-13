@@ -254,6 +254,59 @@ check("eligible seat sees the pool row", pickedForImpl.item?.id === 1, JSON.stri
 const pickedForImpl2 = selectNextWork([{ id: 1, to: "impl", pool: true, status: "queued", requires: ["landing"] }], "qa", { capabilities: ["verify"] });
 check("a claimed/ addressed pool row is not a candidate for another seat", pickedForImpl2.item === null, JSON.stringify(pickedForImpl2.item));
 
+console.log("\n=== a row nobody can finish is CLOSED by splitting, not left as permanent almost-work (row 6) ===");
+const splitParentId = await harness.commit(async (tx) =>
+	enqueueItem(tx, "pm", null, "Over-sized pool row", "a project row no verifier seat can hold", null, false, "project", false, null, ["implement"], null, true),
+	ctx);
+await call("impl", "claim_work", { itemId: splitParentId });
+const parentBefore = await itemById(splitParentId);
+check("the parent was claimed by impl before the split", parentBefore?.status === "claimed", JSON.stringify(parentBefore?.status));
+await call("impl", "complete_work", {
+	itemId: splitParentId,
+	resultSummary: "too big for one window; split into two",
+	split: [
+		{ subject: "Piece 1: the gate itself", body: "sizeVerdict + workable", tier: "small", requires: ["implement", "verify"] },
+		{ subject: "Piece 2: the demos", body: "two demos registered", tier: "trivial" },
+	],
+});
+const parent = await itemById(splitParentId);
+const children = (await queue()).items.filter((it) => it.from === "impl" && String(it.subject).startsWith("Piece "));
+check("the parent is cancelled (no new status literal, §4)", parent?.status === "cancelled", JSON.stringify(parent?.status));
+check("...and says HOW it closed", parent?.closedAs === "split", JSON.stringify(parent?.closedAs));
+check("...and names the children in the reason", String(parent?.cancelReason ?? "").startsWith("split into #"), parent?.cancelReason);
+check(
+	"a split transition records the child ids in the parent's own history (P7: no side document)",
+	(parent?.transitions ?? []).some((t) => t.event === "split" && t.by === "impl" && Array.isArray(t.children) && t.children.length === 2),
+	JSON.stringify(parent?.transitions),
+);
+check("...and the cancellation is recorded too (P8: a row leaves the pool for a NAMED cause)", (parent?.transitions ?? []).some((t) => t.event === "cancelled"));
+check("the parent's tier is UNCHANGED by the split (P9: the ratchet history stays readable)", parent?.tier === "project", JSON.stringify(parent?.tier));
+check("two children exist", children.length === 2, JSON.stringify(children.map((c) => c.subject)));
+check("children are pooled (any eligible seat can take them)", children.every((c) => c.pool === true && c.to === null), JSON.stringify(children.map((c) => ({ to: c.to, pool: c.pool }))));
+check("children come FROM the splitter", children.every((c) => c.from === "impl"), JSON.stringify(children.map((c) => c.from)));
+check("a child inherits the parent's capability SET when it names none", children[1]?.requires === "implement", JSON.stringify(children[1]?.requires));
+check("a child that names its OWN multi-capability set keeps it as an array", JSON.stringify(children[0]?.requires) === JSON.stringify(["implement", "verify"]), JSON.stringify(children[0]?.requires));
+check("a child carries its OWN tier", children[1]?.tier === "trivial", JSON.stringify(children[1]?.tier));
+const cancelledNotice = (await queue()).items.find((it) => it.subject === `CANCELLED #${splitParentId}: Over-sized pool row`);
+check("the author is told the row was split (cancelItem is the one owner of close-and-notify)", cancelledNotice?.to === "pm", JSON.stringify(cancelledNotice?.to));
+
+console.log("\n=== the two split shapes that would lose work are REFUSED ===");
+await call("impl", "send_work", { pool: true, subject: "Split guard row", body: "for the two refusals", tier: "feature", requires: "implement" });
+const guardId = (await queue()).items.find((it) => it.subject === "Split guard row").id;
+const rowsBefore = (await queue()).items.length;
+await call("impl", "claim_work", { itemId: guardId });
+await call("impl", "complete_work", { itemId: guardId, resultSummary: "splitting into nothing", split: [] });
+check("a split with zero children is refused", (await transcript("impl")).includes("needs at least one child item"), "no refusal text");
+check("...and the row is NOT closed by it", (await itemById(guardId))?.status === "claimed", JSON.stringify((await itemById(guardId))?.status));
+await call("impl", "complete_work", { itemId: guardId, resultSummary: "gate on itself", split: [{ subject: "Child gated on its parent", blockedBy: [guardId] }] });
+check("a child gated on the row being split is refused (the gate would be dead on arrival)", (await transcript("impl")).includes("cannot be gated on the row being split"), "no refusal text");
+check("...and no child row was created", (await queue()).items.length === rowsBefore, `rows ${rowsBefore} -> ${(await queue()).items.length}`);
+
+await call("impl", "complete_work", { itemId: guardId, resultSummary: "split for real", split: [{ subject: "Guard piece", tier: "small", requires: "landing" }] });
+const guardChildren = (await queue()).items.filter((it) => String(it.subject).startsWith("Guard piece"));
+check("a valid split DOES close the row and enqueue the child", guardChildren.length === 1 && (await itemById(guardId))?.status === "cancelled", JSON.stringify({ children: guardChildren.length, status: (await itemById(guardId))?.status }));
+check("a child naming ONE capability of its own is stored as the string, not an array", guardChildren[0]?.requires === "landing", JSON.stringify(guardChildren[0]?.requires));
+
 console.log("\n=== enqueueItem's 13th argument (the write path a coordinator uses) ===");
 const directId = await harness.commit(async (tx) =>
 	enqueueItem(tx, "qa", null, "Direct pool row", "via enqueueItem", null, false, "trivial", false, null, ["verify"], null, true),

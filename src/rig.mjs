@@ -1430,6 +1430,21 @@ const Router = defineExtension({
 			parameters: obj({
 				itemId: num(),
 				resultSummary: str(),
+				// N19 row 6 (P8, P9): a row that cannot be finished as one piece is CLOSED by splitting it, not
+				// left in the queue as a permanent almost-task. There is deliberately NO `split` status literal
+                // (~30 status-literal sites in 11 files): the parent stays `cancelled`, carries `closedAs:
+                // "split"`, and the children are ordinary queued rows in the same commit.
+				split: opt(
+					arr(
+						obj({
+							subject: str(),
+							body: opt(str()),
+							tier: opt(str()),
+							requires: opt(union([str(), arr(str())])),
+							blockedBy: opt(arr(num())),
+						}),
+					),
+				),
 				evidence: opt(
 					obj({
 						command: str({
@@ -1459,6 +1474,70 @@ const Router = defineExtension({
 					// recording it would let `check`'s verifier rule pass on nothing.
 					if (args.evidence !== undefined && String(args.evidence.command ?? "").trim() === "") {
 						return "complete_work: `evidence.command` must name the command you ran (evidence is what a verifier re-runs)";
+					}
+					// N19 row 6 (docs/POOL-QUEUE-SPEC.md §6.1, P8 + P9): SPLIT CLOSE. A row nobody can finish as
+					// one piece is CLOSED by splitting it — the parent becomes `cancelled` with `closedAs: "split"`,
+					// the children are ordinary pooled rows enqueued in the SAME commit, and no new status literal
+					// is minted (§4: ~30 status-literal sites in 11 files). P9: the parent's tier is left EXACTLY
+					// as it was, so the ratchet history still shows what the task was sized as.
+					if (args.split !== undefined) {
+						const pieces = args.split;
+						if (!Array.isArray(pieces) || pieces.length === 0) {
+							return `complete_work: \`split\` needs at least one child item — a split with no pieces closes the row and destroys the work.`;
+						}
+						const nameless = pieces.filter((c) => String(c?.subject ?? "").trim() === "");
+						if (nameless.length > 0) {
+							return `complete_work: every split child needs a \`subject\` (${nameless.length} piece(s) have none); a child nobody can name is not a child.`;
+						}
+						for (const piece of pieces) {
+							for (const gate of piece.blockedBy ?? []) {
+								if (String(gate) === String(args.itemId)) {
+									return `complete_work: a split child cannot be gated on the row being split (#${args.itemId}) — the parent is CLOSED by the split, so that gate would be dead on arrival (§4265).`;
+								}
+							}
+						}
+						const childIds = [];
+						for (const piece of pieces) {
+							const childId = await enqueueItem(
+								tx,
+								me,
+								null,
+								String(piece.subject).trim(),
+								String(piece.body ?? "").trim() === ""
+									? `Split of #${args.itemId}: ${piece.subject}`
+									: piece.body,
+								null,
+								false,
+								// Tier: the child's own if declared, otherwise the parent's — inheriting is honest,
+								// because a child of a `project` row is still a `project`-sized task until someone
+								// says otherwise (P9 keeps the parent's tier untouched either way).
+								piece.tier ?? item.tier ?? null,
+								false,
+								piece.blockedBy ?? null,
+								// The capability SET travels with the work: a child of a row that needs `landing`
+								// needs `landing` too, unless the splitter names a narrower set.
+								piece.requires ?? item.requires ?? null,
+								null,
+								true,
+							);
+							childIds.push(childId);
+						}
+						// cancelItem is the ONE owner of "this row is closed, and the author is told" (§3739):
+						// reuse it rather than writing a second close path that could drift.
+						const closed = await cancelItem(tx, {
+							item,
+							me,
+							reason: `split into #${childIds.join(", #")}`,
+						});
+						item.closedAs = "split";
+						item.children = childIds;
+						item.transitions.push({
+							at: new Date().toISOString(),
+							event: "split",
+							by: me,
+							children: childIds,
+						});
+						return `ok:split ${childIds.map((id) => `#${id}`).join(", ")} (${closed && closed.noticeId ? "notice " + closed.noticeId : "no notice — the row had no other party"})`;
 					}
 					item.status = "done";
 					item.resultSummary = args.resultSummary;
@@ -1519,7 +1598,10 @@ const Router = defineExtension({
 					return `ok`;
 				}, context);
 				let cwdResetNote = "";
-				if (out === "ok") {
+				// A SPLIT closes the row too (N19 row 6), so the workspace the split created is retired exactly
+				// as a completion's is — otherwise a split leaves an orphan worktree claimed by a row that no
+                // longer exists as work.
+				if (out === "ok" || String(out).startsWith("ok:split")) {
 					// The item is complete, so retire the workspace `prepare_workspace`
 					// created. `force: false` never discards uncommitted work: a dirty
 					// worktree is refused and left for the operator (D60). Resetting the
