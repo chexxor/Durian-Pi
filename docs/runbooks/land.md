@@ -3,9 +3,9 @@ runbook: land
 symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
-last_verified: 2026-11-11
-verified_by: impl
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked); #6182 owner-state rule measured 2026-11-11 on branch item-6182 (node demo/genlock-owner-state.test.mjs exit 0, 24 checks; the same probe against main 35001c3a reported {unresolvableOwnerBlocks: false, secondClaimAccepted: true, freshUnnamedSlotIsStale: true}) - SCOPED to the genlock bullet: no landing was run in that pass"
+last_verified: 2026-11-12
+verified_by: devtools
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked); #6182 owner-state rule measured 2026-11-11 on branch item-6182 (node demo/genlock-owner-state.test.mjs exit 0, 24 checks; the same probe against main 35001c3a reported {unresolvableOwnerBlocks: false, secondClaimAccepted: true, freshUnnamedSlotIsStale: true}) - SCOPED to the genlock bullet: no landing was run in that pass; #5347 intersection rule measured 2026-11-12 by devtools on branch item-5347 (tip 1489b6ae): `node demo/landing-preflight-dirt.test.mjs` exit 0 (13 checks, git's own FF behaviour on fixture repos) and `node demo/land-helper.test.mjs` exit 0 (111 checks); RED at the pre-fix base 9611c45d in a throwaway detached worktree: land-helper exit 1 (4 FAILs - untracked dirt the landing did NOT write refused, and no dirtyPathsNotTouched in the report), preflight demo exit 1 (src/landinggate.mjs exported no classifyTreeDirt)"
 check_rule: null
 ---
 
@@ -223,8 +223,13 @@ landings reduce how often it arises, but only #1456 removes the blocker.
 
 `scripts/land.mjs` now **waits** for the generation slots instead of refusing while a seat generates
 (#1497/#1498), so the common pass does NOT need to stop the broker. The one hard precondition is a
-**clean tracked tree** (untracked scratch does not block). Do exactly this and you will not have to
-ask "stop or not?" or "why did --suite fail?".
+**no dirt on a path this landing WRITES** (#5347). The pre-flight is an INTERSECTION, not a
+cleanliness test: it refuses when `git status --porcelain` reports a tracked edit or an untracked file on
+a path the branch changes — the two things that actually break a fast-forward — and PROCEEDS, reporting
+them in `dirtyPathsNotTouched`, on dirt elsewhere in the tree (the spend ledger, another seat's in-flight
+edit). A live rig is never clean, so a blanket refusal made the gate unpassable while measuring nothing
+(#5250). The lander never stashes, cleans or commits someone else's path; it names it.
+Do exactly this and you will not have to ask "stop or not?" or "why did --suite fail?".
 
 1. Park another seat's tracked WIP, if any, to a NAMED stash and save a patch first
    (never `git checkout`/`restore` it):
