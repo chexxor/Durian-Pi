@@ -202,7 +202,7 @@ lives in prose. §7's audit is how you tell them apart.
 
 ## 7. Auditing the queue (read-only)
 
-The canonical read is the broker-served queue snapshot. Do **not** open a second writer (D111):
+The canonical read is the broker-served queue snapshot. Do **not** open a second writer (D111b):
 
 ```bash
 DURIG_DB=./selfdev.sqlite node cli.mjs queue > .spike/delegate/queue-audit.json
