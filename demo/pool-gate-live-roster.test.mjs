@@ -4,8 +4,8 @@
 // WHY THIS DEMO EXISTS. The gate shipped, was armed on 2026-11-13 (`up --refresh` recorded a usableWindow for
 // all 12 seats), and then could NOT be observed firing live: `sizeRefused: 0`, `tooBig: []`. Two structural
 // reasons, both of which this demo removes:
-//   1. only the `project` tier (120000) exceeds 70 % of ANY window on this rig — 117891 for the eleven
-//      164320-token seats, 8601 for the 12288-token auditor — so no ordinary row can ever be refused;
+//   1. only the `project` tier (120000) exceeds 70 % of ANY window on this rig — Math.floor(0.7*164320) = 115023
+//      for the eleven 164320-token seats, 8601 for the 12288-token auditor — so no ordinary row can ever be refused;
 //   2. the wake selector pre-filters candidates through `workable()`, so an oversized pool row is SKIPPED rather
 //      than attempted, and the `size-refused` transition is written only on a NAMED claim (D275 addendum (c)).
 // So the only live path to the refusal is "a seat names a project-tier pool row". The live fleet never did (it
