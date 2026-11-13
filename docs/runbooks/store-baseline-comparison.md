@@ -3,9 +3,9 @@ runbook: store-baseline-comparison
 symptom: "how big is the store, how far is it from the backup, and why do two `sha256sum` values of 'the store' disagree"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-11
+last_verified: 2026-11-13
 verified_by: scribe
-evidence: "item #6430; every number below was printed by the commands in this runbook, run 2026-11-11 in worktree item-6430 (branch off main 35001c3a)"
+evidence: "items #6430 (2026-11-11 pass) and #6375 (2026-11-13 pass, worktree item-7274); every number below was printed by the commands in this runbook"
 check_rule: null
 ---
 
@@ -100,10 +100,50 @@ prefix. See [`tool-result-redacted.md`](tool-result-redacted.md).
    `demo/readonly-store-parity.test.mjs`; run it and it reports
    `READONLY-PARITY PASS (15 views identical between pi-durable and node:sqlite readOnly; seats=2)` (exit 0).
 
+## Is a cited backup a rollback point? (the contract)
+
+A file under `.spike/backups/` is a **restore point only for the instant it was copied**. Nothing in the rig
+marks it as current, and nothing keeps it current. Three rules, each of them checkable:
+
+1. **Validity is measured, never asserted.** A backup is a rollback point only if it was taken after the last
+   schema-relevant change to the store. The check is the same three numbers, every time, against the live
+   store: size, `sha256` prefix, and mtime - and the **delta** between them. A non-zero delta means the backup
+   is not the store, and restoring it loses everything written since. Size alone never answers this; a backup
+   copied without `-wal` is a checkpointed snapshot, not the store (see `Do` step 2).
+2. **Before schema or pin work, take a fresh snapshot and record it in the work item.** Copy all three files
+   (`selfdev.sqlite`, `-wal`, `-shm`) - the ladder in
+   [`store-corruption-recovery.md`](store-corruption-recovery.md) lines 51-52 shows the command - and write the
+   **timestamp, byte size and digest prefix into the queue item body**, not into prose elsewhere. A number in a
+   paragraph has no clock and no owner; a number in the row is re-checkable by whoever does the restore.
+3. **`cmp` exiting 1 at byte 28 is normal, not corruption.** Byte 28 sits inside the JSON document header of the
+   store, so it is the first place two generations of the same store can disagree. Divergence there says "this
+   is a different generation of the same store"; it does not say "the store is damaged". Use
+   [`store-corruption-recovery.md`](store-corruption-recovery.md) for actual damage.
+
+**Why the wording matters, measured.** qa's 2026-11-11 pass found the named backup **16.8 MB behind** the live
+store (`617,492,480` vs `634,318,848`, `cmp` diverging at byte 28). Re-measured by scribe on 2026-11-13 in
+worktree `item-7274`, the same backup is **155,041,792 bytes behind** the live store. Both numbers were true at
+their instants - which is exactly the point: the validity check must be run, not quoted from the last run.
+
+| file | bytes | mtime (epoch) | sha256 prefix |
+|---|---|---|---|
+| `.spike/backups/20261110T0551Z/selfdev.sqlite` | 617,492,480 | 1794289915 | `0996cd61bef1` |
+| `selfdev.sqlite` (live main) | 772,534,272 | 1794535156 | `a293284b1446` |
+| `selfdev.sqlite-wal` | 4,255,992 | 1794535159 | - |
+
+Main-file delta: **+155,041,792 bytes (+25.1%)**. The backup directory contains **only** `selfdev.sqlite` - no
+`-wal`, no `-shm` - so it is a main-file snapshot of a WAL-mode store, and even at its own instant it was not
+the whole store.
+
+**Verdict for this rig, as of 2026-11-13:** `.spike/backups/20261110T0551Z/selfdev.sqlite` is a **baseline for
+measuring growth**, not a rollback point. Anyone asked to restore the team queue from it would be restoring a
+store two days and 155 MB older than the one in use. It is the operator's call to delete or refresh it; this
+runbook measures drift, it does not decide.
+
 ## Verify
 
-Run these and compare against the recorded output. All three ran on 2026-11-11 in worktree `item-6430`; exit
-codes are part of the expectation.
+Run these and compare against the recorded output. The 2026-11-11 pass ran in worktree `item-6430`; the
+2026-11-13 pass ran in worktree `item-7274`. Exit codes are part of the expectation.
 
 ```bash
 stat -c '%s %Y %n' .spike/backups/20261110T0551Z/selfdev.sqlite ./selfdev.sqlite ./selfdev.sqlite-wal ./selfdev.sqlite-shm
@@ -128,6 +168,20 @@ Observed (exit 0 for the first four, exit 1 for `cmp`):
 
 Delta main-file: **+88,645,632 bytes (+14.36%)** over the ~19 hours between the backup's mtime and the read.
 
+Re-run 2026-11-13 in worktree `item-7274` (exit 0 for the four `stat`/`sha256sum` lines, exit 1 for `cmp`):
+
+```
+617492480 1794289915 .spike/backups/20261110T0551Z/selfdev.sqlite
+772534272 1794535156 ./selfdev.sqlite
+4255992   1794535159 ./selfdev.sqlite-wal
+0996cd61bef1
+a293284b1446
+... differ: byte 28, line 1 is 113 K 371 M-y
+```
+
+Delta main-file: **+155,041,792 bytes (+25.1%)** over the two days between the backup and the read. The backup
+is not a restore point; the comparison itself is the reason the rule in the section above exists.
+
 ## If it fails
 
 - **`stat` cannot find `-wal` or `-shm`** - the store has checkpointed and no connection holds the WAL; at that
@@ -150,8 +204,9 @@ Delta main-file: **+88,645,632 bytes (+14.36%)** over the ~19 hours between the 
 
 ## Evidence
 
-Item **#6430**. Measurements above printed in worktree `item-6430` (branch `item-6430` off main `35001c3a`) on
-2026-11-11, read-only, broker left running. The read-only opener claim is pinned by
+Items **#6430** and **#6375**. The 2026-11-11 measurements were printed in worktree `item-6430` (branch
+`item-6430` off main `35001c3a`); the 2026-11-13 re-measurement (the table and the 155 MB delta above) was
+printed in worktree `item-7274` off main `9611c45d`. Both passes read-only, broker left running. The read-only opener claim is pinned by
 `demo/readonly-store-parity.test.mjs` (exit 0). The redaction behaviour was observed in this session's own tool
 output. Note that `sha256sum` and `cmp` are outside the harness's read-only allowlist, so the Verify step is an
 operator's shell step, not a seat turn.
