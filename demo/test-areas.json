@@ -77,6 +77,7 @@
       "demo/reset.test.mjs",
       "demo/resume.test.mjs",
       "demo/revise-work-contract.test.mjs",
+      "demo/revise-requires.test.mjs",
       "demo/run.test.mjs",
       "demo/seat-turn-shape.test.mjs",
       "demo/seatmodel.test.mjs",

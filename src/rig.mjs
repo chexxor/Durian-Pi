@@ -403,6 +403,27 @@ export function requiredCapabilities(requires) {
 }
 
 /**
+ * THE ONE SHAPE `requires` IS STORED IN (N19 "The Pool", P2).
+ *
+ * `requiredCapabilities` is the READ normalisation - everything downstream asks for a set. This is the WRITE
+ * normalisation, and it is deliberately lossy in exactly one direction: a set of ONE is stored as the STRING
+ * every pre-Pool row already carries, a set of TWO OR MORE as an array, an empty set as ABSENT. Storing a
+ * one-element array would make "no requirement" and "one requirement" different facts to every check rule,
+ * metric and demo that reads the field.
+ *
+ * WHY A FUNCTION AND NOT TWO INLINE TERNARIES: `send_work` and `revise_work` both write it (N19 row 3 - there
+ * used to be exactly one writer, and the pool needs a second one), and a rule with two spellings is a rule
+ * that drifts. Same reasoning as `deadGateIds` and `normalizeBlock`.
+ *
+ * @param {string|Array<string>|null|undefined} requires
+ * @returns {string|Array<string>|null} string for one, array for many, null for none
+ */
+export function storeRequires(requires) {
+	const needed = requiredCapabilities(requires);
+	return needed.length === 0 ? null : needed.length === 1 ? needed[0] : needed;
+}
+
+/**
  * IS THIS ROW OPEN IN THE POOL? (N19 "The Pool", row 4, P1 + P5.)
  *
  * A row is OPEN only while it has NO owner-of-record: `pool: true` AND `to` null. Once a seat claims it,
@@ -735,12 +756,9 @@ export async function enqueueItem(
 		);
 	}
 	const id = queue.nextId++;
-	// N19 row 3: `requires` is a SET (P2), and the ONE write path is where the shape is decided.
-	// A one-element set is stored as the STRING it always was - every existing row, demo and check rule
-	// reads it that way, and a set of one is not a different fact. Only a real multi-capability row gets
-	// the array, so "no requirement" and "one requirement" stay byte-identical to pre-Pool rows.
-	const needed = requiredCapabilities(requires);
-	const gateRequires = needed.length === 0 ? null : needed.length === 1 ? needed[0] : needed;
+	// N19 row 3: `requires` is a SET (P2), and the shape is decided by `storeRequires`, shared with
+	// `revise_work` so the two writers cannot disagree.
+	const gateRequires = storeRequires(requires);
 	const gateBlock = block ? normalizeBlock(block) : null;
 	const item = {
 		id,
@@ -826,9 +844,10 @@ export function bodyDigest(body) {
  * Pure apart from the `item` mutation it is asked to perform; no I/O, so a demo can drive
  * all three outcomes without a store.
  */
-export function applyRevise(item, { subject, body } = {}) {
+export function applyRevise(item, { subject, body, requires } = {}) {
 	const submitted = [];
 	const changed = [];
+	let requiresDiff = null;
 	if (subject !== undefined) {
 		submitted.push("subject");
 		if (subject !== item.subject) {
@@ -843,10 +862,26 @@ export function applyRevise(item, { subject, body } = {}) {
 			changed.push("body");
 		}
 	}
+	// N19 row 3: the capability SET a claimant must advertise can now be put on a row that ALREADY exists.
+	// Written in the SAME shape `enqueueItem` writes it (single -> string, many -> array, none -> ABSENT),
+	// so a back-annotated backlog row and a freshly sent one are indistinguishable to the claim predicate,
+	// the census and the check rules.
+	if (requires !== undefined) {
+		submitted.push("requires");
+		const next = storeRequires(requires);
+		const before = storeRequires(item.requires);
+		if (JSON.stringify(next) !== JSON.stringify(before)) {
+			if (next === null) delete item.requires;
+			else item.requires = next;
+			changed.push("requires");
+			requiresDiff = { from: before, to: next };
+		}
+	}
 	// Verify inside the same call: a submitted field that did not land is a MISMATCH.
 	const failed = [];
 	if (subject !== undefined && item.subject !== subject) failed.push("subject");
 	if (body !== undefined && item.body !== body) failed.push("body");
+	if (requires !== undefined && JSON.stringify(storeRequires(requires)) !== JSON.stringify(storeRequires(item.requires))) failed.push("requires");
 	const status = failed.length > 0 ? "mismatch" : changed.length > 0 ? "revised" : "no-change";
 	return {
 		status,
@@ -854,6 +889,7 @@ export function applyRevise(item, { subject, body } = {}) {
 		submitted,
 		digest: bodyDigest(item.body),
 		bodyBytes: Buffer.byteLength(String(item.body ?? ""), "utf8"),
+		...(requiresDiff ? { requiresDiff } : {}),
 	};
 }
 
@@ -874,7 +910,10 @@ export function reviseMessage(item, outcome) {
 	if (outcome.status === "no-change") {
 		return `item #${item.id} no change — the submitted ${outcome.submitted.join(" and ")} already matches the stored text (body sha256=${outcome.digest}); nothing was written`;
 	}
-	return `item #${item.id} revised (${outcome.fields.join(", ")}); it stays queued for ${item.to}. Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
+	const req = outcome.requiresDiff
+		? ` requires ${(requiredCapabilities(outcome.requiresDiff.to).length ? requiredCapabilities(outcome.requiresDiff.to).join(",") : "none")} (was ${requiredCapabilities(outcome.requiresDiff.from).length ? requiredCapabilities(outcome.requiresDiff.from).join(",") : "none"}) - a requirement on the CLAIMANT, not a pool entry: the row is still ${item.pool ? "in the pool" : `addressed to ${item.to}`}.`
+		: "";
+	return `item #${item.id} revised (${outcome.fields.join(", ")}); it stays queued for ${item.to ?? "the pool"}.${req} Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
 }
 
 // Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
@@ -1982,37 +2021,86 @@ const Router = defineExtension({
 		defineTool({
 			name: "revise_work",
 			description:
-				"Update the subject and/or body of a QUEUED item you sent or were sent, before it is claimed. A claimed item is being acted on and is not revised.",
+				"Update the subject and/or body of a QUEUED item you sent or were sent, before it is claimed. A claimed item is being acted on and is not revised. " +
+				"You may ALSO set `requires` - the capability SET a claimant must advertise (N19 'The Pool', P2) - on a queued row that already exists: its author or a coordinating seat (route/plan/decide) may annotate it, a working seat that is neither may not. " +
+				"Annotating a row never pools it (`pool` is decided when the row is sent) and never changes any seat's own capabilities.",
 			parameters: obj({
 				itemId: num(),
 				subject: opt(str()),
 				body: opt(str()),
+				requires: opt(union([str(), arr(str())], {
+					description:
+						"the capability(s) a claimant must advertise to take this row: one string, or an array (a claimant must advertise ALL of them). Pass [] to clear it. Refused when NO seat on the roster advertises the set - that would make the row unclaimable forever.",
+				})),
 			}),
 			replay: "safe",
 			execute: async (args, api, context) => {
 				const me = await mySeatName(api, context);
 				const out = await api.commit(async (tx) => {
 					const queue = await tx.doc(RigQueue);
+					const seats = await tx.doc(Seats);
 					const item = queue.items.find((it) => it.id === args.itemId);
 					if (!item) return `unknown item #${args.itemId}`;
-					// Either party may revise: the sender corrects a request before it is
-					// picked up, or the holder tidies an item it has not started. Anyone
-					// else editing a routed item would be a silent spoof.
-					if (item.to !== me && item.from !== me)
+					const isParty = item.to === me || item.from === me;
+					// Either party may revise subject/body: the sender corrects a request before it is
+					// picked up, or the holder tidies an item it has not started. Anyone else editing a
+					// routed item would be a silent spoof - and this is exactly where the #6112 coordinator
+					// grant stops: a coordinator may RELEASE a parked row, it may not rewrite one.
+					if ((args.subject !== undefined || args.body !== undefined) && !isParty)
 						return `item #${args.itemId} is not yours to revise (from=${item.from} to=${item.to})`;
+					// N19 row 3 - `requires` is ROUTING, not authorship of the request. Who may say which seat
+					// can take a row: the seat that made the row, and the seats whose job IS deciding who does
+					// what (`seatIsCoordinator`: route/plan/decide/adjudicate). A working seat annotating
+					// someone else's row is the spoof the party check exists to stop, so the authority is SPLIT
+					// rather than widened - subject/body stays with the parties, the capability set with the
+					// author plus coordinators. That is why pm-release-authority remains green.
+					let claimableNote = "";
+					if (args.requires !== undefined) {
+						const meSeat = seats.seats?.[me] ?? {};
+						const coordinating = seatIsCoordinator({
+							name: me,
+							role: meSeat.role,
+							capabilities: meSeat.capabilities ? [...meSeat.capabilities] : [],
+						});
+						if (item.from !== me && !coordinating)
+							return `item #${args.itemId}: only its author (${item.from}) or a coordinating seat (route/plan/decide) may set the capability requirement; you are neither (from=${item.from} to=${item.to})`;
+						// THE DEAD-GATE GUARD, applied at the moment of writing. A `requires` set NO seat on the
+						// roster advertises makes the row unclaimable forever - the pool's version of a gate naming
+						// a cancelled row (docs/POOL-QUEUE-SPEC.md §6.4), reported by `check` as `pool-dead-gate`.
+						// Catching it here costs one refused call; catching it in a check costs the row.
+						const wanted = requiredCapabilities(args.requires);
+						if (wanted.length > 0) {
+							const roster = Object.entries(seats.seats ?? {});
+							const canClaim = roster.filter(([, s]) => wanted.every((cap) => (s?.capabilities ?? []).includes(cap))).map(([n]) => n);
+							if (canClaim.length === 0)
+								return `item #${args.itemId}: no seat on the roster advertises all of [${wanted.join(", ")}], so this requirement would make the row unclaimable forever. Roster: ${roster.map(([n, s]) => `${n}=[${(s?.capabilities ?? []).join(",")}]`).join(" ")} - name a capability a seat actually has, or change the roster with up --refresh (not this call)`;
+							// THE ADDRESSEE RULE: an addressed row is a promise to ONE seat, and `claim_work` does not
+							// re-check capabilities for a row addressed to the claimant (the by-id path historically skips
+							// `workable()` because the author already chose that seat). So an annotation the addressee
+							// cannot satisfy is not a route - it is a row nobody can take. The capability SET routes work
+							// in the POOL; to move an addressed row to a different seat, send it to that seat.
+							if (item.to !== null && item.to !== undefined) {
+								const addressee = seats.seats?.[item.to] ?? {};
+								const lacks = wanted.filter((cap) => !((addressee.capabilities ?? []).includes(cap)));
+								if (lacks.length > 0)
+									return `item #${args.itemId} is addressed to ${item.to}, which does not advertise [${lacks.join(", ")}]; a requirement the addressee cannot satisfy makes the row unclaimable by the very seat it is addressed to. Capability sets route work in the POOL - to put this work in front of a capable seat, send a row to that seat (or pool it at send time). The roster is changed with up --refresh, not with this call.`;
+							}
+							claimableNote = ` ${wanted.join(", ")} can be claimed by: ${canClaim.join(", ")}.`;
+						}
+					}
 					// Only UNCLAIMED work: once claimed the recipient is acting on the
 					// item, so changing its body under them would diverge from the run.
 					if (item.status !== "queued")
 						return `item #${args.itemId} is not queued (status=${item.status}); only unclaimed work can be revised`;
-					if (args.subject === undefined && args.body === undefined)
-						return "revise_work needs a subject and/or a body";
+					if (args.subject === undefined && args.body === undefined && args.requires === undefined)
+						return "revise_work needs a subject, a body and/or a requires set";
 					// #3435: the OUTCOME must be legible and checkable. A revise that produces no
 					// change used to be indistinguishable from a revise that was DROPPED — both
 					// came back as a success-shaped sentence — so the only way to notice a lost
 					// amendment was to re-read the item, which nobody does on a success path.
 					// `applyRevise` returns a status, the fields it actually wrote, and a digest of
 					// the STORED body so the caller can verify the write without re-reading.
-					const outcome = applyRevise(item, { subject: args.subject, body: args.body });
+					const outcome = applyRevise(item, { subject: args.subject, body: args.body, requires: args.requires });
 					if (outcome.status === "mismatch") {
 						// A change was submitted and did NOT land. Never report that as success.
 						return reviseMessage(item, outcome);
@@ -2023,8 +2111,9 @@ const Router = defineExtension({
 						event: "revised",
 						by: me,
 						fields: outcome.fields,
+						...(outcome.requiresDiff ? { requiresFrom: outcome.requiresDiff.from, requiresTo: outcome.requiresDiff.to } : {}),
 					});
-					return reviseMessage(item, outcome);
+					return reviseMessage(item, outcome) + claimableNote;
 				}, context);
 				return toolText(out);
 			},
