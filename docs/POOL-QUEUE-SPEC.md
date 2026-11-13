@@ -474,6 +474,21 @@ minted with `requires` no seat advertises still enters the pool — measured liv
 `requires: "docs"** and no seat on the roster advertises `docs`, so it is unclaimable by all 12. The verb
 that can *change* a requirement refuses; the verb that *creates* one does not.
 
+The `check` rule sees it, on the live store, and names the whole roster
+(`node cli.mjs check rig.selfdev.json`, 12 seats, 2026-11-13T19:55Z):
+
+> `id: pool-dead-gate`, `severity: error`, `subject: #7660` — "#7660 (queued, in the POOL) requires docs and NO
+> seat advertises it — roster: pm:[route|plan] impl:[implement|code] qa:[verify|review] qa2:[verify|review]
+> lead:[decide|adjudicate] advocate:[review|advocate] scribe:[implement] devtools:[implement] auditor:[verify]
+> designer:[review] security:[security|review] architect:[design|review]; the row is queued, invisible to every
+> claim, and no wake can fire for it"
+
+and `pool-claim-without-capability` **passes** on the same read, which is the invariant that matters: both live
+pool claims (#7667 to `advocate`, #7669 to `security`) are capability-clean, so the *cross-owner* claim was legal
+rather than lucky. **Operational trap:** the bare `node cli.mjs check` audits `./rig.json` (a tracked 2-seat
+scaffold from 2026-10-10, seats `pm`/`worker` with no capabilities) instead of `rig.selfdev.json`, so it reports
+the same finding against a roster nobody runs — on this repo, always pass the rig file explicitly (pitfall 324).
+
 ### 13.2 The doctrine — one paragraph, every seat (commit `1782b495`)
 
 Before this, "pool" appeared 0 times in the 12 personas and 0 times in `rig.selfdev.json`. The doctrine lives

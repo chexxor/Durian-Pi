@@ -4345,3 +4345,12 @@ at `:743`). Re-measure every `path:line` before repeating it.
     (+0.0/h)` after the pool went live; the ledger's 1281-minute window before it read `519 → 846 (+15.3/h)`. Quoting
     the short window as "the pool stopped the backlog growing" would be false — intake simply paused. State the span
     with every rate, and re-measure across hours before claiming an effect.
+324. **`node cli.mjs check` with no argument audits `./rig.json`, which is NOT this rig.** `findRigFileFrom`
+    (`cli.mjs`) walks cwd and parents for the literal name `rig.json`; this repo has a tracked `rig.json` from
+    2026-10-10 (`e4fcd70e`) declaring two seats `0` and `1`, while the LIVE rig is `rig.selfdev.json` with 12
+    seats. Measured 2026-11-13: the bare `check` reported the pool-dead-gate finding on #7660 with
+    `roster: pm:[none] worker:[none]` — a two-seat roster from a rig nobody runs — and the fix line told the
+    operator to run `up /home/chexxor/Git/Durian-Pi/rig.json`. The SAME command with the real file
+    (`node cli.mjs check rig.selfdev.json`, 12 seats, exit via JSON `ok`) printed the full 12-seat capability
+    roster. Always pass the rig file explicitly on this repo; a finding from the bare form may be right for the
+    wrong reason.

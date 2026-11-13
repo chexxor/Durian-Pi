@@ -48,6 +48,7 @@ after a multi-hour window before claiming any effect on the burn rate.
 cd /home/chexxor/Git/Durian-Pi
 node .spike/pool-rows.mjs ./selfdev.sqlite            # 0.8 s — every pool row with its transitions (the census alone hides the claim)
 node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5   # 1.7 s — the migratable denominator, read-only
+node cli.mjs check rig.selfdev.json                   # ~20 s — MUST name the rig file: the bare verb audits ./rig.json (2 seats, pm/worker) and prints a roster nobody runs
 node tools/backlog-burn.mjs --hours 4                 # 0.03 s, exit 0 — the backlog RATE (quotes the ledger window it used)
 DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --limit 2 --no-body | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).pool))'  # 0.8 s
 node tools/stranded-inbox.mjs selfdev.sqlite          # 1 s — is the broker PARKED? hbAgeS vs progressAgeS
