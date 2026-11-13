@@ -4354,3 +4354,11 @@ at `:743`). Re-measure every `path:line` before repeating it.
     (`node cli.mjs check rig.selfdev.json`, 12 seats, exit via JSON `ok`) printed the full 12-seat capability
     roster. Always pass the rig file explicitly on this repo; a finding from the bare form may be right for the
     wrong reason.
+325. **When a mechanism's only trace is a COUNT, the count is not the trace.** The live broker printed
+    `SKIP auditor reason=pool-gated:1` on five seats, every pass, for hours. It named neither the row nor the reason,
+    and the pool was one row deep: #7660 with `requires: "docs"`, a capability no seat advertises. Worse, the gate's
+    own refusal path is UNREACHABLE from the wake loop by design (the selector pre-filters through `workable()`, and
+    `size-refused` is written only on a NAMED claim), so the bare count was the entire visible surface of a mechanism
+    that had never fired. Fixed in `src/driver.mjs` (`poolGatedSkipLine`): `pool-gated:<n> #<id>(<reason>)[ +N more]`,
+    bounded at two rows, count first. Probe: `grep "pool-gated" <db>.broker.log | tail -3` — if the line has no `#`,
+    you are reading an un-upgraded broker (it outlives the code on disk; restart it).

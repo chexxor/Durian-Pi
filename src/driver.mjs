@@ -83,6 +83,31 @@ export function parkedSignature(items, seatName) {
 }
 
 /**
+ * THE `pool-gated` SKIP LINE, with the rows named (N19, 2026-11-13).
+ *
+ * WHY THE COUNT WAS NOT ENOUGH, measured on the live rig: `pool-gated:1` appeared on five seats' SKIP line on
+ * every pass for hours and named neither the row nor the reason. #7660 carried `requires: "docs"`, which NO seat
+ * advertises, so the pool was one row deep, unclaimable by all twelve, and the only instrument that said so was a
+ * bare number. The same line is the ONLY place a size refusal can surface without a claim: the wake selector
+ * pre-filters through `workable()` (so an oversized row is skipped, never attempted) and `size-refused` is written
+ * only on a NAMED claim (D275 addendum (c)).
+ *
+ * The count stays first (`pool-gated:<n>`) because readers parse it; the rows follow, each with its own reason
+ * clipped, and the remainder is summed. Bounded on purpose: a fleet-sized pool must not put hundreds of ids in one
+ * SKIP line, and the broker log is one line per seat per pass.
+ */
+export function poolGatedSkipLine(gated = [], { named = 2, reasonChars = 90 } = {}) {
+  if (!Array.isArray(gated) || gated.length === 0) return "";
+  const clip = (text) => {
+    const t = String(text ?? "");
+    return t.length <= reasonChars ? t : `${t.slice(0, reasonChars - 1)}…`;
+  };
+  const shown = gated.slice(0, named).map((g) => `#${g.id}(${clip(g.reason)})`);
+  const rest = gated.length - shown.length;
+  return `pool-gated:${gated.length} ${shown.join(",")}${rest > 0 ? ` +${rest} more` : ""}`;
+}
+
+/**
  * Which seats to wake. A seat is woken when it has work to advance:
  *   - at least one QUEUED item addressed to it THAT THIS SEAT CAN CLAIM (the ride continues).
  *     #6189: "queued" alone is not claimable. A queued row whose `blockedBy` gate is still open, or
@@ -163,6 +188,8 @@ export function selectWakes({
     const queuedVerdicts = (items ?? [])
       .filter((it) => (it.to === name || openPoolRow(it)) && it.status === "queued")
       .map((it) => ({
+        // The id is kept so the SKIP line can NAME the row, not just count it (see poolGatedSkipLine).
+        id: it.id,
         verdict: workable(it, name, {
           items,
           capabilities: seat.capabilities ?? [],
@@ -172,7 +199,9 @@ export function selectWakes({
         pool: openPoolRow(it),
       }));
     const gatedReasons = queuedVerdicts.filter((v) => !v.verdict.workable && !v.pool).map((v) => v.verdict.reason);
-    const poolGatedCount = queuedVerdicts.filter((v) => !v.verdict.workable && v.pool).length;
+    const poolGated = queuedVerdicts
+      .filter((v) => !v.verdict.workable && v.pool)
+      .map((v) => ({ id: v.id, reason: v.verdict.reason }));
     const hasQueued = !paused && queuedVerdicts.some((v) => v.verdict.workable);
     // A stalled claim: the item is claimed but nothing is advancing it (no
     // submission in flight, no live lease) and the operator did not stop the seat's
@@ -199,7 +228,7 @@ export function selectWakes({
     if (!hasQueued && !hasStalledClaim && !hasParked && !escalationRelevant) {
       // `queued-gated:<code>` is reported ahead of `no-work` so the log distinguishes "this seat has rows
       // it cannot claim yet" from "this seat has nothing". Both were `no-work` before #6189.
-      const reason = [gatedReasons.length ? `queued-gated:${gatedReasons.join(",")}` : "", poolGatedCount ? `pool-gated:${poolGatedCount}` : ""]
+      const reason = [gatedReasons.length ? `queued-gated:${gatedReasons.join(",")}` : "", poolGatedSkipLine(poolGated)]
         .filter(Boolean)
         .join(" ") || (parkedUnchanged ? "parked-deduped" : "no-work");
       onSkip({ seat: name, reason });

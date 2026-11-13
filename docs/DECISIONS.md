@@ -12089,3 +12089,25 @@ live: row **#7660** sits OPEN in the pool with `requires: "docs"`, and no seat o
 unclaimable by all 12 — and every pass logs `pool-gated:1` for the seats that cannot take it. `revise_work`
 refuses to create that state; `send_work` still can. The remedy is a decision (refuse a `requires` set no seat
 advertises at send time, or warn and allow), taken with the operator because it changes what a sender may do.
+
+(l) **A COUNT IS NOT EVIDENCE, so the pool's skip line names the row.** `pool-gated:1` was the ONLY instrument that
+said anything about the gate on the live rig, and it said neither which row nor why: measured 2026-11-13, five seats
+printed it every pass for hours against #7660 (`requires: "docs"`, a capability no seat advertises). The gate's own
+refusal path is unreachable from the wake loop by design — the selector pre-filters through `workable()`, so an
+oversized row is SKIPPED, and `size-refused` is written only on a NAMED claim (clause (c)) — which makes the skip
+line the one place a size verdict can surface for free. It is now
+`pool-gated:<n> #<id>(<reason>)[ +N more]`, bounded at two named rows with a clipped reason
+(`poolGatedSkipLine`, `src/driver.mjs`), the count kept FIRST for readers that parse it, pinned by
+`demo/pool-gated-reason.test.mjs`. The general rule this buys: when a mechanism's only trace is a number, the number
+is not the trace.
+(m) **The gate is proven on the ROSTER, not on a live row, and that is stated as the measurement it is.** `pm` and
+`lead` were asked five times to mint the one `project`-tier pool row that would make the refusal observable live and
+did not (they were landing; pm minted nine other rows); a delegate may not pool a row. So
+`demo/pool-gate-live-roster.test.mjs` drives the SHIPPED verbs against this rig's REAL roster — the twelve seats'
+capability sets and declared windows plus the tier table `up` wrote, read from the live store — on a fixture store:
+`impl` (164320) is refused `too-big:project(120000 tokens > 70% of the 164320-token usable window)` and the
+`auditor` (12288) the same class of refusal quoting ITS window, each with the split instruction, each leaving the row
+queued and open with one `size-refused` transition. What this does NOT prove: that a live seat would attempt such a
+claim — on this tier table only `project` can be refused, and the fleet's claim path skips it before attempting. The
+honest sentence is "the gate refuses correctly for every seat on this roster", not "the gate was observed refusing
+live work", and the difference is recorded here so no later session inherits the stronger claim.

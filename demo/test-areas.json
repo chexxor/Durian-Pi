@@ -103,7 +103,9 @@
       "demo/pool-send-gate.test.mjs",
       "demo/pool-address.test.mjs",
       "demo/pool-size-gate.test.mjs",
-      "demo/declared-window-seam.test.mjs"
+      "demo/declared-window-seam.test.mjs",
+      "demo/pool-gate-live-roster.test.mjs",
+      "demo/pool-gated-reason.test.mjs"
     ],
     "broker": [
       "demo/autostart.test.mjs",

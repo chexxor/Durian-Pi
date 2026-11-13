@@ -180,7 +180,9 @@ The driver wakes a seat for three conditions (`selectWakes`, `src/driver.mjs:71-
 
 - **`hasQueued`** — a `queued` item addressed to it, **or an open pool row it is eligible for** (N19 row 4:
   `selectWakes` uses the same `to === name || openPoolRow(it)` predicate as `claim_work`, and a pool row the
-  seat cannot take is counted in a `pool-gated:<n>` skip reason instead of silently producing no wake),
+  seat cannot take is named in a `pool-gated:<n> #<id>(<reason>)` skip reason instead of silently producing no
+  wake — the count first for readers that parse it, then up to two rows and a clipped reason, because a bare count
+  is not evidence (measured: `pool-gated:1` for hours against #7660 said neither which row nor why)),
   suppressed while `paused`, or
 - **`hasStalledClaim`** — a `claimed` item it holds with no in-flight submission, no live lease, and no
   operator stop,
@@ -206,7 +208,7 @@ that the wake's `reason` is `parked`.
 So:
 
 > A `queued` item addressed to it - or an open pool row it advertises - eventually wakes its seat. A pool row
-> it does **not** advertise does not wake it: the pass logs `pool-gated:<count>` so the silence is attributable. A `claimed`-but-stalled item re-wakes its seat. A `held` item
+> it does **not** advertise does not wake it: the pass logs `pool-gated:<count> #<id>(<reason>)` so the silence is attributable — the count AND the row. A `claimed`-but-stalled item re-wakes its seat. A `held` item
 > wakes nobody to CLAIM — it wakes its seat only to say the row is parked; it becomes claimable through
 > `release_work`. A `deferred` item wakes its seat the same parked way, plus a `QUESTION` item is queued to
 > the seat named in `deferredTo` (§3), and `deferredTo: human` is surfaced by attention (§5).

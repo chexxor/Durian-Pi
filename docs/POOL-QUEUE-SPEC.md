@@ -568,7 +568,32 @@ exactly one `tier: "project"` row.
   does not cover** — the milestone's falsification probe, observed on a live row.
 - Census: `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[]}`.
 
-**Not yet measured, and stated as such:** the `too-big:project(...)` refusal has not fired on a live seat —
-`sizeRefused` is 0 and `tooBig` is empty, because no `project`-tier pool row has been minted. The predicate,
-its reason string and the split instruction are pinned by demos (`demo/pool-size-gate.test.mjs`, the row-5
-tests in §12); the live quote is owed by the next session, and `docs/NEXT.md` names the command.
+**The gate now BITES, on this rig's own roster (2026-11-13, `demo/pool-gate-live-roster.test.mjs`, 0.4 s, exit 0).**
+It could not be observed on the live store, and the reasons are structural rather than accidental: (a) only the
+`project` tier (120000) exceeds 70 % of ANY window here — 115023 for the eleven 164320-token seats, 8601 for the
+auditor — so no ordinary backlog row can ever be refused; (b) the wake selector pre-filters through `workable()`,
+so an oversized pool row is SKIPPED rather than attempted, and `size-refused` is written only on a NAMED claim
+(D275 addendum (c)). The delegate asked `pm` and `lead` five times to mint the one `project` row that would make it
+observable and neither did (they were landing; pm minted nine other rows), and a delegate may not pool a row. So the
+gate is proven against the **real roster** — the twelve seats' names, capability sets and declared windows, and the
+tier table `up` wrote, read from `./selfdev.sqlite` via the broker seam — driven through the **shipped** verbs on a
+fixture store:
+
+| seat | row | verbatim refusal |
+|---|---|---|
+| `impl` (164320 usable) | `pool: true, requires: ["implement"], tier: "project"` | `CLAIM_REFUSED: #1 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of the 164320-token usable window))` + `Split it: send_work the pieces (each with its own tier and requires), then close #1 with complete_work(itemId: 1, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a queue problem.` |
+| `auditor` (12288 usable) | `pool: true, requires: ["verify"], tier: "project"` | `too-big:project(120000 tokens > 70% of the 12288-token usable window)` — the same gate, the seat's OWN window in the string |
+
+Both refusals leave the row **queued and open** (a refusal is not a claim), each writes one `size-refused`
+transition with the claimant and the reason, and `poolCensus(...).tooBig` lists the row with
+`tooBigFor: [all 12 seats]` and `unclaimableByAnyone: true` **without any claim having to happen** — which is the
+instrument a seat-less session should read. The same demo then proves the gate does not starve: a `small` pool row
+is claimed by `devtools`, a non-conventional owner, with its `pool-claimed` transition.
+
+**And the skip line now names the row (same day, `src/driver.mjs`).** `pool-gated:1` was the only live trace of the
+gate and named neither the row nor the reason — measured against #7660
+(`SKIP auditor reason=pool-gated:1` on five seats, every pass, for hours). It is now
+`pool-gated:<n> #<id>(<reason>)[,#<id>(<reason>)][ +N more]`, bounded at two named rows and a clipped reason
+(`poolGatedSkipLine`), so an oversized or dead pool row is attributable **from the broker log alone**:
+`SKIP auditor reason=pool-gated:2 #5001(requires:implement),#5002(too-big:project(120000 tokens > 70% of the 12288-token usable window))`.
+Pinned by `demo/pool-gated-reason.test.mjs` (16 checks: bounded, count-first for old readers, no wake regression).

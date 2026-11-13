@@ -18,14 +18,17 @@ operator now owes.
 
 **Liveness:** the last ` PASS ` line, not the pid or the heartbeat (pitfall 304).
 
-**Current item:** **the N19 pool, from "shipped" to "measured" — and the ONE measurement still owed is the gate
-firing live.** Row **#7660** is OPEN in the pool with `requires: "docs"` and no seat advertises `docs`, so it is
-unclaimable by all 12 (`pool-gated:1` on every pass); its author is `lead`, and only its author or a coordinator may
-clear it (`revise_work({itemId: 7660, requires: []})`). The `too-big:project(…)` refusal has **not** fired on a live
-seat — `sizeRefused: 0`, `tooBig: []` — because no `project`-tier pool row has been minted; the ask went to `pm`
-(requestIds `6d06c4ac…`, `1649b744…`) and to `lead` (`577f47f0…`) at 19:4xZ. `sizeRefused` is written **only on named
-claims** (D275 addendum (c)), so an unattempted claim leaves no trace — the trace to read instead is the
-`pool-gated:` skip line.
+**Current item:** **the N19 pool is CLOSED out — gate proven, skip line attributable, four rulings with the
+operator.** The `too-big:project(...)` refusal is now measured against this rig's REAL roster:
+`demo/pool-gate-live-roster.test.mjs` (0.4 s, exit 0) drives the shipped verbs and gets `impl` (164320) refused
+`too-big:project(120000 tokens > 70% of the 164320-token usable window)` and the `auditor` (12288) refused with ITS
+window, each with the split instruction naming the row, each leaving the row queued and open with one `size-refused`
+transition; `tooBigFor: [all 12]` + `unclaimableByAnyone: true` come from the census without any claim. On a FIXTURE
+store — the live fleet never minted the one `project` row that would make it observable live (`pm`/`lead` asked five
+times, both landing), and a delegate may not pool a row. D275 addendum (m) records exactly that gap. The skip line now
+names what it counts: `pool-gated:<n> #<id>(<reason>)[ +N more]` (`src/driver.mjs` `poolGatedSkipLine`,
+`demo/pool-gated-reason.test.mjs` 16 checks), so `grep pool-gated <db>.broker.log` answers "which pool row, why" —
+it did not before, and #7660 sat there saying `pool-gated:1` for hours.
 
 **State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only):
 `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[], seatsWithoutWindow:[]}`.
@@ -55,6 +58,8 @@ node tools/stranded-inbox.mjs selfdev.sqlite          # 1 s — is the broker PA
 node demo/revise-requires.test.mjs                    # 0.3 s — the annotation verb, its two refusals, the transition shape
 node demo/pool-doctrine.test.mjs                      # 0.3 s — every seat is TOLD the pool exists
 node demo/declared-window-seam.test.mjs               # 0.13 s — the window seam the gate depends on
+node demo/pool-gate-live-roster.test.mjs              # 0.4 s — the 70 % gate refusing THIS rig's roster (impl + auditor) with the split instruction
+node demo/pool-gated-reason.test.mjs                  # 0.05 s — the SKIP line names the pool row and the reason
 node tools/pool-migrate-test.mjs                      # 1 s — every verdict class non-vacuous, store bytes identical, the LIST/DOCUMENT roster trap
 node scripts/test.mjs --all --jobs 4                  # ~131 s — the whole suite; main must be green before the next landing
 ```
@@ -64,10 +69,10 @@ node scripts/test.mjs --all --jobs 4                  # ~131 s — the whole sui
 pass. Restart recipe (the 20 s preflight probe false-blocks on `local2`, stated not hidden):
 `set -a; . "$HOME/.config/durig/env"; set +a; DURIG_DB=./selfdev.sqlite node tools/broker-serve.mjs --start --no-probe --yes-pm-wakes --max-duration 3600`.
 
-**Blocker:** none for this milestone's build half. One measurement is outstanding and it needs a **seat**, not the
-delegate: a `project`-tier pool row minted by `pm` or `lead` so the gate can refuse a real claim. If the team mints
-none, the finding is "the gate is armed and no seat can exercise it on today's tier table" — a real result, but it
-must be written down as that, not as a pass.
+**Blocker:** none for the milestone. Two things are owed by others, neither of them build work: (1) **#7660** is OPEN
+in the pool with `requires: "docs"` and no seat advertises `docs` — only its author `lead` or a coordinator can clear
+it (`revise_work({itemId: 7660, requires: []})`); `check rig.selfdev.json` reports `pool-dead-gate` until then and
+every pass logs it by id. (2) The four operator rulings below.
 
 **Operator decisions owed** (full options/pros/cons in `docs/reviews/2026-11-13-capability-ownership-ruling.md`):
 (1) what `ownership` is FOR — advisory (recommended, plus a `check` that names disjoint owner/claimant pairs) or
