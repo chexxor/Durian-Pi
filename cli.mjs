@@ -1383,6 +1383,9 @@ async function cmdQueue(args = []) {
   let gates = false;
   let human = false;
   let limit = GATE_VIEW_CAP;
+  // `--limit` only bounds what is PRINTED; whether the caller asked for it is recorded so a read that did not ask
+  // keeps returning every matched row (today's behaviour, asserted in demo/queue-compat-args.test.mjs).
+  let limitWasSet = false;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i];
     const spec = QUEUE_FLAGS[a];
@@ -1415,6 +1418,7 @@ async function cmdQueue(args = []) {
         if (n > GATE_VIEW_CAP)
           refuseQueueArgument(`--limit ${n} exceeds the bounded park view's cap of ${GATE_VIEW_CAP}`);
         limit = n;
+        limitWasSet = true;
       } else to.push(v);
       i += 1;
       continue;
@@ -1475,7 +1479,7 @@ async function cmdQueue(args = []) {
   // THE DEFAULT IS TODAY'S BYTES (#5016): no flags, or only the `--json` no-op, and the answer is the whole
   // document — `{ok, command, items}`, unchanged — so anything that parses `queue` today keeps parsing it. Every
   // extra key below appears ONLY once a caller asked for a narrower view.
-  if (ids.length === 0 && !filtered && !noBody && !gates) {
+  if (ids.length === 0 && !filtered && !noBody && !gates && !limitWasSet) {
     const items = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
     out({ ok: true, command: "queue", items });
     return;
@@ -1507,6 +1511,9 @@ async function cmdQueue(args = []) {
     ...(filtered ? { filter: { ...(statuses.length ? { statuses } : {}), ...(to.length ? { to } : {}) } } : {}),
     rows: census.rows,
     counts: census.counts,
+    // The pool is reported APART from `counts` because a pooled row is `queued` like any other: counting it there
+    // makes a rig with a full pool and an idle fleet look busy (N19 row 5, docs/POOL-QUEUE-SPEC.md §6.4).
+    pool: census.pool ?? null,
     attention: census.attention,
     // Mechanism honesty (#5016): filters and `--no-body` narrow the PAYLOAD, never the storage read — the queue is
     // one document (`RigQueue.value.items`), so it is read whole every time. Saying which half moved is what stops
@@ -1537,7 +1544,7 @@ async function cmdQueue(args = []) {
   }
 
   // A filter without ids reads the document (the storage read is whole either way) and then narrows what is
-  // printed. `rows`/`counts`/`attention` above are still the whole store's.
+  // printed. `rows`/`counts`/`attention`/`pool` above are still the whole store's.
   const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
   const items = filterQueueItems(all, { statuses, to });
   if (gates) {
@@ -1553,6 +1560,7 @@ async function cmdQueue(args = []) {
       filter: { statuses, ...(to.length ? { to } : {}) },
       rows: census.rows,
       counts: census.counts,
+      pool: census.pool ?? null,
       // The number the census was asked for: held rows with NOTHING recorded about why they are parked.
       gatelessHeld: view.filter((v) => v.status === "held" && v.gate === "none").length,
       items: view.slice(0, limit),
@@ -1566,7 +1574,18 @@ async function cmdQueue(args = []) {
     }
     return;
   }
-  out({ ...doc, items: noBody ? items.map(stripBody) : items });
+  // A printed cap the caller asked for is APPLIED here too, and the payload says so: an accepted flag that
+  // changes nothing is a bounded read that quietly turns into a dump of the matched rows.
+  const shown = limitWasSet ? items.slice(0, limit) : items;
+  out({
+    ...doc,
+    ...(limitWasSet && items.length > shown.length
+      ? { bounded: { limit, cap: GATE_VIEW_CAP, matched: items.length, shown: shown.length, truncated: true } }
+      : {}),
+    items: noBody ? shown.map(stripBody) : shown,
+  });
+  if (limitWasSet && items.length > shown.length)
+    process.stderr.write(`queue: --limit ${limit} printed ${shown.length} of ${items.length} matched row(s); the rows/counts/pool above are over all ${census.rows} rows in the store.\n`);
 }
 
 // resume (alias: doctor): the deliberate way to advance admitted-but-not-progressing

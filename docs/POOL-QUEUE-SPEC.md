@@ -25,8 +25,8 @@ Success is measurable in three numbers, all already instrumented:
 
 | criterion | today | target | probe |
 |---|---|---|---|
-| work rows that any eligible seat can pull (not addressed to one seat) | 0 | the majority of new work | `cli.mjs queue --json` → count `pool === true` |
-| work rows claimed by a seat OTHER than a fixed owner | 0 (impl holds 380 of 796 queued) | spread across eligible seats | `queueCensus` by `to` among rows with `pool === true` |
+| work rows that any eligible seat can pull (not addressed to one seat) | 0 | the majority of new work | `cli.mjs queue --json --no-body` → the `pool` line (`pool.pooled`) |
+| work rows claimed by a seat OTHER than a fixed owner | 0 (impl holds 380 of 796 queued) | spread across eligible seats | the `pool` line's `claimed`, and the rows themselves by `to` among `pool === true` |
 | rows that exceed a claimant's window and are taken anyway | unmeasurable (tier is recorded, never enforced) | 0 | a check rule over `tier` × claimant window |
 
 **Non-goals (do not build these in N19):**
@@ -403,6 +403,16 @@ section exists so a reader can tell which one is true.
    `fraction * usableWindow` and a non-positive window short-circuits before it.
 5. **The `pool` field is provenance, not eligibility.** A claimed pool row keeps `pool: true`. Treating that as
    eligibility would let a second seat claim a row that already has an owner — the race P5 exists to close.
+6. **The pool census rides the census-bearing `queue` forms, not the bare dump.** §6.4 asks for the three
+   numbers in the queue read. `queue` with NO flags is still byte-identical to what it was before N19
+   (`{ok, command, items}`) — that compat contract is asserted by `demo/queue-filter-attention.test.mjs` and
+   `demo/queue-compat-args.test.mjs`, and a pool key on the 22 MB dump would break it for no gain: anyone who
+   wants the counts asks for a bounded read. Every narrowed form (`--no-body`, `--status`, `--to`, `--limit`,
+   `--with-gates`) now carries `pool`, derived over the FULL row set before projection — measured
+   `node cli.mjs queue --json --limit 2 --no-body` in **0.8 s** on the 7,655-row store (Linux / Fedora Linux 45
+   / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1, 2026-11-13). `--limit` is now applied in the JSON forms
+   too: previously it was parsed, bounded and then ignored unless `--with-gates` or `--human` was in play, so
+   `queue --limit 5` printed 5 of nothing and all of everything.
 
 **Not built, per the boundaries:** the skill store (§9 item 3 — the operator ruled capabilities are
 assigned, not earned) and a capability-grant verb (`pm` assigns through the roster; the two `check` rules in

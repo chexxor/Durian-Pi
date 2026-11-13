@@ -206,6 +206,12 @@ const refusedId = await harness.commit(async (tx) => {
 	row.transitions = [...(row.transitions ?? []), { at: now, event: "size-refused", by: "impl", reason: "too-big:project(120000 tokens > 70% of the 12288-token usable window)" }];
 	return id;
 }, BACKGROUND_CONTEXT);
+// One ADDRESS row, so the pool line can be proved to count POOL rows and not the store: the store has 4 rows,
+// the pool has 3. `pool` absent means "addressed to that seat", exactly as before N19 (row 3).
+const addressId = await harness.commit(async (tx) =>
+	enqueueItem(tx, "pm", "impl", "Plain addressed row", "not pooled - the pool line must not count it", null, false, "trivial", false, null, ["implement"], null, false),
+	BACKGROUND_CONTEXT,
+);
 await storage.close(BACKGROUND_CONTEXT);
 
 const checkDead = await cli(["check", rigPath], { DURIG_DB: db });
@@ -232,6 +238,35 @@ check("`status --json` carries the pool counts separately from the status counts
 check("...and the gate fraction it used is stated, not implied", statusPayload.pool?.fraction === 0.7, JSON.stringify(statusPayload.pool));
 check("...and seats with NO declared window are named rather than guessed at", statusPayload.pool?.seatsWithoutWindow?.length === 0, JSON.stringify(statusPayload.pool?.seatsWithoutWindow));
 check("...and the refused project row is too big for EVERY windowed seat, so nobody can take it", (statusPayload.pool?.tooBig ?? []).some((t) => t.id === refusedId && t.unclaimableByAnyone && t.tooBigFor.length === 3), JSON.stringify(statusPayload.pool?.tooBig));
+
+// The row 5 contract names THREE surfaces for the same three numbers, so the demo pins all three. The `queue`
+// read is where a seat actually looks, and it must not need a second read of the store.
+console.log("\n=== the census-bearing `queue --json` forms carry the pool counts ===");
+const queueJson = await cli(["queue", "--json", "--no-body"], { DURIG_DB: db });
+const qPayload = JSON.parse(queueJson.stdout || "{}");
+check("`queue --json --no-body` reports pooled / open / claimed / size-refused in the same read as the rows",
+	queueJson.code === 0 && qPayload.pool?.pooled === 3 && qPayload.pool?.open === 2 && qPayload.pool?.claimed === 1 && qPayload.pool?.sizeRefused === 1,
+	JSON.stringify(qPayload.pool));
+check("...and `pool.rows` counts POOL rows, not the store (4 rows in it, 3 in the pool)",
+	qPayload.rows === 4 && qPayload.pool?.rows === 3,
+	JSON.stringify({ rows: qPayload.rows, pool: qPayload.pool }));
+check("...and an ADDRESS row (no `pool` flag) is not counted in the pool", (qPayload.items ?? []).some((it) => it.id === addressId && it.pool !== true), JSON.stringify(qPayload.items?.map((it) => [it.id, it.pool])));
+const bareDoc = JSON.parse((await cli(["queue"], { DURIG_DB: db })).stdout || "{}");
+check("...and the UNFILTERED default bytes are unchanged: `queue` still has exactly ok/command/items (#5016)",
+	JSON.stringify(Object.keys(bareDoc)) === '["ok","command","items"]',
+	JSON.stringify(Object.keys(bareDoc)));
+const bounded = await cli(["queue", "--json", "--status", "queued", "--limit", "1"], { DURIG_DB: db });
+const bPayload = JSON.parse(bounded.stdout || "{}");
+check("a bounded view still reports the WHOLE pool, not the slice it printed (#5016)",
+	bPayload.pool?.pooled === 3 && bPayload.pool?.open === 2 && (bPayload.items ?? []).length === 1 && bPayload.bounded?.truncated === true,
+	JSON.stringify({ pool: bPayload.pool, shown: (bPayload.items ?? []).length, bounded: bPayload.bounded }));
+check("...and the counts agree with `status --json`, because they are ONE derivation",
+	JSON.stringify(bPayload.pool) === JSON.stringify(statusPayload.pool) ||
+	(bPayload.pool?.pooled === statusPayload.pool?.pooled && bPayload.pool?.open === statusPayload.pool?.open && bPayload.pool?.claimed === statusPayload.pool?.claimed && bPayload.pool?.sizeRefused === statusPayload.pool?.sizeRefused),
+	JSON.stringify({ queue: bPayload.pool, status: statusPayload.pool }));
+const gateView = await cli(["queue", "--json", "--with-gates", "--limit", "1"], { DURIG_DB: db });
+const gPayload = JSON.parse(gateView.stdout || "{}");
+check("the bounded gate census carries the pool line too", gPayload.pool?.pooled === 3, JSON.stringify(gPayload.pool));
 
 console.log(`\n${failures === 0 ? "POOL CHECK GATE PASS" : `POOL CHECK GATE FAIL — ${failures} check(s)`}`);
 process.exit(failures === 0 ? 0 : 1);

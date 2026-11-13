@@ -1,6 +1,6 @@
-**Last update:** 2026-11-13T06:3xZ (delegate). `main` = `3f68a8a3`, 11 local commits since `792445d5`, **0 pushed** — a 150-commit push landed at 21:17:02Z from OUTSIDE this session; confirm it was the operator's before treating the push grant as exercised. **Landing is DONE:** `refsNeedingLanding: 1` (`item-6959`, author-blocked), refs 105, worktrees 95. The fleet died 21:17Z, cause fixed (`575a67e8`, D274) — `docs/incidents/2026-11-12-broker-terminal-stop.md` has the death, the recovery, the push and the 5.6 h leak.
+**Last update:** 2026-11-13T06:5xZ (delegate). `main` = `38fc6bea` (+1 this session), 12 local commits since `792445d5`, **0 pushed** — a 150-commit push landed at 21:17:02Z from OUTSIDE this session; confirm it was the operator's before treating the push grant as exercised. **Landing is DONE:** `refsNeedingLanding: 1` (`item-6959`, author-blocked), refs 105, worktrees 95. The fleet died 21:17Z, cause fixed (`575a67e8`, D274) — `docs/incidents/2026-11-12-broker-terminal-stop.md` has the death, the recovery, the push and the 5.6 h leak.
 
-**N19 "The Pool" (D275) is SHIPPED, rows 0-8, on `main`** (`a4502733` calibrate → `3f68a8a3` docs): `requires` is a capability SET, `pool: true` mints a row with no recipient, a claimant becomes owner-of-record, a row whose tier estimate exceeds 70 % of the claimer's usable window is refused with a split instruction, `complete_work({split:[…]})` closes a row into children, `status --json`/`queue --human` report the pool census, and `check` fails (exit 1) on pool work nobody can do. Read `docs/POOL-QUEUE-SPEC.md` §12 for the shipped wording. **What is NOT yet measured:** `pool.rows = 0` on this rig — the 12 seats predate the gate and carry no `usableWindow` until the next `up`, and no seat has pooled a row.
+**N19 "The Pool" (D275) is SHIPPED, rows 0-8, on `main`** (`a4502733` calibrate → `38fc6bea` + the queue surface): `requires` is a capability SET, `pool: true` mints a row with no recipient, a claimant becomes owner-of-record, a row whose tier estimate exceeds 70 % of the claimer's usable window is refused with a split instruction, `complete_work({split:[…]})` closes a row into children, `status --json` / `queue --human` / every narrowed `queue --json` form report the pool census, and `check` fails (exit 1) on pool work nobody can do. Read `docs/POOL-QUEUE-SPEC.md` §12 for the shipped wording. **What is NOT yet measured:** `pool.rows = 0` on this rig — the 12 seats predate the gate and carry no `usableWindow` until the next `up`, and no seat has pooled a row.
 
 **431 rows are parked on the absent operator and lead holds the rubric** (no clock; lead 167 / pm 147; 7 class rulings, not 431 asks) — `.spike/lead-decide-431.md`, delivered 21:29:22Z; still 431 at 21:38Z.
 
@@ -13,7 +13,7 @@
 
 ## NEXT SESSION
 
-**Milestone this window worked** — **N19 "The Pool" (D275), rows 0-8 all landed** (`a4502733`, `b454d1ea`, `4b4ac11a`, `a28fe142`, `6eac7919`, `f4cb2c32`, `785f214e`, `6567a568`, `3f68a8a3`): `requires` is a capability SET (AND), a pool row has no recipient until claimed, the size gate refuses a row bigger than 70 % of the claimer's usable window with a split instruction, splits close the parent as `closedAs:"split"`, and the census + two `check` rules make the pool legible. Built by this delegate directly (not through the team), per the operator's instruction.
+**Milestone this window worked** — **N19 "The Pool" (D275), rows 0-8 all landed** (`a4502733`, `b454d1ea`, `4b4ac11a`, `a28fe142`, `6eac7919`, `f4cb2c32`, `785f214e`, `6567a568`, `3f68a8a3`, `38fc6bea` + the queue census surface): `requires` is a capability SET (AND), a pool row has no recipient until claimed, the size gate refuses a row bigger than 70 % of the claimer's usable window with a split instruction, splits close the parent as `closedAs:"split"`, and the census + two `check` rules make the pool legible. Built by this delegate directly (not through the team), per the operator's instruction.
 
 **Liveness:** the last ` PASS ` line, not the pid or the heartbeat (pitfall 304).
 
@@ -55,7 +55,8 @@ node tools/process-leak-scan.mjs                                     # 0.04-0.54
 DURIG_DB=./selfdev.sqlite node cli.mjs ps                             # 1.8 s — roster + claim ORDER (workStrategy: team/seat/default, with its source)
 node demo/offline.mjs                                                  # exit 1 — the mocked plane is still red
 node demo/pool-address.test.mjs                                        # 0.3 s, exit 0 — pool address, claim, owner-of-record, split
-node demo/check-pool-gate.test.mjs                                     # 2.5 s, exit 0 — `check` exits 1 on a pool row nobody can claim
+node demo/check-pool-gate.test.mjs                                     # 3.1 s, exit 0 — `check` exits 1 on a pool row nobody can claim, and `queue --json` reports pooled/open/claimed/size-refused
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --limit 2 --no-body | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).pool))'  # 0.8 s — the live pool census without opening the whole store
 DURIG_DB=./selfdev.sqlite node cli.mjs status --json | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.stringify(JSON.parse(s).pool)))'  # 18.4 s — the live pool census
 ```
 

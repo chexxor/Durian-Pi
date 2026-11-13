@@ -4298,3 +4298,11 @@ at `:743`). Re-measure every `path:line` before repeating it.
     bracketed correctly.** Two calls failed with "expected object, got string" on a 4 KB docs insertion.
     For a section that long, write it to gitignored `.spike/<name>.md` and insert with
     `python3 - <<'PY' ... anchor replace ... PY`; it also lets you assert the anchor is unique before writing.
+317. **`queue --limit N` was parsed, bounded, and then IGNORED unless `--with-gates` or `--human` was also
+    present.** Measured 2026-11-13 before the fix: `cli.mjs queue --limit 2` on the 7,655-row store printed
+    7,655 rows. `--limit` now applies in every JSON form (a `bounded: {limit, cap, matched, shown, truncated}`
+    stamp is added and the truncation is named on stderr), and it counts as "a narrower view", so the bare
+    `queue` bytes stay untouched. If you ever add a key to the bare payload, `demo/queue-filter-attention.test.mjs`
+    fails on `Object.keys(bareDoc) === ["ok","command","items"]` — that assertion is the #5016 compat contract,
+    not an oversight. Probe in one bounded call: `DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --limit 2
+    --no-body | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).pool))'` (0.8 s, Linux Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1).

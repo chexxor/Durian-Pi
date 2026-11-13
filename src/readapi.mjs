@@ -331,6 +331,37 @@ export function queueCensusOf(items) {
 		counts,
 		terminal: rows.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
 		active: rows.filter((it) => !TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
+		// The pool numbers travel with the census, not in a second read: a bounded view must not look like a
+		// smaller rig (#5016), and the pool is exactly the part a status-count-only census hides - a pooled row
+		// is `queued` like any other, so a full pool and an idle fleet read as "busy".
+		pool: poolCounts(rows),
+	};
+}
+
+/**
+ * THE ROW-SIDE POOL COUNTS (N19 row 5 + 7) - docs/POOL-QUEUE-SPEC.md §6.4, the half that needs NO seats.
+ *
+ * Split out deliberately: `queue --json`'s census comes from a row read that has no seat document in it, so a
+ * pool line there must be derivable from rows alone. `poolCensus` is this plus the seat-side warnings. One
+ * derivation, two surfaces - the numbers can drift apart only if the code does.
+ *
+ * `sizeRefused` counts TRANSITIONS, not statuses: a row the size gate refused is still `queued` (nothing about
+ * its status changed - only its eligibility for THIS seat changed), so the only durable trace is the
+ * `size-refused` event the claim path writes.
+ */
+export function poolCounts(rows) {
+	const list = rows ?? [];
+	const pooled = list.filter((it) => it.pool === true);
+	const open = pooled.filter(openPoolRow);
+	return {
+		rows: pooled.length,
+		pooled: pooled.length,
+		open: open.length,
+		// `claimed` is the count the human report and the contract name; `ownerOfRecord` is the same number
+		// spelled out for a reader who needs to know WHY a claimed pool row is no longer open (P5).
+		claimed: pooled.length - open.length,
+		ownerOfRecord: pooled.length - open.length,
+		sizeRefused: list.filter((it) => (it.transitions ?? []).some((t) => t.event === "size-refused")).length,
 	};
 }
 
@@ -355,8 +386,7 @@ export function queueCensusOf(items) {
 export function poolCensus(items, seats = [], tierTokens = DEFAULT_TIER_TOKENS, fraction = POOL_SIZE_GATE_FRACTION) {
 	const rows = items ?? [];
 	const seatList = seats ?? [];
-	const pooled = rows.filter((it) => it.pool === true);
-	const open = pooled.filter(openPoolRow);
+	const open = rows.filter((it) => it.pool === true && openPoolRow(it));
 	const withWindow = seatList.filter((s) => Number.isFinite(s.usableWindow) && s.usableWindow > 0);
 	const tooBig = open
 		.map((it) => {
@@ -368,15 +398,10 @@ export function poolCensus(items, seats = [], tierTokens = DEFAULT_TIER_TOKENS, 
 			return { id: it.id, tier: it.tier, estimate, tooBigFor: cantHold, unclaimableByAnyone: cantHold.length === withWindow.length };
 		})
 		.filter(Boolean);
+	// ONE derivation for the row-side numbers (`poolCounts`); the seat-side numbers are added on top. Two
+	// spellings of "how many rows are in the pool" is the #5047 class the gate rules already learned.
 	return {
-		rows: pooled.length,
-		pooled: pooled.length,
-		open: open.length,
-		// `claimed` is the count the human report and the contract name; `ownerOfRecord` is the same number
-		// spelled out for a reader who needs to know WHY a claimed pool row is no longer open (P5).
-		claimed: pooled.length - open.length,
-		ownerOfRecord: pooled.length - open.length,
-		sizeRefused: rows.filter((it) => (it.transitions ?? []).some((t) => t.event === "size-refused")).length,
+		...poolCounts(rows),
 		tooBig: tooBig,
 		seatsWithoutWindow: seatList.filter((s) => !Number.isFinite(s.usableWindow) || s.usableWindow <= 0).map((s) => s.name),
 		fraction,
@@ -432,7 +457,7 @@ export function refuseOversizedQueueRead(items, { capRows = QUEUE_VIEW_ROW_CAP }
 export async function readQueueCensus(storage, context = BACKGROUND_CONTEXT) {
 	const items = await readQueueItems(storage, context);
 	const seats = await readSeatList(storage, context);
-	return { rows: items.length, counts: queueCounts(items), attention: queueAttention(items, seats) };
+	return { rows: items.length, counts: queueCounts(items), attention: queueAttention(items, seats), pool: poolCounts(items) };
 }
 
 /**

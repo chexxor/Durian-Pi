@@ -158,14 +158,14 @@ every row must be addressed to one seat, so one seat holds 380 of 796. A shared 
 | 4 | pool claim: owner-of-record, `pool-claimed` transition, DONE notice to `from` | **done** — `6eac7919`, same demo |
 | 5 | tier→token gate at claim + pool too-big warning | **done** — `f4cb2c32` + calibration `a4502733`, `demo/pool-size-gate.test.mjs` |
 | 6 | `split` closure (`closedAs`), children inherit `from`/`requires`/`blockedBy` | **done** — `785f214e`, split section of `demo/pool-address.test.mjs` |
-| 7 | census (`pooled`/`pool-claimed`/`size-refused`) + two check rules | **done** — `6567a568`, `demo/check-pool-gate.test.mjs` |
+| 7 | census (`pooled`/`pool-claimed`/`size-refused`) + two check rules | **done** — `6567a568` (rules) + the queue surface (`poolCounts` in `src/readapi.mjs`, carried by `status --json`, `queue --human` and every narrowed `queue --json` form), `demo/check-pool-gate.test.mjs` |
 | 8 | docs: WORK-ITEM-MODEL §3a, WORK-ITEM-LIFECYCLE §2a, FEATURES rows, spec §12 reconciliation | **done** — this commit |
 | 8 | skill store (seat self-constructs skills; eligibility earned) | **NOT in N19** — operator ruled capabilities are assigned only |
 
-**The probe that falsifies it:** after the build, `cli.mjs queue --json` must show pooled rows claimed by
-more than one seat, and `check` must fail if a pooled row requires a capability no seat advertises. If
-`impl` still holds the majority of queued rows once pooling exists, the milestone's premise — that routing
-concentration, not capacity, is the binding constraint — is wrong.
+**The probe that falsifies it:** after the build, `cli.mjs queue --json --no-body` must show the `pool` line with
+pooled rows claimed by more than one seat, and `check` must fail if a pooled row requires a capability no seat
+advertises. If `impl` still holds the majority of queued rows once pooling exists, the milestone's premise — that
+routing concentration, not capacity, is the binding constraint — is wrong.
 
 ---
 
