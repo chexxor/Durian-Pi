@@ -92,7 +92,7 @@ a section verbatim to `docs/NEXT-ARCHIVE.md`.
 **Open decisions the operator owns:** (a) **item-6063/6064/6066** — the compaction-gate trio was reverted. Either
 re-cut it against the 1.5.1 pin and current `main`, or accept the guard and set
 `DURIG_COMPACTION_RESERVE_TOKENS=8192`, `DURIG_COMPACTION_KEEP_RECENT=9288`, `DURIG_COMPACTION_BACKGROUND=8192` in
-the gitignored `durig.config.json` (the config write is operator-owned — `docs/runbooks/compaction-policy-refused.md`)
+the gitignored `durig.config.json` (the config write is operator-owned; `docs/runbooks/compaction-policy-refused.md` does **not** exist on `main` — it was REVERTED with the 6063/6064/6066 trio, so there is no procedure to follow yet)
 and fix `demo/compaction-coherence.test.mjs:77`, which asserts the pin has no `modelOverrides` reader while
 `vendor/pi-main/packages/durable/dist/harness/agent.js:145` reads it. (b) **`item-3570`** and **`item-5301`** need a
 seat re-cut, not a delegate merge (evidence in `docs/DISPOSITIONS.md` §Pass 2026-11-10). (c) Landing #3570 makes
