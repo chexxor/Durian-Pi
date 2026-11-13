@@ -22,8 +22,14 @@ owes.
    (no pass for 2350 s with 1 intent waiting) after replacing 98022's deadline exit above. `--max-duration 3600` →
    deadline ~`20:11:56Z`; it FROZE past it (`lastPass 20:10:17Z`, heartbeat still advancing) and `--start` now
    refuses `broker-degraded` with four `genlock` slots held, so the runbook precondition says do NOT terminate it.
-   It also predates the skip-line fix, so its log still shows the OLD `pool-gated:1` shape; the next start prints
-   `pool-gated:<n> #<id>(<reason>)`.
+   It predates the skip-line fix, so its log showed the OLD `pool-gated:1` shape.
+3. pid **540123**, started `2026-11-13T20:42:21.398Z`, reason: **alive-but-dead after the deadline** — read-drain only,
+   `lastPass 20:10:17Z` and no pass for 30 min, four `genlock` slots held by its own pid for `devtools`.
+   `cli.mjs serve --stop` REFUSED (`did not exit within the stop grace`), so the runbook's fallback was used:
+   `kill -TERM 311912` → `EXIT pid=311912 reason=deadline passes=-` at `20:42:10.249Z`, then `node cli.mjs resume`
+   (cleared the stranded submissions), then `--start --no-probe --yes-pm-wakes --max-duration 1800`. It runs THIS
+   code: passes 1→10 by `20:48:01Z` and the live skip line now reads
+   `SKIP auditor reason=pool-gated:1 #7660(requires:docs)` on six seats.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:

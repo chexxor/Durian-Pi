@@ -621,7 +621,10 @@ exactly one `tier: "project"` row.
   does not cover** — the milestone's falsification probe, observed on a live row.
 - Census: `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[]}`.
 
-**The gate now BITES, on this rig's own roster (2026-11-13, `demo/pool-gate-live-roster.test.mjs`, 0.4 s, exit 0).**
+**The gate now BITES, against this rig's LIVE roster (2026-11-13, `demo/pool-gate-live-roster.test.mjs`, 0.5 s, exit
+0).** The demo READS the twelve seats and the tier table from `./selfdev.sqlite` through the broker seam (it prints
+`roster source: LIVE (12 seats read from ./selfdev.sqlite via the broker seam)`) and falls back to a recorded copy only
+when that store is absent, so a roster change cannot leave it asserting yesterday's windows.
 It could not be observed on the live store, and the reasons are structural rather than accidental: (a) only the
 `project` tier (120000) exceeds 70 % of ANY window here — 115023 for the eleven 164320-token seats, 8601 for the
 auditor — so no ordinary backlog row can ever be refused; (b) the wake selector pre-filters through `workable()`,
@@ -634,7 +637,7 @@ fixture store:
 
 | seat | row | verbatim refusal |
 |---|---|---|
-| `impl` (164320 usable) | `pool: true, requires: ["implement"], tier: "project"` | `CLAIM_REFUSED: #1 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of the 164320-token usable window))` + `Split it: send_work the pieces (each with its own tier and requires), then close #1 with complete_work(itemId: 1, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a queue problem.` |
+| `impl` (164320 usable) | `pool: true, requires: ["implement"], tier: "project"` | `CLAIM_REFUSED: #1 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of the 164320-token usable window)). It was sent by pm. Close the prerequisite, or ask pm to address it to a seat that can. Split it: send_work the pieces (each with its own tier and requires), then close #1 with complete_work(itemId: 1, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a queue problem.` |
 | `auditor` (12288 usable) | `pool: true, requires: ["verify"], tier: "project"` | `too-big:project(120000 tokens > 70% of the 12288-token usable window)` — the same gate, the seat's OWN window in the string |
 
 Both refusals leave the row **queued and open** (a refusal is not a claim), each writes one `size-refused`
@@ -643,7 +646,22 @@ transition with the claimant and the reason, and `poolCensus(...).tooBig` lists 
 instrument a seat-less session should read. The same demo then proves the gate does not starve: a `small` pool row
 is claimed by `devtools`, a non-conventional owner, with its `pool-claimed` transition.
 
-**And the skip line now names the row (same day, `src/driver.mjs`).** `pool-gated:1` was the only live trace of the
+**The live rig's own decline evidence, verbatim.** After the broker was restarted onto this code (pid 540123,
+2026-11-13T20:42Z), every pass prints the row and the reason the seats cannot take it — no claim, no query:
+
+```
+SKIP auditor  reason=pool-gated:1 #7660(requires:docs)
+SKIP designer reason=pool-gated:1 #7660(requires:docs)
+SKIP qa2      reason=pool-gated:1 #7660(requires:docs)
+SKIP architect reason=pool-gated:1 #7660(requires:docs)
+SKIP security reason=queued-gated:gate-open:#6933(queued) pool-gated:1 #7660(requires:docs)
+SKIP advocate reason=queued-gated:gate-open:#6508(queued) pool-gated:1 #7660(requires:docs)
+```
+
+That is the milestone's fallback measurement — the seats' own reasons, named — and it is exactly what the old
+`pool-gated:1` could not say.
+
+**And the skip line names the row (same day, `src/driver.mjs`).** `pool-gated:1` was the only live trace of the
 gate and named neither the row nor the reason — measured against #7660
 (`SKIP auditor reason=pool-gated:1` on five seats, every pass, for hours). It is now
 `pool-gated:<n> #<id>(<reason>)[,#<id>(<reason>)][ +N more]`, bounded at two named rows and a clipped reason

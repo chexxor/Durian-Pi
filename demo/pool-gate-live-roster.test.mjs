@@ -164,6 +164,17 @@ console.log("\n=== impl (a 164320-token seat that DOES advertise `implement`) na
 await call("impl", "claim_work", { itemId: probe.id });
 const implSaid = await transcript("impl");
 const implReason = `too-big:project(${LIVE_TIER_TOKENS.project} tokens > 70% of the 164320-token usable window)`;
+// PRINT THE REFUSAL, do not only assert it: the objective's criterion is "the refusal string is quoted", and a
+// quotation has to come from a run someone else can repeat. This is that artifact.
+{
+	const at = implSaid.indexOf("CLAIM_REFUSED");
+	if (at >= 0) {
+		let quoted = implSaid.slice(at, at + 620).replace(/\\n/g, "\n    ").replace(/\\"/g, '"');
+		const endOfText = quoted.indexOf("not a queue problem.");
+		if (endOfText > 0) quoted = quoted.slice(0, endOfText + "not a queue problem.".length);
+		console.log(`  REFUSAL (impl, live roster, row #${probe.id}):\n    ${quoted.split("\n")[0]}`);
+	}
+}
 check("the refusal is the shipped reason string, verbatim", implSaid.includes(implReason), implReason);
 check("it is a CLAIM_REFUSED naming the row, not a silent null", implSaid.includes(`CLAIM_REFUSED: #${probe.id} is in the POOL but you cannot claim it`), implSaid.slice(-400));
 check("the refusal carries the split instruction, naming THIS row", implSaid.includes(`complete_work(itemId: ${probe.id}, closedAs: \\"split\\", children: [...])`) || implSaid.includes(splitInstruction({ id: probe.id }).slice(0, 60)));

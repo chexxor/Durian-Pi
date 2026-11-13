@@ -12109,14 +12109,21 @@ line the one place a size verdict can surface for free. It is now
 (`poolGatedSkipLine`, `src/driver.mjs`), the count kept FIRST for readers that parse it, pinned by
 `demo/pool-gated-reason.test.mjs`. The general rule this buys: when a mechanism's only trace is a number, the number
 is not the trace.
-(m) **The gate is proven on the ROSTER, not on a live row, and that is stated as the measurement it is.** `pm` and
-`lead` were asked five times to mint the one `project`-tier pool row that would make the refusal observable live and
-did not (they were landing; pm minted nine other rows); a delegate may not pool a row. So
-`demo/pool-gate-live-roster.test.mjs` drives the SHIPPED verbs against this rig's REAL roster — the twelve seats'
-capability sets and declared windows plus the tier table `up` wrote, read from the live store — on a fixture store:
+(m) **The gate is proven on the LIVE ROSTER, not on a live row, and that is stated as the measurement it is.** `pm`
+and `lead` were asked SIX times (17:52Z, 19:08Z, 19:49Z, 19:53Z, 20:43Z and once more after a broker recovery) to mint
+the one `project`-tier pool row that would make the refusal observable live and did not — pm was landing and minted
+dozens of other rows instead; a delegate may not pool a row, and the contract anticipated exactly this ("a team that
+declines is NOT a blocker — report the count and the seats' own reasons verbatim"). So
+`demo/pool-gate-live-roster.test.mjs` drives the SHIPPED verbs against this rig's LIVE roster — the twelve seats'
+capability sets and declared windows plus the tier table `up` wrote, READ from `./selfdev.sqlite` through the broker
+seam on every run, with a recorded copy only as the no-store fallback — on a fixture store, and it PRINTS the refusal
+so the quotation comes from a run anyone can repeat:
 `impl` (164320) is refused `too-big:project(120000 tokens > 70% of the 164320-token usable window)` and the
 `auditor` (12288) the same class of refusal quoting ITS window, each with the split instruction, each leaving the row
 queued and open with one `size-refused` transition. What this does NOT prove: that a live seat would attempt such a
 claim — on this tier table only `project` can be refused, and the fleet's claim path skips it before attempting. The
-honest sentence is "the gate refuses correctly for every seat on this roster", not "the gate was observed refusing
-live work", and the difference is recorded here so no later session inherits the stronger claim.
+honest sentence is "the gate refuses correctly for every seat on the live roster", not "the gate was observed
+refusing live work", and the difference is recorded here so no later session inherits the stronger claim. **What IS
+live and verbatim:** the seats' own decline of the open pool row, once the broker was restarted onto the attributable
+skip line (pid 540123, 2026-11-13T20:42Z) — `SKIP auditor reason=pool-gated:1 #7660(requires:docs)` on six seats,
+every pass. That is the row id and the reason from the live scheduler, and the old count-only line could not say it.
