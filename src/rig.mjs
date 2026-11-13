@@ -504,7 +504,16 @@ export function queueItemLine(it, items = []) {
 	const release = it.release
 		? ` releasedBy=${it.release.by}${it.release.reason ? ` reason=${it.release.reason}` : ""}`
 		: "";
-	return `#${it.id} ${it.status} from=${it.from} to=${it.to} ${it.subject}${gate}${deadMarker}${priority}${release}`;
+	// N19 row 3: a POOL row has no recipient until someone claims it (P5). `to=null` in the line a seat
+	// reads looks like a broken row; `to=POOL` tells every eligible seat why the row is in its view, and
+	// `poolOwner=<seat>` says who took it. An addressed row renders exactly as it always did.
+	const addressed =
+		it.to === null || it.to === undefined
+			? "to=POOL"
+			: it.pool === true
+				? `to=${it.to} poolOwner=true`
+				: `to=${it.to}`;
+	return `#${it.id} ${it.status} from=${it.from} ${addressed} ${it.subject}${gate}${deadMarker}${priority}${release}`;
 }
 
 /**
@@ -570,6 +579,7 @@ export async function enqueueItem(
 	blockedBy = null,
 	requires = null,
 	block = null,
+	pool = false,
 ) {
 	const queue = await tx.doc(RigQueue);
 	// #6215: A GATE MUST RESOLVE TO A ROW THAT CAN REACH `done`. `cancelled` is terminal and can never
@@ -591,8 +601,12 @@ export async function enqueueItem(
 		);
 	}
 	const id = queue.nextId++;
-	const gateRequires =
-		typeof requires === "string" && requires.trim().length > 0 ? requires.trim() : null;
+	// N19 row 3: `requires` is a SET (P2), and the ONE write path is where the shape is decided.
+	// A one-element set is stored as the STRING it always was - every existing row, demo and check rule
+	// reads it that way, and a set of one is not a different fact. Only a real multi-capability row gets
+	// the array, so "no requirement" and "one requirement" stay byte-identical to pre-Pool rows.
+	const needed = requiredCapabilities(requires);
+	const gateRequires = needed.length === 0 ? null : needed.length === 1 ? needed[0] : needed;
 	const gateBlock = block ? normalizeBlock(block) : null;
 	const item = {
 		id,
@@ -615,10 +629,16 @@ export async function enqueueItem(
 		...(blockedBy ? { blockedBy: [...blockedBy] } : {}),
 		// The capability a claimant must advertise, persisted so claimability can be decided per seat
 		// (F1: it was a send-time check only, so nothing could read it back). Absent = no requirement.
+		// ONE capability is stored as a string, several as an array (P2).
 		...(gateRequires ? { requires: gateRequires } : {}),
 		// The structured PARK (`block`), validated here so the ONE write path is also the one place a
 		// malformed park cannot be stored. Absent = unblocked (the legacy exemption, design §7).
 		...(gateBlock ? { block: gateBlock } : {}),
+		// N19 "The Pool" (P5/P7): `pool: true` means the row was never addressed to a seat - `to` is null
+		// until someone claims it, and stays true after the claim so the census can tell a POOLED row from
+		// an addressed one. It is provenance, not ownership: `to` is the owner, `pool` is where it came from.
+		// Absent = an ordinary addressed row, so no existing row changes meaning.
+		...(pool ? { pool: true } : {}),
 		// A HELD/PARKED item (operator queue-hygiene directive, #1885) is created
 		// unclaimable and does NOT wake the recipient: a "registered, do not start"
 		// backlog row must not occupy a working seat's oldest-first claim slot.
@@ -837,14 +857,24 @@ const Router = defineExtension({
 				"Pass `blockedBy: [ids]` to record a structured GATE (the queue-item ids this work waits on); " +
 				"omit it when there is no gate. Gates are ids, never prose. " +
 				"Pass `block` to record WHY a parked item is parked (reason + a mandatory resolver + reviewBy); " +
-				"omit it when the item is not parked. Pass `requires` for a capability the claimant must advertise.",
+				"omit it when the item is not parked. Pass `requires` for a capability the claimant must advertise - " +
+				"one string for one capability, or an ARRAY of capabilities, in which case a claimant must advertise ALL of them. " +
+				"Pass `pool: true` with NO `to` to put the row in the shared pool (N19 'The Pool'): any seat that advertises " +
+				"the capability set may claim it, and the seat that claims it becomes the OWNER-OF-RECORD while the author " +
+				"stays the party the DONE notice returns to.",
 			parameters: obj({
-				to: str({ description: "recipient seat name" }),
+				to: opt(str({ description: "recipient seat name; omit it ONLY when `pool: true`" })),
 				subject: str(),
 				body: str(),
-				requires: opt(str({
+				requires: opt(union([str(), arr(str())], {
 					description:
-						"capability the recipient must advertise; it is checked now AND persisted on the item so claimability can read it",
+						"one capability, or a LIST of capabilities every claimant must advertise; checked at send time against " +
+						"the named recipient and persisted on the row so claimability can read it per seat",
+				})),
+				pool: opt(bool({
+					description:
+						"put the row in the shared pool instead of addressing it: `to` MUST be omitted. A claimant must " +
+						"advertise every `requires` capability and fit the row's tier inside its own usable context window.",
 				})),
 				blockedBy: opt(arr(int({ minimum: 1 }), {
 					description:
@@ -904,6 +934,22 @@ const Router = defineExtension({
 			execute: async (args, api, context) => {
 				try {
 					const me = await mySeatName(api, context);
+					// THE ADDRESS SHAPE IS CHECKED BEFORE ANY WORK IS DONE - before the optimizer, before the commit -
+					// so a malformed call costs nothing and writes nothing. `pool` and `to` are not two ways of saying
+					// the same thing: a pooled row has no recipient yet, an addressed row is not poolable. Accepting
+					// both would store a row whose owner is ambiguous, which is exactly what P5 forbids.
+					if (args.pool === true && args.to !== undefined) {
+						return toolText(
+							`SEND_WORK_REFUSED: pool: true and to: "${args.to}" cannot both be set - a pooled row has no ` +
+							`recipient yet (that is the point). Either address it to a seat, or pool it and omit to.`,
+						);
+					}
+					if (args.to === undefined && args.pool !== true) {
+						return toolText(
+							"SEND_WORK_REFUSED: no `to` and no `pool` - nothing is addressed, so nothing can be claimed. " +
+							"Pass to: <seat> to address it, or pool: true to put it in the shared pool.",
+						);
+					}
 					let body = args.body;
 					let optimizedVia = null;
 					if (args.optimize) {
@@ -931,7 +977,9 @@ const Router = defineExtension({
 					// never a half-written item (same discipline as the gate above).
 					const park = args.block ? normalizeBlock(args.block) : null;
 					const id = await api.commit(async (tx) => {
-						await assertSendAllowed(tx, me, args.to, args.requires);
+						// `to` is null exactly when the row is pooled; assertSendAllowed skips the org edge and the
+						// per-seat capability check for a pool row and still validates the author (row 2).
+						await assertSendAllowed(tx, me, args.to ?? null, args.requires ?? null);
 						// Ratcheting tier raise guard: raising an already-tiered task's chain
 						// to a HIGHER tier requires a stated reason; lowering is free (RANK 2
 						// borrow, ARCHITECTURE.md "survives the next message ... raising needs a
@@ -964,12 +1012,14 @@ const Router = defineExtension({
 								}
 							}
 						}
-						return enqueueItem(tx, me, args.to, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate, args.requires ?? null, park);
+						return enqueueItem(tx, me, args.to ?? null, args.subject, body, optimizedVia, false, tier ?? null, args.held === true, gate, args.requires ?? null, park, args.pool === true);
 					}, context);
 					const label =
 						args.held === true
 							? `parked item #${id} for ${args.to} (held; release with release_work(${id}) to make it claimable)`
-							: `queued item #${id} for ${args.to}`;
+							: args.pool === true
+								? `queued item #${id} in the POOL (unowned; any seat advertising the capability set can claim it)`
+								: `queued item #${id} for ${args.to}`;
 					return toolText(`${label}${optimizedVia ? ` (body optimized via ${optimizedVia})` : ""}`);
 				} catch (err) {
 					return toolText(`SEND_WORK_ERROR: ${err && err.stack ? err.stack : String(err)}`);
