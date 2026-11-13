@@ -4306,3 +4306,42 @@ at `:743`). Re-measure every `path:line` before repeating it.
     fails on `Object.keys(bareDoc) === ["ok","command","items"]` — that assertion is the #5016 compat contract,
     not an oversight. Probe in one bounded call: `DURIG_DB=./selfdev.sqlite node cli.mjs queue --json --limit 2
     --no-body | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).pool))'` (0.8 s, Linux Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1).
+
+## Operational pitfalls (delegate, N19 pool tranche 2 — numbered 318-323, continuing from 317; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+318. **A broker-served read and the no-broker fallback can return DIFFERENT SHAPES for the same view, and the
+    consumer silently empties itself while still printing a balanced answer.** `readData(db, "seats", …)` served by a
+    resident broker is `readSeatList` — an **array** of seat rows, no `tierTokens`. The same call with no broker runs
+    the callback directly: `readSeatsDocument` → `{found, value}` with the roster as an **object keyed by name**.
+    Measured 2026-11-13 on the same 846 queued rows: **268 single-owner / 167 migratable** read directly, then
+    **438 single-owner / 0 migratable** through the broker — every row looked like a one-seat job because `capsOf`
+    returned `[]` for every seat. The arithmetic still BALANCED, so no assertion caught it. Fix shape: normalise at
+    the seam (`rosterOf(doc)` in `tools/pool-migrate.mjs`), print WHICH view served the read, and pin the trap in the
+    test (the naive unwrap yields an empty roster). Ask for the `document` view when you need `tierTokens` or a
+    per-seat field; ask for `seats` only when the plain list is what you want.
+319. **`up --refresh` printing a `usableWindow` is not the same as the rig having a window.** `declaredContextWindow`
+    read only `DURIG_CONTEXT_WINDOW`; this rig declares its windows on the provider specs (`DURIG_LOCAL_CONTEXT`
+    204800, `DURIG_VERIFIER_CONTEXT` 24576), so all 12 seats were written `usableWindow: null` and the 70 % gate was
+    disarmed while the config looked correct. The trap was already recorded in
+    `docs/evidence/2026-11-08-context-window/README.md` §11. Probe after any refresh:
+    `DURIG_DB=./selfdev.sqlite node cli.mjs ps --json | node -e '…print name+usableWindow…'` — a `null` on any seat
+    means the gate is off for that seat, whatever the tier table says.
+320. **"The gate is armed" is not "the gate has fired", and on this rig only ONE tier can fire.** 70 % of 164320 is
+    117891 and 70 % of 12288 is 8601; `project` (120000) is the only tier above either, and the backlog holds exactly
+    one `tier: "project"` row (a notice). `sizeRefused` also counts only NAMED claims (D275 addendum (c)), and the
+    broker's wake selector records a skip as `pool-gated:<n>` without a row id. So the cheap live probe is the skip
+    line and the census, not `sizeRefused`: read `sizeRefused` alone and you will report a working gate as unexercised.
+321. **A pool row can be minted unclaimable and then blocks a pass forever.** `send_work({requires:["docs"]})` is
+    accepted although no seat advertises `docs`, so **#7660** sat OPEN and every pass logged `pool-gated:1` for the
+    seats it blocked. `revise_work` refuses to CREATE that state (it names the roster); `send_work` does not, and the
+    remedy is the author's one call (`revise_work({itemId, requires: []})`), which requires the author or a
+    coordinator. When a census shows an open row with `sizeRefused: 0` and no claimant for hours, check `requires`
+    against `cli.mjs ps` capability sets BEFORE assuming seats are idle.
+322. **A `--dry-run` tool that reads through the broker is only as trustworthy as the view it asked for.** The
+    read-only promise held (store sha identical before/after, `--apply` refused by name) while the ANSWER was wrong
+    for hours, because "read-only" says nothing about "read the right thing". Any instrument that prints a count must
+    also print what it read and how: `read via: broker seam (pid …)` and `roster: 12 seats, from seats document` are
+    the two lines that would have caught 318 on the first run.
+323. **A 38-minute rate window is not a rate.** `tools/backlog-burn.mjs --hours 1` reported `queued 856 → 856
+    (+0.0/h)` after the pool went live; the ledger's 1281-minute window before it read `519 → 846 (+15.3/h)`. Quoting
+    the short window as "the pool stopped the backlog growing" would be false — intake simply paused. State the span
+    with every rate, and re-measure across hours before claiming an effect.

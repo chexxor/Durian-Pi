@@ -12049,3 +12049,43 @@ throws rather than silently falling back.
 rows, which is not a measurement. Saying "the ledger cannot answer this" and keeping an explicit default is
 honest; deriving 120 000 from four rows and printing it as calibrated would be the opposite.
 
+
+**D275 addendum — tranche 1 and tranche 2 of "make the pool usable and alive" (2026-11-13), recorded because each is a rule a reader cannot recover from the code alone.**
+Host for every number below: **Linux / Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` / node
+v24.22.1 / git 2.56.0**. Commits: `655c44e2` (verb), `1782b495` (doctrine), `4ed6b8d0` + `01ff4c91`
+(instrument), `517dc58d` (window seam).
+(f) **Annotation is a VERB, not a classifier.** The temptation was a scheduled pass that infers a `requires` set
+per backlog row from its addressee and writes it. Rejected: `requires` decides who may take work, so an inferred
+value is a routing claim made by a process nobody authorised. `revise_work` puts that claim where a seat can be
+held to it, with the author-or-coordinator authority split (subject/body stay with the parties, because the
+#6112 coordinator grant lets a coordinator RELEASE a parked row, not rewrite one). The instrument
+(`tools/pool-migrate.mjs`) therefore PROPOSES and never writes, and `--apply` is refused by name.
+(g) **The doctrine goes in ONE shared surface, not twelve personas.** "Pool" appeared 0 times in the 12
+`prompts/*.md` and 0 times in `rig.selfdev.json`. It now lives in `constitution.txt` — the
+`durig-constitution` system-prompt section every seat receives on every request. Twelve persona copies would
+need twelve verifications and a sync rule bigger than the paragraph; a per-request injection survives
+compaction, which a committed conversation entry does not.
+(h) **A missing window is a SEAM bug, not a configuration gap.** `up --refresh` recorded
+`usableWindow: null` for all 12 seats because `declaredContextWindow` read only `DURIG_CONTEXT_WINDOW` (unset
+here) while the rig declares its windows on the provider specs (`DURIG_LOCAL_CONTEXT` 204800,
+`DURIG_VERIFIER_CONTEXT` 24576). Under D212 the fix belongs in the base as a seam:
+`usableContextBudget` now falls back to `declaredLocalWindow(localProviderSpecs(config), modelKey)`. The trap was
+already written down in `docs/evidence/2026-11-08-context-window/README.md` §11 and was not read before the
+first run; the seam is now pinned by `demo/declared-window-seam.test.mjs`.
+(i) **The gate's arithmetic is a one-tier gate, and saying so is part of the decision.** 70 % of 164320 is
+117891 and 70 % of the auditor's 12288 is 8601; only the `project` tier (120000) exceeds either, so on this rig
+the size gate can bite ONLY on a `project` row, and the live backlog contains exactly one `tier: "project"` row
+(and it is a notice). "The gate is armed" therefore means "armed against exactly one tier", and a claim that it
+refuses ordinary oversized work would be false until the tier table or the windows change.
+(j) **A broker-served read can silently empty a roster, so the shape is normalised at the seam.** The `seats`
+view is `readSeatList` (an array, no tier table); the no-broker fallback is `readSeatsDocument` (`{found, value}`,
+roster keyed by name). Read as the wrong one, `capsOf` returns `[]` for every seat and the classifier reports the
+whole backlog as single-owner **with balanced arithmetic** — measured 268 migratable read directly vs 0 through
+the resident broker, same store. `rosterOf()` normalises both and the tool prints which view served it; the
+regression is pinned in `tools/pool-migrate-test.mjs`.
+(k) **`send_work` still has no dead-gate guard, and that is recorded as a gap rather than fixed here.** Measured
+live: row **#7660** sits OPEN in the pool with `requires: "docs"`, and no seat on this roster advertises `docs`
+(`route, plan, implement, code, verify, review, decide, adjudicate, advocate, security, design`), so the row is
+unclaimable by all 12 — and every pass logs `pool-gated:1` for the seats that cannot take it. `revise_work`
+refuses to create that state; `send_work` still can. The remedy is a decision (refuse a `requires` set no seat
+advertises at send time, or warn and allow), taken with the operator because it changes what a sender may do.

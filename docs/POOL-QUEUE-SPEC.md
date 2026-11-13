@@ -422,3 +422,138 @@ assigned, not earned) and a capability-grant verb (`pm` assigns through the rost
 "pooled rows claimed by more than one seat". Measured 2026-11-13, `pool.rows` is **0** on this rig: the
 predicate is shipped and proven by demos, but no seat has pooled a row yet, and the 12 existing seats carry no
 `usableWindow` until the next `up` re-records them. That is a follow-up measurement, not a hole in rows 0–8.
+**That sentence is now out of date — see §13.**
+
+## 13. Tranche 1 and tranche 2, shipped and measured (2026-11-13)
+
+Everything below is quoted from the code or from a command actually run on this rig. Host for every
+measurement: **Linux / Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 /
+git 2.56.0**. HEAD before these commits: `517dc58d`.
+
+### 13.1 `requires` on a row that already exists (`revise_work`) — commit `655c44e2`
+
+`send_work` was the only writer of `requires`; the backlog could not be annotated, so the predicate had no
+data to act on. `revise_work` now takes `requires`, and its description says what it is:
+
+> "You may ALSO set `requires` - the capability SET a claimant must advertise (N19 'The Pool', P2) - on a
+> queued row that already exists: its author or a coordinating seat (route/plan/decide) may annotate it, a
+> working seat that is neither may not. Annotating a row never pools it (`pool` is decided when the row is
+> sent) and never changes any seat's own capabilities."
+
+**The authority is SPLIT, not widened.** `subject`/`body` stay with the parties (`from` or `to`) — the
+#6112 coordinator grant lets a coordinator *release* a parked row, not rewrite one. `requires` is routing,
+so it is open to the author **or** `seatIsCoordinator` (route/plan/decide/adjudicate). The refusal names who
+is missing:
+
+> `item #<id>: only its author (<from>) or a coordinating seat (route/plan/decide) may set the capability
+> requirement; you are neither (from=<from> to=<to>)`
+
+**Two refusals exist because a bad annotation is the pool's version of a dead gate.** A set no seat
+advertises makes a row unclaimable forever; catching it in a `check` costs the row, catching it at the write
+costs one call:
+
+> `item #<id>: no seat on the roster advertises all [<caps>], so this requirement would make the row
+> unclaimable forever. Roster: pm=[route,plan] impl=[implement,code] … - name a capability a seat actually
+> has, or change the roster with up --refresh (not this call)`
+
+And an addressed row is a promise to one seat, while `claim_work` does not re-check capabilities for a row
+addressed to the claimant (the by-id path historically skips `workable()`), so a set the addressee lacks is a
+row nobody can take:
+
+> `item #<id> is addressed to <to>, which does not advertise [<caps>]; a requirement the addressee cannot
+> satisfy makes the row unclaimable by the very seat it is addressed to. Capability sets route work in the
+> POOL - to put this work in front of a capable seat, send a row to that seat (or pool it at send time). The
+> roster is changed with up --refresh, not with this call.`
+
+The transition records `by`, `fields`, and — when `requires` moved — `requiresFrom` / `requiresTo`, so a row's
+requirement history is readable without a second store. `demo/revise-requires.test.mjs` (44 checks, 0.3 s,
+exit 0) pins all of it; `--area rig` 87/87 in 14.1 s.
+
+**Gap this exposed (operator ruling, not a bug to fix here):** `send_work` has no equivalent guard. A row
+minted with `requires` no seat advertises still enters the pool — measured live, **#7660 sits open with
+`requires: "docs"** and no seat on the roster advertises `docs`, so it is unclaimable by all 12. The verb
+that can *change* a requirement refuses; the verb that *creates* one does not.
+
+### 13.2 The doctrine — one paragraph, every seat (commit `1782b495`)
+
+Before this, "pool" appeared 0 times in the 12 personas and 0 times in `rig.selfdev.json`. The doctrine lives
+in **`constitution.txt`**, the `durig-constitution` system-prompt section (`src/rig.mjs`,
+`section("durig-constitution", …)`) — one text, every seat, re-injected per request, so it cannot fork into
+12 persona copies and survives compaction. The shipped paragraph, verbatim:
+
+> P2 Pool: the queue is a POOL, not a personal inbox. `claim_work` takes the OLDEST row you are ELIGIBLE for -
+> one addressed to you, or an open pool row (no owner of record) whose `requires` capability SET you advertise
+> in full and whose tier fits inside 70 % of your usable context window. Eligibility is decided by the claim,
+> not by judgement: an ineligible claim is refused with the reason, and a row too big for the window is refused
+> with a split instruction - split it (send_work the pieces, then complete_work with `closedAs: "split"`)
+> rather than start it. A pool claim is recorded on the row as owner-of-record and is NOT messaged to the
+> author, so the pool's state is legible only in the census (`queue --json`, `status --json`); read the census
+> before concluding the pool is empty.
+
+The three surfaces that contradicted it are now consistent: `peek_queue`'s description names pool rows and no
+longer says "addressed to or sent by you"; `WAKE_CONTENT` (`src/driver.mjs`) says
+"one addressed to you, or an open pool row whose capability set you advertise - … an ineligible claim is
+refused with the reason"; `queueItemLine` prints `requires=<set>` (a row with no requirement renders
+byte-identically to before, which is what keeps the queue-compat demos green). `rig.starter.json`'s
+`constitutionInline` is the generated mirror, re-mirrored with `tools/mirror-constitution.mjs`. Evidence:
+`demo/pool-doctrine.test.mjs` (24 checks, exit 0), `--area docs` 8/8 in 48.5 s.
+
+### 13.3 `tools/pool-migrate.mjs` — the denominator, read-only (commit `4ed6b8d0`, corrected `01ff4c91`)
+
+`--dry-run` only; `--apply` is refused by name; there is no write path in the file. Seven classes, applied in
+order so each row lands in exactly one and the classes sum to the queued count:
+`already-pooled → notice → blocked → unaddressed → untiered-or-oversized → single-owner → migratable`.
+When a row carries no annotation, the honest proposal is the addressee's own capability set.
+
+**The trap this instrument found about broker-served reads** (found on contact, fixed in place): a resident
+broker serves the `seats` view as `readSeatList` — an **array**, no tier table — while the no-broker fallback
+is `readSeatsDocument` — `{found, value}`, roster keyed by name. Unwrapping one as the other silently empties
+the roster: `capsOf` then returns `[]` for everyone, `others.length === 0` for every row, and the tool reports
+the whole backlog as `single-owner` while printing balanced arithmetic. Same store, same rows:
+**268 migratable-classified rows read directly vs 0 through the broker.** `rosterOf()` now normalises both
+shapes and the tool prints which view served it (`roster: 12 seats, from seats document`). Pinned by
+`tools/pool-migrate-test.mjs` (36 checks, exit 0), which asserts the naive unwrap yields an empty roster and
+that the normalised list classifies identically to the document.
+
+**Live census after the fix** (`node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite`, 1.7 s):
+rows 7671, queued 853, pool {3 pooled, 1 open, 2 claimed, 0 size-refused}, tier table in force
+`{"trivial":3400,"small":6100,"feature":6200,"project":120000}`, largest declared window 164320.
+Classes: already-pooled 1, notice 313, blocked 85, unaddressed 0, untiered-or-oversized 15, single-owner 274,
+**migratable 165** — balance OK. **107 of the migratable rows name a claimant the `ownership` map does not
+list** for the artifact they name (src-tools-harness 88, workflow-docs 19; 34 rows name no path, so no check
+is possible). That list is the trigger for the operator's ownership ruling; the roster is read-only to this
+tool.
+
+### 13.4 Tranche 2 — the gate is ARMED, and the pool has rows (commit `517dc58d`)
+
+`up --refresh` wrote `usableWindow: null` for all 12 seats. Cause, named in
+`docs/evidence/2026-11-08-context-window/README.md` §11 already: `declaredContextWindow` read only
+`DURIG_CONTEXT_WINDOW`, which is unset on this rig, while the rig declares its windows on the provider specs
+(`DURIG_LOCAL_CONTEXT` 204800, `DURIG_VERIFIER_CONTEXT` 24576). That is a **missing seam in the base**, not a
+customisation, so the seam was grown (D212): `usableContextBudget` now falls back to
+`declaredLocalWindow(localProviderSpecs(config), modelKey)`. `demo/declared-window-seam.test.mjs` (14 checks,
+0.131 s, exit 0) pins it; `--area rig` 88/88 in 17.7 s.
+
+After `node cli.mjs up rig.selfdev.json --refresh` (0.915 s): **11 seats usable 164320** (204800 − 20480 −
+20000), **auditor usable 12288** (24576 − 4096 − 8192), tier table `{"trivial":3400,"small":6100,"feature":6200,
+"project":120000}`. Census before: "seats without a declared window: 12", `pool {rows:0}`. After: **0 seats
+without a window**, `pool {rows:0, pooled:0, open:0, claimed:0, sizeRefused:0}`. `git diff rig.selfdev.json`
+for the refresh is empty outside the size fields — no capability, edge or ownership entry moved.
+
+Gate arithmetic in force: 70 % of 164320 = **117891** (11 seats), 70 % of 12288 = **8601** (auditor). Only the
+`project` tier (120000) exceeds both — so the gate bites only on `project` rows, and the backlog contains
+exactly one `tier: "project"` row.
+
+**Claims that actually happened** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only):
+- **#7667** minted by `lead` with `pool: true`, no addressee, tier small → `pool-claimed by=advocate` at
+  `2026-11-13T18:35:43.701Z`, `claimed by=advocate` in the same commit.
+- **#7669** minted by `lead` with `pool: true`, no addressee, tier small → **`pool-claimed by=security` at
+  `2026-11-13T18:36:48.521Z`**. Both rows name `docs/DECISIONS.md`; `rig.selfdev.json`'s `ownership` assigns
+  `workflow-docs` to `advocate` alone. **The security claim is therefore a claim by a seat the ownership map
+  does not cover** — the milestone's falsification probe, observed on a live row.
+- Census: `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[]}`.
+
+**Not yet measured, and stated as such:** the `too-big:project(...)` refusal has not fired on a live seat —
+`sizeRefused` is 0 and `tooBig` is empty, because no `project`-tier pool row has been minted. The predicate,
+its reason string and the split instruction are pinned by demos (`demo/pool-size-gate.test.mjs`, the row-5
+tests in §12); the live quote is owed by the next session, and `docs/NEXT.md` names the command.
