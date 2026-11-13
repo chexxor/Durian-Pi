@@ -619,7 +619,8 @@ exactly one `tier: "project"` row.
   `2026-11-13T18:36:48.521Z`**. Both rows name `docs/DECISIONS.md`; `rig.selfdev.json`'s `ownership` assigns
   `workflow-docs` to `advocate` alone. **The security claim is therefore a claim by a seat the ownership map
   does not cover** — the milestone's falsification probe, observed on a live row.
-- Census: `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[]}`.
+- Census at that moment: `pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[]}`
+  (four rows and two open by 21:3xZ, with #7700 added and #7667/#7669 closed `done`).
 
 **The gate now BITES, against this rig's LIVE roster (2026-11-13, `demo/pool-gate-live-roster.test.mjs`, 0.5 s, exit
 0).** The demo READS the twelve seats and the tier table from `./selfdev.sqlite` through the broker seam (it prints
@@ -666,10 +667,13 @@ tool says so rather than claiming them as evidence). `tools/pool-gate-live-probe
 fixture store (0.6 s): refusal per seat, split instruction, source untouched, and a roster with an undeclared window
 makes the probe exit 2 rather than report a false "refused for everyone".
 
-**What is still not claimed:** that a LIVE seat was refused during a working turn. The team never minted the one live
-`project` row — `pm` and `lead` were asked six times (17:52Z, 19:08Z, 19:49Z, 19:53Z, 20:43Z, 21:11Z) and were busy
-landing — and a delegate may not pool a row. That is the objective's own fallback, and the seats' live decline of the
-open pool row is quoted immediately below.
+**The live row now EXISTS, and the live refusal is one named claim away.** `pm` minted it on the seventh ask:
+**#7700** (`from=pm`, `pool: true`, `tier: "project"`, no `requires`, queued `2026-11-13T21:20:16.789Z`) sits OPEN in
+the live pool. Every seat's wake selector SKIPS it rather than attempting it (`pool-gated:<n>` with the too-big reason
+now named), and `size-refused` is written only on a NAMED claim — so the remaining step is one seat calling
+`claim_work({itemId: 7700})`. A delegate may not claim a row, so that call is owed by the team; the row and its live
+census are the measurement in the meantime. **What is still not claimed:** that a LIVE seat was refused during a
+working turn. The seats' live decline of the other open pool row is quoted immediately below.
 
 **The live rig's own decline evidence, verbatim.** After the broker was restarted onto this code (pid 540123,
 2026-11-13T20:42Z), every pass prints the row and the reason the seats cannot take it — no claim, no query:

@@ -91,7 +91,8 @@ Three facts a reader must internalise:
 | Field class | Verb | Who may write | When |
 |---|---|---|---|
 | intent — `subject`, `body` | `revise_work` | `from` **or** `to` only | `queued` only (`src/rig.mjs:1291`, `:1297`) |
-| constraint — `blockedBy`, `requires`, `tier`, `block` | **none after mint** | the minting seat, at `enqueueItem` (`src/rig.mjs:441`, reached only from `send_work` at `:737`) | mint time only |
+| routing — `requires` | `revise_work({itemId, requires})` (N19 row 3) | the row's author **or `pm`** (`ANNOTATE_REQUIRES_SEAT`) | `queued` only; normalised by `storeRequires()`, one `revised` transition carrying `requiresFrom`/`requiresTo`; refused when NO seat advertises the set or when the addressee cannot satisfy it |
+| constraint — `blockedBy`, `tier`, `block` | **none after mint** | the minting seat, at `enqueueItem` (`src/rig.mjs:441`, reached only from `send_work` at `:737`) | mint time only |
 | outcome — `resultSummary`, `evidence`, `cancelReason` | the verb that made the move | the actor | — |
 
 So a gate discovered *after* a row is minted has nowhere to go. Writing it into the body is not a gate:
@@ -143,16 +144,22 @@ not gated (absence of a declaration is not a measurement, the #2673 conservative
 warning; a seat whose compaction settings leave it a non-positive window gets "no usable budget declared" and
 never divides. See `docs/POOL-QUEUE-SPEC.md` §6.2-§6.3.
 
-**Measured on this rig, 2026-11-13** (`DURIG_DB=./selfdev.sqlite node cli.mjs status --json`, host Linux /
-Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0):
-`pool: {rows: 0, pooled: 0, open: 0, claimed: 0, sizeRefused: 0, fraction: 0.7}` and
-`tierTokens: {trivial: 3400, small: 6100, feature: 6200, project: 120000}`. **The mechanism is live; no seat has
-pooled a row yet**, because the rig's 12 seats were created before row 5 and carry no `usableWindow` - they get
-one the next time `up` runs them. Fleet-wide distribution is the follow-up, not this milestone's claim.
+**Measured on this rig, 2026-11-13T21:3xZ** (`node .spike/pool-rows.mjs ./selfdev.sqlite` and
+`DURIG_DB=./selfdev.sqlite node cli.mjs status --json`, host Linux / Fedora Linux 45 (Forty Five) / kernel
+`7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0): `pool {rows: 4, pooled: 4, open: 2, claimed: 2,
+sizeRefused: 0}`, `tierTokens: {trivial: 3400, small: 6100, feature: 6200, project: 120000}`, and **every one of the
+12 seats declares a `usableWindow`** (11 × 164320, auditor 12288 — `up --refresh` after the window seam landed).
+**Four real pool rows exist and two were claimed**: #7667 `pool-claimed by=advocate` and #7669 `pool-claimed
+by=security`, both closed `done` — and both name `docs/DECISIONS.md`, which `ownership` assigns to `advocate` alone,
+so security's claim is the milestone's cross-owner probe on a live row. Still open: #7660 (`small`, `requires:
+"docs"`, a capability no seat advertises — `check` reports `pool-dead-gate`) and #7700 (`project`, minted by `pm`
+at 21:20:16Z, which no seat can claim: it is over 70 % of every window).
 
 **Proof:** `node demo/pool-address.test.mjs`, `node demo/pool-size-gate.test.mjs`,
-`node demo/check-pool-gate.test.mjs` (each exit 0); `node cli.mjs check` exits 1 on a pool row whose `requires`
-names a capability no seat advertises.
+`node demo/pool-gate-live-roster.test.mjs`, `node demo/pool-gated-reason.test.mjs`,
+`node demo/check-pool-gate.test.mjs` (each exit 0); `node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite`
+refuses a `project` row for the live seats' own windows from a byte-copy of the store (7-19 s); `node cli.mjs check
+rig.selfdev.json` reports `pool-dead-gate` on #7660 while no seat advertises `docs`.
 
 ## 3. Why `held` exists at all (and why it is the orphan shape)
 

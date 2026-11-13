@@ -12110,10 +12110,12 @@ line the one place a size verdict can surface for free. It is now
 `demo/pool-gated-reason.test.mjs`. The general rule this buys: when a mechanism's only trace is a number, the number
 is not the trace.
 (m) **The gate is proven on the LIVE ROSTER, not on a live row, and that is stated as the measurement it is.** `pm`
-and `lead` were asked SIX times (17:52Z, 19:08Z, 19:49Z, 19:53Z, 20:43Z and once more after a broker recovery) to mint
-the one `project`-tier pool row that would make the refusal observable live and did not — pm was landing and minted
-dozens of other rows instead; a delegate may not pool a row, and the contract anticipated exactly this ("a team that
-declines is NOT a blocker — report the count and the seats' own reasons verbatim"). So
+and `lead` were asked seven times (17:52Z, 19:08Z, 19:49Z, 19:53Z, 20:43Z, 21:11Z, and pm finally did it at
+21:20:16Z) to mint the one `project`-tier pool row that would make the refusal observable live; the first six went
+unanswered while pm landed dozens of other rows, and a delegate may never pool a row itself — the contract anticipated
+exactly this ("a team that declines is NOT a blocker — report the count and the seats' own reasons verbatim"). The row
+now exists live: **#7700** (`from=pm`, `pool:true`, `tier:"project"`) is OPEN, and every seat's wake selector refuses it
+(the skip line names it and the too-big reason) while a live `CLAIM_REFUSED` still needs one seat to claim it BY ID. So
 `demo/pool-gate-live-roster.test.mjs` drives the SHIPPED verbs against this rig's LIVE roster — the twelve seats'
 capability sets and declared windows plus the tier table `up` wrote, READ from `./selfdev.sqlite` through the broker
 seam on every run, with a recorded copy only as the no-store fallback — on a fixture store, and it PRINTS the refusal

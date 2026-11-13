@@ -1,10 +1,10 @@
 # Operator decision request — what `ownership` means, and whether a capability set can route outside it
 
-**Prepared by**: the delegate (not a seat). **Date**: 2026-11-13. **Status**: OPEN — four decisions, none of
+**Prepared by**: the delegate (not a seat). **Date**: 2026-11-13. **Status**: OPEN — five decisions, none of
 which the delegate may take.
 **Host for every number**: Linux / Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` /
-node v24.22.1 / git 2.56.0. HEAD `517dc58d` + the pool-instrument commit `36f57a36` (an amend of `01ff4c91`, which is NOT on `main` — the
-amend is the shipped object; `git merge-base --is-ancestor 01ff4c91 HEAD` exits 1).
+node v24.22.1 / git 2.56.0. Every commit of this work is listed in `docs/NEXT.md`'s sha table (`git log --oneline`
+for the live order); `01ff4c91` is NOT on `main` — it was amended to `36f57a36`, which is the shipped object.
 
 **Why you are being asked.** The N19 pool (D275, `docs/POOL-QUEUE-SPEC.md`) is shipped, armed and alive: rows
 #7667 and #7669 were minted `pool: true` by `lead` and claimed by `advocate` and **`security`**. The second claim

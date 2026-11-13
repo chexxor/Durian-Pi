@@ -58,9 +58,12 @@ owes.
 exit 0): `impl` (164320 usable) is refused `too-big:project(120000 tokens > 70% of the 164320-token usable window)` and
 the `auditor` (12288) the same class quoting ITS window, each with the split instruction naming the row, each leaving
 the row queued and open with one `size-refused` transition, with `tooBigFor: [all 12]` / `unclaimableByAnyone: true`
-from the census and no claim at all; a `small` row is then claimed by `devtools`. It is proven on a FIXTURE store
-carrying the live roster — the live fleet never minted the one `project` row that would make it observable live (asked
-five times; D275 addendum (m) records the gap). **The annotation authority is the contract's, exactly**: author or
+from the census and no claim at all; a `small` row is then claimed by `devtools`. It is ALSO proven from a byte-copy of
+the LIVE store (`node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite`, 7-19 s, row #7700 at 21:2xZ: impl 164320 and
+auditor 12288 each refused with the split instruction, source sha unchanged). **And the live fleet finally minted the
+row**: **#7700** (`from=pm, pool:true, tier:"project"`, queued 21:20:16.789Z) is OPEN in the pool — pm did it after six
+asks. It is refused by every seat's wake selector (they skip it rather than name it), so the LIVE `CLAIM_REFUSED` still
+needs one seat to claim it by id; a delegate may not. **The annotation authority is the contract's, exactly**: author or
 `pm` (`ANNOTATE_REQUIRES_SEAT`), with `lead` REFUSED — the first build used `seatIsCoordinator` and an audit called
 that an unrequested widening, so the question is now decision 5 for the operator. **Every starting number is
 reconciled** in §13.3b (267 = devtools 165 + scribe 78 + qa 24; 262 clean rows = 165 migratable + 53 notices + 42
@@ -68,8 +71,10 @@ blocked + 2 untiered; 313 notices = 311 + 2; 44 untiered − 28 notices = 16; im
 impl-only). **The skip line names what it counts**: `pool-gated:<n> #<id>(<reason>)[ +N more]`.
 
 **State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only):
-`pool {rows:3, pooled:3, open:1, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[], seatsWithoutWindow:[]}`.
-#7667 `pool-claimed by=advocate` 18:35:43Z; **#7669 `pool-claimed by=security` 18:36:48Z** — both name
+`pool {rows:4, pooled:4, open:2, claimed:2, ownerOfRecord:2, sizeRefused:0, tooBig:[], seatsWithoutWindow:[]}` — open:
+**#7660** (`small`, `requires:"docs"`, nobody advertises it) and **#7700** (`project`, minted by pm 21:20:16.789Z, over
+70 % of every window, unclaimed). #7667 `pool-claimed by=advocate` 18:35:43Z and **#7669 `pool-claimed by=security`
+18:36:48Z**, both `done` by 21:14Z; both name
 `docs/DECISIONS.md` (`ownership` → `advocate` alone), so security's claim is the milestone's falsification probe
 passing on a live row. Seats: 11 × `usableWindow` 164320, auditor 12288; tier table
 `{"trivial":3400,"small":6100,"feature":6200,"project":120000}`. Gate limits: 115023 and 8601, so **only `project`
@@ -122,7 +127,7 @@ row is claimed by whoever advertises the set. Do not add an `--apply` to the too
 **Blocker:** none for the milestone. Two things are owed by others, neither of them build work: (1) **#7660** is OPEN
 in the pool with `requires: "docs"` and no seat advertises `docs` — only its author `lead` or a coordinator can clear
 it (`revise_work({itemId: 7660, requires: []})`); `check rig.selfdev.json` reports `pool-dead-gate` until then and
-every pass logs it by id. (2) The four operator rulings below.
+every pass logs it by id. (2) The FIVE operator rulings below.
 
 **Operator decisions owed** (full options/pros/cons in `docs/reviews/2026-11-13-capability-ownership-ruling.md`):
 (0) the annotation authority (decision 5): author-or-`pm` as shipped, every coordinator, or a named `lead` exception. (1) what `ownership` is FOR — advisory (recommended, plus a `check` that names disjoint owner/claimant pairs) or
