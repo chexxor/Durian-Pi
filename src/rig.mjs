@@ -347,12 +347,52 @@ export function deadGateId(item, items = []) {
 	return deadGateIds(item, items)[0] ?? null;
 }
 
+/**
+ * `requires` is a SET (N19 "The Pool", docs/POOL-QUEUE-SPEC.md §5 P2). A row may name ONE capability -
+ * the historical spelling, and the shape every existing row and demo carries - or SEVERAL. A claimant must
+ * advertise EVERY named capability; a partial match is exactly the failure this milestone exists to
+ * prevent. An empty set means "any capability profile".
+ *
+ * WHY ONE FUNCTION AND NOT THREE INLINE CHECKS: the claim predicate, the send gate and the queue line all
+ * read `requires`. Two spellings in three places is how a rule drifts, so the normalisation is single-owned
+ * here the same way `deadGateIds` and `normalizeBlock` are.
+ *
+ * Anything that is neither a string nor an array normalises to `[]` - the #2673 conservative default: an
+ * unmodellable value is absence of a requirement, not a hidden one.
+ *
+ * @param {string|Array<string>|null|undefined} requires
+ * @returns {string[]} deduped, trimmed, in the order written
+ */
+export function requiredCapabilities(requires) {
+	if (typeof requires === "string") {
+		const one = requires.trim();
+		return one === "" ? [] : [one];
+	}
+	if (Array.isArray(requires)) {
+		const out = [];
+		for (const raw of requires) {
+			const cap = String(raw ?? "").trim();
+			if (cap !== "" && !out.includes(cap)) out.push(cap);
+		}
+		return out;
+	}
+	return [];
+}
+
+/**
+ * MAY THIS SEAT CLAIM THIS ROW? Status, capability SET and gate - and nothing else (P1).
+ *
+ * N19 row 1: the capability check is now a SET test. The reason string for a SINGLE missing capability is
+ * byte-identical to what it was before (`requires:landing`) because six demos and the wake log assert it;
+ * a two-capability row names every missing one (`requires:landing,verify`) so the seat can see what it is
+ * short of rather than guessing.
+ */
 export function workable(item, seat, { items = [], capabilities = [] } = {}) {
 	if (!item) return { workable: false, reason: "missing-item" };
 	if (item.status !== "queued") return { workable: false, reason: `not-queued:${item.status}` };
-	const required = typeof item.requires === "string" ? item.requires.trim() : "";
-	if (required !== "" && !capabilities.includes(required)) {
-		return { workable: false, reason: `requires:${required}` };
+	const missing = requiredCapabilities(item.requires).filter((cap) => !capabilities.includes(cap));
+	if (missing.length > 0) {
+		return { workable: false, reason: `requires:${missing.join(",")}` };
 	}
 	for (const id of item.blockedBy ?? []) {
 		const target = items.find((it) => it.id === id);

@@ -22,7 +22,7 @@
 
 import assert from "node:assert/strict";
 
-import { selectOldestWorkable, workable } from "../src/rig.mjs";
+import { requiredCapabilities, selectOldestWorkable, workable } from "../src/rig.mjs";
 
 let failures = 0;
 function check(label, ok, detail = "") {
@@ -73,6 +73,47 @@ try {
 	const cancelled = workable(cancelledGate, seat, { items: [cancelledGate, item({ id: 97, status: "cancelled" })] });
 	check("a gate on a CANCELLED item is NOT workable (terminal != done)", cancelled.workable === false, JSON.stringify(cancelled));
 	check("...reason is gate-cancelled", cancelled.reason === "gate-cancelled:#97", cancelled.reason);
+
+	console.log("\n=== N19 row 1 (docs/POOL-QUEUE-SPEC.md §5 P2): `requires` is a SET ===");
+	check(
+		"a single capability, written as a string, still renders the BYTE-IDENTICAL reason",
+		workable(item({ id: 50, requires: "landing" }), seat, { capabilities: [] }).reason === "requires:landing",
+		workable(item({ id: 50, requires: "landing" }), seat, { capabilities: [] }).reason,
+	);
+	const setRow = item({ id: 51, requires: ["landing", "verify"] });
+	check(
+		"a 2-set is NOT workable when the seat advertises only ONE of them (partial match is the failure P2 prevents)",
+		workable(setRow, seat, { capabilities: ["landing"] }).workable === false,
+		JSON.stringify(workable(setRow, seat, { capabilities: ["landing"] })),
+	);
+	check(
+		"...and the reason names EVERY capability it is short of",
+		workable(setRow, seat, { capabilities: [] }).reason === "requires:landing,verify",
+		workable(setRow, seat, { capabilities: [] }).reason,
+	);
+	check(
+		"...and a seat advertising BOTH is workable",
+		workable(setRow, seat, { capabilities: ["implement", "landing", "verify"] }).workable === true,
+		JSON.stringify(workable(setRow, seat, { capabilities: ["implement", "landing", "verify"] })),
+	);
+	check(
+		"an EMPTY set means anyone (P2: 'any capability profile'), not 'unknown, so refuse'",
+		workable(item({ id: 52, requires: [] }), seat, { capabilities: [] }).workable === true,
+		JSON.stringify(workable(item({ id: 52, requires: [] }), seat, { capabilities: [] })),
+	);
+	check(
+		"`requiredCapabilities` dedupes, trims, keeps order, and normalises a string to a one-element set",
+		JSON.stringify(requiredCapabilities([" code ", "code", "", null, "test"])) === JSON.stringify(["code", "test"]) &&
+			JSON.stringify(requiredCapabilities("landing")) === JSON.stringify(["landing"]) &&
+			JSON.stringify(requiredCapabilities(null)) === "[]" &&
+			JSON.stringify(requiredCapabilities(undefined)) === "[]",
+		JSON.stringify(requiredCapabilities([" code ", "code", "", null, "test"])),
+	);
+	check(
+		"a value that is neither a string nor an array is ABSENCE of a requirement, not a hidden one",
+		workable(item({ id: 53, requires: { capability: "landing" } }), seat, { capabilities: [] }).workable === true,
+		JSON.stringify(workable(item({ id: 53, requires: { capability: "landing" } }), seat, { capabilities: [] })),
+	);
 
 	console.log("\n=== the CONSERVATIVE DEFAULT: ambiguous means workable ===");
 	const unknownGate = item({ id: 15, blockedBy: [4242] });
