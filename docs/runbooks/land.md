@@ -379,7 +379,7 @@ ask "stop or not?" or "why did --suite fail?".
    writing the same commit reported 3 red in the seat root and 7 after a worktree-local `npm ci` — two of
    those were REAL content defects, one was an environment guard and five were dependency-version
    artefacts. A landing pass that treats the delta as noise will treat the real ones as noise too.
-#### ⚠ WHEN `main` IS ALREADY RED: the derived gate is the only lighter path — and proving on `main` is still required
+**⚠ WHEN `main` IS ALREADY RED: the derived gate is the only lighter path — and proving on `main` is still required**
 
 **What you can do while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
 ./selfdev.sqlite --changed-suite` — the derived subset runs only the tests the change itself implies, so
