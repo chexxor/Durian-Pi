@@ -26,8 +26,8 @@
 // enforcement chokepoint and must keep loading when the provider stack is broken (#1164 Q3,
 // the 2026-10-17 checkup.mjs lesson), and src/genlock.mjs needs the same rule in-process. One
 // implementation, two callers, no pi-ai in either path.
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 /** How long a reservation survives without renewal. Matches genlock's STALE_MS: longer than a
  * legitimate provider stream, so a live lander waiting on a long generation is never aged out. */
@@ -204,6 +204,45 @@ export function releaseReservation(dbPath, me) {
  * the record cannot name is not evidence of death). */
 export function slotIsStale(holder, now = Date.now()) {
 	return recordIsStale(holder, now, "a genlock slot");
+}
+
+/**
+ * #5020 — THE LIVE-HOLDER PROBE, IN ONE PLACE.
+ *
+ * `scripts/land.mjs` used to keep its own copy of this scan, with its own liveness test
+ * (`typeof holder.pid === "number" && pidAlive(holder.pid)`), while the lease layer next to it
+ * (src/genlock.mjs `holderAlive`) says a record that names no usable owner is NOT confirmed gone.
+ * Those two rules are not the same rule: a slot genlock refuses to steal was invisible to the
+ * lander, which is exactly the shape of the reported defect — `liveHolders: 0` printed beside a
+ * lease the rig is honouring. Two copies of a liveness rule drift; this is the copy both sides use.
+ *
+ * Returns one entry per numbered slot file whose owner is alive or unresolvable, each carrying the
+ * `state` the shared rule assigned (`"alive"` or `"unknown"`), so a caller can report WHY a slot
+ * blocks rather than only THAT it does.
+ */
+export function liveGenerationHolders(dbPath) {
+	const dir = dirname(dbPath);
+	const prefix = `${basename(dbPath)}.genlock.`;
+	if (!existsSync(dir)) return [];
+	const held = [];
+	for (const name of readdirSync(dir)) {
+		if (!name.startsWith(prefix)) continue;
+		const path = join(dir, name);
+		// The priority reservation shares the prefix and is not a generation slot: counting it would
+		// report the lander against itself (#1498).
+		if (isReservationPath(path)) continue;
+		const holder = readRecord(path);
+		const state = ownerState(holder);
+		if (state === "absent" || state === "dead") continue;
+		held.push({
+			path,
+			pid: typeof holder?.pid === "number" ? holder.pid : null,
+			seat: typeof holder?.seat === "string" ? holder.seat : null,
+			since: typeof holder?.since === "string" ? holder.since : null,
+			state,
+		});
+	}
+	return held;
 }
 
 /** Synchronous sleep — scripts/land.mjs is a sync script, so its acquire loop must block. */

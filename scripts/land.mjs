@@ -83,6 +83,7 @@ import { changedSuiteScope, selectTests } from "../src/testareas.mjs";
 import {
 	acquireAllSlotsSync,
 	isReservationPath,
+	liveGenerationHolders,
 	releaseReservation,
 	releaseSlotsSync,
 	reserveSlots,
@@ -129,43 +130,13 @@ function report(payload, code) {
 /* ───────── the genlock pre-flight ─────────
  * Deliberately LOCAL and dependency-free: this helper must load without the provider stack.
  * src/genlock.mjs imports pi-ai, and a chokepoint that a broken dependency can disable is
- * exactly the mistake the 2026-10-17 incident taught (checkup.mjs). The liveness rule is
- * genlock's: signal 0; only ESRCH means gone (EPERM means alive but unsignalable). */
-function pidAlive(pid) {
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch (err) {
-		return err?.code !== "ESRCH";
-	}
-}
-
-/** Slot files `<db>.genlock.<i>` whose holder is ALIVE. A dead holder's slot is stale and
- * the broker reconciles it, so it does not block a landing. */
-function heldGenlocks(dbPath) {
-	const dir = dirname(resolve(dbPath));
-	const prefix = `${basename(resolve(dbPath))}.genlock.`;
-	if (!existsSync(dir)) return [];
-	const held = [];
-	for (const name of readdirSync(dir)) {
-		if (!name.startsWith(prefix)) continue;
-		const path = join(dir, name);
-		// The PRIORITY reservation lives beside the numbered slots and shares their prefix. It is
-		// not a generation slot: counting it as a live holder would report the lander against
-		// itself (#1498).
-		if (isReservationPath(path)) continue;
-		let holder = null;
-		try {
-			holder = JSON.parse(readFileSync(path, "utf8"));
-		} catch {
-			holder = null; // unreadable/partial: not evidence of a live run
-		}
-		if (holder && typeof holder.pid === "number" && pidAlive(holder.pid)) {
-			held.push({ path, pid: holder.pid, seat: holder.seat ?? null, since: holder.since ?? null });
-		}
-	}
-	return held;
-}
+ * exactly the mistake the 2026-10-17 incident taught (checkup.mjs). The LIVENESS RULE is not
+ * written here: it comes from src/genlockreserve.mjs `ownerState`, the same rule the lease layer
+ * uses (#5020). A lander that decides liveness with its own test can call a slot free while the
+ * rig still honours it — `liveHolders: 0` beside a live writer is that divergence, not a quiet rig.
+ * A dead holder's slot is stale and the broker reconciles it, so it does not block a landing.
+ */
+const heldGenlocks = liveGenerationHolders;
 
 /* ─────────── the EXCLUSIVE landing lock (lead #1429 condition (b)) ───────────
  * The FF-advance must happen under a lock HELD ACROSS it, not merely a start-check: a new
