@@ -148,6 +148,15 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   `durig.config.json` is gitignored (`.gitignore:12`) so it exists only in the shared root - measured in an item
   worktree, a bare `node cli.mjs status` falls back to `./rig.sqlite` (`durig.config.default.json:2`), not to the
   rig the operator meant.
+- **Naming the variable is only half of it: a store path is resolved against the cwd (#6339, measured 2026-11-11 in
+  the item worktree `item-6339`, forked from `main 35001c3a`).** `cli.mjs:161` is
+  `resolve(CFG.DURIG_DB ?? "./rig.sqlite")`, and no store is tracked (`git ls-files | grep -c sqlite` -> `0`;
+  `.gitignore:2`), so `selfdev.sqlite`, `rig.sqlite` and `session.sqlite` exist ONLY in the shared checkout. In an
+  item worktree: bare `node cli.mjs status` -> `"db": "…/item-6339/rig.sqlite"`, exit 1, `cause: no_store`;
+  `DURIG_DB=./selfdev.sqlite node cli.mjs status` -> `"db": "…/item-6339/selfdev.sqlite"`, exit 1,
+  `cause: no_store`. A runbook whose Diagnose/Do opens a store must therefore say which tree it assumes and give
+  the absolute path (`--db /home/chexxor/Git/Durian-Pi/selfdev.sqlite`); `store-probe-identity.md` now carries that
+  section.
 - **Env-name fidelity is now a machine rule (#6335, 2026-11-11, tree `1dc05f8b`):** `tools/doc-integrity-guard.mjs`
   scans the live instruction surfaces (`README.md`, `AGENTS.md`, `docs/QUICKSTART.md`, `docs/STATUS.md`,
   `docs/FEATURES.md`, `docs/TUI-TESTING.md`, `docs/DELEGATE-CLOCKIN.md`, `docs/SELFDEV.md`, every runbook) and

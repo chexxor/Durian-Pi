@@ -792,6 +792,17 @@ leave it at 32 GB) and keep C: for the model; or take the 96 GB RAM route, where
   explicit `DURIAN_PI_DB=` pointing at another store (an item worktree's, a moved workspace's) is **silently discarded**.
   A test that passes `DURIAN_PI_DB=./selfdev.sqlite` and sees `./selfdev.sqlite` proves nothing — that is the confound I
   walked into; discriminate by naming a path the default could not produce.
+- **The store you name is relative to where you stand, and an item worktree has none of them.** Every store is
+  untracked (`.gitignore:2` `*.sqlite`; `git ls-files | grep -c sqlite` → `0`), so `selfdev.sqlite`, `rig.sqlite`
+  and `session.sqlite` exist only in the shared checkout. `cli.mjs:161` on `main 35001c3a` is
+  `resolve(CFG.DURIG_DB ?? "./rig.sqlite")` — resolved against the **cwd**, with the fallback value coming from
+  `durig.config.default.json:2`. Measured 2026-11-11 in the item worktree `item-6339` (forked from
+  `main 35001c3a`): bare `node cli.mjs status` → `"db": "…/item-6339/rig.sqlite"`, exit 1, `cause: no_store`;
+  `DURIG_DB=./selfdev.sqlite node cli.mjs status` → `"db": "…/item-6339/selfdev.sqlite"`, exit 1, `cause: no_store`;
+  and even a worktree-local `durig.config.json` pinning `"DURIG_DB": "./selfdev.sqlite"` resolves inside the
+  worktree, not in the shared root. So a store reading a seat gets in a worktree is a property of that **tree**,
+  not of the rig: run store work from the shared checkout or name an absolute path, and write the path into the
+  finding.
 - **A runbook you are told to follow can be single-OS.** `docs/runbooks/broker-down-or-stalled.md` `## Do` is
   `taskkill /F /PID`, `$env:…`, `scripts/serve-noroot.ps1`; `scripts/` has **no `*.sh`**, and the repo has a second Linux
   host (D131, and `ROADMAP.md:2875` already says "none on the Linux box" about the provider). Name the OS in every

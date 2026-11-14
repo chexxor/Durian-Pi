@@ -32,6 +32,9 @@ Name the store with the variable **the entry point you are invoking actually rea
 `intent.mjs` read `DURIG_DB` (`cli.mjs:155`, `intent.mjs:105`, `src/config.mjs` `CONFIG_KEYS`); the one entry
 point that also accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:379`, and it takes it first. A command carrying a
 name the entry point ignores is not a harmless typo - it silently opens the fallback store (#5911, ROADMAP 191).
+And name the FILE: a relative store path resolves against the cwd (`cli.mjs:161`), and an item worktree holds no
+store at all (`git ls-files | grep -c sqlite` -> `0`, `.gitignore:2`), so either state "run this from the shared
+root" or give the absolute path - a worktree reading of a store is a property of the tree, not of the rig (#6339).
 
 ## Do
 1. <a literal, copy-pasteable step; complete env on every line>
