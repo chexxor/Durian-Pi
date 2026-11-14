@@ -1,6 +1,6 @@
 **Last update:** 2026-11-14 (delegate). Every shipped commit in this window is a ROW below, **in commit order** —
 enforced by `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (0.3-0.6 s, exit 0/1), not by eye. The ONE exempt
-commit is the one carrying this file. Rows for the earlier part of the milestone are VERBATIM in
+commit is the one carrying this file (the restart-limit fixture fix ships in it). Rows for the earlier part of the milestone are VERBATIM in
 [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md). Nothing pushed — the push grant is the operator's.
 
 **Milestone this window worked** — **making self-merging the team default (the work-item lifecycle, D265; the
@@ -45,6 +45,8 @@ pushed. Every commit in `8b5a19e1..HEAD`, oldest first:
 | `219cb687` | skill(driving-durian-pi): name the seat self-merge verbs and their measured cost |
 | `1a31a79a` | docs(DECISIONS): close the D271/D272 duplicate-heading collision — 299 entries, 0 collisions |
 | `f5dc28be` | instruments: four instrument-side failures fixed on contact (depplane rig seam, branch-census exit-code handling, restart-limit fixture, channel-preflight config) |
+| `df256ae0` | docs(SELFDEV): pitfalls 349-354 — a non-zero audit exit is a verdict, a rig is not a config, a demo must not assert the live rig's exit code |
+| `5b1daea5` | docs(NEXT): register the instrument-repair commit row — `pointer-sha-coverage --base 8b5a19e1` exits 0 |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -75,9 +77,17 @@ timeout 320 node scripts/test.mjs --all --jobs 4                        # ~214 s
 node tools/pointer-sha-coverage.mjs --base 8b5a19e1                     # 0.3 s — exit 1 if this file skips a shipped sha
 ```
 
-**Blocker:** three things, in order. (1) **No live fleet proof yet**: no real seat conversation has run
-`land_my_item` on the running rig — the broker is down and waking the fleet is a capacity grant the operator
-holds. (2) **17 refs still need a seat's semantic judgement** (rows in `docs/DISPOSITIONS.md`, verbatim hunk in
+**Suite tally at this HEAD:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 215.9 s**
+(slowest: `demo/runbook-diagnose.test.mjs` 102.8 s, `demo/starter.test.mjs` 71.1 s, `demo/check-pool-gate.test.mjs`
+28.4 s). Host: Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1. The one red at the previous
+HEAD, `demo/restart-limit-behaviour.test.mjs`, is fixed (one scripted response per crash was not enough — a restart
+consumes another, so the run settled `done` and the streak never reached the limit).
+
+**Blocker:** three things, in order. (1) **Live fleet proof IN FLIGHT, not yet proven**: a two-seat proof rig
+(`.spike/fleet-proof/rig.proof.json`, private store `.spike/fleet-proof/proof.sqlite`, both seats on
+`local/qwen3.8-flash-next-q2_0`, declared $0) is running on local main; `impl` claimed pool row #1 at
+2026-11-14T13:12:46Z and has its worktree `item-1`. The production 12-seat fleet is still NOT woken — the broker
+is down and `--start` refuses without the operator's `--yes-pm-wakes` grant. (2) **17 refs still need a seat's semantic judgement** (rows in `docs/DISPOSITIONS.md`, verbatim hunk in
 `docs/evidence/2026-11-14-recut-residue/`); 52 refs report `conflicted` in the SLA census. `wip/seat-prompt-files`
 has no DISPOSITIONS row yet. (3) **`cli.mjs check` on this rig exits 1 for two pre-existing error findings**
 (`store-missing-seat`, `pool-dead-gate` #7660) — that is why `demo/depplane.test.mjs` is red at this HEAD; it is

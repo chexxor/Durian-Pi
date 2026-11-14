@@ -127,7 +127,11 @@ async function crashLoop({ restartLimit, crashes }) {
 	try {
 		while (landed < crashes && attempts < crashes + 4) {
 			attempts += 1;
-			faux.setResponses([fauxAssistantMessage(ANSWER)]);
+			// A restart consumes another scripted response. One response per crash is not enough:
+			// under load the retry queue drains, the run settles normally, and the streak never reaches
+			// the limit (measured 2026-11-14, `--all --jobs 4`: 5 planted crashes charged 4 restarts and the
+			// submission settled `done`). Queue a deep, identical response stack so the only variable is the crash.
+			faux.setResponses(Array.from({ length: 40 }, () => fauxAssistantMessage(ANSWER)));
 			const flag = { dead: false };
 			const harness = await Harness.open(hangingStorage(inner, flag), { models, registry, settings }, ctx);
 			harness.resume();
