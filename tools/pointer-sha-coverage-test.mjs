@@ -7,7 +7,9 @@
 // This test drives the tool against a THROWAWAY git repo (init + 3 commits) and proves it in both
 // directions: a table missing a row exits 1 and names the sha; a table carrying every row exits 0,
 // including the one legitimate exemption (the commit that carries the pointer cannot be its own row);
-// and a table whose rows are out of commit order exits 1.
+// and a table whose rows are out of commit order exits 1. A fifth case covers the ARCHIVE: when the
+// pointer is cut its older rows move verbatim to docs/NEXT-ARCHIVE.md, so a row that lives there still
+// names the commit (exit 0), and `--no-archive` reproduces the hole (exit 1).
 //
 // FAILING-FIRST: before `tools/pointer-sha-coverage.mjs` existed the spawn exited non-zero with
 // "Cannot find module", so every assertion here failed.
@@ -129,7 +131,43 @@ try {
 	);
 	check("--json reports the carrier", parsed && parsed.carrier === c3, JSON.stringify(parsed && parsed.carrier));
 
-	// (5) The cost claim in the header: under a second on a 3-commit repo.
+	// (5) ARCHIVED ROWS COUNT. The pointer is cut: older blocks move VERBATIM to docs/NEXT-ARCHIVE.md.
+	// A range that reaches past the cut cannot close if the tool reads only the live file.
+	writeFileSync(
+		join(repo, "docs", "NEXT-ARCHIVE.md"),
+		["# archive", "", "| sha | shipped |", "|---|---|", `| \`${c2}\` | an older block |`, ""].join("\n"),
+	);
+	writeFileSync(
+		pointer,
+		["# pointer", "", "| sha | shipped |", "|---|---|", `| \`${c1}\` | the base |`, ""].join("\n"),
+	);
+	const withArchive = spawnSync(
+		process.execPath,
+		[tool, "--base", c0, "--file", pointer, "--archive", "docs/NEXT-ARCHIVE.md"],
+		{ encoding: "utf8", cwd: repo },
+	);
+	check(
+		"a row that moved to the archive still names the commit (exit 0)",
+		withArchive.status === 0,
+		`status=${withArchive.status}\n${withArchive.stdout}`,
+	);
+	check(
+		"it says where the row lives",
+		withArchive.stdout.includes("1 in docs/NEXT-ARCHIVE.md"),
+		withArchive.stdout,
+	);
+	const withoutArchive = spawnSync(
+		process.execPath,
+		[tool, "--base", c0, "--file", pointer, "--no-archive"],
+		{ encoding: "utf8", cwd: repo },
+	);
+	check(
+		"--no-archive reproduces the hole (exit 1)",
+		withoutArchive.status === 1 && withoutArchive.stdout.includes("MISSING") && withoutArchive.stdout.includes(c2),
+		`status=${withoutArchive.status}\n${withoutArchive.stdout}`,
+	);
+
+	// (6) The cost claim in the header: under a second on a 3-commit repo.
 	const t0 = Date.now();
 	run();
 	check("runs in under 2 s", Date.now() - t0 < 2000, `${Date.now() - t0} ms`);

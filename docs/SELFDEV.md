@@ -4545,7 +4545,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     its fixture relative to `Date.now()` (`hoursAgo(48)`, `hoursAgo(1)`), and its assertion must PRINT the offending
     rows. Fix measured: the demo passes in 0.47 s; `node scripts/test.mjs --area worktree` 26/26 in 8.9 s.
 
-## Operational pitfalls (delegate instrument-repair pass 2026-11-14 — numbered 349-354, continuing from 348; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+## Operational pitfalls (delegate instrument-repair pass 2026-11-14 — numbered 349-358, continuing from 348; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
 
 349. **`cli.mjs worktree audit --json` exits 1 when it has REMEDIES, not when it fails.** Measured at main
     `f5dc28be`: `total:192`, `ok:true`, `counts.reapable:82`, 67 remedy lines, exit **1**. Any wrapper built on
@@ -4607,3 +4607,10 @@ at `:743`). Re-measure every `path:line` before repeating it.
     **~3 ms** with `provider_auth` — the symptom reads as "the seat is broken", not "the environment is missing".
     `local2` at `192.168.1.52:8080` 401s as well; `DEEPINFRA_API_KEY` unset → `verifier/*` seats fail as `no_model`.
     Before blaming a seat, run `node tools/keycheck.mjs --level=auth --family=LOCAL` → `auth: complete`.
+358. **A pointer-coverage audit that reads only the live pointer reports false holes.** `docs/NEXT.md` is cut at
+    its 200-line cap and the older blocks move VERBATIM to `docs/NEXT-ARCHIVE.md`. Measured 2026-11-14 before the
+    fix: `node tools/pointer-sha-coverage.mjs --base 03bdbf4d` → **265 hole(s)** over 379 commits, while
+    `grep -c 28690eb8 docs/NEXT-ARCHIVE.md` → 1. **Fix in place (ROADMAP 370):** the tool now counts archive rows
+    as named and applies the landing-merge coverage rule to them too; `--no-archive` is the escape hatch. Re-run
+    evidence: `--base 03bdbf4d` → 379 commits, 43 + 140 rows, 229 covered, exit 0, 0.4 s. **Read the pointer as
+    two files** before calling a commit un-named.

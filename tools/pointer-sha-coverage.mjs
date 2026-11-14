@@ -15,8 +15,16 @@
 //
 // COST: 0.3-0.6 s (git log + one file read; no store, no network, no model). Re-measured 2026-11-14
 // with the merge-coverage rule: 0.35 s on a 243-commit range.
-// Run: node tools/pointer-sha-coverage.mjs [--base <sha>] [--file docs/NEXT.md] [--json]
-// Exit 0 = every range commit is named (or is the carrier), 1 = holes / out-of-order rows, 2 = usage.
+//
+// THE POINTER IS CUT. When docs/NEXT.md hits its 200-line cap its older blocks move VERBATIM to
+// docs/NEXT-ARCHIVE.md, so a range that reaches past the cut has no chance of closing if the tool reads
+// only the live file (measured 2026-11-14, Linux Fedora 45, node v24.22.1: the default merge-base range
+// reported 265 "holes", most of them named in the archive). Archive rows therefore count as named and
+// their landing merges count as coverage; the ORDER check still applies to the live pointer only, since
+// the archive is a stack of dated blocks, not one table.
+// Run: node tools/pointer-sha-coverage.mjs [--base <sha>] [--file docs/NEXT.md] [--archive docs/NEXT-ARCHIVE.md] [--json]
+// Use --no-archive to ignore the archive. Exit 0 = every range commit is named (or is the carrier),
+// 1 = holes / out-of-order rows, 2 = usage.
 
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -28,6 +36,8 @@ const flag = (name, fallback = null) => {
 };
 const asJson = argv.includes("--json");
 const file = flag("file", "docs/NEXT.md");
+// `--no-archive` ignores the archive; `--archive <path>` points it elsewhere.
+const archiveFile = argv.includes("--no-archive") ? null : flag("archive", "docs/NEXT-ARCHIVE.md");
 
 if (!existsSync(file)) {
 	console.error(`pointer-sha-coverage: no such pointer file: ${file}`);
@@ -60,11 +70,14 @@ const commits = git("log", "--reverse", "--format=%h%x09%s", `${base}..HEAD`)
 
 const text = readFileSync(file, "utf8");
 // Rows look like: | `655c44e2` | what shipped |
-const rows = [...text.matchAll(/^\|\s*`([0-9a-f]{7,40})`\s*\|/gm)].map((m) => m[1]);
+const rowShas = (s) => [...s.matchAll(/^\|\s*`([0-9a-f]{7,40})`\s*\|/gm)].map((m) => m[1]);
+const rows = rowShas(text);
 const rowIndex = new Map();
 rows.forEach((sha, i) => {
 	if (!rowIndex.has(sha)) rowIndex.set(sha, i);
 });
+
+const archiveRows = archiveFile && existsSync(archiveFile) ? rowShas(readFileSync(archiveFile, "utf8")) : [];
 
 // A landing MERGE row covers the commits that came in with it. `merge: land <branch> onto main`
 // is one row in a pointer that cannot fit 43 seat commits; the merge's second parent is the
@@ -74,7 +87,7 @@ rows.forEach((sha, i) => {
 // keep inside its 200-line cap, and the honest alternative (drop rows) is the hole the tool was
 // built to catch.
 const covered = new Set();
-for (const row of rows) {
+for (const row of [...rows, ...archiveRows]) {
 	let full;
 	try { full = git("rev-parse", row); } catch { continue; }
 	let parents;
@@ -90,7 +103,8 @@ for (const row of rows) {
 	}
 }
 
-const namedByRow = (sha) => [...rowIndex.keys()].some((r) => sha.startsWith(r) || r.startsWith(sha));
+const matches = (list, sha) => list.some((r) => sha.startsWith(r) || r.startsWith(sha));
+const namedByRow = (sha) => matches([...rowIndex.keys()], sha) || matches(archiveRows, sha);
 const named = (sha) => namedByRow(sha) || covered.has(sha);
 const coveredOnly = commits.filter((c) => covered.has(c.sha) && !namedByRow(c.sha)).length;
 
@@ -118,6 +132,8 @@ const ok = missing.length === 0 && outOfOrder.length === 0;
 const report = {
 	tool: "pointer-sha-coverage",
 	file,
+	archive: archiveRows.length ? archiveFile : null,
+	archiveRows: archiveRows.length,
 	base: `${base.slice(0, 8)} (${baseLabel})`,
 	head: head.slice(0, 8),
 	rangeCommits: commits.length,
@@ -133,7 +149,7 @@ if (asJson) {
 	console.log(JSON.stringify(report, null, 1));
 } else {
 	console.log(`pointer-sha-coverage — ${file}, range ${report.base}..${report.head} (${report.rangeCommits} commits)`);
-	console.log(`  table rows: ${report.tableRows}`);
+	console.log(`  table rows: ${report.tableRows} in ${file}${report.archiveRows ? ` + ${report.archiveRows} in ${report.archive}` : ""}`);
 	console.log(`  carrier (exempt, cannot name itself): ${report.carrier ?? "(HEAD is not in the range)"}`);
 	for (const m of missing) console.log(`  MISSING   ${m.sha}  ${m.subject}`);
 	console.log(`  covered: ${coveredOnly} commit(s) inside a landing merge the table already names (a merge row covers its branch)`);

@@ -56,6 +56,8 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `07e0e76f` | merge: land `item-1` onto main — the FIRST seat self-landing its own item (`land_my_item`, derived gate 26/357, containment 0 loss) |
 | `c7f2a4d5` | docs(ROADMAP): rows 368 (`assertSendAllowed` TypeError on an Edges link with no `maySendTo`) and 369 (the bare-scratch gate, shipped in `c608e5b4`) |
 | `3deb580d` | docs(NEXT): the live seat-landing proof, the gate-rig trap, and this window's rows (pointer churn squashed) |
+| `10ca88ee` | docs(SELFDEV) pitfall 356 + docs(NEXT) row in order — the commit that carried this file at the time, now named because it is no longer HEAD |
+| `b968b166` | docs: the D314 live seat-landing addendum, SELFDEV pitfall 357 (the local provider now needs a credential), the final suite tally, and the `wip/seat-prompt-files` KEEP-HELD correction |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -84,15 +86,19 @@ node cli.mjs check rig.selfdev.json --json                              # 14.3 s
 node demo/self-merge-seat.test.mjs                                      # 0.94 s — the seat verb, end to end, no model
 timeout 120 node scripts/test.mjs --area worktree                       # 8.9 s, 26/26
 timeout 320 node scripts/test.mjs --all --jobs 4                        # ~214 s
-node tools/pointer-sha-coverage.mjs --base 8b5a19e1                     # 0.3 s — exit 1 if this file skips a shipped sha
+node tools/pointer-sha-coverage.mjs --base 8b5a19e1                     # 0.4 s — exit 1 if this file skips a shipped sha;
+                                                                      # it now also reads docs/NEXT-ARCHIVE.md (ROADMAP 370):
+node tools/pointer-sha-coverage.mjs --base 03bdbf4d                     # 0.4 s — exit 0, 379 commits, 43+140 rows
 ```
 
-**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 209.0 s, 0 fails, 0 skips, at the final
-HEAD `10ca88ee`** (run detached: `nohup timeout 420 node scripts/test.mjs --all --jobs 4 > .spike/suite-final.out 2>
-.spike/suite-final.err`; stderr 0 bytes). Slowest: `runbook-diagnose` 97.2 s, `starter` 64.5 s, `check-pool-gate`
-28.4 s, `clockin-digest` 28.1 s, `check` 17.6 s. Host: Linux, Fedora Linux 45 (Forty Five), kernel
-`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Areas instead of the whole suite: `--area worktree` 27/27 in
-9.6 s, `--area check` 16/16 in 61.8 s. The one red at the previous HEAD,
+**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 217.2 s, 0 fails, 0 skips** at this
+window's code tip (`db529290`, now amended into the pointer commit `84f7d773`; the amend touched only this file's
+prose). An earlier detached run at `10ca88ee` was 357/357 in 209.0 s (`nohup timeout 420 node scripts/test.mjs
+--all --jobs 4 > .spike/suite-final.out 2> .spike/suite-final.err`, stderr 0 bytes). Slowest:
+`runbook-diagnose` 103.2 s, `starter` 76.4 s, `clockin-digest` 28.9 s, `check-pool-gate` 28.4 s,
+`depplane` 17.9 s. Host: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1,
+git 2.56.0. Areas instead of the whole suite: `--area worktree` 27/27 in 9.6 s, `--area check` 16/16 in 73.4 s,
+`--area toolchain` 41/41 in 36.0 s. The one red at the previous HEAD,
 `demo/restart-limit-behaviour.test.mjs`, is fixed (one scripted response per crash is not enough — a restart
 consumes another, so the run settled `done` and the streak never reached the limit).
 
