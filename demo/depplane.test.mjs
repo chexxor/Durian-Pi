@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs"
 import { join } from "node:path";
 import { readDependencyPlane, pinVersion } from "../src/depplane.mjs";
 import { auditRig, formatCheck, RULES } from "../src/checkup.mjs";
@@ -81,6 +81,8 @@ try {
   const measured = await readDependencyPlane({ root: ROOT, db: store });
   const after = snapshot(store);
   check("store schema version is read", () => assert.equal(measured.storeSchema, newerThan));
+  makeStore(store, 2);
+  check("store schema version is read", () => assert.equal(measured.storeSchema, 2));
   check("a store newer than the resolved code is flagged as disagreeing", () => {
     assert.ok(measured.supportedSchema !== null, "the resolved pi-durable did not expose CURRENT_SQLITE_SCHEMA_VERSION");
     assert.equal(measured.schemaAgrees, measured.storeSchema <= measured.supportedSchema);
