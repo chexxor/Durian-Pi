@@ -7,6 +7,7 @@ last_verified: 2026-11-12
 verified_by: devtools
 evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked); #6182 owner-state rule measured 2026-11-11 on branch item-6182 (node demo/genlock-owner-state.test.mjs exit 0, 24 checks; the same probe against main 35001c3a reported {unresolvableOwnerBlocks: false, secondClaimAccepted: true, freshUnnamedSlotIsStale: true}) - SCOPED to the genlock bullet: no landing was run in that pass; #5347 intersection rule measured 2026-11-12 by devtools on branch item-5347 (tip 1489b6ae): `node demo/landing-preflight-dirt.test.mjs` exit 0 (13 checks, git's own FF behaviour on fixture repos) and `node demo/land-helper.test.mjs` exit 0 (111 checks); RED at the pre-fix base 9611c45d in a throwaway detached worktree: land-helper exit 1 (4 FAILs - untracked dirt the landing did NOT write refused, and no dirtyPathsNotTouched in the report), preflight demo exit 1 (src/landinggate.mjs exported no classifyTreeDirt)"
 check_rule: null
+evidence_addendum: "2026-11-12 (scribe, item #6614, worktree branch item-4866 forked from item-3575; dependencySet lockfile-released - pi-durable 1.3.0 from the lockfile, sync-pi --link FAILED, so this run is NOT comparable with the seat root's built-pin plane): the new 'name the PLANE' section was checked with `node tools/review-cite-check.mjs docs/runbooks/land.md` exit 0 (0 failing of 38 findings) and the runbook's own Verify leg `node demo/land-helper.test.mjs` exit 0 in the same tree; `node tools/doc-integrity-guard.mjs` exit 0. The qa figures quoted in that section (261/282, 21 non-passers, `git merge-base --is-ancestor 612eb837 main` exit 0) are qa's measurements, not re-run by this seat. last_verified is NOT raised: no landing was performed in this pass."
 ---
 
 # Land a branch with the helper (`scripts/land.mjs`)
@@ -641,6 +642,42 @@ After a real landing, confirm the branch is an **ancestor** of `main` (the workt
 ```bash
 git -C <repo> merge-base --is-ancestor <branch> main && echo LANDED
 ```
+
+### A verdict counts only on the PINED dependency plane — name the PLANE, not just the count (#6426, interim rule)
+
+```bash
+node scripts/sync-pi.mjs                                   # prints dependencySet for this tree
+ls -l node_modules/@earendil-works/pi-durable              # '->' = the built pin; a plain dir = the lockfile
+```
+
+**The rule.** A landing verdict is valid only from a tree whose dependency plane is the pinned one, and the
+completion must name **both** the tree and the plane, using the value `scripts/sync-pi.mjs`'s `dependencySet()`
+actually returns (`scripts/sync-pi.mjs:663`): `built-pin` (every pinned package linked into `vendor/pi-main`),
+`mixed` (some linked), `lockfile-released` (nothing linked, npm's released build installed) or `not-installed`
+(nothing there at all). A suite number from an unlinked worktree is **not a failure of the code and not a pass** —
+it is a statement about the plane — and it may not be used as the landing gate.
+
+**The measured shape, so the rule is not abstract.** qa ran the suite on three independent trees and got
+**261/282, exit 1**, with the same 21 non-passers in every unlinked worktree: `broker-cooldown-revisit`,
+`broker-intent-wake`, `broker-liveness`, `broker-wake-return`, `broker-wakepath`, `cli`,
+`commit-discipline-personas`, `driversurvive-pre`, `driversurvive`, `guard`, `inflight`, `livestream`,
+`readboundary-corrupt-live`, `scheduler`, `tui-durable-boot`, `tui-durable-compaction`,
+`tui-durable-compaction-tui`, `tui-durable-persistence`, `tui-durable-tools`, `tui-round-trip-terminal`, plus
+`broker.test.mjs` killed at the 120 s per-test timeout. Concurrency was ruled out — each of the 21 exits 1 solo —
+and the code was ruled out: `git merge-base --is-ancestor 612eb837 main` exit 0, and those demos pass in the
+linked root. The same shape was independently measured earlier at main `e3685a8f` with its mechanism named
+(`src/broker.mjs:2097 runWakeLoop` into the released 1.3.0 `dist/session/session.js:575 #publish`, answering
+`TypeError: listener is not a function`) — see `docs/runbooks/worktree-unlinked-deps.md`.
+
+**What NOT to write: no skip mechanism.** A dependency-plane skip that reports as a pass is the exact failure this
+rule exists to remove. The precedent is item-5770's ledger row, labelled **"GATE BYPASSED, NOT PASSED"**
+(`docs/DISPOSITIONS.md` §item-5770): the advertised `--suite` gate never ran, and the row exists to stop anyone
+reading that landing as verified. If a skip is ever added, it must print `NOT RUN (plane not linked)` and the gate
+must treat that as **no verdict**, not as a pass.
+
+**Why this is recorded as an interim rule rather than a fix:** the durable fix — bumping the lock so `npm ci`
+reproduces the pinned set — is its own held item (`#3712`) and needs a landing slot. Until it lands, every
+verifier pays this, and the honest move is to name the plane, not to downgrade the verdict.
 
 ### What a check or a DEFAULT can and cannot tell you — the unknown-default principle
 
