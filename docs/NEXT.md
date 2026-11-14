@@ -44,6 +44,7 @@ pushed. Every commit in `8b5a19e1..HEAD`, oldest first:
 | `83a3b8ed` | self-merge: the seat verb proven end to end, the D314 ruling, the pointer re-cut |
 | `219cb687` | skill(driving-durian-pi): name the seat self-merge verbs and their measured cost |
 | `1a31a79a` | docs(DECISIONS): close the D271/D272 duplicate-heading collision — 299 entries, 0 collisions |
+| `f5dc28be` | instruments: four instrument-side failures fixed on contact (depplane rig seam, branch-census exit-code handling, restart-limit fixture, channel-preflight config) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
