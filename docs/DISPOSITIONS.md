@@ -674,3 +674,34 @@ so the same refused landing is not re-run by the next session.
 **No ref was deleted** (rule R-B #3270): `node tools/self-merge-sla.mjs --json` at `a9bc766f` counts **195 refs
 besides `main`** — 141 landed, 49 conflicted, 5 gate-refused, `stale: 0`, `ledger_coverage 54/54`, `undocumented: []`,
 exit 0, 7.8 s. Every unlanded ref is named above or in the tables before it.
+
+## Conflicted-set census at HEAD `47e221cf` (delegate second pass, 2026-11-14)
+
+Two instruments, both cheap, both re-runnable:
+
+```bash
+node tools/conflict-hunk-shape.mjs --brief --json          # 49 conflicted refs in 3.4 s
+node tools/ref-recut.mjs --refs <the 27 mechanical + wording-only refs>   # 14.1 s, exit 1
+```
+
+Measured: **49 conflicted refs = 21 semantic, 19 mechanical, 9 wording-only** (host: Linux, Fedora Linux 45,
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0). Replaying the 27 rule-shaped ones onto current `main`:
+**3 replayed clean** — `item-6373` (already landed as `item-6373-recut-r2`), `item-6664` (already landed as
+`item-6664-recut`), `landing-20261114-c3` (the replay's tree is byte-identical to `main`'s tree, so there is nothing
+to land) — and **24 need a human**: markers remain in `src/rig.mjs`, `src/broker.mjs`, `cli.mjs`,
+`docs/SELFDEV.md`, `docs/runbooks/land.md`, `docs/runbooks/pi-pin-update.md` and others. Nothing was committed as
+resolved, and no ref was deleted (R-B #3270). **No conflicted ref is mergeable by rule into content `main` does not
+already have.**
+
+Side effect worth naming: `tools/ref-recut.mjs` creates a `<ref>-recut` branch off current `main` before it decides
+whether the replay is clean, so the census left **24 zero-commit alias branches** pointing at `47e221cf` —
+`landing-20261114-b1-recut`, `landing-20261114-b1b-recut`, `landing-20261114-b1c-recut`, `landing-20261114-b1d-recut`,
+`landing-20261114-b1e-recut`, `landing-20261114-b1f-recut`, `landing-20261114-b1g-recut`, `landing-20261114-b1h-recut`,
+`landing-20261114-b1i-recut`, `landing-20261114-b1j-recut`, `landing-20261114-b1k-recut`, `landing-20261114-b1l-recut`,
+`landing-20261114-b1m-recut`, `landing-20261114-b2a-recut`, `landing-20261114-c3-recut`, `landing-20261114-c5-recut`,
+`landing-20261114-c6-recut`, `landing-20261114-c7-recut`, `landing-20261114-c8-recut`, `landing-20261114-c9-recut`,
+`landing-20261114-c12-recut`, `landing-20261114-r1-recut`, `landing-20261114-r2-recut`, `landing-20261114-r3-recut`.
+Each is provably empty: `git rev-list --count refs/heads/main..refs/heads/<alias>` → `0`, and its tree equals
+`main`'s tree, so the SLA counts them `landed` with 0 lost lines. They are **dispositioned, not deleted**; pruning
+them is a separate decision that needs `tools/branch-census.mjs` and the ancestor test, and the tool that makes them
+should say so in its own output (SELFDEV pitfall 363).

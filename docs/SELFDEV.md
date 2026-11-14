@@ -4651,3 +4651,12 @@ at `:743`). Re-measure every `path:line` before repeating it.
     guard, the second (after `rm -rf .land-scratch-908905`) reached the gate and printed the real verdict. **Probe
     before blaming the gate:** `ls -d .land-scratch-*` — 0.1 s. A landing that exits 1 is only a gate verdict if the
     report's `error` field names `STOPPED: ... main was NOT advanced`; read the JSON, not the exit code.
+363. **`tools/ref-recut.mjs` creates the branch before it knows the answer.** It does `git worktree add -b <ref>-recut`
+    off current `main`, then replays the ref's hunks; when the replay needs a human it leaves the markers in the
+    worktree and **commits nothing**, so the branch is a zero-commit alias of `main`. Measured 2026-11-14 at
+    `47e221cf` (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): a census of the
+    27 rule-shaped conflicted refs (`node tools/ref-recut.mjs --refs <27>`, 14.1 s, exit 1) added 24 such aliases —
+    `git rev-list --count refs/heads/main..refs/heads/<alias>` → `0` for each — taking the ref count from 196 to 220.
+    They are harmless (`self-merge-sla` counts them `landed`, 0 lost lines) but they inflate every "how many branches
+    are open?" number. **Probe:** `git for-each-ref --format='%(refname:short) %(objectname)' refs/heads | awk -v h="$(git rev-parse refs/heads/main)" '$2==h && $1 ~ /-recut$/ {print $1}'`. Prune only with
+    `tools/branch-census.mjs` plus the ancestor test, never by name pattern.
