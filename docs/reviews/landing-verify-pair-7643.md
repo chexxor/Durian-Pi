@@ -119,5 +119,6 @@ already builds.
 Whether absence becomes a refusal, whether the override is per-run or config, and whether self-attestation
 counts as evidence at all are scope calls — `pm` already escalated them to `lead` as **#7641**. This review
 settles only the *form* of the rule: it must be a re-run, and "identical content" must not be the predicate.
-The durable decision is **D276** in `docs/DECISIONS.md` (number to be re-derived at land time — `item-7208`
-carries a D275 that is not yet on `main`).
+The durable decision is **D277** in `docs/DECISIONS.md` (renumbered from the provisional `D276` by the pre-landing
+mint pass #7702: the number is derived from the MERGED tree, per #6561/#6562, and `D276` stays with #7669's
+landing-disposition entry because #7657, #7693 and #7694 already cite it).

@@ -12669,7 +12669,7 @@ the broker can start again.
 
 ---
 
-## D276 — Backlog disposition, and the one principle underneath it: an unlanded branch is a claim on attention, not a store of value; CANCEL is the default and is reversible, CONTENT — not ancestry — is the test, a stack may not land ahead of its base, a number minted in an unlanded branch is a claim to be re-checked at land — and where a cheap signal stands in for an expensive fact, the signal may ACCEPT but must never DECIDE (lead ruling #3265, amended #3338/#3354, carried live by #3410; the principle and its twin from #3575/#4058; recorded by `scribe`, items #3271/#3575, 2026-11-12)
+## D312 — Backlog disposition, and the one principle underneath it: an unlanded branch is a claim on attention, not a store of value; CANCEL is the default and is reversible, CONTENT — not ancestry — is the test, a stack may not land ahead of its base, a number minted in an unlanded branch is a claim to be re-checked at land — and where a cheap signal stands in for an expensive fact, the signal may ACCEPT but must never DECIDE (lead ruling #3265, amended #3338/#3354, carried live by #3410; the principle, its producing-side twin (#4058) and its third face (#4816/#4821), registered in #3575; recorded by `scribe`, items #3271/#3575/#4866/#4821, 2026-11-12)
 
 **Mint note (#3075/#3186 discipline).** `D###` is a placeholder on purpose; the landing pass derives the next FREE
 number by scanning this file at merge. Highest at this branch's fork point `90c63124` is **D266** — re-derive, do not
@@ -12706,6 +12706,34 @@ follow the **cost of being wrong**. Same error, opposite ends of the same wire: 
 The counter-example that makes it a rule rather than a style: the seat-label retirement, where the honest answer *was*
 "unknown, so say both". The default followed the cost there too — a wrong label meant a wrong audit, so the label was
 widened instead of guessed.
+
+### The third face: a signal refreshed by failure cannot certify success (#4816, registered as #4821)
+
+There is a case the two directions above do not cover. **Where a signal would be refreshed by BOTH success and
+failure, it may establish that work HAPPENED; it may never establish that work SUCCEEDED.** The mechanism is a field
+that carries both meanings; the repair is to split *attempt time* from *last-good-outcome time*.
+
+The instance lead ruled on (pm's finding, ruling on #4816): a broker pass that THROWS used to refresh `lastPassAt`,
+so a broker failing every pass read `up` with a fresh timestamp — the act of trying to be healthy counted as
+evidence of health. Same error as the other two faces, from the producing end: the signal is being used to decide
+something it cannot support, because it measures the attempt, not the outcome.
+
+**What the code does now** (read here, not assumed): the split exists. `src/broker.mjs:2025` stamps `lastPassAt`
+only on a pass that COMPLETED, on the pass's own write rather than the 20 s heartbeat; `src/broker.mjs:1774`
+carries a completed pass forward but **never invents one** (the old seed stamped `lastPassAt = now()` at startup,
+which is exactly the attempt-sustained `up`); `brokerHealth` (`src/broker.mjs:2386-2406`) returns `degraded` with
+the reason "no pass has completed yet" when the field is null. Pinned by
+`node demo/broker-progress-is-a-completed-pass.test.mjs` → exit **0** on 2026-11-12 in this seat's worktree
+(`dependencySet: lockfile-released`, pi-durable 1.3.0 — a plane statement, not a gate). The demo's own header says
+it is item **#5698, the re-issue of #4819**, so the defect named in this ruling is **closed on this tree**: the
+instance is now a shape to preserve, not an open one.
+
+**The boundary the ruling set, and where it stands.** The health verdict gets a **NOTICE, never a GATE** (#4820).
+In the code the verdict is carried in the status view (`cli.mjs:3091`, and #4403 requires such a note to ride in the
+JSON rather than stderr so a machine consumer is not broken by it), while `intentWaitBoundMs` (`src/broker.mjs:2422-2427`)
+turns it into a **wait bound**: `up` → 15 minutes, `degraded` → the short bound, `down` → 0. The `down → 0` leg is
+where a notice edges into a refusal to wait. That is not settled in the code and I am not settling it here — it is
+recorded as open for whoever owns the attention wiring.
 
 ### The author-side direction: a seat that cannot run the oracle may AUTHOR, it may not CLOSE
 
@@ -12974,7 +13002,7 @@ estimate refuses real work and the refusal reads like an unlucky claim rather th
 capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
 part of N19 may assume otherwise. It edits files and runs demos.
 
-## D310 — The landing verify pair is a RE-RUN, not a sha match (2026-11-13, queue #7643)
+## D313 — The landing verify pair is a RE-RUN, not a sha match (2026-11-13, queue #7643)
 
 **Decision.** A landing entry's paired `VERIFY` row certifies the landing only when its recorded
 `evidence.command` **exits 0 when re-executed in the scratch worktree at the tree being landed**. Ancestry
@@ -13012,8 +13040,10 @@ pin the squash and stale cases. Landing the implementation must add `demo/landin
 pinning PASS / REFUSE / ABSENT.
 
 **Status:** design and review only — no code changed in `src/` or `scripts/`. Implementation routed to `pm`
-for sequencing; the refusal trigger and override authority are `lead`'s (#7641). ADR number to be re-derived
-at land time: `D275` is referenced in this file's tail and `item-7208` carries a `D275` not yet on `main`.
+for sequencing; the refusal trigger and override authority are `lead`'s (#7641). ADR number minted from the
+MERGED tree before landing (renumber pass #7702): the merged scratch carries `D274` as its highest heading and
+`D275` in this file's tail, and `#7669`'s entry keeps `D276` because #7657, #7693 and #7694 already cite it, so
+this entry takes `D277`.
 
 **D### — the landing gate is a DELTA: "no NEW red", and an unmeasured baseline REFUSES (lead ruling #7269; recorded by scribe, item #7274, 2026-11-12).**
 
