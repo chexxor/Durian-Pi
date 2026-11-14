@@ -251,6 +251,7 @@
       "demo/tui-landing.test.mjs",
       "demo/tui-launch-return.test.mjs",
       "demo/tui-multipane.test.mjs",
+      "demo/tui-queue-split.test.mjs",
       "demo/tui-restore.test.mjs",
       "demo/tui-return-path.test.mjs",
       "demo/tui-roles.test.mjs",

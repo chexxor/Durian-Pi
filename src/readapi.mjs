@@ -811,13 +811,55 @@ export function compactGateMap({ seats, cfg, modelsBySeat = {}, agentModels = {}
 	return gates;
 }
 
-/**
- * The queue statuses a LANDING row counts, in the order the renderer may show them.
- * Deliberately the four LIVE statuses and nothing else: `done` and `cancelled` are
- * terminal history, and counting them would make a seat's "queue size" grow forever as
- * it finishes work — a number nobody could explain (ROADMAP 124's warning).
+/*
+ * THE SPLIT RULE (#4812, the F3 rider). One place decides which queue statuses are LIVE and
+ * how they split into `active` (work waiting or in hand) and `parked` (work stopped on a
+ * question or a gate). Everything that prints a queue NUMBER - the landing row's size, the
+ * row's own `Nq · Mp` column, the status bar's `queue: N · parked M` - reads these two arrays
+ * through `queueSplit()`, so there is no second copy of the rule to drift.
+ *
+ * WHY THEY ARE ARRAYS AND NOT A FROZEN CONSTANT: "shares a derivation" is a claim about a DATA
+ * PATH, and a claim checked only on the consumers you looked at is a sample, not a construction
+ * (CR-A on this campaign: `role`, `stream` and `says` were sanitized while `focus` was raw in
+ * the SAME file). A consumer that bypasses the rule still produces equal numbers on a quiet
+ * fixture; the only way to SHOW the sharing is to move the rule and watch every surface move.
+ * `queueSplit()` reads the poles at CALL time (it never caches a union), so mutating the rule in
+ * one place is observable in all of them. That is what demo/tui-queue-split.test.mjs does.
+ *
+ * Deliberately only the LIVE statuses: `done` and `cancelled` are terminal history, and counting
+ * them would make a seat's "queue size" grow forever as it finishes work - a number nobody could
+ * explain (ROADMAP 124's warning).
  */
-export const LANDING_QUEUE_STATUSES = ["queued", "claimed", "held", "deferred"];
+export const ACTIVE_QUEUE_STATUSES = ["queued", "claimed"];
+export const PARKED_QUEUE_STATUSES = ["deferred", "held"];
+
+/** The live set is the union of the two poles, derived at call time so the poles are the ONLY source. */
+export function liveQueueStatuses() {
+	return [...ACTIVE_QUEUE_STATUSES, ...PARKED_QUEUE_STATUSES];
+}
+
+/**
+ * The rule's live set, snapshot at load. Kept as an export because the landing demos read it.
+ * The RULE itself is the two poles above; anything deciding what to count calls `queueSplit()`.
+ */
+export const LANDING_QUEUE_STATUSES = liveQueueStatuses();
+
+/**
+ * Apply the split rule to a set of queue items. Pure - no store, no I/O.
+ * Returns `{ counts, active, parked, total }`; `total` is `active + parked`, so a status the
+ * rule stops counting stops being counted EVERYWHERE, which is the point of sharing it.
+ */
+export function queueSplit(items) {
+	const counts = {};
+	for (const status of liveQueueStatuses()) counts[status] = 0;
+	for (const item of items ?? []) {
+		if (Object.hasOwn(counts, item.status)) counts[item.status] += 1;
+	}
+	const sum = (pole) => pole.reduce((n, status) => n + (counts[status] ?? 0), 0);
+	const active = sum(ACTIVE_QUEUE_STATUSES);
+	const parked = sum(PARKED_QUEUE_STATUSES);
+	return { counts, active, parked, total: active + parked };
+}
 
 /**
  * The LANDING projection (ROADMAP 124): per seat, what it is working on and how much is
@@ -846,11 +888,11 @@ export function projectLanding(health) {
 	const items = health?.queueItems ?? [];
 	const seats = (health?.seats ?? []).map((seat) => {
 		const mine = items.filter((it) => it.to === seat.name);
-		const counts = { queued: 0, claimed: 0, held: 0, deferred: 0 };
-		for (const item of mine) {
-			if (Object.hasOwn(counts, item.status)) counts[item.status] += 1;
-		}
-		const total = LANDING_QUEUE_STATUSES.reduce((n, status) => n + counts[status], 0);
+		// The row's numbers ARE the split rule applied to this seat's items - the same call the
+		// status bar makes for the whole rig, so the two surfaces cannot disagree by construction.
+		const split = queueSplit(mine);
+		const counts = split.counts;
+		const total = split.total;
 		const action = deriveSeatAction(seat, health);
 		const brief = (item) =>
 			item ? { id: item.id, subject: item.subject } : null;
@@ -862,7 +904,7 @@ export function projectLanding(health) {
 			lastActivity: seat.lastActivity ?? null,
 			action: action.state,
 			focus: action.focus,
-			queue: { total, ...counts },
+			queue: { total, ...counts, active: split.active, parked: split.parked },
 			claimed: brief(action.claimed),
 			deferred: action.deferred
 				? {
