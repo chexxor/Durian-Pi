@@ -206,9 +206,17 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    Three cases: **(a) clean + unlocked + terminal** → `git worktree remove <wt>` then `git branch -d`;
    **(b) clean but `locked`** → `git worktree unlock <wt>` → remove → `-d`, only when the item is
    terminal (otherwise the lock means "in use" — keep it). **Which lock?** `git worktree remove` refuses a
-   *git*-locked tree with `fatal: cannot remove a locked working tree` (exit 128); `cli.mjs worktree audit`'
-   s `locked` field is the **rig's run lock**, a different lock — measured 2026-11-11, `item-5912` is
-   git-locked while the audit reports it unlocked. **(c) dirty** → keep. `leaked-worktrees.md`
+   *git*-locked tree with `fatal: cannot remove a locked working tree` (exit 128). **CORRECTION (2026-11-14,
+   `main` 969b9774, Linux Fedora 45, git 2.56.0):** the older note here (measured 2026-11-11, "`item-5912` is
+   git-locked while the audit reports it unlocked") is now **false** — there is only one lock in play.
+   `cli.mjs worktree audit`'s per-entry `locked` field is git's lock, parsed from `git worktree list --porcelain`
+   (`src/worktree.mjs:1630`, the #1194 fix normalises defaults before the parsed values), and re-measured today:
+   `git worktree list | grep -c locked` = **20**, and the audit's per-entry `locked: true` also = **20**, including
+   `item-5912`. What the audit reports as a **number** (`counts.locked`) is the *bucket* — trees kept **only**
+   because of the lock — and `classifyWorktrees` in `src/broker.mjs:1356-1360` is exclusive and ordered
+   `live → locked → not-terminal → dirty → reapable`. So `locked: 3` means "3 terminal items deadlocked behind a
+   lock", NOT "only 3 trees are locked"; the other 17 locks sit on live items and seat roots. Read the entries,
+   not the count. **(c) dirty** → keep. `leaked-worktrees.md`
    § "Reclaiming a merged item-branch pinned by a verify worktree" covers the qa `verify-*` tree case.
    **When (c) is dirty and the branch IS merged, the operator-approved resolution is to RELOCATE the
    worktree out-of-tree** (`git worktree move` to `../pi-opendurig.worktrees/`, then `switch --detach`,

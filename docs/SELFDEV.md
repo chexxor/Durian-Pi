@@ -4698,3 +4698,21 @@ at `:743`). Re-measure every `path:line` before repeating it.
     failure `demo/restart-limit-behaviour.test.mjs`; the same file run alone exits **0**, and
     `node scripts/test.mjs --area rig --jobs 4` → **95/95 in 25.2 s**. The identical code was 359/359 earlier in the
     same window. Quote the area number, not just the suite number.
+368. **`cli.mjs worktree audit`'s `locked` COUNT is a keep-reason bucket, not the number of locked trees.**
+    Measured 2026-11-14 at `main` 969b9774 (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1,
+    git 2.56.0): `git worktree list | grep -c locked` → **20**; the audit's per-entry `locked: true` → **20**; the
+    audit's `counts.locked` → **3**. `classifyWorktrees` (`src/broker.mjs:1356-1360`) assigns one keepReason per tree
+    in the order `live → locked → not-terminal → dirty → reapable`, so a lock on a live item or a seat root never
+    reaches the `locked` bucket. The two counts answer different questions; a cleanup pass that reads `locked: 3` and
+    then plans `git worktree unlock` loops will under-count by 17. (The older claim in
+    `docs/runbooks/branch-cleanup.md` that the audit's `locked` is a *different*, rig-run lock was corrected in place
+    the same day: `item-5912` is git-locked and the audit now reports it locked.)
+369. **Test residue outlives the test — processes and `/tmp` fixture dirs both accumulate.** Measured 2026-11-14
+    (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1): `node tools/process-leak-scan.mjs`
+    (1.0 s) found **15** reparented runners/brokers holding **594.5 MB** RSS, the oldest 43.6 h old; `--kill`
+    cleared all 15 and the re-scan was clean. Separately, **19,339** `/tmp/durig-*` fixture directories (11 GB of a
+    48 GB tmpfs) sat untouched; nothing in the suite removes them. Run the scan **before** a suite or a broker
+    preflight, not after a failure — a full-suite red can be resource contention wearing a defect costume (see 367).
+    Safe order: scan → `--kill` → confirm no live process holds a fixture (`for p in $(pgrep node); do
+    ls -l /proc/$p/fd 2>/dev/null | grep -q "/tmp/durig-" && echo $p; done` → 0 lines) → sweep the old ones with
+    `find /tmp -maxdepth 1 -name 'durig-*' -type d -mtime +1 -exec rm -rf {} +` (14,055 dirs in one bounded call).

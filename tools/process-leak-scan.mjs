@@ -15,6 +15,15 @@
 // Cost: 0.04 s (reads /proc; opens no store, runs no git) on the host above.
 // Exit codes: 0 = scan ok; 2 = unsupported platform; 1 = --strict and leaks found.
 //
+// RE-VERIFIED 2026-11-14 (delegate, Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+// git 2.56.0): the scan found **15** orphans holding **594.5 MB** RSS (9 `demo/broker.test.mjs` runners, oldest
+// 156,803 s = 43.6 h, and 6 reparented `/tmp/durig-*/fake-broker` fixture brokers); `--kill` sent SIGTERM to all
+// 15, 0 failures, 0 alive 12 s later, re-scan clean in 1.0 s. Fixture residue on the same box: **19,339**
+// `/tmp/durig-*` directories, `df -h /tmp` 11 G used of 48 G; a bounded sweep of the ones older than a day
+// (`find /tmp -maxdepth 1 -name 'durig-*' -type d -mtime +1 -exec rm -rf {} +`) removed **14,055** in one
+// bounded call and left `/tmp` at 9.6 G. Before either act, confirm no live process holds a fixture:
+// `for p in $(pgrep node); do ls -l /proc/$p/fd 2>/dev/null | grep -q "/tmp/durig-" && echo $p; done` → 0 lines.
+//
 // usage:
 //   node tools/process-leak-scan.mjs                          # list suspects with age, RSS and verdict
 //   node tools/process-leak-scan.mjs --kill                   # SIGTERM the confirmed orphans, report survivors

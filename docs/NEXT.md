@@ -7,7 +7,8 @@ commit is the one carrying this file (the restart-limit fixture fix ships in it)
 landing rule now D314)**, on top of the branch catch-up it closed: 36 conflicted refs dispositioned, no ref deleted,
 nothing pushed — and the seat-landing mechanism **proved on a live fleet**: seat `impl` ran `land_my_item` on its
 own branch and advanced local main (`item-1` `0470697b` → merge `07e0e76f`, derived gate 26/357, containment
-`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally, **re-measured after the 2026-11-14 prune at HEAD `a23961dc`**: `node tools/self-merge-sla.mjs --json --strict` (7.6 s, exit 0) counts **99 refs besides `main` — 45 landed, 49 conflicted, 5 gate-refused, stale 0, ledger coverage 54/54, `gate_refused_proven: 5` / `gate_refused_unproven: []`**. (Before the prune the same command at `9e3e2588` said 195 refs — 141 landed; the difference is 120 refs that were provably ancestors of `main`, removed by `tools/branch-prune.mjs`; refs 219 → 99, worktrees 155 → 94, `main` unmoved, nothing forced, nothing pushed.) The census now returns **prune plan (0), unaccounted refs (0), needs-a-landing-decision (0)** in 7.7 s. `node tools/merge-containment-proof.mjs --branch refs/heads/main --refs <all 36, comma-separated>` exits **1** with `refs: 36, refs_with_loss: 23` (2.0 s) — exit 1 is the correct verdict for a set that still has unlanded content; only an all-ancestor subset exits 0. Every ref whose `git merge-tree` exits 0 has been run through `scripts/land.mjs --changed-suite` at this HEAD; the verbatim refusals are in `docs/DISPOSITIONS.md` and `docs/evidence/2026-11-14-landing-attempts/verdicts.md`. **Conflicted-set census at `47e221cf`** (`node tools/conflict-hunk-shape.mjs --brief --json`, 3.4 s): 49 conflicted refs = **21 semantic, 19 mechanical, 9 wording-only**; replaying the 27 rule-shaped ones with `node tools/ref-recut.mjs --refs <27>` (14.1 s, exit 1) gives **3 clean** (all three already in `main` — `item-6373-recut-r2`, `item-6664-recut`, and the `landing-20261114-c3` replay whose tree is byte-identical to `main`'s) and **24 needing a human**; no conflicted ref can be merged by rule into content `main` does not already have. Suite at this HEAD: `node scripts/test.mjs --all --jobs 4` → **358/358 in 192.1 s**.
+`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally, **re-measured after the 2026-11-14 prune at HEAD `a23961dc`**: `node tools/self-merge-sla.mjs --json --strict` (7.6 s, exit 0) counts **99 refs besides `main` — 45 landed, 49 conflicted, 5 gate-refused, stale 0, ledger coverage 54/54, `gate_refused_proven: 5` / `gate_refused_unproven: []`**. (Before the prune the same command at `9e3e2588` said 195 refs — 141 landed; the difference is 120 refs that were provably ancestors of `main`, removed by `tools/branch-prune.mjs`; refs 219 → 99, worktrees 155 → 94 (branch prune) → **40** (the reap pass + 32 released `.spike` scratch trees),
+`main` unmoved, nothing forced, nothing pushed.) The census now returns **prune plan (0), unaccounted refs (0), needs-a-landing-decision (0)** in 7.7 s. `node tools/merge-containment-proof.mjs --branch refs/heads/main --refs <all 36, comma-separated>` exits **1** with `refs: 36, refs_with_loss: 23` (2.0 s) — exit 1 is the correct verdict for a set that still has unlanded content; only an all-ancestor subset exits 0. Every ref whose `git merge-tree` exits 0 has been run through `scripts/land.mjs --changed-suite` at this HEAD; the verbatim refusals are in `docs/DISPOSITIONS.md` and `docs/evidence/2026-11-14-landing-attempts/verdicts.md`. **Conflicted-set census at `47e221cf`** (`node tools/conflict-hunk-shape.mjs --brief --json`, 3.4 s): 49 conflicted refs = **21 semantic, 19 mechanical, 9 wording-only**; replaying the 27 rule-shaped ones with `node tools/ref-recut.mjs --refs <27>` (14.1 s, exit 1) gives **3 clean** (all three already in `main` — `item-6373-recut-r2`, `item-6664-recut`, and the `landing-20261114-c3` replay whose tree is byte-identical to `main`'s) and **24 needing a human**; no conflicted ref can be merged by rule into content `main` does not already have. Suite at this HEAD: `node scripts/test.mjs --all --jobs 4` → **358/358 in 192.1 s**.
 Every commit in `8b5a19e1..HEAD`, oldest first:
 
 | sha | shipped |
@@ -71,6 +72,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `9e3e2588` | instruments: a `gate-refused` verdict must quote the lander's exit code (`attempt_logged`, `gate_refused_proven`, `--strict`), pinned by `demo/self-merge-sla.test.mjs` §5; `demo/checkup-citation.test.mjs` fixture made deterministic — suite **358/358 in 200.6 s**, SELFDEV pitfalls 360-361 |
 | `47e221cf` | docs(catch-up): name the `9e3e2588` and `d9928edb` commits so the pointer audit closes; `verdicts.md` re-measured (5 rule-mergeable refs, all gate-refused, `item-3747-recut-r2` attempted); SELFDEV pitfall 362 (a reaped scratch dir blocks a landing before the gate runs) |
 | `a23961dc` | docs(catch-up): the conflicted-set census at `47e221cf` (49 = 21 semantic / 19 mechanical / 9 wording-only; 27 rule-shaped re-cuts → 3 clean, 24 need a human), the 24 zero-commit recut aliases named, SELFDEV pitfall 363, and the `47e221cf` pointer row |
+| `969b9774` | the prune carrier as pushed: `tools/branch-prune.mjs` + `demo/branch-prune.test.mjs`, the branch-and-worktree skill, the runbook step 0a, the R-B addendum — refs 219 → 99, worktrees 155 → 94, `main` unmoved, nothing forced, nothing pushed by the delegate |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -93,11 +95,16 @@ Run `docs/runbooks/land.md` §"Seat self-merge (the default)" for the commands a
 **99 refs + `main`, 40 worktrees** (155 at window start); prune plan **0**, unaccounted refs **0**, needs-a-landing-decision
 **0**, audit `reapable: 0`. What is
 left is not clutter — the census's 99 kept refs are **35 conflicted**, **22 ruled KEEP in `docs/DISPOSITIONS.md`**,
-**25 dirty with uncommitted tracked work**, **8 seat roots**, **6 attached to a live queue row**, **3 locked mid-run**
-(the 26 `landing-20261114-*` chain snapshots are inside the conflicted/ruled sets; none is an ancestor of `main`).
+**25 dirty with uncommitted tracked work**, **8 seat roots**, **6 attached to a live queue row**, **3 terminal items
+locked mid-run** (the 26 `landing-20261114-*` chain snapshots are inside the conflicted/ruled sets; none is an
+ancestor of `main`).
 The 40 remaining worktrees are the floor: 9 seat roots, 12 live item trees, 3 locked, 13 dirty, 3 non-item
 (`durian-dev/seatroot`, `.spike/ins-6101` — the re-cut pass with its conflict markers still uncommitted — and
-`item-7290/.scratch-7290`). No git verb can release any of them without losing someone's work. The 5 `gate-refused` refs
+`item-7290/.scratch-7290`). No git verb can release any of them without losing someone's work. **Read the audit's
+entries, not its counts:** `git worktree list | grep -c locked` = **20** trees carry a git lock (all 20 have an empty
+reason file), and the audit's per-entry `locked` sees all 20 — its `locked: 3` is the *keep-reason bucket* (terminal
+items deadlocked behind a lock), because `classifyWorktrees` classifies each tree once, `live → locked → not-terminal
+→ dirty → reapable` (`src/broker.mjs:1356-1360`). The 5 `gate-refused` refs
 (`item-7232-recut`, `landing-20261114-b3a`, `landing-20261114-c2`, `item-3747-recut`, `item-3570-recut`) are held by
 one missing implementation — **ROADMAP 371**, the by-id `claim_work` gate in `src/rig.mjs` — not by a merge conflict.
 
@@ -110,6 +117,8 @@ DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json --strict # 7.6 s,
 node tools/branch-census.mjs --db ./selfdev.sqlite                      # 7.7 s, exit 0 — 99 refs / 40 worktrees, prune plan 0
 node tools/branch-prune.mjs --dry-run --db ./selfdev.sqlite             # 8.4 s, exit 0 — the census + the safe delete loop
 node tools/branch-prune.mjs --reap-worktrees --dry-run                  # 1.4 s, exit 0 — the trees the audit calls reapable
+node tools/process-leak-scan.mjs --strict                                # 1.0 s, exit 1 if orphans exist — reparented
+                                                                      # test runners + fixture brokers (15 found, 594 MB, 2026-11-14); add --kill
 node demo/branch-prune.test.mjs                                         # 0.21 s — the prune gate, on a git fixture
 node cli.mjs check rig.selfdev.json --json                              # 14.3 s — MUST name the rig; ready-ref-stale is a row
 node demo/self-merge-seat.test.mjs                                      # 0.94 s — the seat verb, end to end, no model
