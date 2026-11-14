@@ -134,10 +134,19 @@ each value came from (`defaultsSource`).
 | `DURIAN_PI_STREAM_TIMEOUT_MS` | Total request timeout for one generation attempt. Unset = platform default (`openai` SDK, 600000 ms). The only harness setting durian-pi exposes, because it is the only one with no default and a real reason to move in both directions. Proof: `demo/config.test.mjs` |
 | `DEEPINFRA_API_KEY` | Ambient credential, read from env/config, never stored or printed |
 
-Discovery order: `$DURIAN_PI_CONFIG`, then `./durian-pi.config.json`, then
-`./.durian-pi/config.json`; the shipped defaults file is additionally looked up
-anchored to durian-pi's install directory (`durian-pi.config.default.json`)
-(#491 C6). `node cli.mjs config` prints the effective values, the source, and
+**Read the `DURIAN_PI_*` rows above as intended spellings, not as what the CLI reads.** Measured on `main
+35001c3a`, 2026-11-11: `src/config.mjs`'s `CONFIG_KEYS` (`:116-219`) contains `DURIG_*` names only and there is no
+alias resolver in that file, so `DURIAN_PI_PROVIDER=faux node cli.mjs config` reports `"DURIG_PROVIDER":
+"deepinfra"` (exit 0) while `DURIG_PROVIDER=faux node cli.mjs config` reports `"faux"` (exit 0). Same for the store:
+`DURIAN_PI_DB=…` is inert for `cli.mjs` (`cli.mjs:161`). Putting a `DURIAN_PI_*` key in the config file is not
+silently accepted either — `node cli.mjs config` exits 1 and names it (`unknown config-file key(s) … the #5071
+accepted-and-ignored class`). Closing the naming gap is ROADMAP 191; until it lands, the `DURIG_*` spelling is the
+one that works.
+
+Discovery order, first existing file wins: `$DURIG_CONFIG`, then `./durig.config.json`, then
+`./.durig/config.json` (`src/config.mjs:6-8`, `DEFAULT_CONFIG_PATHS` at `src/config.mjs:19`); the shipped
+defaults file is additionally looked up anchored to durian-pi's install directory
+(`durig.config.default.json`, `src/config.mjs:29-31`) (#491 C6). `node cli.mjs config` prints the effective values, the source, and
 `defaultsSource`; the API key is reduced to `set`/`unset` so it is always safe to
 log. Proof: `demo/config.test.mjs` — merge order (env > file > defaults), a
 fresh CWD with no runtime config still gets the shipped floor, malformed
