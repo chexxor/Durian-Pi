@@ -66,7 +66,14 @@ const RUNBOOKS = join(ROOT, "docs", "runbooks");
  *  2026-11-14 (Linux, Fedora Linux 45, 7.2.15-300.fc45.x86_64, node v24.22.1): two refs each
  *  carrying their own copy of the list unioned into a 23-name superset over a 12-name reality,
  *  and the gate reded for runbooks nobody touched. */
-const STRUCTURAL_GAP_REASONS = [
+const STRUCTURAL_REFUSAL_REASONS = [
+  // The line is not a command at all.
+  /^comment$/,
+  /^empty (line|segment|block)$/,
+  /continues onto the next line/,
+  /multi-line shell control flow/,
+  /a fragment of a multi-line command/,
+  // The throwaway fixture structurally cannot satisfy the line.
   /fixture/,                 // the throwaway rig cannot contain this live state
   /allowlist/,               // the harness's read-only allowlist refuses the verb
   /placeholder/,             // an unfilled <placeholder> the fixture has no value for
@@ -326,7 +333,7 @@ for (const file of neverExecuted) {
     gs.length > 0,
     `${file}: CI executed nothing and the harness recorded no gap for it — a runbook with no Diagnose commands is not coverage`,
   );
-  const unexplained = gs.filter((g) => !STRUCTURAL_GAP_REASONS.some((r) => r.test(g.reason)));
+  const unexplained = gs.filter((g) => !STRUCTURAL_REFUSAL_REASONS.some((r) => r.test(g.reason)));
   assert.ok(
     unexplained.length === 0,
     `${file}: every Diagnose line is refused for a reason outside the structural set: ${unexplained.map((g) => `${g.line.slice(0, 60)} — ${g.reason}`).join(" | ")}`,
