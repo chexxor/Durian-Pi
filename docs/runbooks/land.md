@@ -1,11 +1,11 @@
 ---
 runbook: land
-symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge"
+symptom: "a verified branch is not on main (possibly stacked on an unlanded base - name it); land it without ever leaving the shared tree mid-merge; the branch ref is gone after landing so a verifier has no tip to check against"
 writes: false
 precondition: "none"          # no store/Harness precondition — the helper is git-only and WAITS for the genlock slots; the tracked tree must be clean (see Preconditions)
 last_verified: 2026-11-12
 verified_by: devtools; scribe
-evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked); #6182 owner-state rule measured 2026-11-11 on branch item-6182 (node demo/genlock-owner-state.test.mjs exit 0, 24 checks; the same probe against main 35001c3a reported {unresolvableOwnerBlocks: false, secondClaimAccepted: true, freshUnnamedSlotIsStale: true}) - SCOPED to the genlock bullet: no landing was run in that pass; #5347 intersection rule measured 2026-11-12 by devtools on branch item-5347 (tip 1489b6ae): `node demo/landing-preflight-dirt.test.mjs` exit 0 (13 checks, git's own FF behaviour on fixture repos) and `node demo/land-helper.test.mjs` exit 0 (111 checks); RED at the pre-fix base 9611c45d in a throwaway detached worktree: land-helper exit 1 (4 FAILs - untracked dirt the landing did NOT write refused, and no dirtyPathsNotTouched in the report), preflight demo exit 1 (src/landinggate.mjs exported no classifyTreeDirt); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked). #6549 (2026-11-12, scribe, item worktree forked from 792aa059): the merged-tree preflight in step 2 was measured, not assumed — item-5301-resolved `git merge-tree --write-tree main item-5301-resolved` exit 1; `git show main:src/broker.mjs | grep -n candidates` exit 1 while the branch's demo asserts `dry.candidates`; item-6139 @4147a9f2 merged into main ddcc0a23 -> merged tree 6caee77a materialized in a scratch copy, demos exit 0 (test-areas, workstrategy, intent-spool-census, read-intent-starvation, watchview), scratch deleted after"; #5002 addendum (2026-11-12, scribe, measured in the item-5002 worktree forked from 00107a6c, thin plane pi-durable 1.3.0): `node cli.mjs land item-1234 --merge --into main` exit 2 printing the generic usage blob — no `land` verb exists (cli.mjs:3767-3769), and grep finds the stale form only in docs/NEXT-ARCHIVE.md"
+evidence: "node demo/land-helper.test.mjs; 2026-10-19 live landings with the broker UP (lock {slots:4,held:4,reserved:true}), main 4f9e7d6->7b6548e (suite 156 pass/1 fail — the pitui resolution-path failure, #2412) and a second pass 67228b9->3b79159 (17 branches, suite 175 pass/1 fail, inconsistent-tip and conflicting branches correctly SKIPPED); the --suite gate re-proved in a linked scratch at 3b79159 (demo/check.test.mjs exit 0, was exit 1 before impl-item-2679); the #4985 scratch control in this section verified 2026-11-02 by devtools — `node demo/clockin-digest.test.mjs` exit 1 in a detached scratch at 43e26dcc and exit 0 in a detached scratch at c4db1fd9 — SCOPED to that section: no land was run, so the procedure as a whole is still verified at 2026-10-21; the dependency-scratch control in the third bullet was measured 2026-11-08 by devtools during the #5778 landing: land.mjs --suite refused with `STOPPED: demo/commit-discipline-personas.test.mjs failed` (ERR_MODULE_NOT_FOUND on @earendil-works/pi-durable) while the identical merged tree in a detached scratch with `node_modules` symlinked in ran 263/263, exit 0; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked); #6182 owner-state rule measured 2026-11-11 on branch item-6182 (node demo/genlock-owner-state.test.mjs exit 0, 24 checks; the same probe against main 35001c3a reported {unresolvableOwnerBlocks: false, secondClaimAccepted: true, freshUnnamedSlotIsStale: true}) - SCOPED to the genlock bullet: no landing was run in that pass; #5347 intersection rule measured 2026-11-12 by devtools on branch item-5347 (tip 1489b6ae): `node demo/landing-preflight-dirt.test.mjs` exit 0 (13 checks, git's own FF behaviour on fixture repos) and `node demo/land-helper.test.mjs` exit 0 (111 checks); RED at the pre-fix base 9611c45d in a throwaway detached worktree: land-helper exit 1 (4 FAILs - untracked dirt the landing did NOT write refused, and no dirtyPathsNotTouched in the report), preflight demo exit 1 (src/landinggate.mjs exported no classifyTreeDirt); verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked). #6549 (2026-11-12, scribe, item worktree forked from 792aa059): the merged-tree preflight in step 2 was measured, not assumed — item-5301-resolved `git merge-tree --write-tree main item-5301-resolved` exit 1; `git show main:src/broker.mjs | grep -n candidates` exit 1 while the branch's demo asserts `dry.candidates`; item-6139 @4147a9f2 merged into main ddcc0a23 -> merged tree 6caee77a materialized in a scratch copy, demos exit 0 (test-areas, workstrategy, intent-spool-census, read-intent-starvation, watchview), scratch deleted after"; #5002 addendum (2026-11-12, scribe, measured in the item-5002 worktree forked from 00107a6c, thin plane pi-durable 1.3.0): `node cli.mjs land item-1234 --merge --into main` exit 2 printing the generic usage blob — no `land` verb exists (cli.mjs:3767-3769), and grep finds the stale form only in docs/NEXT-ARCHIVE.md"; verify re-run: node demo/land-helper.test.mjs exit 0 (thin tree, pi-durable 1.3.0 from the lockfile, not --linked). #7090 (2026-11-12, scribe, item worktree forked from 792aa059, against main ddcc0a23): the pruned-vs-live leg and the two-fact pair were run as written - `git rev-parse refs/heads/item-6176` exit 128, `git rev-parse refs/heads/item-6139` exit 0 (4147a9f2), `git merge-tree --write-tree main item-6139` exit 0; landed merge 44fd605f: ancestry exit 0 + content exit 0 (LANDED, blob 545a9f53 on both sides); reverted landing af9e5e4c: ancestry exit 0 + content exit 1 (blobs 7da855cd vs main's 34d03f83; undo commit 6db994de) - the false positive the two-fact rule exists to catch"
 check_rule: null
 evidence_addendum: "2026-11-12 (scribe, item #6614, worktree branch item-4866 forked from item-3575; dependencySet lockfile-released - pi-durable 1.3.0 from the lockfile, sync-pi --link FAILED, so this run is NOT comparable with the seat root's built-pin plane): the new 'name the PLANE' section was checked with `node tools/review-cite-check.mjs docs/runbooks/land.md` exit 0 (0 failing of 38 findings) and the runbook's own Verify leg `node demo/land-helper.test.mjs` exit 0 in the same tree; `node tools/doc-integrity-guard.mjs` exit 0. The qa figures quoted in that section (261/282, 21 non-passers, `git merge-base --is-ancestor 612eb837 main` exit 0) are qa's measurements, not re-run by this seat. last_verified is NOT raised: no landing was performed in this pass."
 ---
@@ -661,6 +661,31 @@ The helper's pre-flight, in code (the enforcement chokepoint):
    that lands is the seat that mints. No machine enforces it — `grep -n "D-number" tools/doc-integrity-guard.mjs`
    exits 1 — so the reader is the check.
 
+## A landed ref has no tip: what a verifier may assert, and against what
+
+The landing pass prunes the branch ref, so the tip a verifier wants to inspect is gone. Measured 2026-11-12 in this
+item's worktree against `main ddcc0a23`: `git for-each-ref --format='%(refname:short)' | grep -c item-6176` returns **0**
+(grep exit 1), and `git merge-tree --write-tree main item-6176` exits **1** with "merge-tree: item-6176 - not something
+we can merge". That is not a broken preflight — there is nothing left to preflight.
+
+1. **If the tip itself must be inspected, inspect it BEFORE the prune.** After landing there is no tip; `main` is the
+   only tree that exists for that work.
+2. **After landing, assert TWO facts about `main` — ancestry AND content.** Ancestry alone can be true while the
+   content is absent. Measured pair: `af9e5e4c` ("merge: land item-6066 onto main") is an ancestor of `main`
+   (`git merge-base --is-ancestor af9e5e4c main` -> exit **0**), yet `git diff --quiet af9e5e4c main -- demo/test-areas.json`
+   exits **1** — main's blob is `34d03f83`, the merge's is `7da855cd`, because `6db994de` reverted that landing. Against a
+   real landing: `44fd605f` ("merge: land item-6176"), ancestor exit **0**, and `git diff --quiet 44fd605f main --
+   tools/suite-signature.mjs` exits **0** — both sides blob `545a9f53`. This is the per-file CONTENT convention of
+   **#3337/#3272**; an ancestry-only check reads LANDED when the content was undone, and qa measured exactly that false
+   positive (#4035).
+3. **Name the plane in the verdict.** A suite number means nothing without the dependency set it ran in: this worktree
+   resolves `@earendil-works/pi-durable` **1.3.0** from the lockfile (`node -e 'console.log(require("./node_modules/@earendil-works/pi-durable/package.json").version)'` -> `1.3.0`, exit 0) while the linked seat root resolves **1.5.1**.
+   300/300 in the linked plane and 269/291 on a lockfile-plane tip (#6503) are different populations; never quote one as
+   evidence about the other.
+
+The enforcement half (the runbook plus the tip-drift abort) is already registered as lead's **#3272** — this section
+annotates that carrier, it does not mint a second one.
+
 ## Verify
 ```bash
 node demo/land-helper.test.mjs   # exit 0 — proves the helper's behaviour these steps rely on
@@ -669,10 +694,19 @@ t=$(git merge-tree --write-tree main <ref>)          # exit 0 = texts combine; r
 git ls-tree -r "$t" | while read m ty sha p; do mkdir -p "mt/$(dirname "$p")"; git cat-file blob "$sha" > "mt/$p"; done
 node mt/demo/<the-branch's-demo>.test.mjs; echo "exit=$?"; rm -rf mt   # the artifact you report names $t
 ```
-After a real landing, confirm the branch is an **ancestor** of `main` (the worktree-prune criterion):
+After a real landing, confirm TWO facts, not one — the ref may already be pruned, so the tip cannot be inspected:
 ```bash
-git -C <repo> merge-base --is-ancestor <branch> main && echo LANDED
+ref=item-6176
+git rev-parse refs/heads/$ref > ref-out.txt; echo "exit=$?"                    # 0 = tip still live; 128 = pruned, no tip
+git merge-base --is-ancestor <merge-sha> main && echo ANCESTRY-OK              # fact 1
+git diff --quiet <merge-sha> main -- <a path the landing touched>; echo "exit=$?"   # 0 = content present; 1 = NOT present
 ```
+Both must hold to say LANDED. Measured 2026-11-12 (worktree forked from `792aa059`, against `main ddcc0a23`): a live ref
+`git rev-parse refs/heads/item-6139` -> **exit 0** (`4147a9f2`), a pruned one `git rev-parse refs/heads/item-6176` ->
+**exit 128**; landed item-6176 merge `44fd605f`: ancestry **exit 0**, content **exit 0** -> LANDED; the reverted landing
+`af9e5e4c`: ancestry **exit 0**, content **exit 1** -> ancestry alone would have called it landed. That is the pair of
+cases this leg separates, and `git merge-tree --write-tree main item-6139` **exit 0** shows the preflight is still
+available while the ref exists.
 
 ### A verdict counts only on the PINED dependency plane — name the PLANE, not just the count (#6426, interim rule)
 
