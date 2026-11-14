@@ -23,12 +23,14 @@
 //   11. an unmerged ref is deleted only after a thin bundle of it verifies; without --bundle-dir it is skipped
 //   12. --unlock-locked + --quarantine releases a locked tree, preserving its residue, without --force
 //   13. residue-only trees are released; a tree with a tracked modification or an unrecognised file is kept whole
+//   15. --retire-ruled: the allowlist is read from docs/DISPOSITIONS.md, the LAST row naming a ref wins, a
+//       ruled-held ref is never planned, and a ruled-eligible unmerged ref still needs a verified bundle
 import assert from "node:assert";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { prunePlan, reapWorktrees, buildRetirePlan } from "../tools/branch-prune.mjs";
+import { ledgerRulings, prunePlan, reapWorktrees, buildRetirePlan } from "../tools/branch-prune.mjs";
 
 const TOOL = join(import.meta.dirname, "..", "tools", "branch-prune.mjs");
 const repo = mkdtempSync(join(tmpdir(), "durig-branch-prune-"));
@@ -231,6 +233,64 @@ assert.ok(existsSync(join(bundles14, "chain_retire-me.bundle")), "the bundle fil
 assert.equal(git(["bundle", "verify", join(bundles14, "chain_retire-me.bundle")]).status, 0, "the sanitised bundle verifies");
 assert.ok(branchExists("chain/keep-me"), "the unnamed conflicted ref survives the pass");
 assert.equal(git(["rev-parse", "main"]).stdout, mainShaBefore, "the pass never moves main");
+
+/* 15. ROADMAP 374 residual: the LEDGER is the allowlist, not a typed regex. Three refs diverge from main:
+   one ruled CANCEL, one ruled KEEP-HELD (twice — the later row wins), one whose row states no verdict.
+   Only the first may be planned, and it still has to pass the bundle gate. */
+const mkBranch = (name, file, msg) => {
+	git(["branch", name, "main"]);
+	git(["checkout", "-q", name]);
+	writeFileSync(join(repo, file), name + " content\n");
+	git(["add", file]);
+	commit(msg);
+	git(["checkout", "-q", "main"]);
+};
+const ledger = join(repo, "DISPOSITIONS.md");
+writeFileSync(
+	ledger,
+	[
+		"# Dispositions ledger (fixture)",
+		"",
+		"| date | branch | sha | disposition | reason | deciding item id |",
+		"|---|---|---|---|---|---|",
+		"| 2026-11-14 | `ruled-cancel` | abc1234 | **CANCEL** — content already in main by blob identity | probe exit 0 | #374 |",
+		"| 2026-11-13 | `ruled-held` | def5678 | **KEEP-HELD** — the author owes a re-cut | land.mjs exit 1 | #374 |",
+		"| 2026-11-14 | `ruled-held` | def5678 | **KEEP-HELD** (re-attempted at this HEAD) | re-attempt exit 1 again | #374 |",
+		"| 2026-11-14 | `ruled-ambiguous` | 9999999 | (no verdict recorded yet) | inventory only | #374 |",
+		].join("\n"),
+);
+mkBranch("ruled-cancel", "cancel.txt", "ruled-cancel: work the ledger already cancelled");
+mkBranch("ruled-held", "held.txt", "ruled-held: work still under a ruling");
+mkBranch("ruled-ambiguous", "amb.txt", "ruled-ambiguous: a row with no verdict");
+const rulings = ledgerRulings(readFileSync(ledger, "utf8"));
+assert.equal(rulings.rows, 4, "the fixture's four data rows are read");
+assert.equal(rulings.byRef.get("ruled-cancel").verdict, "CANCEL", "a CANCEL row is delete-eligible");
+assert.equal(rulings.byRef.get("ruled-held").date, "2026-11-14", "the LAST row wins — the later re-attempt, not the first");
+assert.equal(rulings.byRef.get("ruled-held").eligible, false, "KEEP-HELD is not a delete");
+assert.equal(rulings.byRef.get("ruled-ambiguous").ambiguous, true, "a row naming a ref with no verdict is reported, not guessed");
+assert.ok(!rulings.byRef.has("never-ruled"), "an unruled ref has no ruling at all");
+const ruledPlan = buildRetirePlan({ repo, activeWithinDays: null, structuralRefs: new Set(), retireRuled: rulings.byRef });
+assert.ok(ruledPlan.plan.some((p) => p.ref === "ruled-cancel" && p.bundle && p.ruled === "CANCEL"), "the ruled-eligible ref is planned, verdict carried into the plan");
+assert.ok(!ruledPlan.plan.some((p) => p.ref === "ruled-held"), "a KEEP-HELD ref is never planned — no regex, no wildcard");
+assert.ok(!ruledPlan.plan.some((p) => p.ref === "ruled-ambiguous"), "no verdict means no delete");
+assert.ok(ruledPlan.excluded.ruledHeld >= 1, "the held ref is counted, not silently dropped");
+assert.equal(ruledPlan.plan.filter((p) => !p.merged).length, 1, "exactly one UNMERGED ref is planned, and it is the ruled-eligible one (merged refs are planned by ancestry, not by the ledger)");
+const ruledOnly = ruledPlan.plan.filter((p) => !p.merged);
+const ruledDry = prunePlan({ repo, plan: ruledOnly, dryRun: true, bundleDir: join(repo, "bundlesDry") });
+assert.ok(ruledDry.log.some((l) => l.startsWith("DRY ruled-cancel") && l.includes("ruled: CANCEL")), "--dry-run prints the plan and names the ruling behind it");
+assert.ok(branchExists("ruled-cancel") && git(["rev-parse", "main"]).stdout === mainShaBefore, "--dry-run deletes nothing and does not move main");
+const ruledSkip = prunePlan({ repo, plan: ruledOnly });
+assert.equal(ruledSkip.skipped, 1, "without --bundle-dir an unmerged ruled ref is skipped — the guard survives the new verb");
+assert.equal(ruledSkip.ok, false, "and a plan the gate cannot honour reports failure, not a silent pass");
+assert.ok(branchExists("ruled-cancel"), "the skipped ref is still there");
+const bundles15 = join(repo, "bundles15");
+const ruledRetired = prunePlan({ repo, plan: ruledOnly, bundleDir: bundles15 });
+assert.equal(ruledRetired.branchesDeleted, 1, "with a verified bundle the ruled ref is retired");
+assert.equal(ruledRetired.ok, true, "a pass that honours its plan reports success");
+assert.ok(!branchExists("ruled-cancel"), "the ruled ref is gone");
+assert.ok(branchExists("ruled-held") && branchExists("ruled-ambiguous"), "the held and unruled refs survive");
+assert.equal(git(["bundle", "verify", join(bundles15, "ruled-cancel.bundle")]).status, 0, "the bundle that made the delete safe verifies");
+assert.equal(git(["rev-parse", "main"]).stdout, mainShaBefore, "main is byte-identical after a ruled retire");
 
 rmSync(repo, { recursive: true, force: true });
 console.log("PASS branch-prune: ancestor deleted, unlanded kept, snapshot kept, locked held, main unmoved, exit 1 on a plan the gate cannot honour; reap released 1 clean tree, refused 1, left the dirty tree, deleted no ref; --retire-merged plans a merged ref past a stale ledger row; an unmerged ref is deleted only through a verified bundle; --unlock-locked + --quarantine released a locked tree with its residue preserved; residue-only trees are released and trees holding uncommitted work are kept whole");

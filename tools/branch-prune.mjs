@@ -19,11 +19,19 @@
 //   node tools/branch-prune.mjs --reap-worktrees [--dry-run]   # release the trees the audit calls reapable; refs untouched
 //   node tools/branch-prune.mjs --retire-merged --retire-unmerged '^landing-20261114' \
 //       --bundle-dir .spike/quarantine-<date> --quarantine .spike/quarantine-<date> --unlock-locked [--dry-run]
+//   node tools/branch-prune.mjs --retire-ruled --bundle-dir .spike/quarantine-<date> [--dry-run]  # ROADMAP 374 residual
 //     --retire-merged : plan EVERY ref whose tip is provably an ancestor of main, even when a stale
 //                       docs/DISPOSITIONS.md KEEP row (written before the landing) still names it.
 //     --retire-unmerged <regex> : ALSO plan refs whose tip is NOT an ancestor of main and whose name matches
 //                       the regex. This is an explicit allowlist: a ref that merely conflicts with main is
 //                       kept (rule R-B #3270, "refs are dispositioned, never deleted") until a ruling names it.
+//     --retire-ruled        : the allowlist comes from docs/DISPOSITIONS.md instead of a typed regex (#374
+//                       residual). Every row naming a ref is read; the LAST row wins (the ledger is append-only,
+//                       "a row is never edited"). A verdict in {CANCEL, SUPERSEDED, SUPERSEDED-BY-EVENTS,
+//                       NOTHING-TO-LAND, ABSORBED, LAND} is delete-eligible; a verdict in {KEEP, KEEP-HELD, HELD,
+//                       NOT-SUPERSEDED} is held and counted in `excluded.ruledHeld`. Eligibility still has to
+//                       pass the live gate: ancestry, no uncommitted work, and a verified bundle for anything
+//                       not an ancestor of main. `--ledger <path>` points at a different ledger file.
 //     --active-within N : guard — an UNMERGED ref whose tip commit is younger than N days is never planned,
 //                       even if the regex matches it. Off unless the flag is given.
 //                       Omit --bundle-dir and every unmerged ref is skipped, so a retire pass can only
@@ -139,16 +147,74 @@ function worktreeIndex(repo) {
 }
 
 /**
+ * ROADMAP 374 residual: read the LEDGER, not a regex. `docs/DISPOSITIONS.md` is an append-only ledger whose
+ * whole point is that a branch is never re-litigated — so the ruling a prune pass should honour is the LAST
+ * row that names the ref. Rows are parsed loosely on purpose (5 or 6 columns, with or without a sha): the
+ * disposition is found by keyword, in order of specificity, so `KEEP-HELD` never reads as `HELD` and
+ * `NOT-SUPERSEDED` never reads as `SUPERSEDED`.
+ *
+ * Returns {byRef, eligible, held, ambiguous, rows}. `byRef` maps a bare ref name -> {verdict, eligible, date, line}.
+ * Pure: it takes text and returns data, so the demo can pin it against a fixture ledger without a git repo.
+ */
+export function ledgerRulings(text) {
+	// Specificity first: the longest/most qualified verdicts are tested before their substrings.
+	const RULES = [
+		[/not-superseded/i, { verdict: "NOT-SUPERSEDED", eligible: false }],
+		[/nothing-to-land/i, { verdict: "NOTHING-TO-LAND", eligible: true }],
+		[/keep-held/i, { verdict: "KEEP-HELD", eligible: false }],
+		[/superseded-by-events/i, { verdict: "SUPERSEDED-BY-EVENTS", eligible: true }],
+		[/\bcancel/i, { verdict: "CANCEL", eligible: true }],
+		[/superseded/i, { verdict: "SUPERSEDED", eligible: true }],
+		[/absorbed/i, { verdict: "ABSORBED", eligible: true }],
+		[/\bretire/i, { verdict: "RETIRE", eligible: true }],
+		[/\bheld\b/i, { verdict: "HELD", eligible: false }],
+		[/\bkeep\b/i, { verdict: "KEEP", eligible: false }],
+		[/\bland\b/i, { verdict: "LAND", eligible: true }],
+	];
+	const byRef = new Map();
+	let rows = 0;
+	const lines = String(text ?? "").split("\n");
+	for (let i = 0; i < lines.length; i++) {
+		const raw = lines[i].trim();
+		if (!raw.startsWith("|")) continue;
+		const cols = raw.split("|").slice(1, -1).map((c) => c.trim());
+		if (cols.length < 2) continue;
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(cols[0])) continue; // header, separator, or prose table
+		rows++;
+		const names = [...cols[1].matchAll(/`([^`]+)`/g)].map((m) => m[1].trim());
+		const refs = (names.length ? names : cols[1].split(",").map((s) => s.trim())).filter(Boolean);
+		const haystack = cols.slice(2).join(" ");
+		const hit = RULES.find(([re]) => re.test(haystack));
+		for (const ref of refs) {
+			const name = ref.replace(/^refs\/heads\//, "");
+			if (!hit) {
+				byRef.set(name, { verdict: null, eligible: false, date: cols[0], line: i + 1, ambiguous: true });
+				continue;
+			}
+			byRef.set(name, { verdict: hit[1].verdict, eligible: hit[1].eligible, date: cols[0], line: i + 1 });
+			}
+		}
+	return {
+		byRef,
+		rows,
+		eligible: [...byRef.entries()].filter(([, v]) => v.eligible).map(([k]) => k),
+		held: [...byRef.entries()].filter(([, v]) => !v.eligible && !v.ambiguous).map(([k]) => k),
+		ambiguous: [...byRef.entries()].filter(([, v]) => v.ambiguous).map(([k]) => k),
+	};
+}
+
+/**
  * Build the retire plan: every ref that is provably not active work.
  * `structuralRefs` = refs held by a seat root or a non-terminal queue row (from `cli.mjs worktree audit`).
  * A ref whose tree still holds uncommitted WORK is excluded as well; residue-only trees are planned with
  * the residue listed, so the executor quarantines it before releasing the tree.
  */
-export function buildRetirePlan({ repo, db, activeWithinDays = null, structuralRefs = new Set(), retireUnmerged = null, mainRef = "refs/heads/main" }) {
+export function buildRetirePlan({ repo, db, activeWithinDays = null, structuralRefs = new Set(), retireUnmerged = null, retireRuled = null, mainRef = "refs/heads/main" }) {
 	const index = worktreeIndex(repo);
 	const unmergedRe = retireUnmerged ? new RegExp(retireUnmerged, "i") : null;
+	const ruled = retireRuled instanceof Map ? retireRuled : null;
 	const plan = [];
-	const excluded = { structural: 0, activeWithin: 0, snapshot: 0, uncommittedWork: 0, unmergedNotNamed: 0 };
+	const excluded = { structural: 0, activeWithin: 0, snapshot: 0, uncommittedWork: 0, unmergedNotNamed: 0, ruledHeld: 0 };
 	for (const line of git(["for-each-ref", "--format=%(refname)", "refs/heads"], repo).stdout.trim().split("\n")) {
 		const full = line.trim();
 		if (full === mainRef) continue;
@@ -163,8 +229,11 @@ export function buildRetirePlan({ repo, db, activeWithinDays = null, structuralR
 		const merged = git(["merge-base", "--is-ancestor", full, mainRef], repo).status === 0;
 		const ts = Number(git(["show", "-s", "--format=%ct", full], repo).stdout.trim());
 		const ageDays = Math.floor((Date.now() - ts * 1000) / 86400000);
-		if (merged) plan.push({ ref: name, merged: true, worktree: wt?.worktree || null, locked: wt?.locked || false, residue: dirt.residue, ageDays });
+		const ruling = ruled ? ruled.get(name) : null;
+		if (merged) plan.push({ ref: name, merged: true, worktree: wt?.worktree || null, locked: wt?.locked || false, residue: dirt.residue, ageDays, ruled: ruling?.verdict ?? null });
 		else if (activeWithinDays !== null && ageDays <= activeWithinDays) { excluded.activeWithin++; }
+		else if (ruling && ruling.eligible) plan.push({ ref: name, merged: false, bundle: true, worktree: wt?.worktree || null, locked: wt?.locked || false, residue: dirt.residue, ageDays, ruled: ruling.verdict, ruledRow: `${ruling.date} @ ledger line ${ruling.line}` });
+		else if (ruling) { excluded.ruledHeld++; } // the ledger says KEEP/HELD: a ruling is not a delete
 		else if (!unmergedRe || !unmergedRe.test(name)) { excluded.unmergedNotNamed++; } // conflicts with main: needs a landing decision, not a delete
 		else plan.push({ ref: name, merged: false, bundle: true, worktree: wt?.worktree || null, locked: wt?.locked || false, residue: dirt.residue, ageDays });
 	}
@@ -267,7 +336,7 @@ export function prunePlan({ repo, plan, dryRun = false, logPath = null, mainRef 
 		}
 
 		if (dryRun) {
-			res.log.push(`DRY ${ref} @ ${sha.slice(0, 12)}${merged ? " (merged)" : ` (bundled -> ${bundlePath})`}${p.worktree ? `  worktree ${p.worktree}` : ""}`);
+			res.log.push(`DRY ${ref} @ ${sha.slice(0, 12)}${merged ? " (merged)" : ` (bundled -> ${bundlePath})`}${p.ruled ? `  ruled: ${p.ruled}` : ""}${p.worktree ? `  worktree ${p.worktree}` : ""}`);
 			continue;
 		}
 
@@ -363,12 +432,26 @@ function main() {
 		}
 
 	let plan;
-	if (flag("--retire-merged")) {
+	if (flag("--retire-merged") || flag("--retire-ruled")) {
 		const activeWithin = flag("--active-within") ? Number(opt("--active-within", "0")) : null;
+		let rulings = null;
+		if (flag("--retire-ruled")) {
+			const ledgerPath = path.resolve(opt("--ledger", path.join(repo, "docs/DISPOSITIONS.md")));
+			if (!fs.existsSync(ledgerPath)) {
+				console.error(`--retire-ruled: no ledger at ${ledgerPath} — the allowlist has to come from somewhere; pass --ledger <path>`);
+				return 2;
+			}
+			rulings = ledgerRulings(fs.readFileSync(ledgerPath, "utf8"));
+			console.log(
+				`ledger rulings read from ${ledgerPath}: ${rulings.rows} row(s), ${rulings.byRef.size} ref(s) ruled — ` +
+					`delete-eligible ${rulings.eligible.length}, held ${rulings.held.length}, no verdict in the row ${rulings.ambiguous.length}`,
+				);
+			if (rulings.ambiguous.length) console.log(`  ambiguous (row names a ref but states no verdict): ${rulings.ambiguous.slice(0, 12).join(", ")}`);
+			}
 		const st = structuralRefs(repo, db);
-		const built = buildRetirePlan({ repo, db, activeWithinDays: activeWithin, structuralRefs: st.refs, retireUnmerged: opt("--retire-unmerged", null) });
+		const built = buildRetirePlan({ repo, db, activeWithinDays: activeWithin, structuralRefs: st.refs, retireUnmerged: opt("--retire-unmerged", null), retireRuled: rulings?.byRef ?? null });
 		plan = built.plan;
-		console.log(`retire plan: ${plan.length} candidate ref(s); excluded structural ${built.excluded.structural}, active-within-window ${built.excluded.activeWithin}, snapshot-named ${built.excluded.snapshot}, uncommitted-work ${built.excluded.uncommittedWork}, unmerged-and-not-named ${built.excluded.unmergedNotNamed}`);
+		console.log(`retire plan: ${plan.length} candidate ref(s); excluded structural ${built.excluded.structural}, active-within-window ${built.excluded.activeWithin}, snapshot-named ${built.excluded.snapshot}, uncommitted-work ${built.excluded.uncommittedWork}, ruled-held ${built.excluded.ruledHeld}, unmerged-and-not-named ${built.excluded.unmergedNotNamed}`);
 	} else if (flag("--plan")) {
 		plan = JSON.parse(fs.readFileSync(opt("--plan", ""), "utf8")).plan || [];
 	} else {
