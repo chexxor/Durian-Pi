@@ -13,7 +13,7 @@
 | #2, queued, gate #3 open | refuses `gate-open:#3(queued)` | **CLAIMED** |
 | #4, queued, `requires: design` | refuses `requires:design` | **CLAIMED** |
 | #9, queued, gate #10 cancelled | refuses `gate-cancelled:#10` | **CLAIMED** |
-| #11, queued, gate id 12 does not exist | workable (conservative default, D271) | CLAIMED — agrees |
+| #11, queued, gate id 12 does not exist | workable (conservative default, D271b) | CLAIMED — agrees |
 
 The wake layer already uses one predicate: `src/driver.mjs:130-137` computes `workable(it, name, …)` for every candidate wake. So the rig has *three* rules for one seam — wake selection, oldest claim, by-id claim — and two of them agree. The fix is not new machinery; it is deleting the third rule.
 
@@ -48,7 +48,7 @@ The refusal text is *generated from the verdict reason*, not from a hand-written
 - `NOT_CLAIMABLE #<id> — <class>: <remedy>` — for a named row. Classes: `unknown-id`, `terminal`, `parked`, `deferred`, `claimed-by-you`, `addressed-to-<seat>`, `gate-open:#n`, `gate-cancelled:#n`, `requires:<capability>`.
 - Remedy per class: parked → `release_work` (by a party, or a coordinating seat carrying a reason, D258); deferred → `resume_work`; claimed-by-you → `complete_work`/`defer_work`; gate open → nothing the claimant can do, so name the gate id and the sender; terminal → nothing; unknown id → `peek_queue`.
 
-**Acceptance, corrected.** pm's eight cases are the right shape but incomplete in two ways. Add: (a) a row whose gate names a **cancelled** row (the predicate already distinguishes `gate-cancelled` from `gate-open`; D271/D274); (b) a row whose gate id does not exist — the conservative default says workable, so the by-id path and the oldest path must *agree* that it is claimable. The invariant worth asserting is not "eight refusals" but **both paths return the same verdict for the same row**. A case list without that invariant is satisfied by two divergent rules that happen to refuse in eight of the tested situations.
+**Acceptance, corrected.** pm's eight cases are the right shape but incomplete in two ways. Add: (a) a row whose gate names a **cancelled** row (the predicate already distinguishes `gate-cancelled` from `gate-open`; D271b/D274); (b) a row whose gate id does not exist — the conservative default says workable, so the by-id path and the oldest path must *agree* that it is claimable. The invariant worth asserting is not "eight refusals" but **both paths return the same verdict for the same row**. A case list without that invariant is satisfied by two divergent rules that happen to refuse in eight of the tested situations.
 
 ## Failure modes and recovery
 

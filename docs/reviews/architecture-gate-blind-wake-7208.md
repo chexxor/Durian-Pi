@@ -102,7 +102,7 @@ wake for a seat with no verb to act on it. Rejected as the primary mechanism: a 
 than copied into a notice, and F6 shows the seat cannot act on it anyway. Kept as a fallback if the read side
 proves insufficient in practice.
 
-**Option C: a periodic store-scan tick.** Rejected — D272 already rules it out (the snapshot is session-cached,
+**Option C: a periodic store-scan tick.** Rejected — D272b already rules it out (the snapshot is session-cached,
 so a store-derived trigger polls a stale document, and a raw read is a second reader; that is the cadence that
 hot-looped the broker in #2237).
 

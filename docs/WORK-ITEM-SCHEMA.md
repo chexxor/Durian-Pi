@@ -58,7 +58,7 @@ order) or `priority_first` (rank `now < next < later`, then ascending id). It is
 opening a harness and persists it on the seats document (the claim path has no config object). `ps` and `status` print
 the RESOLVED value and its source (`seat` / `team` / `default`), so a rig that declares nothing is visibly unchanged and
 a rig that declares something is visibly changed. Proofs: `demo/workstrategy.test.mjs`, `demo/workstrategy-up.test.mjs`;
-decision **D266**.
+decision **D266b** (docs/DECISIONS.md, the 2026-11-12 claim-order entry; D265/D266 were re-suffixed by tools/probes/adr-number-collisions.mjs).
 
 Terminal means `done` **or** `cancelled` — a `cancelled` item is not work (it must never reappear as
 phantom work in a "non-terminal" view).

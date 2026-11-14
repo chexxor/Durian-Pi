@@ -12346,7 +12346,7 @@ restate the topic-doc check rule. **Residual (the gap, surfaced rather than skip
 `last_verified` wiring and a check rule that reads it do not exist yet — the wiring is routed to `pm`, and
 until it lands, topic-doc verification remains manual by contract.
 
-## D265 — 2026-11-12T01:5xZ: **a work item's branch is a temporary isolation, not a namespace; `staging` is a queue with a human promotion gate; and an artefact the rig did not mint is never swept** (delegate, on the operator's objective "give the team a work-item lifecycle it can run itself"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+## D265b — 2026-11-12T01:5xZ: **a work item's branch is a temporary isolation, not a namespace; `staging` is a queue with a human promotion gate; and an artefact the rig did not mint is never swept** (delegate, on the operator's objective "give the team a work-item lifecycle it can run itself"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
 
 **Decision.** Three rules, in that order:
 
@@ -12451,7 +12451,7 @@ merge) — and the pass only ever feeds that chokepoint a resolvable candidate; 
 `3c6d01fc`: **341/341 in 135.7 s** (`node scripts/test.mjs --all --jobs 4`), Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`,
 node v24.22.1, git 2.56.0.
 
-## D266 — 2026-11-12T06:5xZ: **claim order is a declared POLICY with a name, a default that changes nothing, and a priority that EXPIRES; a setting nobody reads back is not a setting** (delegate, on the operator's directive "I like that idea. Implement that yourself now, bypassing the team to get this done"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
+## D266b — 2026-11-12T06:5xZ: **claim order is a declared POLICY with a name, a default that changes nothing, and a priority that EXPIRES; a setting nobody reads back is not a setting** (delegate, on the operator's directive "I like that idea. Implement that yourself now, bypassing the team to get this done"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
 
 **Decision.** The order a seat takes work in is a **named policy**, not an emergent property of array order:
 
@@ -13338,7 +13338,7 @@ is worth:
   - **Also live and verbatim:** the seats' decline of the OTHER open pool row via the attributed skip line —
     `SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
     usable window))`.
-## D271 — (provisional; re-mint at land from the MERGED tree) `blockedBy-resolves` is split: strict at mint, reported at read; severity comes from a census, not from assertion (architect, item #6664, 2026-11-11)
+## D271b — (provisional; re-mint at land from the MERGED tree) `blockedBy-resolves` is split: strict at mint, reported at read; severity comes from a census, not from assertion (architect, item #6664, 2026-11-11)
 
 **Status.** Design ruling on lead's #6664 scope rulings. Implementation is devtools' (#6659) and pm's to route.
 
@@ -13350,7 +13350,7 @@ is worth:
 
 **Consequences.** The reporting rule must land with, or after, the gate-clearing verb (#6530): `release_work` already refuses to un-park a row whose gate names a cancelled row (`src/rig.mjs:1346`), so today the only exit for 14 stranded held rows is `cancel` — terminal, intent destroyed. `cancelItem` must record `strandedDependents` and notify the dependent rows' parties, or the population keeps growing and every severity measured later is measured on a moving target. §8 of the schema now says "declared, not enforced" so no seat plans around enforcement that is not there.
 
-## D272 — (provisional; re-mint at land from the MERGED tree) the wake trigger is left event-driven; the gate-blindness is fixed in the wake predicate, not in the scheduler (architect, item #6665, 2026-11-11)
+## D272b — (provisional; re-mint at land from the MERGED tree) the wake trigger is left event-driven; the gate-blindness is fixed in the wake predicate, not in the scheduler (architect, item #6665, 2026-11-11)
 
 **Status.** Design ruling on pm's question "does a gate-closing queue write dirty the scheduler, or must the scheduler read the store each turn?". Build routing is pm's; implementation is impl's (`src/driver.mjs`, `src/rig.mjs`) / devtools' for the diagnostic.
 
