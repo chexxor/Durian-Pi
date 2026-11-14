@@ -4,8 +4,8 @@ symptom: "a seat cannot finish its item inside one context window; compaction su
 writes: true                       # arming the extension writes config; the diagnosis below is read-only
 precondition: "read-only"          # Diagnose is read-only; the Do steps that edit config need the broker stopped
 last_verified: 2026-11-11
-verified_by: impl
-evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0); #6161: demo/note-wake-seed.test.mjs (exit 0) and demo/note-census.test.mjs (exit 0), era re-measured on ./selfdev.sqlite 2026-11-11 (`node cli.mjs status --json`, exit 0, 12 seats: 8 proven, 2 seeded, 1 idle, 1 predates-arming; 1,980 compactions = 1,893 pre-arm + 87 post-arm, 0 post-arm summariser)"
+verified_by: impl; architect
+evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0); #6161: demo/note-wake-seed.test.mjs (exit 0) and demo/note-census.test.mjs (exit 0), era re-measured on ./selfdev.sqlite 2026-11-11 (`node cli.mjs status --json`, exit 0, 12 seats: 8 proven, 2 seeded, 1 idle, 1 predates-arming; 1,980 compactions = 1,893 pre-arm + 87 post-arm, 0 post-arm summariser)"; #6082: src/notecensus.mjs + demo/note-census.test.mjs (0.464 s, exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0)"
 check_rule: null
 ---
 
@@ -225,13 +225,21 @@ the messages list and the durable transcript never sees it, so the note is not d
    ```
 
    `[judgement]` this is the operator's decision: it changes what code runs in every seat.
-3. **Set the mirror directory** if the default is not what you want. Default: `<rig root>/.durig/notes`.
-   It is gitignored, so the **store document is the source of truth** and the file is a mirror for humans and
-   gates (`D240`, `D130/R2`).
+3. **Set the mirror directory to an ABSOLUTE path.** The default is cwd-relative —
+   `resolve(process.cwd(), ".durig", "notes")` (`extensions/continuity.mjs:75`) — so the phrase "`<rig root>/.durig/notes`"
+   is true only when the process's cwd is the rig root. A seat process whose cwd is its item worktree mirrors
+   its note **inside** that worktree, and the harness reaps the worktree with the branch: the note vanishes
+   between items. The mirror is gitignored, so the **store document is the source of truth** and the file is a
+   mirror for humans and gates (`D240`, `D130/R2`).
 
    ```bash
-   DURIG_NOTES_DIR=.durig/notes node cli.mjs config | grep DURIG_NOTES_DIR
+   DURIG_NOTES_DIR="$PWD/.durig/notes" node cli.mjs config | grep DURIG_NOTES_DIR
+   node tools/probes/note-location-6643.mjs     # section C: notesDir() must not resolve inside an item-<n> worktree
    ```
+
+   Verified 2026-11-11 on `item-6643`: the probe exits **1** with `notesDir() -> .../item-6643/.durig/notes`
+   and no config file setting `DURIG_NOTES_DIR`; 132 mirror files live at the rig root because the broker's cwd
+   is the root. That is an accident of process cwd, not a design.
 
 4. **Check the compaction policy fits the window** before trusting any of this. `modelOverrides` nests INSIDE
    `compaction` (a sibling key is read by nobody — ROADMAP 331), and a key may name a **family**:
@@ -297,7 +305,8 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
 | `status --json` is 1.4 s slower than you expect | the note census scans `entries` in one pass | pass `--no-notes` for a fast read |
 | a seat woken by `reset` knows nothing | the extension is not armed — an unlisted extension is an absent one (§Do 2), and a plain reset carries no handoff | arm it; `beforeRequest` then supplies the note in the system message |
 | the gate prints `pi.system entries carrying the durig-continuity section: 0` and `requests offering the note tools: 0` | the extension was armed and **no seat has run a request since** — the transcript only shows what ran. Compare the newest entry timestamp with the config write (`ls -l durig.config.json`); on this rig they were 07:54:09Z and 20:59:08Z on the same day | run the mechanism's own proof, `node demo/continuity-note.test.mjs` (0.43 s, no key/network/broker): `CONTINUITY PASS` means the code is sound and the fleet simply has not exercised it. Getting a number on a live fleet needs a provider that registers a model (pitfall 219) |
-| a seat has a note but a compaction still paid for a summariser | the note was written after that boundary, or the seat's conversation has no `durig.notes` document yet | the gate's before/after block is anchored on the first real `write_note` tool call; anything before it is history, not the mechanism |
+| a seat's continuation note is there one item and gone the next | `DURIG_NOTES_DIR` is unset, so the mirror lands in whatever cwd the writing process had — for a seat, its item worktree, which the harness reaps | pin an absolute `DURIG_NOTES_DIR` in `durig.config.json` (the key is registered, `src/config.mjs:165`), then run `node tools/probes/note-location-6643.mjs` and confirm section C passes | 
+| a seat is told to read `docs/notes/<topic>.md` and finds nothing | that location was asserted in D108 and never created: `ls docs/notes` fails and no code writes there. The closeout's probe "no seat tool writes to docs/notes/" is vacuously true and can never fail | the topic layer is struck; durable knowledge is `docs/DECISIONS.md`, `docs/runbooks/`, `docs/reviews/`, `docs/incidents/`, `docs/evidence/`. Run `node tools/probes/note-location-6643.mjs` section A: every `docs/<dir>/` literal asserted in the docs must exist | a seat has a note but a compaction still paid for a summariser | the note was written after that boundary, or the seat's conversation has no `durig.notes` document yet | the gate's before/after block is anchored on the first real `write_note` tool call; anything before it is history, not the mechanism |
 
 ## Escalate to
 
