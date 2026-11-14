@@ -50,6 +50,50 @@ export function isDocumentationPath(path) {
 }
 
 /**
+ * Which dirt can THIS landing actually clobber? (#5347)
+ *
+ * The pre-flight used to refuse on EVERY line of `git status --porcelain`, untracked included. In a
+ * live rig that is unpassable by construction: the broker and the spend ledger write beside the store
+ * continuously, and other seats have edits in flight. What the pre-flight is actually protecting is
+ * the `git merge --ff-only` at the end of the pass - and a fast-forward can only be broken by a path
+ * it WRITES. So the rule is INTERSECTION, not cleanliness:
+ *   refuse  - a dirty path the landing changes: a tracked modification git would have to overwrite,
+ *             or an untracked file the branch adds (git refuses the FF: "untracked working tree files
+ *             would be overwritten").
+ *   proceed - everything else, REPORTED. Dirt that is named is a legible state; dirt that stops a
+ *             landing which cannot touch it is a gate measuring nothing.
+ * Attribution of in-flight edits is #3648's registered requirement, not this gate's job.
+ */
+export function classifyTreeDirt(dirtyLines = [], landingPaths = []) {
+	const landing = new Set(landingPaths.map((p) => String(p).trim()).filter(Boolean));
+	const refuse = [];
+	const proceed = [];
+	for (const raw of dirtyLines) {
+		const line = String(raw).trimEnd();
+		if (!line) continue;
+		const status = line.slice(0, 2);
+		let path = line.slice(2).trim();
+		if (!path) continue;
+		if (status.startsWith("R") || status.startsWith("C")) path = path.split(" -> ")[1] ?? path; // rename/copy: the destination is what the tree holds
+		const tracked = status !== "??";
+		const touched = landing.has(path);
+		const entry = { path, status, tracked, touched };
+		if (touched) {
+			refuse.push({
+				...entry,
+				why: tracked ? "tracked edit in flight on a path this landing writes" : "untracked file this landing adds - git would overwrite it",
+			});
+		} else {
+			proceed.push({
+				...entry,
+				why: tracked ? "tracked edit in flight, not written by this landing" : "untracked artefact, not written by this landing",
+			});
+		}
+	}
+	return { ok: refuse.length === 0, refuse, proceed };
+}
+
+/**
  * Is this landing gated? Returns `{ ok, gate, message }`.
  * `message` is the sentence the report carries, and on a refusal it NAMES the flag that
  * is missing — the whole point of the rule is that the absence is legible, not inferred.

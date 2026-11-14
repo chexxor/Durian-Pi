@@ -70,7 +70,7 @@ import { closeSync, existsSync, openSync, readFileSync, readdirSync, rmSync, sym
 import { basename, dirname, join, resolve } from "node:path";
 import { DEFAULTS_CONFIG_PATHS, DEFAULT_CONFIG_PATHS } from "../src/config.mjs";
 import { landingChangedPaths, readTextIntegrity } from "../src/textintegrity.mjs";
-import { parseGateFlags, requireGate, docsOnlyAttestation } from "../src/landinggate.mjs";
+import { parseGateFlags, requireGate, docsOnlyAttestation, classifyTreeDirt } from "../src/landinggate.mjs";
 import { dependencyProvenance, formatDependencyProvenance } from "../src/provenance.mjs";
 // #4936: the CHANGED-SUITE scope report — which areas ran and which did NOT. It reads the SAME
 // area data as `scripts/test.mjs` and `tools/what-to-test.mjs`; it is a reporter, not a second
@@ -270,38 +270,70 @@ if (sharedRoot && sharedRoot !== resolve(repoRoot)) {
 
 /* ───────── pre-flight: the enforcement chokepoint ───────── */
 
-// The shared root must be CLEAN before a landing pass — UNTRACKED INCLUDED — because A SUITE RUN
-// IN `.` MEASURES THE SHARED TREE, NOT MAIN: a green there is not evidence about the merge and a
-// red there is not a regression. The earlier TRACKED-ONLY filter would have PASSED the third
-// instance of this hazard (an untracked `src/tui/durable/attach.mjs` written by a live seat), so
-// untracked now counts. The suite itself already runs in the detached SCRATCH (below), not `.`.
+// #5347: the pre-flight is an INTERSECTION test, not a cleanliness test. What it protects is the
+// fast-forward at the end of the pass, and a fast-forward is broken only by a path it WRITES: a
+// tracked edit in flight on that path is overwritten, an untracked file the branch adds aborts the
+// merge (git's own "untracked working tree files would be overwritten" refusal). Everything else in
+// the tree is the rig being ALIVE - the broker and the spend ledger write beside the store
+// continuously, other seats have edits in flight - and refusing on it made landing unpassable in a
+// live rig while measuring nothing. Dirt the landing cannot touch is REPORTED, never tidied up: the
+// lander never stashes, cleans or commits another seat's paths.
 const status = git(repoRoot, ["status", "--porcelain"]);
-const dirty = status.out
+const dirtyLines = status.out
 	.split("\n")
 	.map((l) => l.trimEnd())
 	.filter((l) => l.length > 0);
-if (dirty.length > 0) {
-	// Attribution where a path reveals it (an `item-<id>/` path names its item); shared-tree dirt
-	// usually does not, so most paths are named without an owner — attribution for those is
-	// #3648's registered requirement, not this gate's.
-	const attributed = dirty.map((line) => {
-		const path = line.slice(2).trim();
-		const m = /(?:^|\/)item-(\d+)(?:\/|$)/.exec(path);
-		return m ? `${path} (item #${m[1]})` : path;
-	});
+// #5347: the paths THIS landing writes, computed before the refusal decision.
+const landingPaths = [];
+const unreadableBranches = [];
+for (const b of branches) {
+	const paths = landingChangedPaths({ root: repoRoot, branch: b, base: "main" });
+	if (paths === null) unreadableBranches.push(b);
+	else landingPaths.push(...paths);
+}
+const dirt = unreadableBranches.length
+	? {
+		ok: dirtyLines.length > 0,
+		refuse: dirtyLines.map((l) => ({
+			path: l.slice(2).trim(),
+			status: l.slice(0, 2),
+			tracked: l.slice(0, 2) !== "??",
+			touched: null,
+			why: `the changed-path set of ${unreadableBranches.join(", ")} could not be read, so every dirty path is treated as at risk`,
+		})),
+		proceed: [],
+	}
+	: classifyTreeDirt(dirtyLines, landingPaths);
+// The report carries what was JUDGED, not just the verdict: a landing that proceeded past dirt
+// says which paths it did not touch, so a reader can check the intersection rather than take it on
+// faith (#5347).
+base.treeDirt = { refused: dirt.refuse.length, proceeded: dirt.proceed.length };
+base.dirtyPathsNotTouched = dirt.proceed;
+if (dirt.ok && dirt.proceed.length > 0) {
+	// Legible, not silent: a landing that proceeded past in-flight dirt says so out loud. Nothing is
+	// stashed, cleaned or committed - the rule is "report", never "tidy up someone else's paths".
+	console.error(
+		`shared tree: ${dirt.proceed.length} dirty path(s) this landing does NOT write, proceeding: ` +
+		`${dirt.proceed.map((d) => `${d.path} (${d.status})`).join(", ")}. Attribution of these edits is #3648.`,
+	);
+}
+if (!dirt.ok) {
 	report(
 		{
 			...base,
 			error:
-				`refusing to land: the shared tree at ${repoRoot} is NOT clean (${dirty.length} path(s), ` +
-				`UNTRACKED INCLUDED). A suite run in \`.\` measures the SHARED TREE, not main — a green there ` +
-				`is not evidence about the merge and a red is not a regression. Commit, stash or remove the ` +
-				`listed paths, then re-run.`,
-			dirtyPaths: attributed,
+				`refusing to land: the shared tree at ${repoRoot} has ${dirt.refuse.length} dirty path(s) THIS ` +
+				`landing writes. A fast-forward cannot proceed over a path it is about to write: a tracked edit ` +
+				`in flight would be overwritten, an untracked file the branch adds aborts the merge. Commit, stash ` +
+				`or remove the listed paths, then re-run. Dirt elsewhere in the tree is NOT refused - it is named ` +
+				`in dirtyPathsNotTouched (#5347).`,
+			dirtyPaths: dirt.refuse,
+			dirtyPathsNotTouched: dirt.proceed,
 		},
 		1,
 	);
 }
+
 
 // #4139: a write to a REAPED worktree path recreates `item-<id>/` inside the repo. No other guard
 // sees it: the cwd guard refuses RELATIVE writes from a degraded cwd, but this write is ABSOLUTE
@@ -950,22 +982,23 @@ await (async () => {
 
 /* ───────── advance main by a CLEAN FAST-FORWARD ───────── */
 
-// Re-check: the tree must still be clean for the FF (someone may have written while we merged).
+// Re-check: the tree must still be clean FOR THE FAST-FORWARD (someone may have written while we
+// merged). Same rule as the pre-flight (#5347): only a path this landing writes can break a FF.
 const recheck = git(repoRoot, ["status", "--porcelain"]);
-const stillDirty = recheck.out
-	.split("\n")
-	.map((l) => l.trimEnd())
-	.filter((l) => l.length > 0 && !l.startsWith("??"));
-if (stillDirty.length > 0) {
+const recheckDirt = classifyTreeDirt(
+	recheck.out.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0),
+	landingPaths,
+);
+if (!recheckDirt.ok) {
 	if (!keepScratch) removeScratch();
 	report(
 		{
 			...base,
 			error:
-				`refusing to advance main: the shared tree became dirty while the scratch merge ran. ` +
-				`The scratch result is clean but main was NOT advanced.`,
+				`refusing to advance main: the shared tree gained ${recheckDirt.refuse.length} dirty path(s) this ` +
+				`landing writes while the scratch merge ran. The scratch result is clean but main was NOT advanced.`,
 			merged,
-			trackedChanges: stillDirty,
+			trackedChanges: recheckDirt.refuse,
 			scratch: keepScratch ? scratch : null,
 		},
 		1,
@@ -1051,6 +1084,10 @@ report(
 		// resolution, not just infer it from a refusal.
 		db: dbPath,
 		main: { before: mainBefore.out, after: mainAfter },
+		// #5347: the shared tree was NOT clean, and the landing says which dirt it judged safe to
+		// proceed past. A green landing that silently ignores in-flight edits is unauditable; the
+		// lander neither stashed nor removed any of them.
+		dirtyPathsNotTouched: dirt.proceed,
 		merged,
 		lock,
 		// #4436/#6090: the gate is no longer optional — a landing reaches this line only after one ran,

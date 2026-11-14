@@ -157,16 +157,24 @@ try {
     !git(repo, ["worktree", "list"]).includes(".land-scratch-"));
   check("the shared tree is NOT mid-merge", !existsSync(join(repo, ".git", "MERGE_HEAD")));
 
-  console.log("\n2. a DIRTY shared tree refuses to land (tracked modification)");
-  const featB = feature("feat-b", "c.txt", "from feat-b\n");
-  writeFileSync(join(repo, "a.txt"), "line one\nuncommitted edit\n");
+  console.log("\n2. a dirty shared tree refuses ONLY where this landing writes (#5347)");
+  // The rule is INTERSECTION, not cleanliness: what the pre-flight protects is the fast-forward, and
+  // a fast-forward is broken only by a path it WRITES. A tracked edit on a path the branch changes
+  // would be overwritten -> refuse. An edit elsewhere is in-flight work of another seat -> proceed,
+  // reported.
+  const featConflict = feature("feat-conflict", "a.txt", "line one\nchanged by the branch\n");
+  writeFileSync(join(repo, "a.txt"), "line one\nuncommitted edit from another seat\n");
   const beforeDirty = mainSha(repo);
-  const dirty = land(repo, ["feat-b", "--suite"]);
+  const dirty = land(repo, ["feat-conflict", "--suite"]);
   check("the helper refuses (nonzero)", dirty.code !== 0, dirty.raw.slice(0, 200));
-  check("...and states the `.`-suite invalidity", /measures the SHARED TREE, not main/.test(dirty.report?.error ?? ""), dirty.report?.error);
-  check("...and names the dirty path", (dirty.report?.dirtyPaths ?? []).some((p) => p.includes("a.txt")), JSON.stringify(dirty.report?.dirtyPaths));
+  check("...and states that the dirt is a path the landing writes", /dirty path\(s\) THIS landing writes/.test(dirty.report?.error ?? ""), dirty.report?.error);
+  check("...and names the dirty path", (dirty.report?.dirtyPaths ?? []).some((p) => String(p.path ?? p).includes("a.txt")), JSON.stringify(dirty.report?.dirtyPaths));
   check("...and main did NOT advance", mainSha(repo) === beforeDirty);
   git(repo, ["checkout", "--", "a.txt"]);
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
+
+  // feat-b is the branch the LATER sections (2b, 2c, 2d, 3) land or refuse on; it stays unlanded.
+  feature("feat-b", "c.txt", "from feat-b\n");
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
   console.log("\n2b. a STRAY worktree directory at the repo root refuses to land (#4139)");
@@ -223,16 +231,39 @@ try {
   check("...and main did NOT advance", mainSha(repo) === beforeLinked);
   git(repo, ["worktree", "remove", "--force", linked]);
 
-  console.log("\n2e. an UNTRACKED-only shared tree refuses to land (the third instance of this hazard)");
-  // Untracked and alone: staged/tracked are clean, so a TRACKED-ONLY check would have passed it,
-  // yet a suite run in `.` would measure a tree that exists on no branch.
-  writeFileSync(join(repo, "attach.mjs"), "export const attach = 1;\n");
+  console.log("\n2e. UNTRACKED dirt the landing does NOT write proceeds, and is REPORTED (#5347)");
+  // The live-rig case that made landing unpassable: the broker and the spend ledger write beside the
+  // store continuously, and seats have files in flight. The old blanket refusal (UNTRACKED INCLUDED)
+  // blocked a proven landing on paths the merge cannot touch. Intersection is the rule; nothing is
+  // stashed, cleaned or committed - the dirt is named.
+  const featUntouched = feature("feat-untouched", "untouched.txt", "from feat-untouched\n");
+  writeFileSync(join(repo, "attach.mjs"), "export const attach = 1;\n"); // another seat's in-flight file
+  // The live-rig offender was `selfdev.sqlite.spend.jsonl`. In THIS fixture the store pattern is
+  // already ignored (see the .gitignore above), so the artefact is named plainly: what is being
+  // tested is "an untracked file the landing does not write", not the ignore rule that now covers
+  // the real ledger (#4142 / 5335b64e).
+  writeFileSync(join(repo, "spend-audit.jsonl"), '{"spend":1}\n');
   const beforeUntracked = mainSha(repo);
-  const untrackedOnly = land(repo, ["feat-b", "--suite"]);
-  check("an untracked-only dirty tree REFUSES", untrackedOnly.code !== 0, untrackedOnly.raw.slice(0, 200));
-  check("...and names the untracked path", (untrackedOnly.report?.dirtyPaths ?? []).some((p) => p.includes("attach.mjs")), JSON.stringify(untrackedOnly.report?.dirtyPaths));
-  check("...and main did NOT advance", mainSha(repo) === beforeUntracked);
+  const untrackedOnly = land(repo, ["feat-untouched", "--suite"]);
+  check("untracked dirt the landing does not write does NOT refuse", untrackedOnly.code === 0, untrackedOnly.raw.slice(0, 300));
+  check("...and both paths are REPORTED, not silently dropped", (untrackedOnly.report?.dirtyPathsNotTouched ?? []).length === 2, JSON.stringify(untrackedOnly.report?.dirtyPathsNotTouched));
+  check("...and main ADVANCED", mainSha(repo) !== beforeUntracked, `${beforeUntracked} -> ${mainSha(repo)}`);
   rmSync(join(repo, "attach.mjs"));
+  rmSync(join(repo, "spend-audit.jsonl"));
+  check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
+
+  console.log("\n2f. an untracked file the landing ADDS still refuses: git would overwrite it (#5347)");
+  // Order matters: the branch must exist BEFORE the untracked copy appears. feature() switches back
+  // to main, which DELETES a path tracked only on the branch - writing the collision file first
+  // would leave nothing to collide with.
+  const featCollision = feature("feat-collision", "collision.txt", "from feat-collision\n");
+  writeFileSync(join(repo, "collision.txt"), "someone else's file, on no branch\n");
+  const beforeCollision = mainSha(repo);
+  const collide = land(repo, ["feat-collision", "--suite"]);
+  check("an untracked path the branch adds REFUSES", collide.code !== 0, collide.raw.slice(0, 300));
+  check("...and it is named as a path the landing writes", (collide.report?.dirtyPaths ?? []).some((p) => String(p.path ?? p).includes("collision.txt")), JSON.stringify(collide.report?.dirtyPaths));
+  check("...and main did NOT advance", mainSha(repo) === beforeCollision);
+  rmSync(join(repo, "collision.txt"));
   check("the tree is clean again", git(repo, ["status", "--porcelain"]) === "");
 
   console.log("\n3. a HELD genlock makes the lander WAIT with PRIORITY — it does NOT refuse (#1497/#1498)");
@@ -552,7 +583,7 @@ try {
 
   console.log(
     failures === 0
-      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), WAITS WITH PRIORITY for a live genlock holder, and refuses a dirty tree / a conflict / a failing suite"
+      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), WAITS WITH PRIORITY for a live genlock holder, and refuses a path it would clobber / a conflict / a failing suite, while REPORTING the dirt it cannot touch (#5347)"
       : `\nFAIL - ${failures} check(s) failed`,
   );
 } catch (err) {
