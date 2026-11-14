@@ -4,7 +4,7 @@ symptom: "the pinned pi must move (an ordered update, or a tag we skipped become
 writes: true
 precondition: "broker-stopped"
 last_verified: 2026-11-11
-verified_by: delegate (read-only half on #5089 2026-11-04; the WRITE half run end-to-end 2026-11-10, staged then reverted; the drift half re-measured read-only 2026-11-11)
+verified_by: delegate (read-only half on #5089 2026-11-04; the WRITE half run end-to-end 2026-11-10, staged then reverted; the drift half re-measured read-only 2026-11-11); devtools (the read-only half on #5089 2026-11-04; the pin-ref check re-run 2026-11-11 on the landed #6061)
 evidence: "#5089 (the mint) and the read-only half of this procedure run ON that row, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1: `node scripts/sync-pi.mjs --check` exit 0 `drift=true` pin `2ec55d80` tip `707888ec`; `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` = **0 ahead / 515 behind** (the delta doc's 508 was already stale); `git -C vendor/pi-main fetch --tags origin` exit 0, tags `v1.2.0 v1.3.0 v1.4.0 v1.5.0`; pin and tip `migrations.ts` both carry exactly `version: 1, version: 2`; live `durable_schema = {singleton:1, version:2}` (read-only open); scratch-`/tmp`-DB gate: `status`/`queue`/`ps`/`show` exit 1, `cause:no_store`, `-wal`/`-shm` ABSENT; and the lockout itself - an un-linked worktree refused `selfdev.sqlite` (exit 1, \"schema version 2 is newer than supported version 1\") until `--sync` + `--link`, after which the same read exited 0. 2026-11-10, Linux Fedora 45 `7.2.15-300.fc45.x86_64` node v24.22.1 (the WRITE half, staged then reverted): `--update v1.5.1` → pin `dd30101c`, `refType: tag`; `--sync` 14 s / 10 packages (needs `pi-schema` FIRST in `packages`, else chord fails TS2307); `--link` 14 s / 10 linked; suite **93 PASS / 187 FAIL**; revert → **278/280 in 59.7 s**; migrations identical at both ends (`version: 1, 2`) so **nothing migrates**; backup `cmp` exit 0. Migration inventory: `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`, ROADMAP **353–357**. 2026-11-11, read-only, item-6200 in an item worktree at main `35001c3a`, dependencySet built-pin (v1.5.1 built + linked): `node scripts/sync-pi.mjs` exit 0, pin `dd30101cfc5b` tag `v1.5.1`, upstream tip `75ca6e7d0849`, **behind 90 / ahead 0**, `tagsBetween: []` - the tip carries NO tag, so a tip bump pins an unreleased commit; every pin package's `package.json` reads **1.5.2** at the tip vs 1.5.1 at the pin. The BUMP COST, measured in a throwaway scratch worktree whose copy of the pin named the tip (the shipped `pi-main.pin.json` was never edited, and nothing landed): `--sync --link` 36 s, 10 packages built, 10 linked, `dependencySet: built-pin`, and the full suite **300/300 exit 0 in 92.4 s** - the same 300/300 exit 0 as the pinned tree (89.7 s). Churn between pin and tip is concentrated in `apps/` (285 files, not in the pin set), `packages/chord` (91), `packages/durable` (52), `packages/coding-agent` (43); the exported symbols that changed there (`defineState`'s key type widened, `JoinPolicy` gaining `"any"`, `KeyedSlot`/`KeySource`/`RunEndTask` removed) appear in **0** durig files, and `documentState` is still present upstream at both ends - the migration `demo/pi-symbol-migration.test.mjs` pins is ours, not upstream's."}
 check_rule: null
 ---
@@ -88,9 +88,14 @@ Compare migrations across the pair you are about to swap (`version: N` lines are
 git -C vendor/pi-main show origin/main:packages/durable/src/storage/sqlite/migrations.ts | grep -o 'version: [0-9]'
 ```
 
-Do **not** reach for `git describe --tags <pin>`: our pin is on `main`, ahead of the tag it was stamped near, and
-`describe` answers `fatal: No tags can describe …` (measured 2026-11-04). The stamped version is the
-`package.json` version at the pin sha.
+Ask the pin what it is, do not assume it: `git -C vendor/pi-main describe --tags --exact-match <pin-sha>`
+answers **`v1.5.1`** today (measured 2026-11-11: the vendored clone is deep -
+`git rev-parse --is-shallow-repository` = `false` - and 334 tag refs are fetched), and
+`git rev-parse v1.5.1^{commit}` equals the pinned sha, so the label in `pi-main.pin.json` is the commit.
+`describe` answers `fatal: No tags can describe …` only while the pin **floats on a branch** (the state
+measured 2026-11-04, before #6061 named the ref); if it does, the stamped version is the `package.json`
+version at the pin sha. `sync-pi` writes the label for you when a tag points exactly at the sha - see the
+behind/ahead row below.
 
 ## Do
 
