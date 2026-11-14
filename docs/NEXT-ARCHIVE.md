@@ -14947,3 +14947,71 @@ The rows below are the sha table from docs/NEXT.md as it stood before this windo
 | `1872bc25` | docs(NEXT): the conflict pass closed out - 19 ancestors, 17 held with residue; the self-merge seam is next |
 | `4ad4c38e` | docs(NEXT): add this window's five commit rows so tools/pointer-sha-coverage.mjs stays honest |
 | `dba822b1` | docs(NEXT): register this window's commit rows so tools/pointer-sha-coverage.mjs stays honest |
+
+## Commit rows cut from the live pointer (2026-11-14, landing-integrity tranche) — verbatim, oldest first
+
+The rows below were moved out of `docs/NEXT.md` on 2026-11-14 so the live pointer stays inside the 200-line cap (`demo/next-pointer.test.mjs`). They are the earlier tranches of the same milestone; `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` reads this file as well as the pointer, so every sha here is still named.
+
+| sha | shipped |
+|---|---|
+| `d29cdd7b` | merge: land landing-20261114-c11 onto main |
+| `f764023e` | doc-integrity-guard (#6335): the env-name exempti... |
+| `b90395a8` | restart-limit-seam demo: derive the settings spre... |
+| `e5fd5e34` | scripts/land.mjs: resolve suite entries by their ... |
+| `6e054eb9` | demo/runbook-diagnose: derive the 'CI cannot exec... |
+| `560eccac` | demo/runbook-diagnose: the derived 'CI cannot exe... |
+| `945cd805` | merge: land landing-20261114-b2b onto main |
+| `026ab5f6` | docs(DECISIONS): disambiguate the four colliding ... |
+| `c2008de7` | feat(tools): the re-cut instruments — ref-recut (... |
+| `4b52ecc8` | tools(ref-recut, conflict-blocks): --refresh re-c... |
+| `2e06ff55` | merge: land item-6343-recut onto main |
+| `f9cce597` | merge: land item-6374-recut onto main |
+| `1870e4be` | merge: land item-6435-recut onto main |
+| `155ad010` | merge: land item-6664-recut onto main |
+| `1751a3c2` | merge: land item-7090-recut onto main |
+| `9ddf8c4c` | absorb refs/heads/item-5002: its added lines are ... |
+| `42983b07` | absorb refs/heads/item-6177: its added lines are ... |
+| `c600a2a9` | absorb refs/heads/item-6268: its added lines are ... |
+| `199ebd70` | absorb refs/heads/item-6314: its added lines are ... |
+| `b055d6a4` | absorb refs/heads/item-6326: its added lines are ... |
+| `1f90d7e8` | absorb refs/heads/item-6336: its added lines are ... |
+| `25a082f9` | absorb refs/heads/item-6562: its added lines are ... |
+| `9a7ac64b` | absorb refs/heads/item-6643: its added lines are ... |
+| `a9b0d007` | absorb refs/heads/item-7158: its added lines are ... |
+| `af86fefe` | docs+tools: close the branch catch-up — absorb-re... |
+| `1872bc25` | docs(NEXT): the conflict pass is closed out — 19 ... |
+| `4ad4c38e` | docs(NEXT): add the five commit rows this window ... |
+| `dba822b1` | docs(NEXT): register the nine absorption commits ... |
+| `5a18d70f` | docs(NEXT): register the remaining commit rows fo... |
+| `c8cf55ab` | feat(self-merge): seats land their own item workt... |
+| `a67d4cf8` | self-merge SLA: relative fixture dates in the dem... |
+| `83a3b8ed` | self-merge: the seat verb proven end to end, the D314 ruling, the pointer re-cut |
+| `219cb687` | skill(driving-durian-pi): name the seat self-merge verbs and their measured cost |
+| `1a31a79a` | docs(DECISIONS): close the D271/D272 duplicate-heading collision — 299 entries, 0 collisions |
+| `f5dc28be` | instruments: four instrument-side failures fixed on contact (depplane rig seam, branch-census exit-code handling, restart-limit fixture, channel-preflight config) |
+| `df256ae0` | docs(SELFDEV): pitfalls 349-354 — a non-zero audit exit is a verdict, a rig is not a config, a demo must not assert the live rig's exit code |
+| `5b1daea5` | docs(NEXT): register the instrument-repair commit row — `pointer-sha-coverage --base 8b5a19e1` exits 0 |
+| `ea857be9` | demo(restart-limit-behaviour): a 40-deep scripted-response stack — one response per crash drained on retries, so the streak never reached the limit; suite 357/357 |
+| `c608e5b4` | fix(land.mjs): the gate's environment carries the landing repo's armed extensions; report `gateRig{extensions,source}` — pinned in `demo/land-helper.test.mjs` §10 (8.6 s), pitfall 355 |
+| `07e0e76f` | merge: land `item-1` onto main — the FIRST seat self-landing its own item (`land_my_item`, derived gate 26/357, containment 0 loss) |
+| `c7f2a4d5` | docs(ROADMAP): rows 368 (`assertSendAllowed` TypeError on an Edges link with no `maySendTo`) and 369 (the bare-scratch gate, shipped in `c608e5b4`) |
+| `3deb580d` | docs(NEXT): the live seat-landing proof, the gate-rig trap, and this window's rows (pointer churn squashed) |
+| `10ca88ee` | docs(SELFDEV) pitfall 356 + docs(NEXT) row in order — the commit that carried this file at the time, now named because it is no longer HEAD |
+| `b968b166` | docs: the D314 live seat-landing addendum, SELFDEV pitfall 357 (the local provider now needs a credential), the final suite tally, and the `wip/seat-prompt-files` KEEP-HELD correction |
+| `aa5c4284` | tools(pointer-sha-coverage): read `docs/NEXT-ARCHIVE.md` so a range past the pointer cut closes (ROADMAP 370, pitfall 358), pinned by the tool's own test |
+| `90dd5ff2` | merge: land `item-7448-recut` onto main — derived gate green, containment 0 lost lines |
+| `04b92e94` | merge: land `item-6344-recut` onto main — derived gate 47/358 green |
+| `211075e9` | absorb `refs/heads/item-6343` — 182 added lines already verbatim in main, 0 lost, tree unchanged |
+| `78eb0c01` | absorb `refs/heads/item-6435` — 46 added lines, 0 lost, tree unchanged |
+| `a804f250` | absorb `refs/heads/item-7090` — 41 added lines, 0 lost, tree unchanged |
+| `9c5eaf05` | recut `item-6373` onto main with conflict blocks unioned by rule (R1–R6) — the branch later lands as `item-6373-recut-r2` |
+| `a707a047` | docs(catch-up): DISPOSITIONS "Landing attempts" with the verbatim gate refusals; ROADMAP 371 (by-id claim gate); SELFDEV pitfall 359 (a containment-proof exit code describes the SET, not a verdict); NEXT tally corrected |
+| `469ed339` | rule-merge `item-6373-recut` onto main — rerere resolution, `tools/recut-resolve.mjs` 0 files needing a human, containment proof 0 lost lines |
+| `a9bc766f` | merge: land `item-6373-recut-r2` onto main — derived gate 48/358 green; `item-6373` and `item-6373-recut` are both ancestors now |
+| `9de0bcc3` | tools(self-merge-sla): `gate-refused` / `scratch-chain` verdicts + `ledger_coverage`/`undocumented` + `--strict`, pinned by `demo/self-merge-sla.test.mjs` §5; `docs/evidence/2026-11-14-landing-attempts/verdicts.md` holds the verbatim refusals |
+| `d9928edb` | docs+config close-out: the NEXT tally at `a9bc766f` (141/195 landed, 5 gate-refused, coverage 54/54) plus the `item-6373` rule-merge rows; `durig.config.example.json` arms `extensions/self-merge.mjs` as the team default (the base ships none) |
+| `9e3e2588` | instruments: a `gate-refused` verdict must quote the lander's exit code (`attempt_logged`, `gate_refused_proven`, `--strict`), pinned by `demo/self-merge-sla.test.mjs` §5; `demo/checkup-citation.test.mjs` fixture made deterministic — suite **358/358 in 200.6 s**, SELFDEV pitfalls 360-361 |
+| `47e221cf` | docs(catch-up): name the `9e3e2588` and `d9928edb` commits so the pointer audit closes; `verdicts.md` re-measured (5 rule-mergeable refs, all gate-refused, `item-3747-recut-r2` attempted); SELFDEV pitfall 362 (a reaped scratch dir blocks a landing before the gate runs) |
+| `a23961dc` | docs(catch-up): the conflicted-set census at `47e221cf` (49 = 21 semantic / 19 mechanical / 9 wording-only; 27 rule-shaped re-cuts → 3 clean, 24 need a human), the 24 zero-commit recut aliases named, SELFDEV pitfall 363, and the `47e221cf` pointer row |
+| `969b9774` | the prune carrier as pushed: `tools/branch-prune.mjs` + `demo/branch-prune.test.mjs`, the branch-and-worktree skill, the runbook step 0a, the R-B addendum — refs 219 → 99, worktrees 155 → 94, `main` unmoved, nothing forced, nothing pushed by the delegate |
+| `18e378d2` | docs+tools: correct the worktree-audit `locked` count (20 git-locked trees vs the audit's keep-reason bucket of 3), re-verify `tools/process-leak-scan.mjs`, register ROADMAP 373, and name the worktree floor 155 → 94 → 40 |
