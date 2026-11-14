@@ -439,6 +439,13 @@ so it is neither `main` nor a candidate. A clean detached worktree is the only t
 question. State which tree a verdict came from, or the verdict is not usable by anyone else — the same
 rule as the generated-artifact check above.
 
+**A TREE NAME IS NOT ENOUGH — NAME THE MOMENT TOO (#5819, from #5782).** The red set drifts by the hour,
+measured on the same suite: `demo/clockin-digest.test.mjs` failed at `37651f23` and passed at `4efce137`.
+A landing proof is therefore a triple: **tree + dependencySet + timestamp**. `node scripts/test.mjs --all`
+prints a PROVENANCE line carrying the tree and the dependency set; paste that line with the count, and
+stamp the run. Without the timestamp, two landers quoting "the suite is green" may both be telling the
+truth about different worlds, and the gate cannot tell which.
+
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):   ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
    ```

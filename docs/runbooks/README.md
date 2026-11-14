@@ -318,3 +318,6 @@ New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROAD
 `--dry-run`, executable `Diagnose` blocks, verification provenance, a gated agent runtime, the daemon
 runbook).
 
+
+| [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root — including the shape `ERR_MODULE_NOT_FOUND: Cannot find package '@earendil-works/pi-schema'` inside a demo's `/tmp` scratch, because `pi-schema` is in the pin's package set but in `package-lock.json` zero times (#5819) | no |
+| What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
