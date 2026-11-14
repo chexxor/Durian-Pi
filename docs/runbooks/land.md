@@ -92,6 +92,10 @@ A SERIALISER — IT CAN ONLY AVOID THE OBVIOUS CASE.
 may be a colleague's edit in flight, and this session has one incident that began with a seat deciding a
 dirty tree was its problem to solve.
 
+**IF THE NAMED PATH IS THE RIG'S OWN SPEND LEDGER** (`selfdev.sqlite.spend.jsonl`, or any
+`<db>.spend.jsonl`): the procedure is `docs/runbooks/spend-ledger-blocks-landing.md` — record md5, MOVE it
+aside, land, restore, compare md5. Never ignore or delete it: the spend caps read that file (row 310).
+
 **WHY THE TEMPTATION IS STRONG HERE:** a landing takes minutes and the tree can change in seconds, so the
 window between "I checked" and "I landed" is exactly where the failures live.
 
