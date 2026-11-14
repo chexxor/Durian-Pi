@@ -12974,6 +12974,47 @@ estimate refuses real work and the refusal reads like an unlucky claim rather th
 capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
 part of N19 may assume otherwise. It edits files and runs demos.
 
+## D310 — The landing verify pair is a RE-RUN, not a sha match (2026-11-13, queue #7643)
+
+**Decision.** A landing entry's paired `VERIFY` row certifies the landing only when its recorded
+`evidence.command` **exits 0 when re-executed in the scratch worktree at the tree being landed**. Ancestry
+and content comparison are inputs to the report, never the PASS predicate. Absence is *reported*
+(`no independent verify row names <sha>; self-attested by <seat> as row <id>`); a contradiction between a
+recorded verify verdict and the re-run *refuses*. Refusal becomes code-tier only after `lead` sets a
+measurable trigger (#7641).
+
+**Context.** #7143, as revised by `pm`, states the collision rule as: PASS if `S == T`; PASS if `S` is an
+ancestor of `T` and "the verified content is identical at `T`"; REFUSE otherwise. Measured on this rig's own
+derived merge (`T = 517dc58d`, landed branch tip `S = 4ed6b8d0`): `git diff --quiet S T` exits 1, and
+`git diff --quiet S T -- <the paths S touched>` also exits 1, because the merge re-resolves a file the branch
+changed. Meanwhile a squash-shaped landing has the verified content while failing ancestry
+(`merge-base --is-ancestor` exit 1, `git diff --quiet S T -- probe-artifact.txt` exit 0). `src/checkup.mjs:322-327`
+already records the same limit in prose. Nothing in the landing path reads a queue row today
+(`grep -n evidence scripts/land.mjs` → `:161 :303 :327 :821`, none about verify rows).
+
+**Alternatives considered.** (a) Ancestry + content identity — cheapest, two git calls, no subprocess;
+rejected because it is false for correct landings and false-negative for squash landings, so it either stalls
+the drain or quietly collapses into "ancestor means PASS". (b) Verify after landing against `main` — rejected:
+`main` would have advanced unverified, the exact failure `src/landinggate.mjs` was written to close (#6090,
+the `1f6f26c5` landing). (c) Require the verify row to name `T` — rejected for the same ordering reason: `T`
+does not exist until the merge is computed.
+
+**Consequences.** One command run per landing, on a scratch `scripts/land.mjs` already builds (`:545`) and
+already links dependencies into (`:558`). Independence is computed, not asserted: the completer must satisfy
+`seatsAreVerifier` (`src/verifierrole.mjs:26-31`), which deliberately excludes the shared `peer-review`
+capability because `impl`/`impl2` advertise it. Minted-but-unclaimed verify rows are the loop risk; they carry
+a `set_priority` lease whose expiry surfaces in the census, and `pm` releases or cancels. The ratchet trigger
+counts the same predicate the gate uses, so the trigger and the gate cannot disagree.
+
+**Falsifiable probe.** `node tools/probes/verify-pair-rule-7643.mjs` → exit 0; assertions 1b/1c are the proof
+that the prose rule is undecidable, assertion 2 is the proof that the verdict moves between trees, 3/3b and 4
+pin the squash and stale cases. Landing the implementation must add `demo/landing-verify-pair.test.mjs`
+pinning PASS / REFUSE / ABSENT.
+
+**Status:** design and review only — no code changed in `src/` or `scripts/`. Implementation routed to `pm`
+for sequencing; the refusal trigger and override authority are `lead`'s (#7641). ADR number to be re-derived
+at land time: `D275` is referenced in this file's tail and `item-7208` carries a `D275` not yet on `main`.
+
 **D### — the landing gate is a DELTA: "no NEW red", and an unmeasured baseline REFUSES (lead ruling #7269; recorded by scribe, item #7274, 2026-11-12).**
 
 **Mint note.** The heading carries a `D###` PLACEHOLDER on purpose — the landing pass derives the next FREE number by
