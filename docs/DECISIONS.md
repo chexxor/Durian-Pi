@@ -4080,7 +4080,10 @@ happened; (c) no rename today, with the post-split names reserved — adopted.
 moves. No rename, no code, no split design — the naming entry only. D122 is the issue-ordered next number
 after D121 (main `ffa2ab3`). Per #3075 (no branch hardcodes a number), the number here is PROVISIONAL: the
 lander MUST re-confirm 122 is still free at land time and RENUMBER IF NOT — an entry that lands with a taken
-number would collide, and a silently-assumed number is exactly what #3075 forbids.
+number would collide, and a silently-assumed number is exactly what #3075 forbids. **Mint status, re-measured
+2026-11-13 against main `657d8c60` (scribe, item #7373):** the number WAS minted as D122 without collision -
+`git grep -c '^## D122' docs/DECISIONS.md` returns **1**, and the neighbours D121 and D123 each appear once.
+The rule stays in the entry because it binds every future entry, not because this one is still provisional.
 
 ## D123 — One window resolver for every context bound: the degeneration guard's context threshold is RELATIVE to the seat's effective window (architect, item #2730, 2026-10-19)
 
