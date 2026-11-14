@@ -19,6 +19,14 @@
 //           this tree does not contain. A gap is NOT a pass: it is printed with its
 //           reason, and the set of gap REASONS is pinned so a new runbook cannot slip
 //           past unexecuted with a reason the harness has never seen.
+// Three rules decide gap-vs-execution, so a disposable fixture is not blamed for a state it
+// legitimately cannot hold (item 6330):
+//   - a command that GUARDS its own absence (`2>/dev/null`, `|| true`) is EXECUTED: the
+//     runbook already expects the file may be missing, and exit 0 is the verdict;
+//   - a ref RANGE (`main..item-1234`) is a pair of refs, not a path, and a bare word after a
+//     ref-taking git verb may be a tree path (`git ls-tree HEAD docs`);
+//   - a `for`/`while` unit runs only when every `;`-separated command inside it is on the
+//     allowlist - a loop header must not smuggle a write into CI.
 
 /** `## Diagnose` or `## Diagnose (read-only)` — the heading the skeleton mandates. */
 export const DIAGNOSE_HEADING = /^## Diagnose\b[^\n]*$/m;
@@ -66,13 +74,16 @@ export const READ_ONLY_GIT_SUBCOMMANDS = new Set([
   "for-each-ref",
   "count-objects",
   "remote",
+  // `merge-tree --write-tree` writes a TREE OBJECT into the repo object store,
+  // never a ref and never the working tree - in a disposable fixture that is a read.
+  "merge-tree",
   "blame",
   "worktree",
 ]);
 
 /** Plain read-only shell tools the harness is willing to run. */
 export const READ_ONLY_SHELL_TOOLS = new Set([
-  "ls", "cat", "head", "tail", "wc", "grep", "egrep", "sort", "uniq", "awk", "sed",
+  "ls", "cat", "head", "tail", "wc", "grep", "egrep", "rg", "sort", "uniq", "awk", "sed",
   "comm", "echo", "test", "stat", "find", "du", "ps", "pgrep", "date", "pwd", "env",
   "which", "command", "tr", "basename", "dirname", "realpath", "file", "tree",
   "printf", "true", "false", "cut", "seq", "tac", "nl", "paste", "readlink",
@@ -166,6 +177,13 @@ function segments(line) {
  * value stays a gap; nothing is invented silently.
  */
 const PLACEHOLDER_RULES = [
+  [/\bmint\b/i, "mint"],
+  [/\bbase\b/i, "base"],
+  [/\bpin\b/i, "pin"],
+  [/\bproject\b/i, "project"],
+  [/\bmarker\b/i, "marker"],
+  [/\bbranches\b/i, "branches"],
+  [/\bfiles\b/i, "files"],
   [/\bbranch\b|\bref\b|\bhead\b/i, "branch"],
   [/\bsha\b|\bcommit\b/i, "sha"],
   [/\bseat\b/i, "seat"],
@@ -217,8 +235,22 @@ export function classifyDiagnoseBlock(code, fixture = {}) {
   const lines = fenceCommandLines(code);
   if (lines.length === 0) return { runnable: false, reason: "empty block", kind: "skip" };
   for (const line of lines) {
-    if (line.includes("<") || line.includes("*")) return { runnable: false, reason: "an unfilled `<placeholder>` or a glob", kind: "gap" };
-    if (isControlFlowLine(line)) continue;
+    const bare = line.replace(/"[^"]*"|'[^']*'/g, " ");
+    if (bare.includes("<") || bare.includes("*")) return { runnable: false, reason: "an unfilled `<placeholder>` or a glob", kind: "gap" };
+    if (isControlFlowLine(line)) {
+      // A control-flow line hides verbs behind `;`: every piece of it must still pass
+      // the allowlist, or a `for` loop could smuggle anything into CI.
+      for (const piece of line.split(";")) {
+        // `do`/`then` are not commands; a loop HEADER (`for b in ...`) is not one
+        // either, so it is left to the shell. Anything else inside the loop must pass.
+        const pieceCode = piece.trim().replace(/^(do|then|else)\b\s*/, "").trim();
+        if (!pieceCode) continue;
+        const cls = classifyDiagnoseLine(pieceCode, fixture);
+        if (cls.kind === "skip") continue;
+        if (!cls.runnable) return { runnable: false, reason: cls.reason, kind: cls.kind };
+      }
+      continue;
+    }
     const cls = classifyDiagnoseLine(line, fixture);
     if (!cls.runnable) return { runnable: false, reason: cls.reason, kind: cls.kind };
   }
@@ -238,8 +270,9 @@ const NON_OPERAND_WORDS = new Set(["list", "audit", "porcelain", "short", "tree"
  * must exist in the fixture; a bare word after a ref-taking git subcommand is a REF that
  * must exist. Quoted text, flags, and subcommand nouns are not operands.
  */
-function operandCheck(segment, fixture) {
-  const code = segment.replace(/"[^"]*"|'[^']*'/g, " ").replace(/#.*$/, "").trim();
+function operandCheck(segment, fixture, tolerant = false, repo = null) {
+  // Redirect TARGETS are outputs the command creates, not operands it reads.
+  const code = segment.replace(/"[^"]*"|'[^']*'/g, " ").replace(/#.*$/, "").replace(/(^|\s)>[^|]*$/, "").trim();
   const words = code.split(/\s+/).filter(Boolean);
   while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift(); // env prefix
   const verb = words[0];
@@ -248,22 +281,34 @@ function operandCheck(segment, fixture) {
     if (token.startsWith("-") || token === "--" || token === "." || NON_OPERAND_WORDS.has(token)) continue;
     if (token.includes(">") || token.includes("<")) continue; // redirections are not operands
     const path = token.includes(":") ? token.split(":").pop() : token;
+    // A ref RANGE (`main..item-1234`) is a pair of refs, not a path.
+    if (/^[A-Za-z0-9_.-]+\.{2,3}[A-Za-z0-9_.-]+$/.test(token)) {
+      const [a, b] = token.split(/\.{2,3}/);
+      if (fixture.refExists && (!fixture.refExists(a, repo) || !fixture.refExists(b, repo))) {
+        return { runnable: false, reason: `\`${token}\` names a ref the fixture does not have`, kind: "gap" };
+      }
+      continue;
+    }
     if (path.startsWith("refs/")) {
-      if (fixture.refExists && !fixture.refExists(token)) {
+      if (fixture.refExists && !fixture.refExists(token, repo)) {
         return { runnable: false, reason: `\`${token}\` is not a ref in the fixture`, kind: "gap" };
       }
       continue;
     }
     if (path.includes("/") || path.includes(".")) {
-      if (!fixture.exists || !fixture.exists(path.startsWith("/") ? path : path)) {
-        return { runnable: false, reason: `\`${path}\` is not present in the fixture`, kind: "gap" };
-      }
-      continue;
+      if (tolerant) continue; // the command tolerates the file being absent
+      if (fixture.exists && fixture.exists(path)) continue;
+      const refSub = verb === "git" ? words[1] : null;
+      if (verb === "git" && GIT_REF_SUBCOMMANDS.has(refSub) && fixture.refExists && fixture.refExists(token, repo)) continue;
+      return { runnable: false, reason: `\`${path}\` is not present in the fixture`, kind: "gap" };
     }
     const gitSub = verb === "git" ? words[1] : null;
-    if (verb === "git" && GIT_REF_SUBCOMMANDS.has(gitSub) && !/^[A-Za-z0-9_./-]+$/.test(token)) continue;
     if (verb === "git" && GIT_REF_SUBCOMMANDS.has(gitSub)) {
-      if (!fixture.refExists || !fixture.refExists(token)) {
+      if (!/^[A-Za-z0-9_./-]+$/.test(token)) continue;
+      // A bare word after a ref-taking git verb may be a TREE PATH (`git ls-tree HEAD docs`),
+      // not a ref: if the fixture has the file, the operand is satisfied.
+      if (fixture.exists && fixture.exists(token)) continue;
+      if (!fixture.refExists || !fixture.refExists(token, repo)) {
         return { runnable: false, reason: `\`${token}\` is not a ref in the fixture`, kind: "gap" };
       }
     }
@@ -286,8 +331,10 @@ export function classifyDiagnoseLine(line, fixture = {}) {
     return { runnable: false, reason: "multi-line shell control flow", kind: "skip" };
   }
   if (/^[)\}]|^\|/.test(trimmed)) return { runnable: false, reason: "a fragment of a multi-line command", kind: "skip" };
-  if (trimmed.includes("<")) return { runnable: false, reason: "an unfilled `<placeholder>`", kind: "gap" };
-  if (trimmed.includes("*")) return { runnable: false, reason: "a glob the fixture cannot guarantee", kind: "gap" };
+  // Quoted text is DATA: a `*` inside a sed/awk pattern is not a shell glob.
+  const bare = trimmed.replace(/"[^"]*"|'[^']*'/g, " ");
+  if (bare.includes("<")) return { runnable: false, reason: "an unfilled `<placeholder>`", kind: "gap" };
+  if (bare.includes("*")) return { runnable: false, reason: "a glob the fixture cannot guarantee", kind: "gap" };
   if (/(powershell|Get-CimInstance|Get-NetTCPConnection|taskkill|Select-String|cmd \/c)/i.test(trimmed)) {
     return { runnable: false, reason: "host-specific shell command", kind: "gap" };
   }
@@ -346,7 +393,18 @@ export function classifyDiagnoseLine(line, fixture = {}) {
   }
 
   for (const seg of segments(trimmed)) {
-    const problem = operandCheck(seg, fixture);
+    // When the command guards its own absence (`2>/dev/null`, `|| true`), the fixture
+    // does not have to hold the file: running the command is the check.
+    const tolerant = /\b2>\s*\/dev\/null\b|\|\|\s*true\b/.test(seg);
+    // `git -C vendor/pi-main ...` checks refs in THAT repo, not the fixture root.
+    const repoTok = seg.match(/-C\s+([^\s]+)/);
+    const repo = repoTok ? repoTok[1].replace(/^"|"$/g, "") : null;
+    // `git -C <dir>` names a directory: if the fixture has no such directory the line
+    // cannot be run here, and its 128 is not a verdict about the rig.
+    if (repo && !repo.startsWith("$") && fixture.exists && !fixture.exists(repo)) {
+      return { runnable: false, reason: `\`${repo}\` is not a directory in the fixture`, kind: "gap" };
+    }
+    const problem = operandCheck(seg, fixture, tolerant, repo);
     if (problem) return problem;
   }
   return { runnable: true, reason: "read-only verb, every operand present", kind: "run" };

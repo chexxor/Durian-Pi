@@ -387,6 +387,43 @@ seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 | Research | research-request, competitor-review |
 | An item's branch/worktree never retires; refs pile up; how `staging` landing and operator promotion are supposed to work | branch-cleanup, land, merge, `docs/WORK-ITEM-MODEL.md` (the model), `docs/reviews/branch-lifecycle-llm-agent-teams.md` (round-1 research), `docs/DISPOSITIONS.md` (append-only disposition ledger) |
 
+## `Diagnose` blocks are EXECUTED in CI (`demo/runbook-diagnose.test.mjs`)
+
+ROADMAP 85. Every `## Diagnose (read-only)` fence is run against a throwaway rig — a temp git repo
+(with the item branches the runbook names), a temp store built by `cli.mjs init` + `up`, and the
+repo's `cli.mjs`, `src`, `tools`, `scripts` and `demo` reachable from it. A line is EXECUTED when
+every verb in it is on the read-only allowlist and every operand it names is present in that rig;
+anything else is a NAMED gap, printed with its reason, never a silent pass.
+
+What the fixture supplies, so a runbook's operands are not excuses (item 6330):
+
+- a real `<db>.broker.log`, written by a bounded `serve --max-duration 2`, and the serve's stderr at
+  `.spike/serve.err`; the fixture store also exists at `.spike/store/selfdev.sqlite`;
+- every `rig*.json` spec, `constitution.txt` and `AGENTS.md` (COPIES, so a Diagnose tool that rewrites a
+  file edits the fixture, never the repo), plus the `prompts/` personas and `extensions/` the suite demos read;
+- refs: every `item-<n>` a runbook names, plus `refs/rescued`; ref RANGES (`main..item-1234`) are
+  checked as refs, not paths;
+- the files a line WRITES: a line earlier in the same block that redirects into `merged.txt` makes
+  that file present for the line that reads it;
+- a stand-in `vendor/pi-main` (a shallow clone with `origin/main` and `packages/durable/package.json`)
+  and a `vendor/eval/` directory — the SHAPE the runbook probes is real, the NUMBERS are fixture-shaped.
+
+A command that guards its own absence (`... 2>/dev/null` or `... || true`) RUNS: the runbook expects
+the file may not exist, and exit 0 is the verdict. A command that does not guard it still needs the
+file to exist. A `for`/`while` unit is run only when every `;`-separated command inside it passes the
+allowlist, so a loop cannot smuggle a write into CI.
+
+A line that reads a shell variable the rig never set (`cat "$DB.broker.json"`) or a `git -C <dir>` whose
+directory the rig does not have is a NAMED gap - running it would return a 128 that reads like an answer
+about a rig that was never given.
+
+Still CI-unexecutable (pinned in the demo; it fails if a runbook joins or leaves the set): the host
+shells (`powershell`/`Get-CimInstance`/`taskkill`), live processes, network endpoints, inline `node -e`
+code, and globs. The current set is the 17 files listed in `NOTHING_EXECUTED`: four have no Diagnose section
+at all, four have a section with no fenced command block, one's only command is inline `node -e`, three are
+PowerShell (a host the harness does not have), and five have bash blocks whose every line names a state the
+rig cannot supply.
+
 ## Template
 
 New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROADMAP items **81–88**
