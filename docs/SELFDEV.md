@@ -4581,3 +4581,15 @@ at `:743`). Re-measure every `path:line` before repeating it.
     only when `git merge-base --is-ancestor <ref> refs/heads/main` exits 0 **and** `docs/DISPOSITIONS.md` has no
     KEEP row for it — 22 `landing-20261114-*` scratch refs in this window failed the ancestor test and were left
     in place.
+355. **A landing gate runs in a SCRATCH worktree, and a scratch has no `durig.config.json`.** The config that
+    arms `DURIG_EXTENSIONS` is gitignored (`.gitignore:12`), so the detached worktree `scripts/land.mjs` builds for
+    the gate is a bare checkout: `cli.mjs check` there lists 28 rules, the shared root lists 29 — `ready-ref-stale`
+    is the missing one (measured 2026-11-14, Linux Fedora 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1: one
+    `cli.mjs check --json` in a fresh `git worktree add --detach` vs the root). A seat's `land_my_item` on branch
+    `item-1` (tip `0470697b`) was refused twice by `demo/depplane.test.mjs` for exactly this reason — the branch
+    was merge-clean and docs-only. **Fix in place:** `scripts/land.mjs` now resolves the armed extension list from
+    the repo that owns the landing (env > `durig.config.json` > `.durig/config.json`, the same discovery paths as
+    `src/config.mjs`) and passes it to every gate child, and the report carries `gateRig: {extensions, source}`.
+    Pinned in `demo/land-helper.test.mjs` §10 (the whole demo, 8.6 s): armed → landing green; config removed → the
+    gate demo exits 1, the landing is refused, main does not move. **Read `report.gateRig` before blaming a branch
+    for a gate red.**

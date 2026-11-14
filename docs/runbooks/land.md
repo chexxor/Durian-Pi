@@ -1107,6 +1107,18 @@ of main), `conflicted` (merge-tree exits 1 — needs an author re-cut, `docs/run
 queue row could not be read — the missing fact is named, not guessed), and `in-flight` (the row is still claimed).
 "Ready" is not "verified": the proof is `scripts/land.mjs --changed-suite` green in the scratch.
 
+**The gate must be the SAME rig as the landing repo.** `durig.config.json` is gitignored, so the scratch worktree
+the gate runs in has no config and arms zero extensions; a demo that asserts an extension rule then fails on the
+environment, not the branch (pitfall 355). `scripts/land.mjs` resolves `DURIG_EXTENSIONS` from the repo that owns
+the landing (env > `durig.config.json` > `.durig/config.json`) and passes it to every gate child, and the report
+carries it:
+
+```bash
+node scripts/land.mjs item-42 --changed-suite --json | grep -o '"gateRig":.*'   # {extensions, source}
+```
+
+If `source` says "NO extension armed", a gate red naming an extension rule is the scratch, not the branch.
+
 **The rule that makes it happen on time.** `cli.mjs check` runs the extension rule `ready-ref-stale` (severity
 `error`, so `check` exits 1): a ref that is ready and older than the SLA — default 24 h, override
 `DURIG_SELF_MERGE_SLA_HOURS` — is a finding with the exact landing command as its fix. Measured
@@ -1122,6 +1134,7 @@ node demo/self-merge-plan.test.mjs    # 0.17 s — five refusals and the exact a
 node demo/self-merge-sla.test.mjs     # 0.47 s — every verdict, and staleness as a threshold, on a git fixture
 ```
 
-**What is still owed:** a live fleet run. The mechanism is gated; a real seat conversation has not yet been
-observed calling `land_my_item` on the live rig (the broker was down for this window —
-`node tools/broker-serve.mjs --status`). Waking the fleet is a capacity decision the operator makes.
+**What is still owed:** the live fleet run, on a store the delegate can touch. The mechanism is gated; the first
+observed live `land_my_item` was refused twice by the gate-rig gap above (pitfall 355), now fixed and pinned.
+Waking the 12-seat production fleet is a capacity decision the operator makes (`node tools/broker-serve.mjs
+--start` refuses without `--yes-pm-wakes`).

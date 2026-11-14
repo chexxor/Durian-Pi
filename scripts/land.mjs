@@ -195,6 +195,20 @@ function resolveSlotCount(repoRoot) {
 // sides cannot disagree about what "held", "stale" or "waits" means. Only the blocking sleep
 // stays here: it is a script-local detail, not a rule.
 
+/** Read one key from the config file in `root` (env wins at the caller; this is the fallback).
+ * `DEFAULT_CONFIG_PATHS` comes from src/config.mjs so this resolver cannot drift from the rig's own. */
+function readConfigValue(root, key, names = DEFAULT_CONFIG_PATHS) {
+	for (const name of names) {
+		try {
+			const raw = JSON.parse(readFileSync(join(root, name), "utf8"))[key];
+			if (raw !== undefined && raw !== "") return raw;
+		} catch {
+			/* absent or unreadable: try the next candidate */
+		}
+	}
+	return undefined;
+}
+
 /** Synchronous sleep — land.mjs is a sync script (spawnSync), so the acquire loop blocks. */
 function sleepSync(ms) {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -205,6 +219,30 @@ function sleepSync(ms) {
 const repoArg = option("--repo");
 const discovered = git(process.cwd(), ["rev-parse", "--show-toplevel"]).out;
 const repoRoot = resolve(repoArg ?? (discovered || process.cwd()));
+
+/* THE GATE MUST MEASURE THE RIG THE LANDING RUNS, NOT A BARE CHECKOUT.
+ * `durig.config.json` is gitignored, so the scratch worktree the gate runs in contains none of it:
+ * `cli.mjs check` there arms ZERO extensions and a demo that asserts an extension rule fails on the
+ * ENVIRONMENT, not the branch. Measured 2026-11-14 on Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64,
+ * node v24.22.1: `node cli.mjs check rig.selfdev.json --json` lists 28 rules in a fresh detached worktree
+ * and 29 in the shared root — `ready-ref-stale` is the missing one. A seat's `land_my_item` was refused
+ * twice by exactly this (item #1, branch `item-1`, tip 0470697b).
+ * Fix: resolve the armed extension list from the root that owns the landing and hand it to every gate child. */
+const gateRig = (() => {
+	const env = { ...process.env };
+	let source = "environment: DURIG_EXTENSIONS was already set by the caller";
+	if (!env.DURIG_EXTENSIONS) {
+		const armed = readConfigValue(repoRoot, "DURIG_EXTENSIONS");
+		if (armed) {
+			env.DURIG_EXTENSIONS = armed;
+			source = `the landing repo's config file (read from ${repoRoot})`;
+		} else {
+			source = "NO extension armed: the landing repo has no DURIG_EXTENSIONS in env and no config file — a gate that asserts an extension rule fails on THIS, not on the branch";
+		}
+	}
+	return { env, extensions: env.DURIG_EXTENSIONS ?? null, source };
+})();
+
 if (!existsSync(join(repoRoot, ".git"))) {
 	report({ ok: false, command: "land", error: `${repoRoot} is not a git repository root` }, 1);
 }
@@ -694,7 +732,7 @@ await (async () => {
 		// names). It runs IN THE SCRATCH against the main that scratch forked from, so the change it
 		// classifies is the change being landed — not the state of the shared tree, which is the
 		// measurement error #4436 and the clean-root pre-flight exist to prevent.
-		const wtt = spawnSync(process.execPath, [join(scratch, "tools", "what-to-test.mjs"), "--json", `--base=${mainBefore.out}`], { cwd: scratch, encoding: "utf8" });
+		const wtt = spawnSync(process.execPath, [join(scratch, "tools", "what-to-test.mjs"), "--json", `--base=${mainBefore.out}`], { cwd: scratch, encoding: "utf8", env: gateRig.env });
 		let verdict = null;
 		try {
 			verdict = JSON.parse(wtt.stdout ?? "");
@@ -885,7 +923,7 @@ await (async () => {
 	/* ── helper: run a single test, return { test, exit } ── */
 	function runTest(test) {
 		return new Promise((resolve) => {
-			const child = spawn(process.execPath, [testFile(test)], { cwd: scratch, encoding: "utf8" });
+			const child = spawn(process.execPath, [testFile(test)], { cwd: scratch, encoding: "utf8", env: gateRig.env });
 			let stdout = "";
 			let stderr = "";
 			child.stdout.on("data", (d) => { stdout += d; });
@@ -961,7 +999,7 @@ await (async () => {
 
 	/* ── run serialized tests one at a time ── */
 	for (const test of serializedTests) {
-		const run = spawnSync(process.execPath, [testFile(test)], { cwd: scratch, encoding: "utf8" });
+		const run = spawnSync(process.execPath, [testFile(test)], { cwd: scratch, encoding: "utf8", env: gateRig.env });
 		collectSkips(test, run.stdout);
 		suiteResults.push({ test, exit: run.status ?? 1 });
 		if ((run.status ?? 1) !== 0) {
@@ -1115,6 +1153,10 @@ report(
 		// #5793: what the scratch's environment actually was. A suite result without this field cannot be
 		// read as a measurement of the tree, because a bare scratch is a different tree.
 		scratchDeps,
+		// What rig the GATE actually ran as: which extensions its environment had armed, and where that
+		// came from. A gate measuring a bare checkout is not measuring this repo (the gitignored-config
+		// gap that refused a seat's `land_my_item` twice on 2026-11-14).
+		gateRig: { extensions: gateRig.extensions, source: gateRig.source },
 		dependencyProvenance: scratchProvenance,
 	},
 	0,

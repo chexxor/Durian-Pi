@@ -126,7 +126,7 @@ try {
   // real repo TRACKS that file (so `check-ignore` saying NOT IGNORED is correct there), while this
   // temp repo CREATES it as a fixture for the cap-resolution section. Ignoring it here keeps the
   // fixture's own artefact out of its own preflight; it is a fixture detail, not a `.gitignore` rule.
-  writeFileSync(join(repo, ".gitignore"), "*.sqlite*\n*.sqlite.broker.*\n/.land-scratch-*/\n.durig/\n/item-*/\ndurig.config.default.json\n");
+  writeFileSync(join(repo, ".gitignore"), "*.sqlite*\n*.sqlite.broker.*\n/.land-scratch-*/\n.durig/\n/item-*/\ndurig.config.default.json\ndurig.config.json\n");
   git(repo, ["add", "."]);
   git(repo, ["commit", "-m", "base"]);
   git(repo, ["branch", "-M", "main"]);
@@ -581,9 +581,48 @@ try {
   check("...and feat-l is an ancestor of main",
     spawnSync("git", ["merge-base", "--is-ancestor", featL, "main"], { cwd: repo }).status === 0);
 
+  console.log("\n10. the GATE runs as THIS rig: the armed extension list reaches the scratch (#D314 follow-up)");
+  // `durig.config.json` is GITIGNORED (real repo .gitignore:12), so the scratch worktree a landing
+  // creates has NO config file and arms ZERO extensions. A gate demo that asserts an extension rule
+  // then fails on the ENVIRONMENT, not the branch. Measured 2026-11-14 on the real rig: `node cli.mjs
+  // check rig.selfdev.json --json` lists 29 rules in the shared root and 28 in a fresh detached
+  // worktree (`ready-ref-stale` missing), and a seat's `land_my_item` was refused twice by exactly
+  // that. The lander now resolves the armed list from the repo that owns the landing, passes it to
+  // every gate child, and reports it in `report.gateRig`.
+  mkdirSync(join(repo, "extensions"), { recursive: true });
+  writeFileSync(join(repo, "extensions", "gate-probe.mjs"), "// a fixture extension: armed by the gitignored config\nexport default { checks: [] };\n");
+  git(repo, ["add", "extensions/gate-probe.mjs"]);
+  git(repo, ["commit", "-m", "fixture: an extension the gate should be armed with"]);
+  const gateDemo = [
+    'const armed = process.env.DURIG_EXTENSIONS || "";',
+    'console.log(armed ? `gate rig armed: ${armed}` : "gate rig NOT armed");',
+    'process.exit(armed ? 0 : 1);',
+    "",
+  ].join("\n");
+  const featM = feature("feat-m", "demo/gate-rig.test.mjs", gateDemo);
+  writeFileSync(join(repo, "durig.config.json"), JSON.stringify({ DURIG_EXTENSIONS: "extensions/gate-probe.mjs" }));
+  check("the config file is gitignored in the fixture, as it is in the real repo",
+    spawnSync("git", ["check-ignore", "-q", "durig.config.json"], { cwd: repo }).status === 0);
+  const armed = landClean("feat-m");
+  check("the gate child SEES the armed extension (the demo that exits 1 without it exits 0)", armed.code === 0, armed.raw.slice(0, 300));
+  check("...and the report names which extensions the gate ran with",
+    armed.report?.gateRig?.extensions === "extensions/gate-probe.mjs", JSON.stringify(armed.report?.gateRig));
+  check("...and says where it came from", /config file/.test(armed.report?.gateRig?.source ?? ""), armed.report?.gateRig?.source);
+  rmSync(join(repo, "durig.config.json"), { force: true });
+  const featN = feature("feat-n", "n.txt", "from feat-n\n");
+  const bareMain = mainSha(repo);
+  const bare = landClean("feat-n");
+  check("with the config file GONE the gate is NOT armed, and the same demo refuses the landing",
+    bare.code !== 0, bare.raw.slice(0, 300));
+  check("...and the gate child says it was un-armed rather than pretending the rig is fine",
+    /gate rig NOT armed/.test(bare.raw), bare.raw.slice(0, 300));
+  check("...and main did NOT advance on the un-armed run", mainSha(repo) === bareMain, `${bareMain} -> ${mainSha(repo)}`);
+  check("...and feat-n did not land",
+    spawnSync("git", ["merge-base", "--is-ancestor", featN, "main"], { cwd: repo }).status !== 0);
+
   console.log(
     failures === 0
-      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), WAITS WITH PRIORITY for a live genlock holder, and refuses a path it would clobber / a conflict / a failing suite, while REPORTING the dirt it cannot touch (#5347)"
+      ? "\nPASS - the landing helper merges in a scratch worktree, fast-forwards main only when clean, holds an EXCLUSIVE lock across the FF (released on success and failure), WAITS WITH PRIORITY for a live genlock holder, arms the gate with the landing repo's extensions, and refuses a path it would clobber / a conflict / a failing suite, while REPORTING the dirt it cannot touch (#5347)"
       : `\nFAIL - ${failures} check(s) failed`,
   );
 } catch (err) {
