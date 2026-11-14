@@ -1,0 +1,9 @@
+265 ADR entries; 2 number(s) used more than once.
+  D265: 2 entries
+    line 2330: — A standing `security` seat, not only an external consult (delegate, 2026-10-17
+    line 11783: — 2026-11-12T01:5xZ: **a work item's branch is a temporary isolation, not a name
+  D266: 2 entries
+    line 2816: — TUI cost/spend pricing comes from a per-provider EXTENSION; unavailable, never
+    line 11833: — 2026-11-12T06:5xZ: **claim order is a declared POLICY with a name, a default t
+consequence: a citation like 'see D115' names two different decisions, and a landing pass
+minting 'the next free number' can mint one that already exists (ROADMAP minting rule).
