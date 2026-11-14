@@ -3,9 +3,9 @@ runbook: attach-a-gate
 symptom: "I know a row must wait on another row, but I am not the sender or the recipient of it, and every way of writing that constraint is refused or silently dropped"
 writes: false                    # the procedure routes rows; it never opens a Harness or a store
 precondition: "none"
-last_verified: 2026-11-10
+last_verified: 2026-11-11
 verified_by: architect
-evidence: "item #6225; `node tools/probes/revise-authority-boundary.mjs` exit 0 in worktree item-6185 @ f192f543; `node demo/queue-held-gates.test.mjs` exit 0 (42 held rows with NO recorded gate in the fixture)"
+evidence: "item #6782; `node tools/probes/gate-authority-census-6782.mjs <dump>` exit 1 (63 dead-gate rows, 95 parked-gate rows, 0 gated/ungated events) at HEAD 35001c3a; `node tools/probes/gate-write-surface.mjs` exit 0; `node tools/probes/gate-reference-validation.mjs` exit 0"
 check_rule: null                 # nothing re-tests gate reachability after the fact — see Evidence
 ---
 
@@ -67,10 +67,20 @@ Pick by whether you are a party.
 Gate hygiene, whichever route you take:
 
 - every id in `blockedBy` must **exist and be non-terminal**. A dangling id is inert
-  (`workable` returns `{workable: true}`, `src/rig.mjs:312`); a `cancelled` id blocks forever
+  (`workable` returns `{workable: true}`, `src/rig.mjs:326-337`); a `cancelled` id blocks forever
   (`gate-cancelled:#id`).
-- never gate two rows on each other. `normalizeBlockedBy` (`src/rig.mjs:355-380`) checks shape only —
+- never gate two rows on each other. `normalizeBlockedBy` (`src/rig.mjs:434-451`) checks shape only —
   no existence check, no cycle check. A cycle starves both rows with no exit.
+- there is **no removal verb**: `blockedBy` is written at mint and never cleared anywhere in
+  `src/rig.mjs` (0 removal sites, measured 2026-11-12). A row stranded on a dead reference has no legal
+  exit except `cancel_work` on the dependent, which orphans every id naming it. The count of such rows is
+  a state, not a guess: run the census below.
+
+## If the gate is already there and must come off
+
+Measured on the live store (read seam: `DURIG_DB=selfdev.sqlite node cli.mjs queue --no-body > dump.json`, then `node tools/probes/gate-authority-census-6782.mjs dump.json` → exit 1): of 378 gated rows, **156** are gated on a target that can never resolve — 63 on a `cancelled` row, 95 on a row that is `held` or `deferred`. Today no verb can clear any of them: `blockedBy` is written at mint and never un-written (`tools/probes/gate-write-surface.mjs`, exit 0, 0 removal sites), and no row carries a `gated`/`ungated` event (0 of 6,877). The rule the fleet is moving to (`docs/reviews/architecture-gate-authority-6782.md`, amending D261): a **party** may clear a gate id when the target is terminal-cancelled, or when the target is parked with **no authored block** and its `reviewBy` is absent or past. Removing a live, authored gate is still a scope ruling for `lead`, and every removal writes `{event: "ungated", by, id, reason, at}`.
+
+Until that verb exists, the honest move is: mint a row addressed to the party who can clear it, saying which id and why. Do not cancel the dependent to make the gate disappear — that is the terminal recovery this ruling exists to replace.
 
 ## Verify
 
@@ -79,6 +89,13 @@ The boundary this runbook describes is pinned by a probe:
 ```bash
 node tools/probes/revise-authority-boundary.mjs
 ```
+
+Measured on 2026-11-12 in the `item-7038` worktree (`@earendil-works/pi-durable` 1.3.0 from the lockfile):
+`node tools/probes/gate-predicate-computability-7038.mjs` -> **exit 1** (mint accepted `[9999]`, a self-gate
+and a gate on a cancelled row; no removal path exists), and
+`node tools/probes/gate-authority-census-7038.mjs` -> **exit 1** with 7202 rows: 428 held, 265 without an
+authored block, 24 of those with pm not a party, 246 gated non-terminal rows, **19** gated on a cancelled
+id, 0 dangling, 0 self-gates, 0 cycles. Green means zero stranded references, not "the verb exists".
 
 Expected: exit 0, and the six lines read as — coordinator revise REFUSED; both parties revise OK;
 sender `revise_work` with `blockedBy` REFUSED **and the body unchanged**; a `done` row answered by
@@ -92,6 +109,15 @@ DURIG_DB=./selfdev.sqlite node cli.mjs show <new-row-id>
 ```
 
 Expected: `blockedBy=<ids>` present, not a sentence in the body.
+
+The stuck-gate census, if you need the fleet-wide picture:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --no-body > /tmp/queue-dump.json
+node tools/probes/gate-authority-census-6782.mjs /tmp/queue-dump.json
+```
+
+Expected today: exit 1 with the two gaps (no gate-edit verb; `legacyBlock` invents resolver "pm"). It goes GREEN only when a `gate_work` verb exists, the rig writes an `ungated` event, and the pm-inference line is gone from `src/queue-lifecycle.mjs:256`.
 
 ## If it fails
 

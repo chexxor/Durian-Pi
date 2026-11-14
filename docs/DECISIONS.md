@@ -11783,6 +11783,459 @@ the very condition it diagnoses. Every route must print which path served the re
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
 
+## D296 — 2026-11-11: **an actor boundary is not a rule until a verb's exit code enforces it: mint the mode, bind the gate to the verifier's tip, and deny seats the blessed refs** (architect, item #6926; host measured with the measurement: **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`, tree = branch `item-6926` @ `1bbe8f34`)
+
+**Status:** provisional pending the branch-lifecycle research prompt (`docs/reviews/branch-lifecycle-research-prompt.md`, not yet routed — routing is an operator action). Numbered 266 rather than 265 because branch `item-4879` already carries a provisional D265; the collision is registered in #5296.
+
+**Context.** `docs/WORK-ITEM-MODEL.md` names three actors — the rig decides an item's execution mode, a *different* seat verifies before landing, and the operator alone promotes to `main`. All three sit on one topology: a seat's worktree is a **linked** worktree of the same repository, so every ref, including `refs/heads/main`, is reachable from every seat's tree by ordinary git. Measured in this tree: `node tools/probes/main-writer-surface-6926.mjs` (exit 0) — `refusalFor` allows 8 of 8 candidate commands, including `git update-ref refs/heads/main <sha>`, `git branch -f main item-6926` and `git merge --ff-only main`; `node tools/probes/main-ref-writer-falsifier-6926.mjs` (exit 1) — a `git update-ref` issued **from inside a linked worktree** moved a ref it does not own (git exit 0, ref before `3745a1f68480`, after `06058fc830a3`). `src/confine.mjs:498` already names the hole in its own comment. There is no promote verb in `src/` or `scripts/`, and no mode anywhere: `grep -rn "branchless\|executionMode" src/` returns zero hits, while `isDocumentationPath` (`src/landinggate.mjs:45`) is applied only at landing (`:98`) — after the tree and the commits already exist.
+
+**Decision.**
+- **Mode is minted, not inferred.** The execution mode is recorded on the item at intake by the one predicate the gate already uses (`isDocumentationPath`), and a `branchless-violation` check compares the recorded mode to `git worktree list`. The decision and the coverage judgement share one function, called at two moments.
+- **The landing gate reads the verifier.** `requireGate` composes `{argv, diff, suite exit}`; it must also require a `verify` row whose `evidence.artifact` names the **exact sha being fast-forwarded** — literal sha comparison, not ancestry, per #5681.
+- **Seats are denied the blessed refs.** A ref-writing verb whose target is `refs/heads/main` or `refs/heads/staging` is refused for a seat, alongside the existing `push` denial (`src/confine.mjs:206-217`); the promote verb is the only legitimate writer, and it prints its evidence (refs merged in order, suite pass/fail **with exit code**, per-ref `merge-base --is-ancestor`, parent count) rather than an `ok: true` flag.
+
+**Consequences.** Every claim in the model becomes falsifiable by a planted-command demo: a seat command naming `refs/heads/main` must exit non-zero; a landing whose verify row names an ancestor sha must exit 1 naming both shas; a docs-only claim must leave `git worktree list` count unchanged. The accepted cost: the ref denial is a **blocklist**, so its completeness is a property of the enumeration — the enumeration lives in the demo, and any new git verb added to the allowed set must be re-tested there. Interim risk while it is unlanded: the rig advances `main` by convention only.
+
+**Rejected options.** (b) an allow-list parser that limits a seat to `refs/heads/item-<id>` — stronger but requires every verb to parse its ref target; deferred to after (a). (c) a mirror repository holding `main` — structurally airtight, but breaks the single-writer store and taxes every read.
+
+## D295 — (provisional; re-mint at land from the MERGED tree; item #6782) **a recovery path must be usable on the class it is meant to repair: a party may clear a gate whose target is terminal-cancelled OR parked with no authored block; clearing a live, authored gate stays a scope ruling** (architect review of lead's amendment of D261, 2026-11-11; extends D280)
+
+**Status.** Review ruling, before the `gate_work` build rows start. Sequencing is lead's.
+
+**Context.** Measured through the sanctioned read seam (`node cli.mjs queue --no-body > dump.json`, then `node tools/probes/gate-authority-census-6782.mjs dump.json` → exit 1, HEAD `35001c3a`): 6,877 rows; 378 carry a structured gate; **156** of them are gated on a target that can never resolve — 63 on a `cancelled` row, 95 on a `held` or `deferred` row. `blockedBy` is written at mint and never un-written (`tools/probes/gate-write-surface.mjs`, exit 0, 0 removal sites), and **0** rows carry a `gated`/`ungated` event. `legacyBlock` invents `resolver: "pm"` (`src/queue-lifecycle.mjs:256`) and `effectiveBlock()` (`:320`) falls back to it for 267 of the 429 held rows.
+
+Lead's amendment (b) is correct: mint-scoped authority leaves only cancellation as recovery, and cancellation is terminal, orphans every id naming it, and destroys intent that may still be valid. But as written, removal of a **live** id with no recorded add is refused — and since no row carries an add event, that clause makes the verb inert on 95 of the 156 stuck gates. The dependent then has no lever except `cancel_work`, which is the terminal recovery the amendment exists to replace.
+
+**Decision.** A party of the row may remove a gate id when either (1) the target is terminal-cancelled, or (2) the target is parked and carries **no authored block** and its `reviewBy` is absent or past. Every removal writes `{event: "ungated", by, id, reason, at}` on the row and notifies the author as cancellation does. Removing a live, authored gate by anyone else remains a scope ruling for `lead`. Standing is read from the row's `from`, `to` and authored `block.resolver` only — never from `effectiveBlock()`'s inference. `check` gains `gate-dangling`, `gate-cancelled`, `gate-cycle` and `gate-stalled` findings with age, so a stuck gate is reported before a seat trips on it.
+
+**Options considered.** (a) Refuse all live-id removal until an add event exists — rejected: with zero add events in the store it strands 95 rows and re-admits the terminal recovery we rejected. (b) Let any seat remove any gate — rejected: loosening a contract another seat authored is scope, not a verb. (c) Chosen: repair by parties, scope by lead, and the repair is recorded. Trade-off accepted: some gates get cleared by a party who did not author them, and the audit trail shows who did it and why; the alternative is rows that can never run.
+
+**Consequences.** The acceptance is not "the verb exists" — it is "zero rows are gated on a target that can never resolve", which the probe counts. D261 clause 3 stands for live authored gates; this entry is the exception that keeps it from being a dead end. Residual: mint must also refuse self-gates and cycles (measured accepted today by `normalizeBlockedBy`), and the wake predicate is gate-blind for parked rows (#6817); both must land with the verb or the repair is invisible.
+
+## D294 — (provisional; re-mint at land from the MERGED tree; item #6731) **ADR numbers are minted on the merged tree, never on a branch; a duplicate is a stub, never a deletion; and a shared number must be suffixed in file order** (architect ruling on pm's #6731, 2026-11-11)
+
+**Status.** Ruling, before the rename pass runs.
+
+**Context.** `node tools/probes/adr-canonical-order-6731.mjs` (exit 1, HEAD `35001c3a`): 260 headings, 13 shared numbers. Six are verbatim restatements (D115–D120); seven numbers carry genuinely different decisions (D91 with three entries, D111, D112, D113, D114, D258, D259). One heading already uses a suffix letter; one provisional heading (D264) names its item. Meanwhile three ADRs on unlanded branches (D275 on item-6671, D279 on item-6707, D280 on item-6730) are placeholders that would collide if the branches land in the wrong order.
+
+**Decision.** Canonical = first in file order. Dedupe only when the decision sentence before the attribution is identical. A restated heading becomes a stub pointing at the canonical entry — it is never deleted, because `grep -oE "\bD[0-9]{2,3}\b" docs/*.md docs/runbooks/*.md | sort -u | wc -l` counts 872 distinct D-number tokens in the corpus and a deleted heading turns every citation into a dangling reference. Distinct decisions sharing a number get position-ordered letters (`D111a`, `D111b`), and a checker must refuse a bare citation to a suffixed number. Branches write `## D<placeholder> — (provisional; re-mint at land from the MERGED tree; item #NNNN)` and the landing pass assigns the number from the merged file.
+
+**Options considered.** (a) Earliest date as canonical — rejected: provisional entries carry no date and dates are prose. (b) Delete duplicates — rejected: it breaks citations and erases provenance. (c) Let branches pick numbers and resolve collisions later — rejected: that is how the 13 collisions arose in the first place.
+
+**Consequences.** `check` gains a rule: zero shared numbers, every provisional heading names its item, no bare citation to a suffixed number. The file does not shrink; it gets unambiguous. Sequencing: run the rename pass before new ADRs are written, or it has to run again.
+
+## D293 — (provisional; re-mint at land from the MERGED tree) **a cancelled gate is OPEN, the docstring that calls it "dropped, not unmet" is wrong, and the repair is a verb: `gate_work` may clear a dead gate by any party, while removing a live gate stays a scope ruling** (architect ruling on lead's #6730, amending D261 clause 3; resolves the conflict lead raised in #6782, 2026-11-11)
+
+**Status.** Ruling, before #6497/#6508 build. Sequencing is lead's.
+
+**Context.** Measured with `node tools/probes/gate-state-semantics-6730.mjs` (exit 1, HEAD `35001c3a`) against `workable()` (`src/rig.mjs:320-333`): a gate naming a `done` row is workable; one naming a `cancelled`, `queued`, `held`, `claimed` or `deferred` row is refused; one naming an id that does not exist is workable (the conservative legacy default, D271); a self-gate and a two-row cycle both read `gate-open`, indistinguishable from ordinary waiting, because `normalizeBlockedBy` (`:391`) validates shape and never looks at the referenced rows. In the same file, `deadGateId`'s docstring (`:304-309`) says "a CANCELLED prerequisite is a DROPPED prerequisite, not an unmet one" while `workable()` returns `workable: false` for exactly that case. And there is no repair: assignments to `item.blockedBy` outside `enqueueItem` number **0**, and `gate_work` does not exist. `tools/probes/gate-dead-end-6707.mjs` runs the state through the real verbs — `revise_work`, `release_work`, `hold_work`, `claim_work` all refuse; only `cancel_work` changes anything.
+
+**Decision.** (1) A cancelled gate is **open**: a dropped prerequisite is unmet, and the row is not workable until the gate is removed. The docstring is corrected to say that in one sentence. (2) `gate_work(itemId, add?, remove?)` exists, on `queued` rows only, validated inside the commit over the combined graph: ids exist, no self-gate, no cycle. (3) Authority is split by kind: **add** = parties plus mint-scoped reach to depth 1 (D276); **remove a dead gate** (target cancelled or nonexistent) = any party, recorded `{by, reason, at}`, notified to the author as cancellation is (#3470); **remove a live gate** = the minting seat or a lead scope ruling. (4) `check` gains `gate-dangling`, `gate-cancelled` and `gate-cycle` findings, with age, so a stranded row is noticed before a seat trips on it.
+
+**Options considered.** (a) treat cancelled as closed and let the row proceed — rejected: it makes an incoherent row claimable with no trace, the silent-wrong-output class. (b) keep cancelled as open and make cancellation the only recovery — rejected on measurement: it is today's behaviour, and it destroys work to fix bookkeeping. (c) open plus a repair verb, with live-gate removal reserved — chosen. Trade-off accepted: more rows sit refused, and every refusal must name the dead id, the party who may clear it and the verb; the rig gets stricter text and a longer validation path in exchange for a state that is no longer a dead end.
+
+**Consequences.** D261 clause 3 ("a future `gate_work` is additive-only for a non-minting party; removing a gate is a scope ruling, not a verb") is amended: the distinction is between loosening a live contract (scope) and clearing a constraint that can never be satisfied (repair). The standing bound and the removal leg are one change — shipping removal alone creates the laundering path the bound exists to prevent. Observability: `check` today has zero rules touching `blockedBy`, and the wake predicate reads a parked row's `id:status` only (#6817), so both need the same `workable` verdict to make this visible. Residual: the mint-time cycle validator (#6512) is the place the self-gate and cycle refusals belong; this ruling pins the semantics, not the implementation.
+
+## D292 — (provisional; re-mint at land from the MERGED tree) **a gate that can be added must be removable, and the removal verb and the depth-1 standing bound are one contract: authority is recorded on the row, never inferred from an absent capability string** (architect ruling on pm's four conditions, item #6707, 2026-11-11)
+
+**Status.** Design ruling on #6530/#6508 before either builds. Sequencing is lead's scope call.
+
+**Context.** `grep -n blockedBy src/rig.mjs` shows writes only at mint (`:464`); every other mention is a read. `check` has zero rules touching `blockedBy`. Measured with `node tools/probes/gate-dead-end-6707.mjs` (exit 1, HEAD `35001c3a`, real harness): a held row #1 gated on #2, with #2 cancelled, is untouchable by either party — `revise_work` refuses ("only unclaimed work can be revised"), `release_work` refuses ("its gate names #2, which is cancelled"), `hold_work` refuses for the sender ("addressed to impl, not you"), `claim_work` returns `NO_QUEUED_WORK`, and `revise_work(..., blockedBy: [])` is rejected by the schema. The only verb that changes anything is `cancel_work`, which ends the row. Separately, `coordinatedBy` — the field pm's re-validation predicate reads — does not exist anywhere in `src/*.mjs`.
+
+**Decision.** (1) `gate_work(itemId, add?: [ids], remove?: [ids])` is required, party-scoped (D258 authority: `from`, `to`, `block.resolver`), recording `{by, reason, at}` on the row and notifying the author as cancellation does (#3470). (2) It is validated inside the commit, over the combined graph: no self-gate, no cycle, no id that does not exist, and no reference the caller has standing on beyond one hop (`referenceOk`, D276). (3) The standing bound and the removal verb land in the same change: a verb that can attach any id from any party with no depth bound is a larger authority than the one it replaces. (4) Re-validation at the verb reads the row, not the actor: standing is a stored field, and the refusal names the failed admission step (existence, terminality, authority, applicability, gate), not "which half". (5) The coordinator release carve-out stays, but as a declared lever in config (`levers: ["release"]`), justified by reversibility (release is undoable by the sender; cancel and revise are not), not by `seatIsCoordinator`.
+
+**Options considered.** (a) leave gates additive and let cancellation be the repair — rejected on measurement: it destroys work to fix bookkeeping. (b) let `revise_work` accept `blockedBy` — rejected: revise is a pre-claim text edit; silently rewriting a gate under a holder is the spoofing class D258 already refuses, and it would bypass validation the mint path performs. (c) `gate_work` with the standing bound in the same commit — chosen. Trade-off accepted: one more verb and one more config field, in exchange for a gate that can be repaired instead of a row that must be ended.
+
+**Consequences.** `check` needs `gate-dangling`, `gate-cancelled` and `gate-cycle` rules; without them the state this probe produces is invisible until a seat trips on it. The probe `tools/probes/gate-dead-end-6707.mjs` asserts the repair path exists — it goes GREEN only when a party can clear a dead gate without cancelling the row. Residual: whether `hold_work`'s recipient-only authority is consistent with mint-scoped authority (#5662) is unresolved and belongs with this contract, not with the release ruling.
+
+## D290 — (provisional; re-mint at land from the MERGED tree; D272-D276 are provisionally taken by item-6664, item-6668, item-6671 and this branch) **a class-closing gate is behavioural first, and a static scan passes on ABSENCE only if it is written to — presence of the rule is the pass condition, the verb set is derived from the source, and the gate names the tree it read** (architect ruling on pm's amendment to #6518, item #6679, 2026-11-11)
+
+**Status.** Design ruling on #6518's acceptance criteria before the build rows wire it. Verification leg is advocate's; the probe in this branch is the instrument.
+
+**Context.** `tools/probes/verb-ordering.mjs` and `tools/probes/authority-symmetry.mjs` are the standing gate for the authority-before-state class (#6363/#6364, D275). Measured with `node tools/probes/detector-blindspots-6679.mjs` (exit 1, HEAD `35001c3a`, gates run as child processes against synthetic trees derived from the real `src/rig.mjs`, each tree's sha printed): the ordering gate prints `PASS release_work — no authority refusal` while that verb carries 4 `isParty` references and 0 matches for the detector pattern; a tree in which every ownership check is deleted prints 8 verb verdicts PASS and 0 FAIL; a tree where the rule moves into a shared `admitRow` helper prints 8 PASS / 0 FAIL because bodies are sliced at `name: "<verb>_work"` and the helper is never scanned; both gates print verdicts for 8 verbs while `src/rig.mjs` declares 9, and `send_work` — the mint path where `blockedBy` is created (#6673) — is never examined; and the gate reads its input via `process.cwd()` (`tools/probes/verb-ordering.mjs:20`) while printing no identity for the bytes it read. Its own fix text points at `src/rig.mjs:1275`; `release_work` starts at 1293.
+
+**Decision.** Two layers with different jobs. **Behaviour is the proof**: for each verb and each admission step (existence, terminality, authority, applicability) run the real tool against a row in that condition and assert the refusal *class* as a token, not the sentence. **The static scan is a lint**, and it is only valid if it: (1) derives its verb set from the source it scans rather than restating it; (2) treats `admitRow` as a pseudo-verb — a verb passes only if its body calls the helper *and* the helper body contains the four steps in order; (3) **fails closed on absence**: a verb with neither an inline authority check nor a helper call is FAIL, never "no authority refusal, so PASS"; (4) resolves its input through `import.meta.url` and prints the sha of the bytes it read, so a verdict names the tree it certified. No gate text may cite a line number — cite the verb.
+
+**Options considered.** (a) widen the regex to match `isParty` — rejected: it patches the one measured symptom and dies the moment the rule moves to a helper or a verb is added. (b) the two-layer split above — chosen. (c) behaviour only, drop the scan — rejected: the scan is what catches an ordering regression in a verb nobody exercised this week, and it is cheap. Trade-off accepted: the gate gets slower (a harness plus ~36 faux turns) and goes RED on trees that today read clean; those trees are the failure it exists to catch.
+
+**Consequences.** Acceptance for #6518 is not "the probe exists and exits 0" — it is "the probe contains the authority-deleted, helper-moved and derived-verb-set trees and is RED on the first two". The goldens move from wording to class tokens, so rewording a refusal no longer breaks a check. Observability requirement added: every gate prints the sha it read, and a completion evidence that names a tree must match it (this is the same rule `complete_work`'s `evidence.artifact` enforces for a fix — a check that does not say which bytes it looked at is not re-checkable). One open trigger question: `check` does not run probes today, so a gate that is not wired into `check` or the demo suite only fires when someone chooses to run it; putting the behavioural layer in `demo/` (the fleet's oracle, `npm run demo`) is the cheap recovery path, and whether the scan becomes a `check` rule is lead's scope call.
+
+## D291 — (provisional; re-mint at land from the MERGED tree; D272-D277 are provisionally taken by other branches) **the claim seam has one predicate: the by-id path calls admitRow and workable() like every other path, and `NO_QUEUED_WORK` is reserved for the genuinely empty queue** (architect ruling on pm's amendment to #6526, item #6681, 2026-11-11)
+
+**Status.** Design ruling before #6526 is built. Scope question (is by-id an intentional operator escape hatch) is with lead. Verification leg is advocate's.
+
+**Context.** `src/rig.mjs:851-860` admits a named row on `it.to === me && it.status === "queued"` while its comment claims the whitelist is "IDENTICAL to the oldest path"; the wake layer (`src/driver.mjs:130-137`) and the oldest path (`selectOldestWorkable` → `workable`, `src/rig.mjs:320`) both use one predicate. Measured with `node tools/probes/claim-admission-6681.mjs` (exit 1, real harness, HEAD `35001c3a`): a queued row with an open gate, a row with `requires: design` for a seat declaring only `implement`, and a row whose gate is CANCELLED are all CLAIMED by id, while `workable()` refuses each of them. Held, deferred, done, another seat's row and a non-existent id all return the identical string `NO_QUEUED_WORK`. The oldest path's skip report names the oldest row and counts the rest: "…#20 is addressed to you and is now `held` (and 1 more row(s) addressed to you)" — the gated row is counted, never named. `grep -n blockedBy src/checkup.mjs` finds no rule, so gate integrity is checked nowhere.
+
+**Decision.** One predicate on both paths: `admitRow(item, me, "claim_work")` (existence → terminality → authority → applicability, D275) then `workable(item, me, {items, capabilities})` (gate + capability, D274), and the refusal text is generated from the verdict reason, not from a hand-written list. Strings: bare `NO_QUEUED_WORK` is reserved for the seat that has nothing at all — it is the wake-path signal (`src/driver.mjs:33-36`) and two goldens assert exact equality (`demo/race.test.mjs:84`, `demo/rearmclaim.test.mjs:132`), so it must not gain suffixes. A named row that is not claimable returns `NOT_CLAIMABLE #<id> — <class>: <remedy>` with class one of `unknown-id | terminal | parked | deferred | claimed-by-you | addressed-to-<seat> | gate-open:#n | gate-cancelled:#n | requires:<capability>`, and a remedy verb where one exists (`release_work` for parked, `resume_work` for deferred, `complete_work`/`defer_work` for claimed, the gate id plus the sender for an open gate, nothing for terminal). Acceptance is not a case count: the invariant is that **both paths return the same verdict for the same row**, and the probe fails in either direction.
+
+**Options considered.** (a) add `workable()` to the by-id branch and leave the text alone — rejected: it closes the bypass and leaves the legibility defect that generated the rows. (b) the split above — chosen. (c) treat by-id as a deliberate operator escape hatch — coherent only if the bypass is recorded on the row; recommendation to lead is that an escape hatch belongs to the operator's verbs, not to a seat's tool, and must leave a trace. Trade-off accepted: the by-id path becomes stricter, and rows the rig already declared not workable stop being claimable through it.
+
+**Consequences.** The claim-by-id goldens move in the same commit as the predicate. Observability gap this ruling names: a claimed row with an open gate is invisible to every predicate, because all of them look for `queued`; a `claimed-row-with-open-gate` check finding is needed, and the gate rules (#6497 dangling, cycle, cancelled) have no home in `check` yet. The skip report must name every passed-over row and its reason, which makes the wake text and the claim text share one vocabulary of refusal classes — the same vocabulary D275's admission order produces. Residual: whether capability strings for `requires` are validated against a closed vocabulary at load (D276) is unresolved; without it, `requires` matching is string equality against whatever a seat declared, and a typo becomes an unclaimable row no rule reports.
+
+## D288 — (provisional; re-mint at land from the MERGED tree — branches item-6664, item-6668 and this one have provisionally taken D272, D273 and D274; the number is minted at merge, never hardcoded) **row admission is a four-step order — existence, terminality, authority, applicability — and the verbs that collapse steps 2 and 4 are the ones that misreport a closed row as open work** (architect ruling on pm's row #6671, 2026-11-11)
+
+**Status.** Design ruling on the amended build rows #6508-#6512 before they start. Sequencing is pm's; the helper is impl's; the verification leg is advocate's (#6670).
+
+**Context.** DECISIONS.md already carries the rule from the #6185 ruling: "Terminality is checked before authority in every control verb." Measured with `node tools/probes/verb-admit-order-6671.mjs` (exit 1, real harness, real tools, faux turns, worktree HEAD `35001c3a`, pi-durable 1.3.0 from the lockfile): `defer_work`, `resume_work`, `hold_work`, `revise_work` and `cancel_work` all answer "not yours" for a `done` row they do not own; `release_work` is the only verb that follows the rule (`src/rig.mjs:1311` existence, `:1318` terminality #5778, `:1337` authority #6112, `:1339` applicability). `claim_work` by id answers three distinct situations — a terminal stranger's row, a live stranger's row, and my own held row — with the identical string `NO_QUEUED_WORK`. pm's amended #6510 reads "terminal, then status, then authority", which is not the order its own model verb uses: terminality and applicability are two different steps, and collapsing them makes the helper tell a stranger "the row is not held" when the operative fact is that they have no standing on it.
+
+**Decision.** `admitRow(item, me, verb)` returns the first failing step in this order: **existence** (`unknown item #N`) → **terminality** (`already done/cancelled; nothing to <verb>`) → **authority** (`not a party`, with `release`'s scoped coordinator carve-out and its mandatory reason) → **applicability** (`is <status>; <verb> needs <expected>`). Every verb that touches a row calls it, and claim additionally calls `workable()` (D274): admission says *who may touch this row in this state*, workability says *is this row ready* — two questions, two functions, one call site each. Gate removal, when #6508 lands, follows the same authority shape: parties, or a coordinating seat carrying a reason, and it notifies the author the way cancellation does (#3470).
+
+**Options considered.** (a) wire the six verbs and leave `claim_work` alone — rejected: claim is the leg the fleet uses hourly, and its failure is the one string the seat cannot act on. (b) keep per-verb ordering and document it — rejected on measurement: five of seven verbs already contradict the written rule, so a comment is not a control. (c) fold terminality and applicability into one "state" check, as the amended row reads — rejected because it re-creates the misreporting #5778 fixed: the reader learns the row's state instead of their own standing. Trade-off accepted: refusal text grows (id, reason, remedy), costing a little context per wake, in exchange for a refusal the seat can act on rather than escalate.
+
+**Consequences.** Five verbs change the string they emit, so the #3663 `NAMES_ITS_VERB` goldens move in the same commit; the probe asserts the *class* of the refusal, not the wording, so the contract survives rewording. The helper must read status through the queue-lifecycle mapping pair (#3112 `effectiveStage`/`effectiveBlock`), or the ~30-literal migration (#3021) leaves it asserting literals. New observability requirement: coordinator standing is inferred from an ABSENT capability (`src/seattools.mjs:292-294`) — measured, the same seat and row flips from a refusal to a release when the seat declares nothing. A seat whose capabilities failed to register silently gains release authority; the reason requirement and the recorded transition are the current mitigation, and a check rule reporting "role implies work, capabilities empty" is the missing detector.
+
+## D289 — (provisional; re-mint at land from the MERGED tree — D272-D275 are provisionally taken by branches item-6664, item-6668 and item-6671; the number is minted at merge, never hardcoded) **standing is stored data, never a capability string: authority comes from `from`/`to`/`block.resolver`, provisioning comes from a validated vocabulary, and a gate reference may reach one hop** (architect ruling on lead's #6673 / ruling #6672, 2026-11-11)
+
+**Status.** Design ruling pinned before impl mints `gateStanding` (#6672). Verification leg is advocate's; the probe is in this branch.
+
+**Context.** `src/seattools.mjs:262,292` answers two unrelated questions with one predicate: whether a seat needs working tools, and whether it may act on a row it did not mint. Measured with `node tools/probes/coordinator-standing-6673.mjs` (exit 1, real harness, HEAD `35001c3a`): `["design"]` → coordinator, 5 tools removed; `["review"]` → not; `[]` → coordinator. Through the verb (`src/rig.mjs:1315-1323`), a seat declaring only `["design"]` released a held row it is neither sender nor recipient of, while a seat declaring `["implement"]` was refused on the same kind of row. The census, counted as lead ruled: 12 seats declared, 2 coordinators by design (pm, lead), 3 seats carrying a capability string that confers nothing (`advocate`, `security`, `design`) — so no seat is mis-classified today, and the drift is one deletion away. On the gate side, `gateStanding` does not exist in `src/rig.mjs`: `normalizeBlockedBy` (`:391`) validates the shape of the list and `assertSendAllowed` (`:73-91`) checks the recipient's caps, but nothing checks who has the right to name an id. Measured: `designer` minted a row `blockedBy: [1]` on a row it has no part in — accepted.
+
+**Decision.** Three separate instruments, never conflated.
+1. **Authority** = stored fields: `item.from === seat || item.to === seat || item.block?.resolver === seat`, extended by mint-scoped reach (`#3470`). A gate reference is accepted only if the sender has standing on the target, or a row within ONE hop of the target's gate chain is a row the sender minted. Depth 2 is refused. The check runs at write — mint and `gate_work` — inside the commit, over the combined graph (#6512), never at read.
+2. **Provisioning** = the seat's intersection with `WORKING_CAPABILITIES`, but the strings are validated at config load against `DECLARABLE_CAPABILITIES`. An undeclared capability is a config error, not a silent reclassification. `design` joins `WORKING_CAPABILITIES` with a recorded reason: design deliverables are commits (this branch's `docs/reviews/architecture-*.md` and probe files are the evidence). `route`, `plan`, `decide`, `adjudicate`, `advocate`, `security` stay declarable but non-working.
+3. **The coordinator release carve-out stays**, but as a recorded lever rather than a derived classification, and the test that justifies delegating it remains reversibility: release is undoable by the sender, cancel and revise are not (D258 point 1).
+
+**Options considered.** (a) keep derivation and add a `check` finding — rejected: a report that does not stop a write is not a control. (b) the three-instrument split above — chosen: cheap, data-driven, and reversible in one edit. (c) delete the coordinator release carve-out — rejected: a parked row whose gate is dead has no non-terminal repair for its parties (#3747, #6665), so removing it strands rows. Trade-off accepted: writes that succeed today will refuse, and refusals must name the target id, the seat's standing, and the legal alternative (mint the row carrying the gate, or ask a party) or the bound becomes an escalation generator.
+
+**Consequences.** `gateStanding` must take `(seat, target, items)` and read only row fields — the probe asserts a non-party non-resolver is refused regardless of its capabilities, so an implementation that reads `seatIsCoordinator` cannot go green. Chains can only grow through parties, which is a behavioural narrowing for pm's routing habit of attaching gates to rows it merely observes: pm may still mint the row carrying the gate (D258 point 3). New observability requirement: `check` reports seats whose declared capabilities are all non-working, so pm and lead appear as an expected diff and any other seat appearing there is a fault. `requires` matching is string equality against caps (`src/rig.mjs:86-91`); once the vocabulary is closed, a `requires` value that matches nobody is impossible by construction rather than merely rare.
+
+**Residual.** Whether load-time refusal (vs `check` reporting) is the right severity is lead's scope call. Cycle and dangling-id validation are #6497/#6512's, not this ruling's; this ruling only pins who may name an id and how far a reference may reach.
+
+## D286 — (provisional; re-mint at land from the MERGED tree; note that branch item-6664 has provisionally taken D272 — the number is minted at merge, never hardcoded) `proven` in the note census requires source attribution produced at the seam, not inferred from the summary's wording (architect, item #6668, 2026-11-11)
+
+**Status.** Design ruling on pm's question "does `proven` require the carried summary to name its source, or is the current inference the contract?". Build routing is pm's; the seam change is impl's, the demo is devtools'/qa's.
+
+**Context.** `src/notecensus.mjs:35-38` counts a compaction as note-carried on the literal marker `CONTINUITY NOTE`. The seat's own note and the queue seed both render through `renderNote` (`extensions/continuity.mjs:118-126`); only the seat's note carries `— last written <ISO>` because `write_note` sets `updatedAt` (`extensions/continuity.mjs:344`) and `seededGoal` (`extensions/continuity.mjs:197-203`) does not. Measured with `node tools/probes/note-source-attribution-6668.mjs` (exit 1, live store `selfdev.sqlite`, read-only, 2026-11-11): fleet `proven 8, seeded 2, claimed-only 1, not-observed 1`; 1,976 compactions of which 83 are note-carried and 1,893 summariser; **30 of the 83 note-carried boundaries are seeds** (36%). Every one of the 8 proven seats happens to have at least one self-attributed boundary, so the verdict is accidentally correct today. The pure falsifier: `{compactions:1, via_note:1, noteWritten:true}` and the same row with `noteWritten:false` give `proven` and `seeded` — the only difference is a whole-history boolean, not whether that boundary carried that note.
+
+**Decision.** Attribution is part of the definition. `renderNote(note, source)` stamps the source in the header (`source: seat note` vs `source: queue seed, item #N`); the census counts `viaNoteSelf` and `viaNoteSeed` separately; `classifySeat` returns `proven` only when `viaNoteSelf >= 1`, otherwise `seeded` with an owner and a why that names the timing uncertainty. The headline reports the attributed share and the snapshot time. Transitional: until the stamp exists, attribute by the presence of `last written` — but that heuristic must be pinned by a pure demo asserting both renders, because it is prose, not a field.
+
+**Options considered.** (a) keep the inference and document it as conditional — rejected: the number is consumed as evidence by milestone rows, and a documented guess is still a guess. (b) derive attribution from store timestamps — rejected on measurement: `document_revisions` has no time column (`document_id, seq, kind, version, content`) and entry ids are a different sequence, so ordering has to be reconstructed. (c) stamp at the seam — chosen; the seam already knows which source it used and currently discards that fact. Trade-off accepted: a slightly longer summary header and any golden asserting the header text must be updated; in exchange `proven` means what the reader assumes.
+
+**Consequences.** Enforcing attribution reclassifies nobody today (8 → 8), so the change is free and only stops the fleet total from overstating coverage. Coverage must be reported alongside existence: conv-15 is `proven` with 14 of 575 boundaries note-carried, conv-4930 14 of 853 — a seat can be proven and effectively uncarried. `docs/evidence/2026-11-08-context-window/milestone-check.mjs` and any future gate must read `classifySeat` rather than recounting markers, or the two disagree. The demo gap is exact: `demo/note-census.test.mjs` has the seeded case (line 223) and the clean proven case (line 224) but not compact-then-write, which is the shape that breaks the claim.
+
+## D287 — (provisional; re-mint at land from the MERGED tree — D272 and D273 are already taken on branches, so the number is minted at merge, never hardcoded) **claimability is computed once: designating a row does not exempt it from the predicate, and a refusal must carry the reason code the predicate already produces** (architect ruling on lead's row #6669, 2026-11-11)
+
+**Status.** Design ruling on lead's question "does `claim_work(itemId)` apply the workable predicate?". Lead already ruled *yes* (#6669); this ADR fixes the shape of the implementation and the one case the ruling does not cover. Build sequencing is pm's; the code is impl's (#6667); the pin is qa's (#6639).
+
+**Context.** Two paths decide claimability today and they do not compute the same thing. Measured with `node tools/probes/claim-by-id-predicate-6669.mjs` (exit 1, real harness, real `claim_work` tool driven by faux turns, 2026-11-11): a row whose gate is open (`workable` → `gate-open:#1(queued)`) is **claimed** by id; a row requiring a capability the seat does not advertise (`requires:design`) is **claimed**; a row gated on a cancelled prerequisite (`gate-cancelled:#6`) is **claimed**. The by-id branch is `src/rig.mjs:854-858` (`id && to === me && status === "queued"`) — status only — while the oldest branch calls `selectOldestWorkable` → `workable()` (`src/rig.mjs:320-335`), which checks status, `requires` and every gate. The comment at `src/rig.mjs:846-851` asserts the whitelist is "IDENTICAL to the oldest path"; it is a subset that drops two of three checks. Separately, `src/rig.mjs:966` returns the string `NO_QUEUED_WORK` for a held row, a foreign row and a nonexistent id — measured identical, so the seat cannot tell which happened.
+
+**Decision.** (1) One exported predicate, one call site per path: the by-id branch computes the row and hands it to the same function the oldest path uses; there is no second whitelist. Ownership moves into that predicate too — `workable(item, seat, …)` currently takes `seat` and never reads it (`src/rig.mjs:320`), with each caller filtering `to === seat` in its own shape (`src/rig.mjs:349-351` and `src/rig.mjs:855`); a rule applied in two shapes is the next drift. (2) A refusal names the cause in the code the predicate already emits — `gate-open:#n(status)`, `gate-cancelled:#n`, `requires:<cap>`, `not-queued:<status>`, `not-yours` — and the seat-visible text is distinct from `NO_QUEUED_WORK`. (3) Overrides are queue actions (release, re-point, cancel), visible and attributable (#6552); no tool argument bypasses the predicate. (4) A gate id that names no row is refused **at claim** with `gate-dangling:#n` while the wake predicate only reports it (D271's strict-at-mint / soft-at-read split): a wake is a hint, a claim is the last line before work starts.
+
+**Options considered.** (a) add the two missing checks to the by-id branch and leave the duplication — rejected: the failure class is "two predicates that must agree", and the smallest diff leaves the class intact, plus a comment asserting a property the code does not have. (b) call `workable()` inside the by-id branch but keep its own status whitelist — rejected: `workable()` already covers held/foreign/terminal states, so the whitelist becomes a redundant third source of truth. (c) treat a dangling gate as satisfied at claim (the current conservative default, `src/rig.mjs:329`) — rejected after measurement: 0 of 211 gated rows in the live store name a nonexistent id, so refusing costs nothing today, while leaving it open lets an author's "blocked on 42" mean "not blocked". Trade-off accepted: a mistyped gate id strands a row visibly, with a message naming who can fix it, instead of letting it run unblocked invisibly.
+
+**Consequences.** `src/rig.mjs:846-851` must be corrected in the same commit — an inaccurate comment is how a bypass survives review. `docs/WORK-ITEM-LIFECYCLE.md` and the runbook symptom index need the refusal vocabulary once the wording changes. The acceptance matrix is in `docs/reviews/architecture-claim-predicate-6669.md`; the probe exits 1 today and must exit 0 after #6667 lands — that probe, not this paragraph, is the check. Risk to watch: a seat that is genuinely blocked on a dangling gate now produces `NO_QUEUED_WORK`-adjacent refusals on every wake, so the wake leg must keep reporting starved rows (the `skipped` line at `src/rig.mjs:982-985`) or the strand becomes invisible again.
+
+## D-MINT (number assigned by the landing pass, per the rule in #3075 — this entry deliberately carries no number) — ADR numbers are UNIQUE BY CONSTRUCTION: mint from the merged tree, canonical is first-in-file, collisions are deduped or suffixed, never renumbered (architect ruling on pm's #6561, item #6561, review `docs/reviews/architecture-adr-collisions-6561.md`, 2026-11-11)
+
+**Status:** adopted for the rename pass already routed by pm.
+
+**Context.** `node tools/probes/adr-number-collisions.mjs` on this tree (exit 1): 267 `## D<n>` headings, 13 numbers used twice or more; 6 pairs are byte-identical duplicates (D115-D120), 8 are distinct decisions sharing a number (D91 x3, D111-D114, D258, D259). Root cause: provisional numbers hardcoded in branches, then two branches land with the same number — the hazard lead ruled about in #3075.
+
+**Decision.**
+1. The **first entry in file order** keeps the bare number; it was the first mint and every pre-collision citation refers to it.
+2. Byte-identical duplicates are **deleted** (the later copy), with one line added to the canonical entry recording the merge. No citation rewrite is needed for these.
+3. Distinct decisions sharing a number get a **suffix**: first stays bare, second becomes `<num>b`, third `<num>c`. Not `a`/`b` for both — that would orphan every existing bare citation. The canonical entry gains a pointer line so the suffixed entry remains reachable.
+4. Same-decision-different-wording pairs (D91's two entries share provenance lead #1297 / scribe #1301, one revised by #1316): the revised wording is canonical; the earlier wording is folded in as a superseded line, not deleted. Mechanical test: colliding entries sharing a ruling item id are one decision.
+5. **Never renumber.** Renumbering breaks the audit trail; a suffix is additive and reversible.
+6. Prevention: mint `max(existing D<n> on the merged tree) + 1` at land, run the probe as a `check` rule (`adr-number-unique`, error severity) so a collision cannot merge silently.
+
+**Alternatives considered.** (a) Renumber the later entry to the next free number — rejected: every citation to the bare number then silently points at the other decision. (b) Suffix both (`D258a`/`D258b`) — rejected: orphans all existing bare citations. Chosen: canonical-bare + suffixed-later.
+
+**Consequences.** The rename pass touches ~13 numbers, 6 deletions, 8 suffixes, and must read in context the bare citations counted by the probe (D111 36, D114 32, D119 24, D113 27 outside DECISIONS.md). Entries already sitting on unlanded branches with hardcoded provisional numbers (D265, D266, D267 on `item-6531`) are the recurrence in action: the landing pass must assign them, not trust them. Acceptance: the probe exits 0.
+
+## D282 (PROVISIONAL - mint at land; DECISIONS.md already collides at D258/D259, re-check the number) — there is ONE claim-admission predicate: every path into `claim_work` runs `workable()`, and the refusal keeps `NO_QUEUED_WORK` as a stable prefix (architect, item #6531, review `docs/reviews/architecture-claim-by-id-6531.md`, 2026-11-11)
+
+**Status:** proposed, awaiting lead's scope ruling on whether the by-id bypass is intentional.
+
+**Context.** `claim_work` has two paths. The oldest path runs `selectOldestWorkable` -> `workable()` (status, `requires`, every `blockedBy` gate). The by-id path filters `it.id === args.itemId && it.to === me && it.status === "queued"` and its comment claims the whitelist is "IDENTICAL to the oldest path". Measured at HEAD `9ae345df` (`tools/probes/claim-by-id-gate-bypass.mjs`, exit 1): the by-id branch contains no `workable`, no `blockedBy`, no `requires`; a row the predicate refuses with `gate-open:#5001(queued)` is admitted by the filter, and a row `requires: design` is admitted for a seat with no `design` capability.
+
+**Decision.** Both paths call the same predicate. The refusal is `NO_QUEUED_WORK - #<id> is <status> (<predicate reason>); <remedy verb>` — the prefix stays stable because three demos and the driver's wake documentation match on it, and the detail is appended, exactly as the oldest path already does at `src/rig.mjs:958`. "No such row" is reserved for an id that does not exist.
+
+**Options considered.** (a) Fix only the message and leave the bypass: cheapest, behaviour-stable, and it leaves a documented predicate the verb does not honour. (b) One predicate: makes the by-id path refuse rows it currently admits, which is a behaviour change on a verb every seat uses. Chosen: **(b)** — a refusal is retryable once the gate closes; work started before its prerequisite lands is not.
+
+**Consequences.** `requires` becomes binding in both paths (a seat pointed at a row it cannot do now gets a named reason instead of a claim it cannot fulfil). Any future path into claiming must use `workable()` or the class reopens. Demos `race.test.mjs:84`, `rearmclaim.test.mjs:132`, `defer.test.mjs:228` must stay green.
+
+**Residual (lead):** if forcing a claim by id is meant to be an operator escape hatch, that is a scope decision, and the code comment must be corrected either way.
+
+## D283 (PROVISIONAL - mint at land) — coordinator standing is a RECORDED field that must be RE-VALIDATED at the verb, bounded to depth 1, and undoable by whoever added the gate (architect review of lead's #6532 ruling, item #6532, review `docs/reviews/architecture-coordinator-standing-6532.md`, 2026-11-11)
+
+**Status:** adopted in direction (lead chose (b)); this ADR records the four conditions the ruling left open.
+
+**Context.** `coordinatedBy` does not exist in `src/rig.mjs` today; the only non-party grant is `release_work` (`:1332`), which derives standing at call time from `seatIsCoordinator` (`src/seattools.mjs:292`), a predicate over a closed four-entry list `WORKING_CAPABILITIES = ["implement","code","verify","review"]` (`:262`). Measured by `tools/probes/coordinator-standing-surface.mjs` (exit 1): 0 recorded field, 1 unbounded non-party grant, 0 sites that clear a gate, and `seatIsCoordinator({capabilities:["design"]}) = true`.
+
+**Decision.** Four conditions, all falsifiable:
+1. `coordinatedBy` is set at mint (to `from` when `seatIsCoordinator(from)`), never mutated, never inferred from forwarding history.
+2. Authority is additive on gate/constraint fields only (`blockedBy`, `reviewBy`), never subject, body, tier, status or cancellation, and never after the row is claimed.
+3. The verb checks BOTH the record and the predicate: `item.coordinatedBy === me && seatIsCoordinator(seats[me])`, and the refusal names which half failed. Standing that cannot lapse is a latent grant.
+4. Scope is depth 1: `coordinatedBy === me` or a gate naming a row whose `from === me`. "The gate chain" is not a bound. And additive authority includes removal of the edges that same actor added, recorded per edge.
+
+**Options considered.** (a) no coordinator standing — cheap, leaves sequencing in prose (#3570). (b) standing without re-validation — rejected: a recorded snapshot plus a predicate that flips means two truths about one seat. Chosen: (b) narrowed as above; the trade-off accepted is one extra field and one graph-depth computation per gate write.
+
+**Consequences.** Capability vocabulary becomes load-bearing: a seat whose capabilities are spelled outside the four-entry list currently reads as a coordinator, so unknown capability strings must be reported by `check` rather than silently granting standing. Removal becomes part of the same seam as addition — #6508 and #6530 are one contract, not two rows that meet in the middle.
+
+**Residual (lead):** whether `design`/`architecture`/`docs` count as working capabilities, and whether a coordinator may gate a row it neither minted nor is party to at all. Both are scope, not design.
+
+## D281 (PROVISIONAL - mint at land; D258 and D259 already collide, re-check the number) — a gate is validated where it is WRITTEN, never where it is read; and an additive gate verb is not shippable without a removal path and a graph check (architect, item #6517, review `docs/reviews/architecture-gate-verb-decomposition-6517.md`, 2026-11-11)
+
+**Status:** proposed, ready to adopt with the #6508-#6516 tranche.
+
+**Context.** `blockedBy` is created only in `send_work` (`src/rig.mjs:778`) and normalized by shape alone (`:391-404`); there is **no** code path that clears it (probe `tools/probes/gate-verb-decomposition-gaps.mjs` at HEAD `560db92e`: 0 removal sites, exit 1). `workable()` (`:319`) is the single predicate both claim selection and wake selection read. pm's #6473 decomposition mints `gate_work` as an additive verb with a 2-cycle check (#6512). Measured at HEAD: a self-gate is accepted and makes the row permanently unworkable; a 3-cycle makes all three rows unworkable and the reason each seat reads names only the parent id; a held row whose gate names a cancelled row can be neither released nor un-gated, leaving `cancel_work` (terminal, party-scoped) as the only exit. `docs/WORK-ITEM-SCHEMA.md:188` already declares a `blockedBy-resolves` error rule that `src/checkup.mjs` does not implement.
+
+**Decision.** Three rules, in this order:
+1. **Strict at write, conservative at read.** `gate_work` and `send_work` refuse a gate id that is unknown, self-referential, or part of a cycle; `workable()` keeps its conservative "unknown means workable" default so legacy rows do not retroactively starve.
+2. **The validator sees the whole graph, inside the commit.** The combined set (every row's existing `blockedBy` plus the proposed edge) is checked for reachability-before-self before the mutation is allowed, on **both** write paths.
+3. **A verb that can add a gate must be able to remove one, and the authority is a closed set** — the seat recorded in the add transition, the row's `from`/`to`, or the operator — with the removal recorded in `transitions` the same way the add is. Removal is the *recovery path* for a gate whose parent is cancelled.
+4. Observability, not enforcement: implement the schema's `blockedBy-resolves` rule as a check finding; if it is not implemented, delete it from the schema.
+
+**Options considered.** (a) Enforce in `workable()` at read time: cheapest, retroactive, and it silently starves the 249 prose-gated and legacy rows on a rule they never agreed to, while leaving the bad write invisible. (b) Enforce at write, observe at read: a refused verb call is legible and retryable; a starved row is neither. Chosen: **(b)** — the reversible one, because a refusal can be retried and a starvation cannot be seen.
+
+**Consequences.** Gate writes get slower (one graph walk per write over the queue doc) and two verbs must share one validator or they drift. Rows gated by a cancelled parent stop being a dead end only once the removal path exists — until then they remain starvable, and the check rule is the only way anyone learns. The 2-cycle assertion in #6512 is insufficient as written and must be widened to self-gate, 3-cycle, and "a refused write leaves the row byte-identical".
+
+**Residual (scope for `lead`):** whether `blockedBy-resolves` is an error-severity rule that blocks landing or an advisory finding, and whether a parked row whose parent is itself parked must carry a mandatory `reviewBy`. Neither is decided here.
+
+## D280 — (provisional; re-mint at land from the MERGED tree per the #6561 rule) gate closure is ONE predicate; a `cancelled` gate is a strand to repair, never a pass and never a release (architect, item #6502, 2026-11-11)
+
+**Status.** Design ruling, docs-only in this branch; the four code seams are routed to `impl` through `pm` (#6497/#6498/#6499 amended by #6574-series), and the two scope questions (a gate-EDIT verb; the `closed` vs `open` word for a cancelled gate) are parked with `lead`.
+
+**Context.** Four independent readers answer "is this gate closed?": `workable()` (`src/rig.mjs:320`) says a cancelled gate makes a row permanently unworkable; `deadGateId()` (`src/rig.mjs:312`, used by the release guard at `:1346`) refuses the release; `heldgate.mjs:19` `TERMINAL_STATUSES = {"done","cancelled"}` calls the same gate closed and classifies the row `release-candidate`; `queue-lifecycle.mjs:310` maps it to stage `"closed"`. Run against the same row, the classifier advises a release the broker refuses — measured, not inferred: `node tools/probes/gate-predicate-disagreement-6502.mjs` exit 1 prints `class=release-candidate`, `deadGateId=100`, `workable=false (gate-cancelled:#100)`. There is also no exit: 0 sites in `src/rig.mjs` re-write or clear a stored `blockedBy`, and ids are monotonic (`:442`), so a stranded dependent can never be repaired. Live mirror at the time of measurement: 1,216 non-terminal rows, 194 gated, 96 of them naming an id the mirror does not list.
+
+**Decision.** One exported predicate, `gateState(item, items) -> [{id, state: done|open|cancelled|unknown}]`, is the only reader of `blockedBy`; `workable()`, the release guard, `heldgate`'s classifier, `queueItemLine` and the `check` rule all call it. A gate naming a cancelled row is a named state (`gate-dead`), whose legal actions are repair (once an edit verb exists) or `cancel_work` with a reason — never release, never silent pass. Validation happens at write, before the commit, in the one path that can write a gate; unresolvable ids remain the conservative read default (#2673) and are DISPLAYED as `(unknown)`, never omitted.
+
+**Alternatives considered.** (a) Treat a cancelled gate as satisfied at read — rejected: a dropped prerequisite would pass silently, which is the exact failure `gate-cancelled` was minted to catch. (b) Auto-cancel the dependents of a cancelled parent — rejected: `cancel_work` is terminal and destroys intent; a cancelled parent is not evidence the child's work is unwanted. (c) Keep four predicates and document the disagreement — rejected: the disagreement is already in two documents on the same page (`docs/runbooks/stale-held-backlog.md:57` vs `:152-155`), and a rule kept in four places drifts on the next edit. Chosen: one predicate plus a named state — reversible (the state can be re-gated once an edit verb exists), bounded (only the row's parties may edit it), and testable without a store.
+
+**Consequences.** Rows that today read as releasable will read as `gate-dead`, and the audit's recommended action changes from "release" to "repair or cancel" — some held rows that pm expected to clear will stay parked until someone re-gates or cancels them. The cycle-detection leg of #6497 is unreachable until the edit verb exists (measured: 0 gates name an id ≥ their own row), so the acceptance test for cycles moves to a constructed-graph demo. Every consumer must print which state it saw, and the `check` rule (`stranded-gate`, new) reports stranded counts per seat as observation only — it never feeds a decision, per D258's audit-sink boundary.
+
+**Residual.** Whether `revise_work` gains a `blockedBy` parameter, or a separate `gate_work` verb is minted, and who may call it, is `lead`'s scope ruling, not this decision. Until it lands, the recovery path for a stranded row is `cancel_work` with a reason.
+
+## D284 — (provisional; re-mint at land from the MERGED tree) gate references are validated at mint, gate satisfaction is decided at read, and a bare id in `blockedBy` is a queue id (architect ruling, item #6634, 2026-11-11)
+
+**Status.** Ruling, docs-only here; the validator itself is #6497 (amended by pm per #6720) and the demo is named in `docs/reviews/architecture-gate-id-semantics-6634.md`.
+
+**Context.** pm found two rules that look contradictory: `normalizeBlockedBy([9999])` accepts an unresolvable id (measured: returns `[9999]`), and `workable()` passes an unresolvable gate id as workable (`src/rig.mjs:286-289`, pinned by `node demo/workable-claim.test.mjs` exit 0). Separately, ids are assigned consecutively from 1 (`src/rig.mjs:114`, `:442`) while `docs/ROADMAP.md` numbers run to 331, so every roadmap number is also a queue id — `node cli.mjs queue --id 63` returns a CANCELLED "ROADMAP (agent-fleet borrow) RANK 5 REGISTERED" row. `node tools/probes/gate-id-space-6634.mjs` exits 1 on both.
+
+**Decision.** Reference validity is a WRITE-time property, checked inside the commit against the full queue doc: self-gate, an id not present, and an already-`cancelled` parent are refused before the item exists. Satisfaction is a READ-time property, and the conservative default stays for rows written before the check — the pinned comment must name that population rather than call the default safe. A bare integer in `blockedBy` is a queue id; roadmap gates live in `block.constraints` with `kind:"roadmap"`, and mint refuses a row whose own text names `ROADMAP <n>`/`RM-<n>` while `blockedBy` contains `n`.
+
+**Alternatives considered.** (a) typed references `{kind,ref}` — rejected: breaks `workable()`'s integer loop, the mirror format and 6,718 stored rows to fix a case a regex catches; (b) integers plus a collision guard — chosen: reversible, no migration; (c) a numeric threshold below which ids mean roadmap — rejected: arbitrary and would break legitimate low-id gates.
+
+**Consequences.** New rows cannot carry a gate that can never resolve; the ~6,700 legacy rows can, so the `stranded-gate` check rule must report them rather than the system pretending they are clean. Validation must never run on a bounded view (`GATE_VIEW_CAP` = 200) — a truncated read would produce false refusals. The read-side default remains, so #2673's demo gains a second case distinguishing legacy from minted rows.
+
+## D285 — (provisional; re-mint at land from the MERGED tree) gate authority is the target row's parties plus its AUTHORED resolver; a gate reference need only resolve; every gate change writes an audit event (architect review of lead's #6638 ruling, item #6638, 2026-11-11)
+
+**Status.** Review ruling. It amends the shape of lead's #6360 answer and is in tension with D261's mint-scoped boundary; the resolution (a named gate-edit verb) is a scope call routed to `lead` (#6722 already carries the gate-verb question).
+
+**Context.** lead's predicate `mayGate(row, seat) = seat === row.from || seat === row.to || (row.block && row.block.resolver === seat)` with the bound "ids a seat may add must be rows that seat is a party to". Measured with `node tools/probes/gate-authority-predicate-6638.mjs` (exit 1 at item-6634@673df239): 0 authority-predicate sites in `src/rig.mjs` today; the live mirror has 200 gated non-terminal rows and **27** references whose adder is not a party to the referenced row; `legacyBlock` synthesizes `resolver: "pm"` for never-claimed held rows (`src/queue-lifecycle.mjs:257`) and 269 of 429 held rows have no authored block, 27 of them with pm not a party; `transitions` carries no gate ids, so "who added this gate" is not derivable for the ~6,700 stored rows.
+
+**Decision.** Authority to change a row's gate belongs to that row's `from`/`to` and to the seat named in its **authored** `block.resolver` — never to the value `effectiveBlock()` infers. A gate reference is legal if it resolves to an existing, non-self row; it does not have to share a party with the adder. Every add or removal appends `{event:"gated"|"ungated", by, added|removed, prior}`, and for rows written before the event existed the parties own the gate. Removal must be able to clear a `cancelled` id, because that is the only recovery for permanently stranded dependents.
+
+**Alternatives considered.** (a) adder-only removal, consistent with D261 — rejected: it strands rows whose adder is gone and gives the 96 measured stranded rows no exit. (b) an explicit `coordinator` array — rejected by lead, and rejected here for the same reason: the array's definition is the question being asked. (c) keep authority mint-scoped and make recovery terminal (cancel the dependent) — rejected: destroys intent and is not reversible. Chosen: parties + authored resolver, bounded by the target row, with the audit event. Trade-off accepted: one more write path on a row in exchange for an exit from a strand.
+
+**Consequences.** D261's boundary 2 ("constraint is mint-scoped") must be amended to name the verb, or the predicate governs a verb that does not exist and impl will invent one. The bound as written would refuse 27 of the gates in use, so the build must be tested against real routed rows, not only against a hand-built pair. Legacy rows need a stated fallback, pinned by a demo, or derived authority silently fails on them.
+
+## D279 — (provisional; re-mint at merge by scanning this file for the next free number — the highest in this fork was D264, and D265 is provisionally held by branch `item-4879`) a competing-products research commission is not routable until it carries the iteration-architecture questions, and routability is checked by grep (architect, item #5148, 2026-11-11)
+
+**Decision.** Before a research prompt that surveys competing products is handed to the operator for
+routing, it must contain the D213 iteration-architecture questions: piece boundaries and their loop
+cost, hermetic vs live test planes, how the model is mocked or substituted, how prompt/policy text is
+regression-tested, what bounds a long agent turn, and how slow tests are quarantined. The check is a
+grep, not a judgement: `grep -ci "iteration|hermetic|mock|regression" <prompt>` returning 0 is a
+refusal to route.
+
+**Context:** intake of `docs/reviews/agent-fleet-containment-domain-map-research-prompt.md` (#5148).
+`docs/runbooks/research-request.md` Do step 1 already requires these questions for any pass over
+competing products, but nothing checks it. Measured on the prompt as it stood: `iteration=0`,
+`test plane=0`, `hermetic=0`, `mock=0`, `regression=0`, `loop cost=0`, `quarantine=0`. Meanwhile every
+other intake claim checked out — the "~27 pinned projects" claim matches `grep -c '^| ' docs/VENDOR-PINS.md`
+= 27, and all 13 projects the prompt excludes are real pins.
+
+**Alternatives considered:** (a) leave it to the reviewer's judgement — rejected, the requirement was
+written and still was not met, which is the definition of an unenforced norm; (b) add the questions
+after the report arrives as a follow-up round — rejected, it costs a whole second commission for a
+gap that was visible before routing (round 3 of the harness-tools survey exists for exactly this
+reason); (c) fold the iteration questions into each of the nine existing questions — rejected, they
+would be answered by prose rather than by a table the map can be checked against.
+
+**Consequences.** Prompts already routed without these questions stay valid as far as they go, but any
+new commission carries the addendum, and the runbook's Verify step now states the grep so a seat can
+fail a prompt before it reaches the operator. The accepted cost: a survey that cannot answer iteration
+cost is treated as incomplete even when its landscape table is excellent — that is deliberate, because
+D213 makes iteration speed an architectural requirement, and a map of containment without a map of how
+fast containment can change leaves out the half that decides our own shape.
+
+**Residual:** the intake also surfaced a gate that cannot clear — #5152 (`blockedBy 4829, 5147, 5148`)
+is gated on a `deferred` and a `held` row, both with no authored park block. That is #6880's class,
+owned by `pm`/`lead`, not decided here.
+
+## D278 — (provisional; re-mint at merge by scanning `docs/DECISIONS.md` for the next free number — this tree's highest was D264 at fork) host identity is DERIVED at one seam and never DECLARED per seat (architect, item #4879, 2026-11-11; host measured by `node tools/rig-portability-audit.mjs --db /home/chexxor/Git/Durian-Pi/selfdev.sqlite --rig /home/chexxor/Git/Durian-Pi/rig.selfdev.json` → **linux**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, exit 1, 1 finding)
+
+**Decision.** A seat definition gets no `hostOs`, no `shell`, no per-seat host override. Host identity
+is a property of the running process, not of the role, and it is produced once per process by the
+registry seam that already decides the shell (`src/shellregistry.mjs:200 shellPlan()`, which carries
+`platform`, `name`, `programs`, `startedBy`, `degraded` and the withheld rows). Every consumer —
+tool registration, the guard, the seat prompt, the resolver, the worktree sweep, the instruments —
+reads that object or the resolver's `{root, source, kind, shape, reason}`. An operator may declare a
+host class in the **host-local** layer (`durig.config.json`, gitignored), and that declaration may
+label a divergence and set offerability (RM-306's `offeredOn`); it may never feed selection, and it
+may never gate a pass.
+
+**Context:** ROADMAP 217's second finding is that no seat definition names the host OS or the shell.
+Lead split that half out of #4849 as #4879 because availability-based selection fixed the observed
+`spawn … ENOENT` without a schema change. Measured on the fork `e01e9256`: 12 seats, field union
+`name, role, goal, constraints, capabilities, model, thinkingLevel, instructionsFile` — no host key.
+`shellPlan()` here resolves `bash` → `/usr/bin/bash`, `degraded:false`, with `powershell` withheld.
+The counterfactual is the whole argument: `shellPlan({platform:"win32"})` on this Linux box returns
+`name=powershell startedBy=null degraded:true` — a declared host feeding selection recreates the 217
+incident. Separately, `resolveSeatRoot` (`src/seatroot.mjs:28`) returns a stored cwd verbatim
+(`C:\Users\Alex\Durian-Pi` on a POSIX host) and `classifyGitRoot` then reports that phantom as
+`linked-worktree`; and three normalizers answer "same tree" three ways (`src/seatroot.mjs:36`,
+`src/broker.mjs:1094`, `tools/rig-portability-audit.mjs:53`), the instrument being the only one that
+knows the drive↔POSIX mapping. Probe: `node tools/probes/host-identity-4879.mjs` → exit 1, three
+named owed items.
+
+**Alternatives considered:** (a) add `hostOs`/`shell` to the seat spec — rejected: it puts a
+host-coupled value in the portable tracked layer (265's defect inverted) and, when read by selection,
+produces a registered tool with no startable program; (b) derive at one seam and keep any declaration
+as a labeled expectation in the host-local layer — chosen: reversible, and the shell half of it is
+already shipped; (c) do nothing beyond shell selection — rejected: 264's context half stays open and
+the seat improvises (store entry #274090: "Maybe the shell is pwsh on Linux?"), which makes
+completions unverifiable (`tools/channel-preflight.mjs` §7).
+
+**Consequences.** The accepted cost is un-enforced drift: a declared host class can sit next to a
+contradicting live host and nothing stops the pass. That is deliberate and matches the standing rule
+that store-vs-config drift is labeled, not gated (`docs/DECISIONS.md:3977`, point 5) — a gate whose
+only key is held by the operator stalls every pass and no seat may legitimately clear it. It also
+makes one consolidation mandatory: the resolver owns host-qualified normalization, and the audit and
+the sweep import it rather than re-deriving; until then the instruments can be right while the
+product is wrong, which is the D183 class of confidently wrong shell reports.
+
+**Residual (scope, not decided here):** whether the host-local layer gets a host-class key at all —
+this rig has no `durig.config.json`, so the layer is empty rather than unused — is `lead`'s call. The
+resolver's shape is impl's (263) and the prompt block is devtools' (264); the acceptance for both is
+the probe going green, not a new field appearing.
+
+## D277 — A LIVE item's branch may be taken only by handoff onto an EMPTY ref, gated by a broker-authoritative run probe; otherwise the answer is a refusal that names what to do (lead ruling #4751, ADR minted by scribe #4758, 2026-11-11)
+
+*(Numbered 266, not 265: D265 is reserved by scribe #3094's cadence entry on branch `item-3094`, which has
+not landed yet. Collision is the failure mode this numbering convention exists to prevent.)*
+
+**Decision — four clauses.**
+
+1. **Handoff is permitted only when BOTH gates hold:** the holder is **not running**, **and** the branch
+   carries **no holder-authored commits** (`tip == base`). The second gate is not optional: handoff
+   transfers the REF, and a ref carrying the holder's work makes the taker the **carrier** of another
+   seat's commits — that work then lands through the wrong branch without the holder's verify, which is
+   the R-D / stack-order violation ruled in #3346. Taking an empty branch is not the same act as taking
+   someone's work.
+2. **Where the holder has commits, the answer is a refusal with an actionable message, not a handoff.**
+   Where the holder is dead or retired and the branch carries commits, the path is a **disposition**
+   (cancel the claim, record the sha, authorship not transferred) — never a handoff.
+3. **The probe is a precondition, not a detail.** It must be **broker-authoritative** (the broker knows
+   which seats have runs in flight) and the acquisition must be **atomic with it**, because a filesystem
+   or heuristic check is a race: the holder can start a run between the probe and the acquire.
+   **Off-ramp, written in advance so it is not discovered in the build:** if the probe cannot be made
+   cheap and honest, clause 1 is **withdrawn** and the policy falls back to clause 2 alone — the legible
+   refusal with no path out.
+4. **Naming consequence (recorded, not re-litigated):** the branch must not name a seat, because under
+   handoff the seat is mutable and a seat-named branch becomes a lie after the first handoff. BRANCH =
+   `item-<id>`; WORKTREE PATH = `item-<id>-<seat>` — the worktree is seat-owned, the branch is not. This
+   is a **narrowing of D110**, not a repeal: the path half of that taxonomy stands, the branch half of
+   #3179/#3185 does not.
+
+**Rejected, and recorded because it will be proposed again:** **sharing the worktree.** It makes the
+worktree shared in order to make the branch shared — one index, shared staging, one seat's `git status`
+showing another seat's work. That spends the F12/seat-root isolation the system exists to protect in
+order to buy a fix to a problem about the ref.
+
+**What the code does today, measured in this tree** (branch `item-4758` off `main 35001c3a`; the worktree
+is UN-linked, so it resolves `@earendil-works/pi-durable` 1.3.0 from the lockfile while the seat root
+resolves 1.5.1 — this entry's claims are greps, line reads and one demo run, none of which depend on the
+pi version):
+- **One ref per item is real.** `itemBranchFor(itemId)` returns `item-<id>` (`src/worktree.mjs:893-895`);
+  a legacy `<seat>-item-<id>` ref is **adopted**, renamed to `item-<id>` when no worktree holds it, and
+  **refused outright** when two such refs exist, because guessing a side would silently pick one
+  (`adoptLegacyItemBranch`, `src/worktree.mjs:913-937`).
+- **The live-holder gate is the #3174 rule, narrower than clause 1.** If another worktree holds
+  `item-<id>` and that item is not terminal, `prepareSeatWorkspace` throws — verbatim:
+  `refusing to prepare item <id>: branch <branch> is checked out by another worktree <path> (holder item <id>). Detaching it would free the branch, but that is safe only once the holder's item is TERMINAL (done/cancelled); it is not, so this is refused rather than stolen. Finish or cancel the holder's item first, or prepare a different item.` (`src/worktree.mjs:1004-1010`). When the item IS terminal, the holder is detached losslessly. Liveness fails CLOSED: an unknown status is not terminal (`isTerminalItemStatus`, `src/worktree.mjs:943-952`). A second refusal shape exists for the reused-path case — "`refusing to prepare item <id>: <path> is a valid worktree on branch <current> (another seat's item branch, item <id>). Switching it to <branch> would silently steal that seat's working state. The holder's item must be TERMINAL (done/cancelled) first. Never steal, never force.`" (`src/worktree.mjs:1053-1057`).
+- **Proven by:** `node demo/prepare-workspace.test.mjs` → exit 0 in this tree (VERDICT line: "PREPARE-WORKSPACE PASS … a held branch is resolved, never stolen"); §9 asserts the live-holder refusal names the item and the branch and that the holder is left on its branch (`demo/prepare-workspace.test.mjs:270-289`), §9b–9c the adopt / refuse / rename paths for legacy refs.
+
+**Gaps, surfaced rather than skipped** — each of these is a clause of the ruling that the code does NOT
+yet satisfy, and a reader must not take the entry as a description of shipped behaviour:
+- **`tip == base` is not checked.** Nothing in acquisition compares the branch tip to its base before a
+  handoff.
+- **There is no broker-authoritative run probe, and no handoff verb.** `grep -n "reassign\|acquire" cli.mjs`
+  → 0 hits; acquisition is `prepare_workspace` refusing, not a transfer being granted. Clause 1 is
+  therefore, today, clause 2 only.
+- **The refusal is only half actionable** in the sense clause 3 demands: it names the item, the branch and
+  the holder's worktree path, but NOT the holder's seat, the holder's item status, or the literal command
+  that releases the ref. Verified in the emitted text quoted above and in the test's assertions
+  (`demo/prepare-workspace.test.mjs:289-291`, which can only match the item id, the branch and the path).
+- **Clause 4 (runbook fidelity) was unmet and is now met at the wording level:** before this item,
+  `docs/runbooks/prepare-workspace-refused.md:80-82` quoted only two fragments (`checked out by another
+  worktree`, `another seat's item branch`). It now carries both full refusal sentences verbatim, with the
+  `src/worktree.mjs` line numbers, and names what the message leaves out — the holder's SEAT, its item
+  status, and any literal command (`grep -rni "never steal" docs/` had zero hits before this commit).
+- **Clause 3's off-ramp has not been exercised:** nobody has measured whether a cheap, honest probe is
+  possible, so the withdrawal condition is untested rather than resolved.
+- **The path half of clause 4 is not implemented.** The path is `join(worktreeRoot, "item-<id>")`
+  (`src/worktree.mjs:968-969`; `prepareSeatWorkspace` itself is `:966`), with **no seat component**; `git
+  worktree list` on the live rig shows `item-1158`, `item-3087`, `item-3094`, `item-4758` — none seat-suffixed.
+  **The code wins**: the ruled path shape is a target, not a present fact, and D110's table still prints
+  the old pair. Amending that table is the separate D-entry this item explicitly excludes from scope.
+
+**Boundary.** This decides *who may take a live item's branch and when*. It does not implement anything,
+does not amend D110's table, does not decide the scratch/throwaway naming taxonomy, and does not authorise
+worktree sharing in any form. **Residual for the implementer:** the probe plus the `tip == base` gate plus
+a handoff verb plus a runbook that quotes the refusal are the open work; if the probe cannot be made cheap
+and honest, clause 1 is withdrawn by this entry's own terms and the refusal stands alone.
+
+## D275 — topic-doc re-verification runs on TRIGGERS, not a calendar, and a doc that cannot be auto-verified is SURFACED as uncheckable (operator ruling 2026-10-19, item 2; ruled by `lead` on pm's #2936, registered by lead #3090, minted by scribe #3094, 2026-11-11)
+
+**Decision.** The cadence for periodic **topic-doc** re-verification is trigger-based, and the trigger has
+to be computable rather than judged:
+
+1. **The trigger set is "the thing the doc describes changed"** — (a) an incident touched the procedure
+   the doc covers, (b) a source file the doc names changed, (c) a `check` rule the doc references changed.
+   A date passing is not a trigger.
+2. **Each topic doc declares, machine-readably, what underlies it (`underlies`) and when it was last
+   verified (`last_verified`).** A change to anything in `underlies` re-opens the doc for verification.
+   Without those two fields the trigger is a judgement call, and a judgement call is not a cadence.
+3. **Uncheckable-surfacing.** A doc that cannot be auto-verified is SURFACED as uncheckable, never skipped
+   in silence. A rule that quietly never runs is worse than a rule that fails, because the reader reads
+   the silence as a pass.
+
+**Why.** A calendar sweep fires whether or not anything moved: it spends re-verification on docs that
+are unchanged and still misses drift that happens between ticks. A doc can only be stale when what it
+describes moves, so the change is the only signal that is both timely and cheap. This is the same shape
+the runbook rules already use — `runbook-stale` fires when `last_verified` predates a named file's
+change (`src/checkup.mjs:91-103`) — and the same shape as the README's own maintenance policy
+("Re-verify on trigger, not calendar", `docs/runbooks/README.md:102`).
+
+**Alternatives considered.** (a) **Calendar sweep** — rejected: nags on fresh docs, misses urgent drift,
+and needs a scheduler we do not have. (b) **Decide staleness by reading the doc** — rejected: not
+computable, and it makes verification a matter of opinion rather than a command that exits. (c) **Skip
+what cannot be checked** — rejected: it produces invisible coverage, which is exactly the failure the
+`UNKNOWN` render exists to prevent.
+
+**Status at minting, measured in this tree (`item-3094` worktree, off `main 580c1343`), so the entry is
+not read as a shipped mechanism:**
+- The contract is prose so far: `docs/runbooks/README.md:62-84` ("Topic docs — the map behind the
+  procedures", "Periodic verification (the contract)") and `:102` for the trigger rule.
+- Five docs already carry a `How to re-verify this document` block, and the README states the contract twice
+  (`:68`, `:81`): `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:18`,
+  `docs/SEAT-CAPABILITY-PROFILE.md:107`, `docs/VERIFY-PROVENANCE.md:92`, `docs/WORK-ITEM-LIFECYCLE.md:352`,
+  `docs/reviews/delivery-channel-linux-2026-10-28.md:141` (`grep -rn "How to re-verify this document" docs/`).
+- `underlies` is **not yet a field anything reads**: outside this entry, `grep -rn underlies docs/ src/ tools/`
+  returns exactly one line — the prose table column at `docs/runbooks/README.md:70`.
+- The only machine-checked verification rules are the runbook trio (`src/checkup.mjs:91-103`), and
+  `cli.mjs`'s `check` call (`cli.mjs:3422`) passes no `runbooks` collection, so all three report
+  **UNKNOWN (not judged)** (`src/checkup.mjs:660-666`, rendered at `:1100-1103`). That render is the
+  precedent for point 3: an unjudged rule prints in yellow rather than passing.
+
+**Boundary.** Cadence only. This entry does not authorise #2938 (still gated on #2934) and does not
+restate the topic-doc check rule. **Residual (the gap, surfaced rather than skipped):** the `underlies` /
+`last_verified` wiring and a check rule that reads it do not exist yet — the wiring is routed to `pm`, and
+until it lands, topic-doc verification remains manual by contract.
+
 ## D265 — 2026-11-12T01:5xZ: **a work item's branch is a temporary isolation, not a namespace; `staging` is a queue with a human promotion gate; and an artefact the rig did not mint is never swept** (delegate, on the operator's objective "give the team a work-item lifecycle it can run itself"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
 
 **Decision.** Three rules, in that order:
@@ -11832,6 +12285,45 @@ architecture, sprawl measurement). Registering the build items (ROADMAP **358–
 Rejected with a reason, not silently: a purpose-prefix naming taxonomy enforced by a linter (ROADMAP **362**) —
 no fetched source shows one enforced, and a naming rule the tooling cannot enforce is a rule set that gets
 violated silently.
+
+## D298 — 2026-11-12T04:5xZ: **claimability stays depth-1 and stranding is a separate, bounded graph walk; the by-id claim verb is not exempt from the gate** (architect, item #6999; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, `git version 2.56.0`; tree = branch `item-6999` @ fork of `ed84f0b4`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1. Provisional number: unlanded branch `item-6926` carries a provisional D266; the landing pass re-derives, do not assume 267.)
+
+**Status.** Accepted for the predicate contract; the code change is NOT landed — it is routed to `pm` as build legs.
+
+**Context.** `workable()` (src/rig.mjs:320-335) is the ratified claim/wake predicate (#2673/#2677). Lead's #6999 asks whether workability is *transitive*: #5953 and #5954 gate on #5947, which is itself gated on the cancelled #5945, so a "live" gate is unworkable. Two probes on this tree: `node tools/probes/workability-transitivity-6999.mjs` (exit 1 — three assertions fail) and `node tools/probes/nested-gate-census-6999.mjs` (exit 0) over `node cli.mjs queue --json --no-body` (7101 rows): 405 gated rows, 61 with a directly cancelled hop, 155 open at depth 1, and **15 permanently uncloseable** (9 with a cancelled hop deeper down, 6 cycles). `node demo/workable-claim.test.mjs` exits 0 — the ratified depth-1 semantics are intact.
+
+**Decision.**
+1. **Claimability is not, and must not become, recursive.** Every hop that is not `done` already fails at depth 1 (queued, held, deferred, claimed, cancelled). Treating a hop that is merely *capable of closing* as satisfied would weaken the gate, not strengthen it.
+2. **Stranding is a different question and gets its own predicate**: one bounded walk (`visited` set, `MAX_DEPTH = 8`, cycle-guarded) that answers "can this row ever be claimed, and which hop is the blocker". It reports the hop and the path; it never decides.
+3. **One walk, one vocabulary.** `deadGateId`, the release refusal, the held-row audit class and BOTH claim paths call the same function. Today they do not: src/rig.mjs:855-858 admits any `to === me && status === "queued"` row without consulting the predicate — the probe claimed an unworkable row — and src/heldgate.mjs:105-107 calls a row a `release-candidate` when every hop is "terminal", counting `cancelled` as closed, while the predicate calls a cancelled hop a positive unworkability.
+4. **The reason string keeps its shape and gains the hop**: `{workable, reason, hop, chain}`.
+
+**Options considered.** (a) Make `workable` recursive — cheapest, rejected: weakens the gate and re-walks the graph on every wake. (b) Materialize a `stranded`/`gateClosed` field at mint — rejected: the verdict goes stale the instant a hop changes status, which is the drift qa measured in #6853, and it needs a write path plus an invalidation fan-out D53 forbids inventing without a ruling. (c) Chosen: depth-1 claimability plus a read-time bounded walk. (d) Hand-fix the 15 rows — rejected: the shape recurs with every cancel.
+
+**Consequences.**
+- **Accepted cost:** a bounded walk per wake/claim (≤ 8 hops, gated rows only) and one `Map` built per call site instead of `items.find` over 7101 rows.
+- **Reversibility:** high. Delete the walk and the previous semantics return exactly; no schema, no new field, no write path.
+- **Behaviour change worth watching:** by-id claims that today succeed on gated, unworkable rows will now be refused with a legible reason. Seats that relied on that path will see a refusal instead of a claim — that is the fix, and it is observable in the transitions.
+- **New observability:** `cancel_work` can report the dependents it strands (15 today) without deciding anything about them (#3575: the report may accept, never decide).
+- **Failure modes closed, each with its probe:** buried dead hop (probe assertion 2); cycle that never converges (assertion 3, bounded ms); wake/release/claim disagreeing (assertion 4); depth cap truncation reported, not swallowed; dangling hop ids keep the ratified conservative default but say so.
+- **Open, not decided here:** what to do with #5953/#5954/#5948 (scope, `lead`) and the ship order relative to #6530 and #6659 (sequencing, `pm`).
+
+## D297 — 2026-11-13T20:1xZ: **a gate is enforced by ONE predicate on EVERY admission path, and every gate write emits an event; enforcement graduates rather than starting red** (architect, item #6998; measured on `/home/chexxor/Git/Durian-Pi/selfdev.sqlite`, node v24.22.1, Linux, git 2.56.0; probe `tools/probes/dead-gate-status-split-6998.mjs`, exit 1)
+
+*Number re-derived at landing: this tree's highest is D265; branches `item-7208` (D275) and `item-7643` (D276) carry unlanded ADRs, so the landing pass must re-number this if those land first.*
+
+**Context.** A `blockedBy` gate is written once, at mint (`normalizeBlockedBy`, `src/rig.mjs:368`, one call site inside `send_work` at `:755`). No verb on the tool surface rewrites or clears a gate (`tools/probes/gate-write-surface.mjs`, exit 0, #6361). Two readers interpret the same field differently: `workable` treats a CANCELLED prerequisite as blocking (`src/rig.mjs:332`), `heldgate`'s release-candidate class treats "done **or** cancelled" as satisfied (`src/heldgate.mjs:196`), and `src/checkup.mjs` has no rule that reads `blockedBy` at all. `deadGateId` (`src/rig.mjs:312`) was extracted explicitly so two write paths would share it — grep shows it is used by exactly one (`:1346`, the release refusal); `workable` re-walks the gate inline. Measured drift, two runs 39 hours apart: 63 rows carrying a dead gate / 22 live-stranded, then 58 / 1. The count moves; the mechanism does not. And 6 rows (`3350, 3617, 4849, 4931` plus 2 that drifted after admission) **completed while their prerequisite was cancelled** — they were admitted through the by-id claim path (`src/rig.mjs:854-857`), which checks only `to === me && status === "queued"` and never calls `workable` (its sole call site is `:352`, the oldest-workable scan).
+
+**Decision.**
+1. **One predicate.** `deadGateId` is the single definition of "this gate is dead". `workable` calls it; nothing else re-derives gate status.
+2. **Every admission path runs it.** Claim-by-id, claim-oldest, and any pool claim path all call the predicate, and each refusal returns a **named reason code** (`gate-cancelled:#<id>`), never a bare `null`.
+3. **Gate writes are events.** `gated` / `ungated` transitions join the log so drift is recorded, not inferred from a diff. Measured today: **0** gate events across 7,687 rows.
+4. **Enforcement graduates.** Refuse now only on the unambiguous case — a gate naming a CANCELLED row (measured cost on live queued rows: zero refusals; the 53 refusals in the impact report are all `gate-open`). Open and legacy-inferred gates (`legacyBlock`, `src/queue-lifecycle.mjs:250-260`, which fabricates `resolver: claimed ? item.to : "pm"` for 266 parked rows) are **reported first**, and become refusals only after those rows are classified.
+5. **A count is never a rule.** Check rules assert the per-row predicate; snapshot counts belong in reports only.
+
+**Options considered.** (a) enforce the predicate on every claim path immediately — cleanest, but it makes 53 queued rows unclaimable on the first run and some of those gates are inferred rather than authored, which is the "#3539: a rule that starts red gets disabled" trap. (b) enforce only where the predicate is unambiguous, report the rest — chosen: zero cost today, fully reversible, and it does not pre-disqualify rows whose gate has not been classified. (c) leave the by-id path alone and clean up the population afterwards — rejected: 6 rows already closed through a gate that could never close and the inflow is open.
+
+**Consequences.** Positive: no seat can execute work whose prerequisite was dropped; gate drift becomes legible; `heldgate` and `checkup` stop disagreeing because they read the same predicate. Negative and accepted: two more refusals a seat can hit at claim time, each with a reason code the seat must handle; the parked-but-unreleasable class (held/deferred with a dead gate) can now only be cleared by **cancel** or a future `gate_work` verb (#6361), so that verb becomes load-bearing rather than optional; existing 58 rows stay as evidence and are not retroactively repaired. **Falsifiable probe:** the probe exits 1 while any row completed after its gate died, and exits 0 when none do — a landed fix must drive it to 0 and produce `gated`/`ungated` events in the transition log.
 
 **Addendum — 2026-11-14, the gated landing pass: a conflicted ref is an anchor collision, not a verdict on the work.**
 Rule 1 ("dispositioned, never deleted") was exercised on the 21 refs the census named (`node tools/branch-census.mjs
@@ -11932,6 +12424,27 @@ the claim PATH runs on the new code with the default strategy, and the `priority
 tool plane (`demo/workstrategy-claim.test.mjs`), because this rig resolves to `oldest_first` and flipping the live team to
 `priority_first` to watch it reorder would have changed the team's behaviour for a test.
 
+## D299 — 2026-11-12T06:5xZ: **a gate reference is validated at MINT against the doc being written, and that makes the gate graph of every new row acyclic; the cycle guard is for legacy rows only** (architect review of pm's #7005 re-cut of ruling #6758; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7005`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1. Provisional number — re-derive at land: D265-D274 were minted-at-land by commit `53eea388`, branch `item-6926` carries a provisional D266, `item-6999` carries D267, and the #6758 ruling carries D269.)
+
+**Status.** Accepted as the predicate contract; the code is NOT landed. Legs #7001 (mint validation), #7002 (id space), #7003 (read default), #7004 (runbook) are queued to impl/scribe.
+
+**Context.** `normalizeBlockedBy` (src/rig.mjs:434-451) checks shape only — array of positive integers, deduped. Probe `node tools/probes/mint-gate-validation-7005.mjs` (exit 1, branch `item-7005`) shows the mint seam today accepts: a dangling id `[9999]` (read verdict `workable=true`), a `cancelled` gate, a **self-gate** (`#5 blockedBy=[5]` → `gate-open:#5(queued)` forever, and `deadGateId` returns null so the release path calls it a release-candidate while the claim path can never claim it), and a forward reference to a row minted later.
+
+**Decision.**
+1. At mint, a gate id must **exist in the queue doc being written**, must not be the row's own id, and must not already be `cancelled`. Validate against `tx.doc(RigQueue).items`, never a projection: `--with-gates` is capped (cli.mjs:1414, `GATE_VIEW_CAP`), and a truncated list produces false refusals.
+2. **The invariant that follows, stated out loud:** ids are monotonic (`queue.nextId++`), so every accepted edge points to an older id. A cycle requires both directions to exist at mint, which is impossible. Therefore the gate graph of every row minted after this change is a **DAG**, and the bounded walk in D267 terminates for new rows without a guard.
+3. The read default (unknown id → workable) stays, scoped to rows minted before validation, and the reason string says why.
+4. Discriminate the id space by **existence, not prose**: a bare integer in `blockedBy` is a queue id and is accepted whatever the row's text says; a `blockedBy` id that names no queue row is refused, and if the text names `ROADMAP n`/`RM-n` the refusal says the roadmap reference belongs in `block.constraints[{kind:"roadmap", ref:n}]`.
+
+**Options considered.** (a) Chosen: strict mint validation. (b) Allow forward references inside one transaction — rejected: dangling refs reappear when a later commit of the same batch fails, and the DAG invariant becomes unprovable. (c) No mint check, repair at read — rejected: every wake walks the legacy population instead of making new bad rows impossible. (d) Typed `{kind, ref}` gates — already rejected and recorded, not re-litigated.
+
+**Consequences.**
+- **Cost accepted:** decomposition batches must mint gates before dependents. Each `send_work` is its own commit (src/rig.mjs:825), so a refusal mid-batch leaves a half-minted plan — the runbook leg #7004 must state the ordering rule and the counting check.
+- **Kill the locked-row class:** self-gates and dangling gates stop accumulating. Measured today: 405 gated rows, 61 with a directly cancelled hop, 6 cycles; all 6 cycles are legacy, and none can be minted again.
+- **One predicate, three readers:** mint validation, the release refusal (`deadGateId`, src/rig.mjs:312), the held-row audit class (`heldgate.mjs:105-107`, which counts `cancelled` as closed) and both claim paths must use the same walk, or the audit says "release-candidate" for a row the claim predicate can never claim.
+- **Reversible:** relaxing the mint check restores today's behaviour exactly; the legacy population is untouched either way.
+- **Left open, deliberately:** the cancelled-TWIN question (#3863, held) and the disposition of rows already gated on cancelled ids (lead #6656) are scope calls, not predicate calls.
+
 **Addendum (2026-11-12, N35, after the operator's landing directive).** The operator approved a SEAT-LEVEL flip, not a team
 one: `impl` and `devtools` carry `"workStrategy": "priority_first"` in `rig.selfdev.json` while the team value stays
 `oldest_first`, because `pm` routes landing passes to both. Applied with `up rig.selfdev.json --refresh` while the broker was
@@ -11943,6 +12456,420 @@ before the flip), and the neutral-tie rule means 235 unprioritised rows kept the
 operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent does not wake a DORMANT broker, and
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
+
+## D309 — (provisional; re-mint at land from the MERGED tree) **a presence check is defined at FRAGMENT granularity, never line granularity, and a cancellation that closes a branch must name the commits it covers** (architect review, item #7388; host measured: Linux, kernel `7.2.15-300.fc45.x86_64`, Fedora Linux 45, node v24.22.1; tree = branch `item-7388`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling, triggered by pm's cancellation of #5421 ("artifact already fully on main"). Whether the unlanded host-identity residue on `item-4879` is landed or retired is pm's/lead's call.
+
+**Context.** `node tools/probes/cancel-claim-content-check-7388.mjs 3c4973c9` → **exit 0**, 211 fragments present on main, 0 absent: the cancelled artifact (the 2026-11-07 broker specimen folded into ROADMAP rows 303/314/328/329 and the stall runbook) is genuinely on main, and ancestry alone was not accepted as the answer (#3337: a squash can carry the sha while reverting content). But the first version of that probe compared **whole added lines**, and it reported one false absence: the runbook's `evidence_addendum` line added by `3c4973c9` is not a substring of main's version of that line, because six later addenda were appended to it. A line-level presence test can only pass if nobody ever edits the line again. Separately, `git rev-list --count main..item-4879` → **2** unlanded commits (`45466f1c` the host-identity probe, `dab62450` its design note plus a provisional `## D265`, a number main has since used for a different decision): cancelling the row closed the branch without saying what happened to the other concern on it.
+
+**Decision.**
+1. **Fragment, not line.** Split an added line on `; `, ` — ` and `. ` and test each clause of at least 40 characters. The probe does this; the control runs prove it can detect absence, not only confirm presence: `item-3570` 24/29 absent, `item-4058` 28/60 absent, `item-4879` tip 173/173 absent.
+2. **Ancestry is the fast path; content is the decision.** Both halves belong in any land-verification, including the `evidence` field now required on completions.
+3. **A cancellation names its commits.** If a row closes a branch, the reason states which commits it covers; residue gets either its own entry or an explicit retirement.
+
+**Options considered.** (A) line-level substring — rejected, it produced a measured false absence on a artifact that was fully present. (B) whole-file blob equality — rejected: it cannot distinguish "content present" from "content present plus later edits", which is the normal state of a living doc. (C) fragment granularity — chosen: it tolerates later edits and still detects real loss. **Trade-off accepted:** fragments are coarser than a diff and can miss a loss confined to one short clause under 40 characters, in exchange for a check that does not report false absences.
+
+**Consequences.** Every presence check in the landing machinery (#4772 green-from-the-wrong-tree, #4775 land-verification, the `evidence` field on completions) inherits this rule. False absences reopen closed work — the mirror image of #3539, where a rule reporting 498 findings got disabled; both come from the check's unit being wrong. Falsifier: the probe exits 0 on `3c4973c9` and exits 1 on any branch whose content is genuinely absent.
+
+## D308 — (provisional; re-mint at land from the MERGED tree) **the execution mode is a CLAIM minted at intake and a FACT derived at landing; the check rule judges the mismatch on claimed rows only, never the absence of a worktree, and `branchless` is not minted for an acceptance that names a file write until the delta sink exists** (architect review, item #7160, of build rows #7158 and #7159; host measured: Linux, kernel `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0; tree = branch `item-7160`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling before #7158 (mode minting) and #7159 (the `branchless-violation` check rule) are built. Whether the mode exists at all is `lead`'s (WORK-ITEM-MODEL §4 is PROVISIONAL); sequencing is `pm`'s.
+
+**Context.** `node tools/probes/branchless-check-baseline-7160.mjs` → **exit 1**. Measured: **140** worktrees (137 item-linked, **113 reapable**, 7 dirty, 2 locked) against **1564** non-terminal rows, of which only **11** are claimed and **11** have a live worktree; **1553** non-terminal rows have none, because `prepare_workspace` runs at CLAIM. `src/seattools.mjs:162` calls `prepareSeatWorkspace` **unconditionally**; `src/seatguard.mjs:129-141` refuses **every** shell command from a degraded cwd (the shared checkout), allowing only `prepare_workspace`; pm, lead and advocate currently sit in the shared checkout; the main worktree holds **2** uncommitted tracked changes, and this rig has already recorded that `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`, `docs/SELFDEV.md` 281). `executionMode`/`branchless` appear **0** times in src/ and scripts/. `isDocumentationPath` (src/landinggate.mjs:45) is applied at :98 - after the diff exists - so it cannot be the mint-time predicate §3 proposes.
+
+**Decision.**
+1. **Two names for one predicate.** `modeClaim` is minted at intake from kind + acceptance text (a prediction); `modeActual` is derived at landing from `changedPaths` (a fact). The check rule reports the mismatch. A prediction and a fact that share a name is how a rig starts trusting the prediction.
+2. **Population = claimed rows.** The rule never fires on unclaimed rows; measured, the naive version would report 1553 findings and be disabled, the #3539 outcome.
+3. **A violation is a contradiction, not an absence.** "Claimed branchless, produced code" and "claimed isolated, produced nothing" are findings; "no worktree exists" is not, because the tree is created at claim.
+4. **No `branchless` for a write-producing acceptance until the delta sink exists.** Today a branchless seat has no legal place to write: the guard refuses shell from the shared checkout. Minting the mode without the mechanism manufactures a deferral.
+5. **Residue is the honest metric.** Reapable worktrees per non-terminal row (113 / 1564 today) is the number the mode rule is supposed to move; anything else is inference about intent.
+
+**Options considered.** (A) mint + check as specified - rejected, measured 1553 findings at birth. (B) claim-vs-fact check on claimed rows - chosen: cheap, reversible, measures something true. (C) make `prepareSeatWorkspace` conditional first - rejected as the first step: isolation semantics cannot change before they are measurable, and the unconditional tree is what makes the current census tractable. **Trade-off accepted:** the mode field is advisory for a while and only the mismatch is enforced, in exchange for a rule that does not start red and does not stall seats.
+
+**Consequences.**
+- #7158's "one function called from both sites" is correct only if it returns different things at the two sites; the demo must assert the delta, not the equality of a mint-time guess with a post-diff fact.
+- #7159's baseline is 1553 unclaimed rows / 11 claimed rows / 113 reapable trees; it must print those before going live, exactly as pm required.
+- Dirty-tree attribution (registered as #3648) becomes the guard against the branchless cascade: a dirty main tree stops the broker and the fleet, so the finding must name the seat and item.
+- Falsifier: the probe exits 1 today; it exits 0 when the rule's population is claimed rows and the finding is a claim/fact mismatch.
+
+## D307 — (provisional; re-mint at land from the MERGED tree) **`promote` is safe by CONTENT, not by identity: it refuses unless the promote is additive, shares one predicate with the landing gate, takes the landing lock, retires refs only after main advances, and stores its evidence as a queue row - and "operator only" is a layer, not a boundary** (architect review, item #7148, of build row #7147; host measured: Linux, kernel `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0; tree = branch `item-7148`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the promote verb before #7147 is built. Whether `staging` exists at all is `lead`'s (WORK-ITEM-MODEL §7 is marked PROVISIONAL); the CLI-vs-spool placement is `pm`'s.
+
+**Context.** `node tools/probes/promote-verb-failure-modes-7148.mjs` → **exit 1**, built in a throwaway repo so the real refs were never touched. Measured: `refs/heads/staging` does **not** exist; `cli.mjs` has **no** promote command; the confinement guard (`refusalFor`, src/confine.mjs:903) ALLOWS a seat to run `git update-ref refs/heads/main <sha>`, `git update-ref refs/heads/staging <sha>`, `node scripts/promote.mjs staging main` and inline `node -e "execSync(...)"`. With a diverging staging, `git merge --ff-only staging` exits **128** (git refuses) while the tempting one-liner `git update-ref refs/heads/main staging` silently **loses a commit** from main. `src/broker.mjs:482-498` already states the enforcement limit for control-plane ops: `from` is producer-stamped, all seats share one OS user, same-user forgeability is a KNOWN RESIDUAL (UNVERIFIED-FOR-PREVENTION), "the layers narrow it; they do not eliminate it. Never claim otherwise."
+
+**Decision.**
+1. **Additive or refuse.** Before any write: `merge-base --is-ancestor main staging` must exit 0. Otherwise refuse with the remediation named (rebase staging onto main, or land the refs). Never force a revert into main.
+2. **One predicate.** `promote` calls the same exported gate as `land.mjs` (src/landinggate.mjs), keyed on the set of parent refs. Two copies of a landing rule drift, and drift at a landing gate is silent.
+3. **The same lock.** Promote takes the exclusive landing lock (`acquireAllSlotsSync`); a promote without it is the two-delegates-one-tree shape #4432 named.
+4. **Retire after, never before.** Refs are deleted only once main has advanced, only if they are ancestors of the new tip, and never if their worktree is dirty or locked - the rule `tools/branch-census.mjs` already computes. Unmerged refs are written to `docs/DISPOSITIONS.md`, and the row is written even when nothing is deleted.
+5. **Evidence is stored, not printed.** The verb records `{command, exitCode, artifact}` with the artifact naming the new main sha, as a queue row; suite capture stays `> out 2>&1; rc=$?`, never piped.
+6. **"Operator only" is a layer.** An identity gate is kept as detection; the enforcement is the content gate, because a stamp in a shared-user rig is forgeable. No demo can prove a seat cannot promote, so the spec must not promise one.
+
+**Options considered.** (A) identity/env gate as the boundary - rejected, it reads as a wall and is not one. (B) content gate shared with landing - chosen; testable and independent of who is at the terminal. (C) promote as a broker-side control-plane spool op (D113's shape) - the durable direction, but gated on unlanded spool work (#3969, #3975 held), and the rig's own recorded facts cut against it now: a mutating spool intent does not wake a dormant broker, and `broker-serve --start` refuses on a dirty live tree. **Trade-off accepted:** a seat can still run the verb; what the rig guarantees is that nothing reaches main unless it is additive, gated, locked and evidenced.
+
+**Consequences.**
+- `staging` must be created by the landing path, not hand-made; absent staging is a refusal, not a no-op.
+- `promote` and `land` cannot disagree, because they are the same function - the "second, weaker path to main" pm named is closed structurally, not by sequencing.
+- The verb is idempotent: re-running it reports "nothing to promote" via the ancestor test.
+- Falsifier: `tools/probes/promote-verb-failure-modes-7148.mjs` exits 1 today (a diverging promote loses a commit); it exits 0 only when the verb refuses non-additive promotes and the additive case advances main with evidence recorded.
+
+## D306 — (provisional; re-mint at land from the MERGED tree — other unlanded branches already carry provisional D284 (`item-7026`), D285 (`item-7038`), D287 (`item-7082`), D288 (`item-7123`), D289 (`item-7123`)) **the landing gate keys on the PARENTS a landing advances, never on the derived merge sha; an author's own completion is not verification; and the requirement is phased - refuse on contradiction now, report absence, ratchet to refusal only after the habit exists** (architect review, item #7144, of build row #7143; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, git **2.56.0**; tree = branch `item-7144`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the landing gate (`scripts/land.mjs`, `src/landinggate.mjs`) before #7143 is built.
+
+**Context.** `src/landinggate.mjs` composes the decision from argv + changedPaths + suite exit and mentions verify/evidence **zero times**; `scripts/land.mjs` :410 runs `requireGate` before any git write, and :1038-1040 fast-forwards main to `scratchHead`, the head of a **scratch merge tree** built for multi-branch passes. Measured with `node tools/probes/landing-verify-tip-7144.mjs --db ../selfdev.sqlite` (exit 0): **102** unlanded `item-*` branches; **100** of them have their tip sha named by some done row's subject or evidence artifact; of those naming rows **91** are the author's own completion and **9** say VERIFY; only **2** unlanded branches have a DONE VERIFY-subject row naming them. `complete_work` already stores `item.evidence = {command, exitCode, artifact}` (src/rig.mjs:1111-1116) and `src/checkup.mjs:111-118` already has `verification-without-evidence` and `evidence-tree` rules.
+
+**Decision.**
+1. **The key is the parents, not the sha main lands on.** A verify row naming a branch tip does not verify a derived merge commit. Require an independent verify row per named parent tip, and require the merged tree to pass the suite gate. The refusal names both: verified parents and the derived sha.
+2. **A row counts only if it is done, comes from a seat other than the branch's author, carries `exitCode 0`, and names the tree it ran against.** 91 of 100 sha-naming rows are self-attestation; a gate that accepts them restates the defect it closes.
+3. **Content decides, ancestry is the fast path.** Reconciles #5681 (literal shas) with lead's #3337 (per-file content, ancestry a fast path): pass if `S == T`; pass if `S` is an ancestor of `T` and the verified files' content is identical at `T`; otherwise refuse.
+4. **Phase it.** Today refuse only on **contradiction** (a verify row exists and does not match the landing), report absence as `no independent verify row names <sha>; self-attested by <seat>`, and ratchet to a refusal for code-tier landings once landing entries routinely carry a verify row. Docs-only keeps the diff-checked attestation.
+5. **Fail closed on an unreadable store, and say so in the report.** Unlike the `sharedRoot` check (:277-293), which fails open deliberately, silence here means an unverified landing gets through.
+
+**Options considered.** (A) strict sha-presence refusal now — rejected, measured 100/102 refusals and it manufactures empty verify rows (a Goodhart failure worse than the one being closed). (B) contradiction-first with a reported absence, then a ratchet — chosen; reversible and legible. (C) machine-only verification (suite, no row) — rejected as the sole control: the suite proves demos pass, not that a second seat examined the change. **Trade-off accepted:** some landings proceed with only a reported absence for a while, in exchange for a gate that does not stall the rig or reward ceremony.
+
+**Consequences.**
+- The gate becomes checkable before it is built: the probe prints the pass-rate, and a gate that refuses 100 of 102 pending landings is a stalled rig, not a stronger control.
+- Landing entries must mint a verify row as part of their shape; pm's "assert on the merged tree" convention becomes enforced rather than hoped for.
+- The derived-tree problem is named once, in the same vocabulary `complete_work` already uses ("a DERIVED artifact must be named as MERGED").
+- Falsifier: the probe's verdict line (today "2 of 102 unlanded branches have a DONE VERIFY row naming the branch") must move toward 100 before the refusal is promoted from reported to blocking.
+
+## D304 — (provisional; re-mint at land from the MERGED tree — unlanded branches already carry provisional D284 (`item-7026`), D285 (`item-7038`), D287 (`item-7082`)) **a void gate reference is repaired by REMOVAL, never by silently re-marking it satisfied; cancelling a gated row must surface its dependents as structure, not as a notice row; and mint refuses self-references and cycles as well as terminal ones** (architect review, item #7123, of pm's decomposition of #6659; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7123`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the stranded-gate seam. Disposition of the stranded rows is `lead`'s (#6656 is closed; D271 is provisional on another branch); sequencing of #7118-#7122 is `pm`'s.
+
+**Context.** Measured, `node tools/probes/stranded-gate-cascade-7123.mjs` → **exit 1**: `cancelItem` (src/rig.mjs:211-243) notifies exactly one seat — the cancelled row's other party — so cancelling a `lead -> impl` row produced "item #1 cancelled: superseded (notified impl as notice #3)" while the dependent row `pm -> qa` carrying `blockedBy:[1]` received nothing and reads `{workable:false, reason:"gate-cancelled:#1"}`. `release_work` already refuses to un-park a row whose gate names a cancelled row (`deadGateId` check at src/rig.mjs:1413-1415). Live census (7221 rows, 2026-11-12T11:3xZ): **19** non-terminal rows gated on a CANCELLED id — 11 held, 8 deferred, 0 queued; none of them also name an absent id. In the probe the dependent's parties (`pm, qa`) and the cancelled parent's parties (`lead, impl`) are disjoint, so the notice route structurally cannot reach the seat whose work is stranded. `node tools/probes/gate-predicate-computability-7038.mjs` → exit 1: mint accepts `[9999]`, a self-gate and a gate on a cancelled row; `docs/runbooks/attach-a-gate.md:73` already states "a cycle starves both rows with no exit". `node demo/workable-claim.test.mjs` → exit 0, and it pins "a gate on a CANCELLED item is NOT workable (terminal != done)".
+
+**Decision.**
+1. **A void reference is repaired by removal, not by re-marking it satisfied.** The alternative — treating a cancelled prerequisite as met — is refused by the ratified pin above and would make gates silently inert.
+2. **Notification must be structure, not a notice row.** Cancelling a gated row records the stranded dependents (an ATTENTION entry plus a structured field on the dependent row naming the dead target, the time and the actor). Notice rows are claimable work; the store already holds 2671 of them, 135 still queued (D287).
+3. **Mint refuses self-references and cycles, not just terminal and absent ids.** A rule that refuses a cancelled id while accepting a self-reference is inconsistent: both are provably unsatisfiable.
+4. **Auto-voiding at cancel time is not the default.** It edits another row's gate without that row's parties acting. If it is ever adopted, the bound is: only the dead id is removed, the prior value is recorded in an `ungated` event, and the dependent's parties are notified — and the trigger to revisit it is measurable (the 19 stranded rows not draining within a week after #6530 lands).
+5. **A verification gate must include every verb its acceptance depends on.** #7121's acceptance is "the census count rises then falls"; its `blockedBy` is `[7118, 7119, 7120]` and the fall requires the repair verb (#6530).
+
+**Options considered.** (a) treat cancelled as satisfied — rejected by the ratified pin; (b) chosen — leave the reference, report it, let a party clear it via #6530; (c) auto-void on cancel — rejected as default for the authority reason above. Trade-off accepted: 19 rows stay unworkable until someone acts, in exchange for every state change having an author and an event.
+
+**Consequences.**
+- The stranded set becomes countable and attributable; "23 stranded" quoted from a stale snapshot is replaced by a probe that prints the number and the exit code.
+- #7118's fix does not multiply claimable ack rows, so it does not worsen the ceremony cost measured in D287.
+- Mint gets three refusals (absent, terminal, self/cycle) with named reasons; existing rows are untouched, so the change is additive and reversible.
+- Falsifier: `tools/probes/stranded-gate-cascade-7123.mjs` exits 1 today and 0 only when a cancelled parent's dependents are surfaced as structure and a removal path exists.
+
+## D305 — (provisional; re-mint at land from the MERGED tree) **the blessed-ref guard is scoped to the ref being WRITTEN, not to the verb, and it is a speed bump by design: the guarantee is detection + reversibility, not prevention** (architect review, item #7141, of build row #7140; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, git **2.56.0**; tree = branch `item-7123`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the seat-tool boundary (`src/confine.mjs`) and on what the rig can honestly claim about `refs/heads/main` / `refs/heads/staging`.
+
+**Context.** Measured with `node tools/probes/blessed-ref-writer-surface-7141.mjs` (**exit 1**): 8 of 11 direct ref-moving commands are ALLOWED today by `refusalFor` (src/confine.mjs:903, exported at :1181) - `git update-ref refs/heads/main <sha>`, `git update-ref refs/heads/staging <sha>`, `git branch -f main <ref>`, `git merge --ff-only main`, `git worktree add <path> main` among them; `symbolic-ref`, `reset --hard` and `push` are already refused. The ref namespace is shared: from inside an item worktree `git rev-parse --git-common-dir` returns `/home/chexxor/Git/Durian-Pi/.git`, and a ref I wrote from my own worktree (`git update-ref refs/probe/7141 HEAD` → `refs/probe/7141 3aa294d2…`, then deleted) landed repo-wide. The guard inspects a **string before spawning**: `node -e "execSync('git update-ref refs/heads/main <sha>')"` is ALLOWED, as is `node scripts/land.mjs <branch> --suite`. `refs/heads/staging` does not exist yet (`git for-each-ref` shows `refs/heads/main`, `refs/remotes/origin/main`, `refs/remotes/win/main`, `refs/rescued/main`). `src/confine.mjs:469-470` keeps `update-ref` open because three runbooks prescribe it: `refs/rescued/*` (cross-clone-object-recovery.md:113), an `archived/*` anchor (leaked-worktrees.md:173), a published `-rebased` ref (resolve-merge-conflict.md:67). Queue row #4133 already records that `refusalFor` is pre-spawn, so an after-call property check has no host.
+
+**Decision.**
+1. **Scope the refusal to the ref being written, not the verb.** Refuse `update-ref`, `branch -f/-D`, `symbolic-ref`, `worktree add` and `merge --ff-only` when their ref argument names `main`, `staging`, `refs/heads/main` or `refs/heads/staging`; leave the runbook namespace (`refs/rescued/*`, `archived/*`, `refs/heads/item-<id>`) and every read verb open. Every refusal names the ref and the alternative: the operator lands, via `scripts/land.mjs`, under the push grant.
+2. **Do not claim prevention.** A seat with arbitrary code can write a ref in a shared namespace. The honest guarantee is: direct commands are refused, drift is detected, and drift is reversible.
+3. **Pair the guard with a tripwire.** Snapshot the blessed refs' object names at generation start, compare at lease release; on drift, emit an ATTENTION line (src/attention.mjs `computeAttention`) naming the seat, the before/after sha, and the restore command. Detection is the layer that cannot be bypassed by a string trick.
+4. **Only the supervisor and `scripts/land.mjs` write blessed refs.** A seat "repairing" drift by moving main is the same authority error D288 refuses for gates.
+
+**Options considered.** (A) drop `update-ref`/`branch` from `GIT_WRITING_CLAIMED` - cheapest, rejected: it breaks three documented procedures, and #4367 records that a guard blocking a documented procedure is a guard seats route around. (B) target-scoped refusal - chosen. (C) per-seat clones with no blessed refs - strongest prevention, rejected: it severs the shared object namespace that lets one item branch reference another's commit and contradicts D265 (branch = temporary isolation, staging = a queue with a human promotion gate). (D) tripwire detection - adopted alongside (B). **Trade-off accepted:** a determined seat can still move a blessed ref locally; what the rig guarantees is visibility, attribution and reversibility, and that nothing reaches `origin` without the operator's grant (`DURIG_ALLOW_PUSH`, unset).
+
+**Consequences.**
+- The demo's assertion must be "zero blessed-target write commands allowed", not "fewer than before", and must also assert the sanctioned cases still pass: `git diff main`, `git update-ref refs/rescued/main HEAD`, and `node scripts/land.mjs <branch> --suite`. A guard that stops landing stops the rig.
+- Because `refs/heads/staging` does not exist, the rule is a name rule and must refuse whether or not the ref is present; a demo asserting its existence would be testing the wrong thing.
+- Drift becomes an observable, attributable event instead of a silent poisoning of every later `prepare_workspace` (which forks from HEAD by default).
+- Falsifier: `tools/probes/blessed-ref-writer-surface-7141.mjs` exits 1 today; it exits 0 only when no direct command names a blessed write target **and** the runbook namespace is still allowed.
+
+## D303 — (provisional; re-mint at land from the MERGED tree — unlanded branches already carry provisional D284 (`item-7026`) and D285 (`item-7038`)) **a protocol notice is a RECORD, not a task: the claim/wake predicate that already sets `notice: true` must read it, and an ack should be terminal at the moment it is minted** (architect review, item #7082; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7082`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the shape of the notice seam. Whether acks become terminal at mint (which amends a ratified demo pin) is a **scope call for `lead`**; sequencing is `pm`'s.
+
+**Context.** `cancelItem` mints the ack as a normal row: `enqueueItem(tx, me, other, "CANCELLED #<id>: <subject>", "cancelled by <me>: <reason>", null, true, tier)` (src/rig.mjs:224-232); the flag is stored at src/rig.mjs:499 and consulted by `isNoticeItem` (src/rig.mjs:265) only to stop an ack spawning an ack — the rig already knows the chain grows without bound and burns a seat turn per hop (src/rig.mjs:189-191, ROADMAP 39). No claim or wake predicate reads the flag: `workable` (src/rig.mjs:326-341) checks status, `requires` and gates only, and the wake is `queuedVerdicts.some(workable)` (src/driver.mjs:135-137). Measured, `node tools/probes/notice-as-work-7082.mjs` → **exit 1**: an ack minted before a real task is `{workable: true, reason: null}` and wins `selectNextWork` for the seat. Live store (7221 rows, 2026-11-12T11:0xZ): **2671 notice rows** — 2217 done, 173 cancelled, 136 deferred, 8 held, **135 queued**, 2 claimed — and the per-seat queued split is `pm 44 work / 66 acks`, `impl 214/39`, `devtools 94/15`, `architect 1/7`. `node demo/notices.test.mjs` → exit 0, and line 125 of that demo is the pin this decision bumps: "pm can claim its own DONE notice".
+
+**Decision.**
+1. **An ack is a record of an event that has already happened.** The end state is: minted terminal (`done`) with a `notified` transition, so it is unclaimable (claim requires `queued`, src/rig.mjs:899), never wakes, and never counts as open work.
+2. **Until that ruling is made, the interim is bounded and reversible**: rank notices behind real work in `orderCandidates` (src/workstrategy.mjs:145) and do not wake a seat whose queue contains only acks. Any metric that says "open" must mean *workable and not a notice*, or it is lying.
+3. **One rule, one place.** `docs/WORK-ITEM-SCHEMA.md` R6 already says a notice must never be answered with another notice; the same paragraph must say a notice is not claimable work.
+
+**Options considered.** (a) Stop minting ack rows and record the notification as a transition on the completed row — rejected: the recipient loses the durable record of *why* the other party stopped, which is the notice's whole purpose. (b) Chosen: mint the ack terminal. (c) De-rank only — rejected as the end state because 2217 claims were already spent on rows carrying no work; ranking around the class does not remove it. Trade-off accepted: ceremony is removed at the cost of amending a ratified pin (`demo/notices.test.mjs:125`) and reconciling 135 open acks.
+
+**Consequences.**
+- Seat turns stop being burned on ceremony: 2217 ack claims have already been made, and 135 acks are claimable now.
+- `queued: 546` and drain-rate metrics stop counting acks as throughput; the numbers the fleet health census reports change, and anyone comparing across dates must know why.
+- A seat no longer gets a wake to learn that its prerequisite was cancelled. Recovery path: the cancelled gate already reads `gate-cancelled:#<id>` in `workable`, and the queue line names the row — the notice is not the only channel.
+- Reversible: the change is one field read plus one status at mint; no existing row is rewritten by the predicate.
+- Falsifier: `tools/probes/notice-as-work-7082.mjs` exits 1 today; it exits 0 only when an ack is not workable, selection returns the real task when both are queued, and the census reports zero acks in `queued`/`claimed` state.
+
+## D302 — (provisional; re-mint at land from the MERGED tree) **gate authority reads the AUTHORED `block` field, add and remove are DIFFERENT predicates, and the reference validator ships in the same chain before the edit verb** (architect review, item #7038, of lead's #6530 and pm's corrections #7034; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7038`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Review ruling on the shape of the gate-edit contract. Scope and sequencing stay with `lead` (#6530) and `pm`; the build is `devtools`'s row.
+
+**Context.** Measured, `node tools/probes/gate-predicate-computability-7038.mjs` → **exit 1**: a stored row's keys are `id, from, to, subject, body, optimizedVia, notice, block, status, transitions` — there is no `authoredBlock` field anywhere in `src/`, so lead's `mayGate` cannot be evaluated as written; `effectiveBlock()` → `legacyBlock()` synthesizes `resolver: "pm"` for a never-claimed held row (src/queue-lifecycle.mjs:257) on a row whose parties are `lead` and `impl`; mint accepts `blockedBy:[9999]` (target absent), a self-gate, and a gate on a row already cancelled, because `normalizeBlockedBy` (src/rig.mjs:434-451) checks shape only; a row gated on the absent id #9999 reports `{workable:true, reason:null}` (src/rig.mjs:335-337: "a MISSING or AMBIGUOUS signal means WORKABLE") while the queue line prints `blockedBy=9999`. Live census (`node tools/probes/gate-authority-census-7038.mjs`, 7202 rows, exit 1): 428 held, 265 with no authored block, 24 of those with pm not a party; 246 non-terminal rows carry a gate; **19** are gated on a CANCELLED id, 89 on a held/deferred id; 0 dangling, 0 self-gates, 0 cycles today. **0 of 7202** rows carry a `gated`/`ungated` event, and there are **0** removal sites for `blockedBy` in `src/rig.mjs` — removal is neither derivable nor possible. `node demo/workable-claim.test.mjs` → exit 0: the ratified gate semantics (cancelled = positive non-workability, ambiguous = workable) are unchanged by this review.
+
+**Decision.**
+1. **Authority reads `row.block`, never `effectiveBlock()`.** `mayChangeGate(row, seat) = seat === row.from || seat === row.to || row.block?.resolver === seat`. The view stays a read mapping for humans and metrics; it is not an authority input.
+2. **Add and remove have different legality tests.** `gateAddIsLegal` refuses self, an id that does not exist, a terminal-cancelled id, and an id that closes a cycle. `gateRemoveIsLegal` accepts any recorded id, terminal included: a void reference is a broken pointer, and clearing it is a repair, not a scope decision.
+3. **The validator ships before the verb, in the same chain.** A verb that can add references without the validator is the laundering path the standing bound exists to prevent.
+4. **The conservative default (unknown id → workable) is kept but never exercised by minted rows.** It is a safety net against starving a workable item, not a licence to mint an unresolvable reference.
+5. **One canonical sentence about a cancelled reference** goes in `docs/WORK-ITEM-SCHEMA.md` §4; the comments at src/rig.mjs:296-298 ("POSITIVE non-workability") and src/rig.mjs:313-317 ("a DROPPED prerequisite, not an unmet one") state opposite meanings, and the code (src/rig.mjs:337) plus the 19 stranded rows settle it.
+6. **The fallback for rows predating the event is the parties of the row being edited**, not the target's parties.
+
+**Options considered.** (a) Validator only, no edit verb — closes the mint hole but leaves 19 stranded rows whose only exit is cancelling the dependent (the #6656 class). Rejected. (b) Verb first, validator later — rejected: the verb mints what mint refuses. (c) Chosen: one chain, validator first, two predicates, an event written at every change. Trade-off accepted: more refusals at mint (a row cannot be gated on something that cannot resolve) in exchange for gates that mean something.
+
+**Consequences.**
+- 19 rows need a repair pass; the census tool is green only at zero, so the acceptance is a state, not a verb.
+- Mint gains a reference check: naming a gate on an id that cannot resolve is refused at creation with the reason named. That is a behaviour change for anyone relying on prose-only gates.
+- Cycle refusal is load-bearing: a two-node cycle reads as two open gates and is never named today.
+- Existing rows are not rewritten; the fields and events are additive, so the call is reversible.
+- Falsifier: `tools/probes/gate-predicate-computability-7038.mjs` (exit 1 now, 0 when the accessor is fixed, mint validates, and terminality precedes authority) and `tools/probes/gate-authority-census-7038.mjs` (exit 1 while any non-terminal row is gated on a reference that can never resolve).
+
+## D301 — (provisional; re-mint at land from the MERGED tree) **a park is a LEASE with an owner and a horizon, and it is delegable to a coordinating seat only under four mandatory bounds; expiry makes staleness countable, never a silent un-park** (architect seam design, item #7026; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7026`, pi-durable **1.3.0** from this worktree's lockfile, not the seat root's 1.5.1)
+
+**Status.** Design ruling on the property and the authority rule. The verb's shape and sequencing stay with `pm`; whether priority is a row field or a seat lease is `lead`'s call (#7025).
+
+**Context.** `set_priority` is already delegable to a coordinating seat, with a mandatory reason and a mandatory expiry capped at 30 days (`MAX_PRIORITY_LEASE_MS`, src/workstrategy.mjs:64), and its reply names which strategy is in force (src/rig.mjs:1520-1522). `hold_work` is not delegable: the `item.to !== me` guard in `hold_work` (src/rig.mjs:1337 in this tree; pm's row pinned it at :1251 in an earlier revision), while `release_work` explicitly allows a coordinating seat to un-park a row it did not mint (src/rig.mjs:1395-1401). Measured, `node tools/probes/park-authority-asymmetry-7026.mjs` → **exit 1**: pm's `hold_work(#1)` leaves #1 `queued`; impl's `hold_work(#1)` makes it `held` and `workable` reports `not-queued:held`; pm's `release_work(#1)` restores it to claimable; pm's `set_priority(#3,"now")` reorders the selection under `priority_first`. The park record itself is `{"class":"unattributed","basis":"nothing recorded…","gateIds":[],"recordedAt":…}` — src/rig.mjs:531 writes no author, no resolver, no expiry. Live store at snapshot 2026-11-12T09:3xZ (`node cli.mjs queue --json --no-body`, 7168 rows): **428 held**, median **532.8 h** since the last transition, max 640.4 h; only 13 carry a structured park record, 163 an authored block, and 135 carry a `reviewBy` (77 still in the future, 58 already past).
+
+**Decision.**
+1. **Priority stays data on the row; ordering policy stays configuration.** Never a queue-level ordering doc and never a per-seat priority table: one fact, one owner. An absent priority ranks neutral, so opting into `priority_first` reorders nothing that nobody prioritised.
+2. **Unknown is not a value.** `effectivePriority` returns `unknown: raw === null`; metrics read that as UNKNOWN, never as "medium". Rank parity with `next` is deliberate and pinned by the `selectOldestWorkable` alias demos.
+3. **A park carries `{by, resolver, reviewBy, expiresAt, delegated}` in addition to `{class, basis, gateIds, recordedAt}`.**
+4. **Delegated parks are allowed only with all four bounds:** mandatory `reason`, mandatory `resolver`, mandatory `reviewBy`, mandatory `expiresAt` (≤ 30 days), a per-seat cap on active delegated parks, and only on a `queued` row — never one in flight.
+5. **Expiry does not auto-revert.** A lapsed priority changes order with no write; a lapsed park must not change claimability without one. Staleness is reported (`stale-park`), and an un-park is an authored verb.
+
+**Options considered.** (a) Keep `hold` party-only and let the coordinator use the lease — rejected as the whole answer: a lease changes order, not eligibility, so "do not start this" has no expression. (b) Chosen: bounded delegation. (c) Remove release's delegation for symmetry — rejected: it fixes symmetry by making 428 parked rows un-releasable.
+
+**Consequences.**
+- The seat that sees the whole queue gets a lever that is checkable field by field; the seat that owns the work keeps the unbounded one.
+- Existing parks keep their shape; the new fields are additive, so nothing has to migrate (428 rows are not touched by this decision).
+- New surface, new failure modes, all with a check: unattributed park (add `by`), unbounded park (expiry + cap), coordinator interrupting in-flight work (queued-only), wake loops on parked rows (the parked-signature bound, #5927), and a park on a row whose gate is void (release already refuses when the gate names a cancelled id; D283 makes void a chain property).
+- Falsifier: `tools/probes/park-authority-asymmetry-7026.mjs` exits 1 today and must exit 0 only when a delegated park is accepted **and** the four refusals (missing reason/resolver/reviewBy/expiry, cap reached, `claimed` row) are demonstrable.
+
+## D300 — (provisional; re-mint at land from the MERGED tree; amends D282) **a gate's authority to be cleared is a property of the CHAIN, not of the hop's status; and the acceptance metric must count void gates and parked gates separately or it rewards clearing the wrong ones** (architect review of lead's ruling on #6530, item #7012; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7012`, pi-durable **1.3.0** from this worktree's lockfile, not the seat root's 1.5.1)
+
+**Status.** Review ruling, before the `gate_work` chain builds. Sequencing stays lead's; the single-chain ruling (validator commit first, verb commit second) is accepted and not reopened.
+
+**Context.** Both instruments run on the live store through the read seam (`node cli.mjs queue --json --no-body > queue-dump.json`; snapshot 2026-11-12T07:0xZ, 7141 rows):
+- `node tools/probes/gate-authority-census-6782.mjs queue-dump.json` → **exit 1**: 414 gated rows; 156 gated on a target the rule calls unresolvable (63 `cancelled`, 95 `held`/`deferred`); **0** rows carry a `gated`/`ungated` event; **0** dangling ids, **0** self-gates.
+- `node tools/probes/gate-graph-classification-7012.mjs queue-dump.json` → **exit 0**: transitive never-resolvable = **70** (63 direct + 7 nested), depth-1 = 156, rows missed by depth-1 = 0; parked targets = 76 (52 deferred, 10 held-no-block, 14 held-authored); **0 real cycles**, while a shared-`visited`-set walk calls 7 rows cycles.
+
+**Decision.**
+1. **Void is computed, not declared.** A hop is void when it is `cancelled`, or when every path from it terminates in a `cancelled` row (bounded walk, `MAX_DEPTH = 8`, path-based DFS). `gate_work`'s removal authority and `check`'s `gate-cancelled`/`gate-cycle` findings use that predicate; `statusOf(target)` alone is not the test.
+2. **"Parked" is a status set, spelled out in code:** `{held, deferred}`. Left as a word, the rule reaches 10 targets; as a set it reaches 62. Pin it in a demo, and say it in the runbook.
+3. **Two counters, one acceptance.** `VOID` = chain cannot close; `PARKED` = hop is held/deferred with a resolver and an open `reviewBy`. Acceptance is `VOID == 0`. Grading the verb against the combined 156 would make the number reachable only by clearing gates that are legitimately waiting — the test would reward laundering a scope decision as a repair.
+4. **Cycle guard correctness:** push/pop the path (`path.add` before recursing, `path.delete` after). A shared visited set reads a diamond as a cycle.
+5. **The add leg is the same validator.** `normalizeBlockedBy` checks shape only; the verb's add leg and `revise_work` (which today drops `blockedBy` silently, `tools/probes/gate-write-surface.mjs`) must call the mint validator, or the verb is the laundering path from the other side.
+
+**Correction, recorded because it is mine.** The "6 cycles in the live store" in `docs/reviews/architecture-gate-transitivity-6999.md` and ADR D268 are misreported diamonds: a path-based DFS finds **0** cycles in this store. D268's invariant (mint-time existence makes every new edge point to an older id, so new rows cannot cycle) is unaffected.
+
+**Options considered.** (a) Status-based authority as written — rejected: 7 rows stay locked behind a live hop whose chain ends in a cancelled row, and 3 parked targets are protected pointers to a cancelled resolver (`#4852`, `#4853`, `#4855` → `#4847`). (b) Chosen: the shared graph predicate. (c) Hand-repair the 7 — rejected: every `cancel_work` makes more.
+
+**Consequences.**
+- The repair reaches the class it was written for: 70 void rows are reachable, not 10.
+- The acceptance test is honest: 86 parked gates are triage, not failure, and clearing one is `lead`'s scope call, not a verb's default.
+- Cost accepted: one bounded walk per grading run and one shared definition to maintain. Reversible: swapping `chainVoid` back for the status test restores today's behaviour exactly.
+- Atomicity is part of the contract: the `ungated` event and the gate mutation commit together; if the record cannot be written, the removal does not happen (D258).
+- Removing `legacyBlock`'s `resolver: "pm"` inference (`src/queue-lifecycle.mjs:256`) leaves 266 held rows unattributed; readers must treat null as *unattributed*, never as pm, and the parked-wake bound must not spin on them.
+
+---
+
+## D276 — Backlog disposition, and the one principle underneath it: an unlanded branch is a claim on attention, not a store of value; CANCEL is the default and is reversible, CONTENT — not ancestry — is the test, a stack may not land ahead of its base, a number minted in an unlanded branch is a claim to be re-checked at land — and where a cheap signal stands in for an expensive fact, the signal may ACCEPT but must never DECIDE (lead ruling #3265, amended #3338/#3354, carried live by #3410; the principle and its twin from #3575/#4058; recorded by `scribe`, items #3271/#3575, 2026-11-12)
+
+**Mint note (#3075/#3186 discipline).** `D###` is a placeholder on purpose; the landing pass derives the next FREE
+number by scanning this file at merge. Highest at this branch's fork point `90c63124` is **D266** — re-derive, do not
+assume 267. Per #3186 the entry lands from the landing pass, never as an independent side-branch entry. Complements,
+does not replace, #3252.
+
+### The principle: a cheap signal may ACCEPT, but it must never DECIDE
+
+When a cheap signal stands in for an expensive fact, the signal is allowed to say *proceed* — it is never allowed to
+say *the fact is X*. Everything below is one instance of this, which is why #3575 registers it as the head of the
+entry rather than a seventh convention: a reader who has the principle can derive the rule at the moment they meet it,
+instead of carrying six unrelated ones.
+
+| Cheap signal | The fact it stands in for | What breaks when it is allowed to decide | Where the check lives |
+|---|---|---|---|
+| commit reachability (`git merge-base --is-ancestor`) | content on `main` | a squash-shaped landing is byte-identical on main while ancestry says no (`security-item-1475` @`7cf5a34` vs union tip `e3abbca`) — work is reported unlanded and re-landed | `scripts/land.mjs:479-487`: ancestry is a FAST PATH (`contains-base` / `already-landed` / `neither` → fall through to the merge), never a refusal |
+| patch-id (`git cherry`) | whether a branch's content is already main's | an add/add branch that adds a whole file reports "unique" even when the blob is identical (`architect-item-3005` @`0827b39`, blob `0a26921ef6…` on both sides) — the branch is routed as live work, or re-landed as an add onto a file that is already there | blob identity at path is the verdict, patch-id secondary: `docs/DISPOSITIONS.md` §"The probe method", `docs/runbooks/branch-cleanup.md` step 0 |
+| test coverage | proof | a test that reaches a branch without forcing the condition it guards proves nothing — the bounded-drain case whose `waitForIdle` resolved instantly | force the condition: the guard is shown FAILING on planted damage |
+| a title | the spec | #2826's title named four things, its body carried seven; the three unnamed ones fell out of a split made from the title | read the body; a split enumerates from the body |
+| green tests | the defect is fixed | pm's formulation, quoted: "a verified fix proves it does what it says, not that it addresses the mechanism that produced the observed failures. Landing something green that leaves the defect in place is the most expensive outcome available, because it looks solved." | a defect-fix verify confirms the **mechanism** — the `originCallId` check decides whether #3192's dedup key matches the mechanism that produced the duplicates |
+| a reported state | the actual state | `revise` reporting "unchanged", `held: true` silently downgrading to `queued`, cancel reasons never reaching the sender, a delivery snapshot stale after a revise (#3236, #3435 class) | read the state back, not the report |
+
+**The producing-side twin (#4058): a degraded source must degrade to UNKNOWN, never to EMPTY or PERMISSIVE.** An empty
+result is indistinguishable from a real empty result, so it makes *absence look like evidence*, and the default must
+follow the **cost of being wrong**. Same error, opposite ends of the same wire: an unknown treated as a fact.
+
+| Degraded source | The permissive default that must not be taken | What it authorises | Where it is |
+|---|---|---|---|
+| liveness probe | "dead" when the OS cannot tell | a second writer into the store | `src/broker.mjs:2444-2447` — "FAIL-SAFE (#3398): dead ONLY on ESRCH … unknown ⇒ ALIVE"; same rule `src/genlock.mjs:77-79` |
+| `listWorktrees` | `[]` when git itself failed | the delete the check exists to prevent | `src/worktree.mjs:1385` ("`strict: true` — a caller that DECIDES on the result. A failure THROWS"), used at `:930` and `:1004`; `node demo/worktree-list-failure.test.mjs` exit **0** (2026-11-12) |
+| keyboard bindings | "all free" when the binding list is unknown | binding over `ctrl+]`, measured as already bound to `tui.editor.jumpForward` — the operator finds it by being unable to leave a session | `src/tui/durable/launch.mjs:63, 96` |
+| a CANCELLED gate | released | the dependent reads as blocked while being permanently dead (starved) | `src/rig.mjs:296, 339` — `gate-cancelled:#<id>` |
+
+The counter-example that makes it a rule rather than a style: the seat-label retirement, where the honest answer *was*
+"unknown, so say both". The default followed the cost there too — a wrong label meant a wrong audit, so the label was
+widened instead of guessed.
+
+### The author-side direction: a seat that cannot run the oracle may AUTHOR, it may not CLOSE
+
+This is the same law pointed at the person doing the work instead of the person reading the signal — lead's ruling on
+#4858 (2026-10-30, main `3860e5d1`): **a claimable queue row may ACCEPT a claim, but it must never DECIDE that the
+work is admissible.** Two conditions, both required, decide who may claim anything on a degraded host:
+
+1. the claimant can run the check the row's done-condition asserts; and
+2. if it cannot, a named verifier with a pinned evidence command is registered as its own row at mint time.
+
+A seat that has `write`/`edit` but no working shell fails **both** for code-change rows, and should defer at claim
+rather than deliver a diff whose correctness nobody owns. The one admissible exception is a row whose deliverable is
+a MEASUREMENT: the claimant may hand the exact commands to a named runner and cite the tree (#4858's delegate-run
+carve-out).
+
+**The admissible degraded completion** states five things, all of them: the command it was supposed to run; the tree
+it would have run on (sha or branch — a verdict that names no tree is not a verdict, the constitution's P1 Evidence
+rule); that it was **not** run; who is named to run it; and the gate attached to the row that will run it. The minimum
+form is `NOT VERIFIED BY ME: <which premise is whose measurement, and at which sha>`. A completion that silently omits
+any of these is how "5 tui-durable pre-existing" came to hide three distinct causes (#3795).
+
+**Three directives from the same ruling, recorded as ruled.**
+
+- **Restore the ability to check before building the thing to be checked.** The suggested order in the portability
+  class was 263 → 217 → …; lead reversed the first edge to 217 → 263 → … because `tools/rig-portability-audit.mjs`
+  reported 15 findings → 2 with both survivors being 217 (the only defect the rig can currently see about itself), and
+  217 is what stops every author from running the demo suite at all — 22 `spawn … ENOENT` shell results. A row that
+  cannot be checked by its author is not slower work, it is **inadmissible** work.
+- **Do not sweep debris by hand while the guard that owns it is wrong.** The repo root held directories literally named
+  `C:\Users\Alex\dsh-Projects\pi-opendurig` and `C:` after a wake wrote `.durig/queue-*.md` into them; they are invisible
+  to `git status` because `.gitignore:12` (`.durig/`) matches at any depth. Ruling: a DISPOSITIONS ledger row, not a
+  delete — the keep-guard was string-equality at the time, `.gitignore` means a wrong delete leaves no trace, and a
+  deletion is admissible only when the guard governing the path says it is safe (normalized equality, then a dry
+  listing, then a second pass). The leak itself was closed by re-pointing the seat root, which is the real fix.
+- **Codify an operational state only after re-measuring it.** Twelve seats were re-pointed to an isolated Linux
+  worktree (`DURIG_SEAT_ROOT=<path> node cli.mjs up rig.selfdev.json --refresh`), and the phantom-root findings and the
+  232 keep-guard finding cleared without 263 or 232 shipping. Consequence: 263 and 232 are CODEX rows whose RED demos
+  must MANUFACTURE the condition rather than depend on a broken host, and if nothing fails at the tip their subject
+  must say they codify rather than fix. A defect row written against a premise the operator has already repaired
+  produces a fix for a defect that no longer exists.
+
+### Re-measured on the current tree — three of the recorded facts did not survive
+
+The ruling itself asked for this: "if a landing pass finds one of them does not reproduce on main, correct it on main
+and keep the correction visible" (#4151). Measured by `scribe` on 2026-11-12 at main `a7c9ab0` (commands run in this
+seat's item worktree; the shared root was read, never written):
+
+| Fact as recorded at `3860e5d1` | Measured at `a7c9ab0`, 2026-11-12 | What follows |
+|---|---|---|
+| 554 commits since `910fac7` | 1423 | both counts were correct on their own tree; a count that names no tree is not evidence (#4814) |
+| 2 registered worktrees | 130 registered, **0 ghosts** (every listed path exists on disk), 127 of them `item-*` | the leak's size has to be measured, not carried over from the old figure |
+| 0 stray `item-*` dirs | 0 by name — but 174 `durig-pass-progress-*` directories and 18 loose `verify-*`/`report-*`/`check-*` files sit at the repo root | the debris class that remains is not the one the ruling named |
+| `docs/NEXT.md` 162 lines | 199 lines | scribe's 157 and qa2's 186 were both tree-local and both right: the disagreement was about trees, not facts |
+| the TUI name rung is still 9, so #4354 is owed | rung **10** — `src/tui/client.mjs:79-80`: "rung 10 per #4354: sel 2 + state 13 + name 10 + queue 9" | #4354 is **landed** (`9129d333 feat(tui,#4354): land the name rung 9 -> 10`, merged `1e5fff7c`); the "still owed" claim is stale |
+
+### The rules that follow from it
+
+**Trigger.** lead's ruling #3265 was asked to dispose "the leftover unlanded set: 9 unclassified clean branches" and
+to settle who owns the rest. The cost of an unlanded branch is not storage — it is attention: it reappears in every
+inventory, every landing list and every conflict report, and the tax compounds with each pass.
+
+**The rules, as ruled.** Numbered as the ruling numbered them; the letters are how `docs/DISPOSITIONS.md` and the
+runbooks refer to them.
+
+- **R-A — the default disposition of an unlanded, clean branch is CANCEL.** The burden of proof is on KEEPING: keep
+  only where a **named live item** needs the content; no named item → cancel. "A branch is not a store of value; a
+  commit reachable by sha is."
+- **R-B — CANCEL cancels the LANDING CLAIM, never the ref.** The commit stays reachable by sha, so cancellation is
+  **reversible**; deleting a ref is a separate act requiring the author or the operator (the same rule the ledger
+  records as R-B, #3270). This is what makes cancel-by-default safe: we are declining to spend attention, not
+  destroying work.
+- **R-C — before cancelling, the AUTHOR runs an equivalence probe against main.** Three outcomes: patch-equivalent →
+  cancel, record "already on main"; unique but no live purpose → cancel, record the sha as recoverable; unique with a
+  live purpose → route to the owning item. Equivalence is never inferred from a branch name. (See R-I for what the
+  probe actually is.)
+- **R-D — the author's seat owns its own rebase.** Never cross-assign a branch to another seat, however convenient.
+  If the author seat is inactive or retired, the landing claim is cancelled with the sha recorded — authorship is not
+  transferred. Worked case: `item-5094` @ `e173f397` — #5175 could not name the author, `docs/DECISIONS.md` and
+  `docs/NEXT-ARCHIVE.md` proved it was `devtools`, so the rebase-then-land belongs to `devtools`, not to impl's pass.
+- **R-E — no sha pins in verify items** (ratified 2026-10-20). Shape: the rebase item requires the author to report
+  new tips in its completion; the verify item is gated on the **rebase item id** (`blockedBy`); the verify runs against
+  whatever tips were reported; the landing entry is issued only after a fresh verify. **The pin moves, it does not
+  vanish**: the verify's completion records the tips it actually verified in `evidence.artifact`, the landing entry
+  takes its sha from that evidence rather than from the branch at land time, and the landing path aborts when the tip
+  disagrees with the evidence. A completion that cannot be re-checked is not evidence (ROADMAP 48 / W2) — deleting the
+  pin from the body without pinning the evidence replaces stale pins with unfalsifiable verifies, which is worse.
+- **R-F — a landing entry's gate names the work items that must close first, never itself.** A landing entry gated on
+  its own id is a defect, not a cycle to untangle (source: #2824, the entry for `impl-item-2483`, gated on #2824).
+- **R-G — verification reports are evidence, not product.** A `VERIFICATION-*.md` artifact never lands as a doc; its
+  content belongs in the completing verify item's evidence/notes (source: `qa-item-3147` @`3a89076`,
+  `qa-item-3151` @`b7c0795`).
+- **R-H — stack order is a landing invariant.** A stacked branch may not land before its base. A branch built on
+  another branch legitimately CARRIES its base's commits — that is what stacking means, not contamination, and it must
+  not be "fixed". The defect is proposing the **dependent** for landing while its base is unlanded and unverified:
+  landing it alone carries the base's work to main through the wrong seat's branch, without the base author's verify,
+  which destroys verification integrity and defeats R-D. Order: the base lands through its own author's path with its
+  own verify; the dependent is rebased onto the new main, which drops the duplicate commit; the dependent then lands
+  and is verified on its own delta. **A landing entry for a stacked branch names its base.** A landing entry is a
+  claim about a specific tip against a specific main, so an entry already terminal is never revived after main moves —
+  issue a new entry.
+- **R-I — for docs-only and add/add-shaped branches the probe is BLOB IDENTITY AT PATH**: `git rev-parse <tip>:<path>`
+  against `git rev-parse main:<path>`, or an empty `git diff main:<path> <tip>:<path>`, with `git cherry`/patch-id as a
+  **secondary** signal only. Patch-id **under-reports on add/add rebases**: a branch that adds a whole file is not
+  patch-equivalent to the landed commit that added a delta on top of an earlier version, even when the resulting blob
+  is identical; run patch-id literally and it reports "unique", so the branch is routed as live work or re-landed as an
+  add that resolves against a file already present. This entry is **normative** for the probe; `docs/DISPOSITIONS.md`
+  and the runbooks apply it and cite it rather than becoming a second authority.
+- **R-J — a minted D-number in an unlanded branch is a claim, not a fact.** The landing step re-verifies that a minted
+  number is still the next FREE number at the moment of landing and re-mints if anything landed in between. A union
+  branch inserting several entries is checked for monotonic order **as a whole**, not entry by entry (trigger:
+  `scribe-item-3268`'s branch carried a minted D121 while the union branch #3343 also inserted D115–D120).
+
+**The principle underneath R-C, R-E and R-I: content is the invariant, ancestry is a proxy.** The evidence pin is a
+CONTENT invariant — what lands must be what was verified — and it is the first table's first row applied at two
+lifecycle points. Ancestry is only a proxy for content, and squash-shaped
+landings break the proxy: an artifact can sit on main byte-identically while `git merge-base --is-ancestor` reports it
+is not an ancestor (`security-item-1475` @`7cf5a34` against union tip `e3abbca` — true by content, false by ancestry).
+Decision procedure:
+
+1. the evidence artifact **is** an ancestor of the tip → proceed. FAST PATH, not the test.
+2. it is **not** an ancestor → do NOT abort on that ground; compare **per-file content** of the landing set, tip vs
+   evidence artifact; equal → proceed (the squash-shaped / already-carried case).
+3. content differs → **ABORT**, naming both shas and the differing paths.
+
+Reachability is demoted from TEST to FAST PATH; ignoring it entirely is explicitly rejected, because that discards the
+protection the pin exists for. R-C's probe ("is this branch already on main?") and the evidence-pin abort ("does what
+I am landing match what I verified?") are **the same test at two lifecycle points** — disposition time and land time —
+both content-based, neither ancestry-based.
+
+**Refinement of R-A: a citation in a landed document is a live need — for the REFERENT, not the branch.** (1) If the
+branch *is* the cited artifact (same path, clean, docs-only) it satisfies the need and lands. (2) If the branch merely
+*contains* the cited artifact among other changes, **split it**: land the referent, dispose of the remainder under R-A.
+(3) If the cited artifact is already on main **by content**, the citation is not dangling and the branch cancels under
+R-A. This closes the loophole that any branch could become un-cancellable by being cited: only the cited path
+qualifies, and extra content is split off rather than riding along. The discriminator for whether a REVIEW belongs on
+main at all is **ADJUDICATION**: a review whose findings were adopted into a landed document is part of that decision's
+record and lands; a review nobody adjudicated is an opinion with no consumer and cancels. The alternative remedy —
+editing a landed document to delete the citation and describe an absence — is rejected: it edits main to record a gap
+and destroys the audit trail of an adjudicated decision. Worked case: `advocate-item-2985` @`7387716`, cited by path in
+landed proposal v2 `defbc34` §12 with its CR-1..CR-8 adjudicated in §13 (lead #3351). **Transfer note:** R-G does NOT
+transfer to reviews — an `evidence` field needs a completing queue item and a review has none; adjudication is the
+transferable discriminator.
+
+**One correction recorded so it is not re-raised.** `architect-item-2700`'s primary cancellation ground is
+content-equivalence (its DECISIONS body landed as D113 via #2744); the hardcoded `+## D114 —` line was corroborative
+only.
+
+**What is already built, and where it is proven.** `scripts/land.mjs:479-487` treats ancestry as a **fast path**
+(`contains-base` → land, `already-landed` → re-run, `neither` → fall through to the merge rather than refuse), and
+`demo/land-helper.test.mjs:278-284` asserts exactly that: *"a STALE branch is NOT refused on ancestry — it reaches the
+merge"* — `node demo/land-helper.test.mjs` exit **0** on 2026-11-12. `docs/DISPOSITIONS.md` §"The probe method" carries
+the blob-identity probe as data, `docs/runbooks/branch-cleanup.md` step 0 states it as procedure ("blob identity at
+path, patch-id secondary, **content wins**"), and `docs/runbooks/land.md` §"Stacked (unlanded) base — every entry NAMES
+its base" is R-H in operational form.
+
+**Named, not papered over.** R-J has no instrument: nothing re-derives the next free D-number at land time, so a
+placeholder is minted by hand and can collide — the same class R-J describes. The carrier mechanism this ruling had to
+travel through is itself a defect the rig has not fixed: `revise_work` refuses a HELD item (#3236) and a COMPLETED
+item's body is not readable through the queue tools, so *a carrier that completes takes its payload with it* — that is
+why #3410 exists and is instructed not to close until #3271 absorbs it. Both halves were raised with `pm` against
+#3236 as of this entry; neither is built.
+
+**Status.** RATIFIED by lead at #3265, amended at #3338/#3354/#3410, and recorded here by `scribe` at #3271. The
+number is minted by the landing pass in issue order.
 
 **D273 — a park on the operator is a LEASE, and when it lapses `lead` decides (2026-11-12T20:2xZ).** Decided by the
 operator, on the delegate's recommendation "lead decides, pm routes, with a 5-day lease". The measurement that forced it:
@@ -11978,6 +12905,8 @@ exists to avoid. Guarded by `demo/store-busy-timeout.test.mjs`, a static check r
 `node demo/test-areas.test.mjs` → 326 tests across 9 areas. Commit `575a67e8`. Unverified: that the 30 s grace is
 sufficient under the heaviest checkpoint (no lock longer than 5 s has been observed since), and the running broker
 was NOT restarted, so the live process still holds the old 5 s connection until its next re-arm.
+
+**D275 — the wake signature carries a COARSE gate bucket, and the dedup is taken at the push, not before the guards (2026-11-12T22:0xZ).** Decided by the architect on review of pm's routing of #6817 into #7205/#7206/#7207; scope is lead's, sequencing is pm's. Context: `parkedSignature` (`src/driver.mjs:76`) encodes only `${id}:${status}` of a seat's held/deferred rows, so when a parked row's gate is CANCELLED the signature does not move, the dedup suppresses the wake, and the row is starved in silence (`SKIP … reason=parked-deduped`). The review measured three things in-process (`tools/probes/gate-blind-wake-7208.mjs`, exit 0): (1) `deadGateIds` (`src/rig.mjs:333`) reads `blockedBy` only and returns `[]` for a row parked through `block.constraints`, while `parkGateIds` (`src/queue-lifecycle.mjs:429`) returns the id — so the signature must be built on the union, not on `deadGateIds`; (2) `derivePark`'s `gated-work` class conflates "all gates DONE" with "a gate CANCELLED", so a single terminal bucket would print a strand on work that is ready to run; (3) `parkedChanged` (`src/scheduler.mjs:148`) is consulted at `src/driver.mjs:177`, BEFORE the pending/busy guards at `:189-195`, so a change that is recorded but never delivered is lost forever — probe pass 1 (seat pending) records `101:held` and issues 0 wakes, pass 2 skips as deduped. Decision: three buckets (`open`/`closed`/`dead`) derived from ONE gate definition (`parkGateIds`) with `deadGateIds` as its "cancelled" projection; the signature is consumed at the point the wake issues, mirroring the escalation ruling already written in `src/driver.mjs`; the wake body stays a constant (two constants, chosen by a boolean) and the ids travel on the queue line and `computeAttention`. Consequences: `demo/parked-wake-dedup.test.mjs:55`'s byte pin `"1:held"` must be updated, and the acceptance test for #7205 is the suppressed-then-delivered wake, not the signature format. Options considered and rejected as primary: (a) notify dependents at cancel time — `cancelItem` (`src/rig.mjs:213-240`) already notifies only the other party, and widening it writes N notices for a fact already on the row, to a seat with no verb to act on it (`release_work` refuses at `src/rig.mjs:1478`, `revise_work` is queued-only at `:1595`); (b) a periodic store tick — refused by D272 (session-cached snapshot, second reader, the #2237 hot-loop). Accepted trade-off: the wake says *that* the gate died, not which id — the id is one `peek_queue` away and the fan-out is bounded to one wake per seat per pass. Unresolved and routed: there is no repair verb for a held row with a dead gate, so the diagnostic must name `cancel` or pm re-gating as the exit, per `docs/runbooks/stale-held-backlog.md`.
 
 **D275 — the team queue is AUTHORITATIVE, specialisation is a predicate, and work is sized to the window (2026-11-12).**
 Decided by the operator across a design exchange; recorded by the delegate. Milestone **N19 "The Pool"**, spec
@@ -12045,6 +12974,90 @@ estimate refuses real work and the refusal reads like an unlucky claim rather th
 capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
 part of N19 may assume otherwise. It edits files and runs demos.
 
+## D310 — The landing verify pair is a RE-RUN, not a sha match (2026-11-13, queue #7643)
+
+**Decision.** A landing entry's paired `VERIFY` row certifies the landing only when its recorded
+`evidence.command` **exits 0 when re-executed in the scratch worktree at the tree being landed**. Ancestry
+and content comparison are inputs to the report, never the PASS predicate. Absence is *reported*
+(`no independent verify row names <sha>; self-attested by <seat> as row <id>`); a contradiction between a
+recorded verify verdict and the re-run *refuses*. Refusal becomes code-tier only after `lead` sets a
+measurable trigger (#7641).
+
+**Context.** #7143, as revised by `pm`, states the collision rule as: PASS if `S == T`; PASS if `S` is an
+ancestor of `T` and "the verified content is identical at `T`"; REFUSE otherwise. Measured on this rig's own
+derived merge (`T = 517dc58d`, landed branch tip `S = 4ed6b8d0`): `git diff --quiet S T` exits 1, and
+`git diff --quiet S T -- <the paths S touched>` also exits 1, because the merge re-resolves a file the branch
+changed. Meanwhile a squash-shaped landing has the verified content while failing ancestry
+(`merge-base --is-ancestor` exit 1, `git diff --quiet S T -- probe-artifact.txt` exit 0). `src/checkup.mjs:322-327`
+already records the same limit in prose. Nothing in the landing path reads a queue row today
+(`grep -n evidence scripts/land.mjs` → `:161 :303 :327 :821`, none about verify rows).
+
+**Alternatives considered.** (a) Ancestry + content identity — cheapest, two git calls, no subprocess;
+rejected because it is false for correct landings and false-negative for squash landings, so it either stalls
+the drain or quietly collapses into "ancestor means PASS". (b) Verify after landing against `main` — rejected:
+`main` would have advanced unverified, the exact failure `src/landinggate.mjs` was written to close (#6090,
+the `1f6f26c5` landing). (c) Require the verify row to name `T` — rejected for the same ordering reason: `T`
+does not exist until the merge is computed.
+
+**Consequences.** One command run per landing, on a scratch `scripts/land.mjs` already builds (`:545`) and
+already links dependencies into (`:558`). Independence is computed, not asserted: the completer must satisfy
+`seatsAreVerifier` (`src/verifierrole.mjs:26-31`), which deliberately excludes the shared `peer-review`
+capability because `impl`/`impl2` advertise it. Minted-but-unclaimed verify rows are the loop risk; they carry
+a `set_priority` lease whose expiry surfaces in the census, and `pm` releases or cancels. The ratchet trigger
+counts the same predicate the gate uses, so the trigger and the gate cannot disagree.
+
+**Falsifiable probe.** `node tools/probes/verify-pair-rule-7643.mjs` → exit 0; assertions 1b/1c are the proof
+that the prose rule is undecidable, assertion 2 is the proof that the verdict moves between trees, 3/3b and 4
+pin the squash and stale cases. Landing the implementation must add `demo/landing-verify-pair.test.mjs`
+pinning PASS / REFUSE / ABSENT.
+
+**Status:** design and review only — no code changed in `src/` or `scripts/`. Implementation routed to `pm`
+for sequencing; the refusal trigger and override authority are `lead`'s (#7641). ADR number to be re-derived
+at land time: `D275` is referenced in this file's tail and `item-7208` carries a `D275` not yet on `main`.
+
+**D### — the landing gate is a DELTA: "no NEW red", and an unmeasured baseline REFUSES (lead ruling #7269; recorded by scribe, item #7274, 2026-11-12).**
+
+**Mint note.** The heading carries a `D###` PLACEHOLDER on purpose — the landing pass derives the next FREE number by
+scanning this file at merge, per the minting convention already in this file (the notes at lines 3979 and 11419, which
+lead's ruling cites as #3077/#3075). Highest at this branch's fork point `9611c45d` is **D275**: re-derive at merge,
+do not assume D276.
+
+**The decision, in one line.** "Landing is safe" means **NO NEW RED**, not "the tree is green". The gate compares
+`RED(main)` with `RED(merged)` — two fresh runs, in the same pass — and refuses **iff the merge introduces a red that
+main did not already carry**.
+
+**The measurement that forced it.** Twelve refs merged cleanly and were refused because **main itself** was red: the
+clockin digest measured **20279 B** against its **20000 B** budget, while the merged tree measured **20244 B** — the
+candidate was **35 B better** than the tree it was refused against. The budget is in the code, read here at `9611c45d`:
+`scripts/clockin.mjs:46` `export const DIGEST_BUDGET_BYTES = 20000`, and `budgetVerdict()` at `scripts/clockin.mjs:378-384`
+makes over-budget a failure rather than a comment. **Labelled honestly:** the 20279 / 20244 figures are lead's
+measurement reported under #7269; this entry did NOT re-run the digest, so treat those two numbers as attributed, not
+re-verified here. An absolute gate measures the TREE; it cannot tell "this candidate is bad" from "this tree is already
+bad". A gate that cannot make that distinction is a stop sign, not a gate.
+
+**Why the delta is not weaker.** When main is green the two gates are **identical**. Its only added risk — permitting a
+landing onto a red main — is bounded by the fail-closed rule below.
+
+**Fail-closed: no baseline, no landing.** If the baseline run does not complete, the delta is **undefined** and the
+landing is **REFUSED**. This is the same rule as #4866 (a seat without an oracle may author, not close) and the same
+shape as #3575 (a cheap or cached signal may accept but must never decide): the baseline is **re-measured every landing,
+never read from a cached tally**.
+
+**Direction counts for budget-shaped reds.** An already-red budget test is tolerated only if the candidate does not move
+it the wrong way, and the report prints the number **before and after**.
+
+**Ruled vs. built, so a reader is not misled.** As of main `9611c45d` the comparison does not exist: `scripts/land.mjs`
+runs the gate in the detached scratch and `recordFailure()` (`scripts/land.mjs:885-897`) stops on the FIRST red with
+"main was NOT advanced" — it never measures main separately; `src/landinggate.mjs` only requires that a gate flag was
+passed (#6090). So this entry is the **rule**, not the implementation; the carrier row is **#7273**, and `docs/NEXT.md:146`
+already states the sequencing fact that the delta gate is not a prerequisite for landing while main is green.
+
+**Verify (run in the `item-7274` worktree off `main 9611c45d`; exit codes named).** `node tools/doc-integrity-guard.mjs`
+→ `VERDICT: 0 hard, 1 soft`, exit **0** (the 1 soft predates this entry). `grep -c "^\*\*D" docs/DECISIONS.md` → 247
+numbered `**D**` headings, exit **0** — the count is the census the landing pass can re-derive, not a reservation of a
+number. `node --check scripts/land.mjs` → exit **0** (no source was touched by this entry; the cited lines are read from
+the file, not modified).
+
 **D275 addendum — the five calls the build had to make (2026-11-13), recorded because each is a rule a reader cannot recover from the code alone.**
 (a) **Visibility is wider than eligibility.** Every OPEN pool row appears in every seat's `peek_queue`
 (`src/rig.mjs:2077`), even a row that seat cannot take. The spec's recommendation was the opposite; the build
@@ -12069,6 +13082,58 @@ throws rather than silently falling back.
 rows, which is not a measurement. Saying "the ledger cannot answer this" and keeping an explicit default is
 honest; deriving 120 000 from four rows and printing it as calibrated would be the opposite.
 
+## D311 — 2026-11-13: **a row whose artifact is provably on main is CLOSED with a DISPOSITION, never CANCELLED; cancellation stays with the parties, and any authority to close a row a seat is not a party to is a trust boundary that must be checked by the broker, not asserted by the caller** (lead ruling #7657, recorded by `security`, item #7669; the sweep rows are #7668/#7670 for `impl` and the sweep itself is `pm`'s once the verb exists)
+
+(1) **DONE plus disposition, not cancelled.** A LANDING row whose cited sha is an ancestor of `main` is closed
+with `complete_work` and a disposition line naming it: `LANDED at <sha>` (or, if the artifact was routed and has
+not landed, `ROUTED to <seat> as <id>, NOT YET LANDED`). Rule #4073 already makes plain `done` on a landing entry
+read as landed, so leaving the disposition out is an ambiguity the census cannot recover from. The close must carry
+re-runnable `evidence`: `{command: "git merge-base --is-ancestor <sha> refs/heads/main", exitCode: 0, artifact: "main"}`.
+`cancelled` means "no longer worth doing"; a row that landed is, by definition, not that. Measured on the live store
+in this run (`node cli.mjs queue --json`, exit 0): 1116 rows are `cancelled`, and a CANCELLED row named as a gate
+starves its dependents forever — `demo/gate-cancel-refusal.test.mjs` (exit 0) pins the semantics: `workable()`
+refuses the claim with `gate-cancelled:#<id>`, 50 claim passes claim it 0 times, and `enqueueItem` THROWS on such a
+gate. A sweep that cancels already-landed rows therefore converts a housekeeping win into permanently unclaimable
+work.
+
+(2) **Who may close a row.** `cancel_work`, `revise_work` and a tier RAISE stay with the row's parties, because they
+are irreversible — `demo/pm-release-authority.test.mjs` (exit 0) pins #6112 and shows a non-party `pm` refused on
+cancel, revise and tier-raise while a coordinator RELEASE with a recorded reason succeeds. Reversibility is the
+authority test: a sweeper may report and may release a parked row with a reason; it may never cancel a row it is
+not a party to. Any new verb that lets a designated sweeper close a row it did not mint is therefore a NEW trust
+boundary, not a convenience. The gates that make it defensible are app-layer and falsifiable (OS identity is a
+norm here, not a control — D-ENV-AUTH): the ancestry check is RUN by the broker and the refusal is returned, not
+delegated to the caller's word; the verb refuses when the sha is not an ancestor of `main`, when the cited token is
+not a git object (`git cat-file -t`), and when the row still has an open gate; and it refuses silently-failing
+checks rather than accepting an unverified close.
+
+(3) **No new terminal literal.** `src/queue-lifecycle.mjs` fixes STAGES = open|active|deferred|closed and
+`src/checkup.mjs` fixes TERMINAL_STATUSES = {done, cancelled}; the disposition rides on the transition as a field,
+in the same shape as `closedAs: "split"`. A seventh status literal would drift every reader that enumerates
+statuses, including the census and the `check` rules.
+
+(4) **Containers close as work.** Umbrella/container rows close with `complete_work`, never `cancel_work` (#6214):
+cancelling a container makes its children's gates dead by rule (1).
+
+Non-goals: this records the DISPOSITION and the AUTHORITY rule; it does not authorise this seat to sweep, and it
+does not clear the 9 existing rows whose `blockedBy` names a CANCELLED id (3377→3343, 3456→3455, 5816→5815 among them) — that is the
+clear-gate verb in #7668, and clearing a dead gate is a verb, not a status change.
+
+Number check, re-runnable: `grep -cE '^## D[0-9]+' docs/DECISIONS.md` counts 267 entries after this commit
+(266 before); `grep -n 'D283' docs/DECISIONS.md` returns no match, so the rule pm was quoting is not in this file —
+the shipped gate rule is `deadGateIds` in `src/rig.mjs` (`gate-cancelled:#<id>`), pinned by
+`demo/gate-cancel-refusal.test.mjs` and `demo/workable-claim.test.mjs`. There is no `demo/decisions-numbering.test.mjs`.
+
+
+**D276 addendum — WITHDRAWN IN FAVOUR OF `D276` AS MINTED BY #7669 (2026-11-13)** (recorded by `advocate`, items #7667/#7698; superseded by the lead disposition at #7710, ruling on #7657). `D276` belongs to `security`'s entry on branch `item-7669` at `d2281e54`: it is the fullest record and the one the citation chain (#7657, #7693, #7694) already resolves to, so keeping the number there is what makes those references resolve. This block is NOT an ADR and carries no authority — it is a measurement record kept so the findings are not lost, and it must never land as a second entry under the same number. Renumbering it would be worse than withdrawing it: one decision under two numbers splits authority. The numbering-collision rule it points at is routed to the doc-integrity guard in #6467, not recorded here. Host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**.
+
+(5) **One number, four live claimants.** Measured in this tree (`git rev-parse refs/heads/<branch>`, then `git merge-base --is-ancestor <tip> refs/heads/main` — exit 1 for all four, so none is landed): `item-6671` `7902bf64` carries `## D276` "standing is stored data, never a capability string ..." (2026-11-11, self-labelled provisional: "re-mint at land from the MERGED tree"); `item-7669` `d2281e54` carries `## D276` the landing-disposition entry; `item-7643` `0371ccf5` carries `## D276` "The landing verify pair is a RE-RUN, not a sha match"; `item-7667` `cab8ce7f` — this record — carries no `## D276` heading at all. On main `grep -c "^## D276" docs/DECISIONS.md` returns **0**: the number is free and unowned, and four unlanded records already claim it. Whichever lands first owns it; the others must land folded into it, not beside it. The pre-merge check is one command: on main that count must equal 1. Collisions are not hypothetical — on main `grep -o "^## D[0-9]+" docs/DECISIONS.md | sort -n | uniq -d` returns **D265 and D266**, each appearing twice, and D273/D274 record their own collisions with D258/D259 (DECISIONS.md:11546, :11591). There is no `demo/decisions-numbering.test.mjs`, so nothing re-checks this after the fact; the doc-integrity guard in #6467 is now meant to report ADR numbers claimed by more than one live branch.
+
+(6) **"How many decisions are there" has two answers, and the census must name which.** On main `grep -cE "^## D[0-9]+" docs/DECISIONS.md` returns 266 while `grep -c "^## D"` returns 276: ten headings begin with `## D` and are not numbered entries. A count without its pattern is a number a reader cannot reproduce.
+
+(7) **The sweep only works if a closed row stays legible to the seat that was working on it.** A sweeper may not close a row it is not a party to, so the rows it *can* close are the ones a seat is watching — and what the seat sees is the whole interface. The semantics are pinned as "refused at write time and **named at read time**" (`demo/gate-cancel-refusal.test.mjs`, exit 0; `demo/workable-claim.test.mjs`, exit 0 — both run in this entry's tree, `item-7667` @ `36f57a36`, dependencies `@earendil-works/pi-durable` 1.3.0 from the lockfile). If landed rows are closed without the `LANDED at <sha>` disposition and evidence naming the tree, the sweep reads to a seat as work that vanished rather than work that finished: the same failure this ADR exists to prevent, on the reading side.
+
+**Numbers this addendum does not claim as its own:** the 484 gate references / 67 naming a cancelled row / 19 still-held dependents are lead's measurement at #7657; the 1116 `cancelled` rows are security's measurement at #7669. Neither was re-measured by this record — the queue is one delta-compressed document (`durig.queue`, doc id 29, 3,980,162 revisions, latest revision a 144-byte delta), so a raw-store recount is not a one-liner.
 
 **D275 addendum — tranche 1 and tranche 2 of "make the pool usable and alive" (2026-11-13), recorded because each is a rule a reader cannot recover from the code alone.**
 Host for every number below: **Linux / Fedora Linux 45 (Forty Five) / kernel `7.2.15-300.fc45.x86_64` / node

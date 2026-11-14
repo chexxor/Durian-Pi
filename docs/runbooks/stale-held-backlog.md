@@ -1,10 +1,10 @@
 ---
 runbook: stale-held-backlog
-symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so; ALSO: a queued row can NEVER be claimed and the scan says `gate-cancelled:#<id>""
+symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so; ALSO: a queued row can NEVER be claimed and the scan says `gate-cancelled:#<id>`; ALSO a HELD row whose gate was CANCELLED never wakes and is never reported (`SKIP … reason=parked-deduped`)"
 writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
 precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
 last_verified: 2026-11-11        # the tool below was run against the live store; see Evidence
-verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry); scribe (2026-11-12, #6626 — the Verify legs only: the audit, `demo/held-gate-audit.test.mjs`, `demo/runbook-frontmatter.test.mjs`, `demo/text-integrity.test.mjs`, `tools/doc-integrity-guard.mjs`, and the symptom-index grep, all in an UNLINKED worktree; the intent-spool and release legs were NOT re-run, so last_verified is not raised)
+verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry); scribe (2026-11-12, #6626 — the Verify legs only: the audit, `demo/held-gate-audit.test.mjs`, `demo/runbook-frontmatter.test.mjs`, `demo/text-integrity.test.mjs`, `tools/doc-integrity-guard.mjs`, and the symptom-index grep, all in an UNLINKED worktree; the intent-spool and release legs were NOT re-run, so last_verified is not raised); architect (2026-11-13, #7208 — ONLY the new parked-wake-suppression entry: `node tools/probes/gate-blind-wake-7208.mjs` exit **0** (12 checks) in the `item-7208` worktree, deps pi-durable 1.3.0 from the lockfile; the audit, spool and release legs were not re-run, so last_verified is not raised)
 evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Re-run 2026-11-11 by scribe (#6315) in the `item-6315` worktree with UNLINKED deps (pi-durable **1.3.0** from the lockfile): live store exit **0** `rows=6502 held=434`, `git landing commits read: 153`; a worktree-local copy exit **0** `rows=6501 held=434`, same 153. The schema-version refusal did NOT fire in that tree — see If it fails. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"
 check_rule: demo/held-gate-audit.test.mjs
 ---
@@ -55,7 +55,12 @@ human noticing reveals it. Measured 2026-10-19: **153 held rows**, 113 to `impl`
 
    Five classes, and the distinction is the whole point:
    - **release-candidate** - every gate the row names is `done`/`cancelled`, no trigger text, nothing else
-     parks it. These are the orphan rows.
+     parks it. These are the orphan rows. **Read the qualifier (#6502):** if the only gate the row names is
+     `cancelled`, releasing it is REFUSED by the broker (`src/rig.mjs:1346`, "its gate names #<id>, which is
+     cancelled") and `claim_work` refuses the row with `gate-cancelled:#<id>` (`src/rig.mjs:332`). Verify
+     before acting: `node tools/probes/gate-predicate-disagreement-6502.mjs` (exit 1 = the classifier still
+     disagrees with the claim path). Until a gate-edit verb exists, the legal action for such a row is
+     `cancel_work` with a reason, not release.
    - **cancel-candidate** - the row's own work has a `merge: land item-<id>` commit on main, or the artifact
      it asks for is already in the tree and contains what it names.
    - **standing-rule** - the row's text names an EVENT it waits for (a quiet window, an operator ruling, a
@@ -245,6 +250,23 @@ starvation retroactively, and `cancel_work` does not refuse it - the guard is at
 the live store (probe below): of the 67 dead gates, the dependents were registered first and the gate
 row was cancelled afterwards, so the enqueue guard alone does not close the whole failure mode. The
 rule for an operator today: when closing a container, `complete_work` it, never `cancel_work` it.
+
+**Symptom to look for: a parked row whose gate died and which never wakes (review #7208, ADR D275).**
+The wake dedup only sees `${id}:${status}` of the seat's own held/deferred rows (`parkedSignature`,
+`src/driver.mjs:76`), so a gate being CANCELLED does not change the signature and the seat is never
+told. Worse: the dedup is consulted at `src/driver.mjs:176`, BEFORE the pending/busy guards at
+`:189-195`, so if the seat's run is in flight at the moment the gate closes, the new signature is
+recorded and the wake suppressed - every later pass reads "unchanged" and skips with
+`parked-deduped`. The strand is then invisible: the row is neither claimable nor reported.
+Recovery today, in order: (1) read the row with `peek_queue` - the line carries `DEAD-GATE=#<id>` for a
+queued row, and the structured `park` class (`gated-work`) for a held one; (2) note that
+`release_work` REFUSES a held row whose gate is cancelled (`src/rig.mjs:1478`), so the only verb a
+party has is `cancel_work`; (3) if the row is legitimate work mis-gated on an umbrella/container, ask
+`pm` to re-gate it - there is no revise path for a `held` row (`revise_work` is queued-only,
+`src/rig.mjs:1595`) and no repair verb anywhere in `src/` (grep `regate|gate-repair|repairGate`: no
+hits).
+Verify the shape reproduces: `node tools/probes/gate-blind-wake-7208.mjs` → exit **0** (checks 3a/3b
+assert the signature is recorded while zero wakes are issued, and the next pass skips as deduped).
 
 **The measurement that motivated it** (`node tools/probes/gate-starvation-census.mjs --db <store>`, run
 2026-11-12 on `selfdev.sqlite`, exit **0**): 7,130 rows, **484** gate references, **67** of them naming a

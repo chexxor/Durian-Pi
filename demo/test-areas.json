@@ -116,6 +116,7 @@
       "demo/broker-cooperative-stop.test.mjs",
       "demo/broker-dirty-fork.test.mjs",
       "demo/broker-error-classify.test.mjs",
+      "demo/broker-harness-dead.test.mjs",
       "demo/broker-health.test.mjs",
       "demo/broker-hotloop-bound.test.mjs",
       "demo/broker-inbox.test.mjs",

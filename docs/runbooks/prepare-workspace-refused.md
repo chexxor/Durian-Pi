@@ -77,10 +77,12 @@ the first sha, not the base you asked for.
 2. `leftover directory, not a registered git worktree`: `git -C "$REPO" worktree list` to confirm
    nothing is registered at the path, then remove ONLY that directory and retry. If it is registered,
    use [leaked-worktrees.md](leaked-worktrees.md) instead; do not delete a registered worktree's files.
-3. `checked out by another worktree` / `another seat's item branch`: the holder's item must reach a
+3. `checked out by another worktree` / `another seat's item branch`: the code's exact sentences are
+   `refusing to prepare item <id>: branch <branch> is checked out by another worktree <path> (holder item <id>). Detaching it would free the branch, but that is safe only once the holder's item is TERMINAL (done/cancelled); it is not, so this is refused rather than stolen. Finish or cancel the holder's item first, or prepare a different item.` (`src/worktree.mjs:1010-1013`) and, for a reused path sitting on another branch, `refusing to prepare item <id>: <path> is a valid worktree on branch <branch> (another seat's item branch, item <id>). Switching it to <branch> would silently steal that seat's working state. The holder's item must be TERMINAL (done/cancelled) first. Never steal, never force.` (`src/worktree.mjs:1053-1057`). Note what the message does NOT name: the holder's SEAT, its item status, or a command you can run — the verbs it gives are `finish` or `cancel` the holder's item. The holder's item must reach a
    TERMINAL status (`done`/`cancelled`) before the branch can be freed, and freeing it is a `switch
    --detach` on the holder (lossless), which the operator runs. Ask with `defer_work`; do not detach
-   another seat's tree yourself.
+   another seat's tree yourself. (`#4758` records why handoff is refused here rather than granted: a ref
+   carrying the holder's commits would make the taker the carrier of unverified work.)
 4. `the branch ALREADY EXISTS at <sha>`: you asked for `base=<ref>` and the item branch already sits
    somewhere else. Pick one, deliberately:
    - you do NOT need that base: call `prepare_workspace` again WITHOUT `base`. The existing branch is

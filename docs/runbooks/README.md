@@ -58,6 +58,10 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 7. **Small and stable.** Link out to the design doc; move any growing `Background` to the design doc.
 8. **Ownership.** The delegate owns operator-surface runbooks; the team owns seat-runbooks; `scribe`
    keeps them true to the code like any other doc.
+9. **A health total names its tree.** Any count taken from `demo/runbook-diagnose.test.mjs` (or any other
+   instrument) is quotable only with the ref it was measured on - `main @ <sha>`, date, measurer. A
+   branch-tip measurement is **not** a baseline: it can be arithmetically correct and still describe a
+   tree that does not exist downstream. See *Runbook-health baseline* below.
 9. **Host scope is written, not assumed.** Every command block says which shell it needs. Do not
    translate a PowerShell-only block into a POSIX one you have not run: a Windows-only read with its
    host named is a true document, a guessed equivalent is an unverified claim. Where both halves exist,
@@ -144,6 +148,15 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   `durig.config.json` is gitignored (`.gitignore:12`) so it exists only in the shared root - measured in an item
   worktree, a bare `node cli.mjs status` falls back to `./rig.sqlite` (`durig.config.default.json:2`), not to the
   rig the operator meant.
+- **Naming the variable is only half of it: a store path is resolved against the cwd (#6339, measured 2026-11-11 in
+  the item worktree `item-6339`, forked from `main 35001c3a`).** `cli.mjs:161` is
+  `resolve(CFG.DURIG_DB ?? "./rig.sqlite")`, and no store is tracked (`git ls-files | grep -c sqlite` -> `0`;
+  `.gitignore:2`), so `selfdev.sqlite`, `rig.sqlite` and `session.sqlite` exist ONLY in the shared checkout. In an
+  item worktree: bare `node cli.mjs status` -> `"db": "…/item-6339/rig.sqlite"`, exit 1, `cause: no_store`;
+  `DURIG_DB=./selfdev.sqlite node cli.mjs status` -> `"db": "…/item-6339/selfdev.sqlite"`, exit 1,
+  `cause: no_store`. A runbook whose Diagnose/Do opens a store must therefore say which tree it assumes and give
+  the absolute path (`--db /home/chexxor/Git/Durian-Pi/selfdev.sqlite`); `store-probe-identity.md` now carries that
+  section.
 - **Env-name fidelity is now a machine rule (#6335, 2026-11-11, tree `1dc05f8b`):** `tools/doc-integrity-guard.mjs`
   scans the live instruction surfaces (`README.md`, `AGENTS.md`, `docs/QUICKSTART.md`, `docs/STATUS.md`,
   `docs/FEATURES.md`, `docs/TUI-TESTING.md`, `docs/DELEGATE-CLOCKIN.md`, `docs/SELFDEV.md`, every runbook) and
@@ -158,6 +171,64 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   after the #5911 sweep — which is the rot a hand sweep cannot prevent. The rule judges TEXT only; a shell that still
   carries the dead name at runtime is a different check (`tools/broker-serve.mjs`'s `legacy-env-set`, which is a NOTE
   and does not affect its exit code).
+
+## Runbook-health baseline (`demo/runbook-diagnose.test.mjs`)
+
+**Run the instrument, then name the tree.** `node demo/runbook-diagnose.test.mjs` (exit 0 = pass) prints
+one PASS line with every headline number; record it together with `git rev-parse --short main`.
+
+Baseline on **`main` @ `9655e761`**, measured 2026-11-12 by `scribe` (item #6595), exit 0:
+
+| Measure | Value | Where it comes from |
+|---|---|---|
+| Runbooks counted | 59 | `docs/runbooks/*.md` minus `README.md` and `_template.md` (`demo/runbook-diagnose.test.mjs:134`) |
+| `## Diagnose` command lines | 221 | the PASS line |
+| Lines CI **executes** (exit 0; a `--json` line must parse) | 73 | the PASS line |
+| Gaps reported (classified, not executed) | 160 | the PASS line |
+| Runbooks CI executes **nothing** from | 22 | pinned by name in `NOTHING_EXECUTED` (`demo/runbook-diagnose.test.mjs:62`) |
+
+Gap classes on that same tree, read from the demo's grouped `gap reasons` section (printed once), which
+sums to 160:
+
+| Class | Count |
+|---|---|
+| a token not in the harness's read-only allowlist | 52 |
+| a file the throwaway fixture cannot contain (`selfdev.sqlite.broker.json`, `.spike/acceptance-seed/…sqlite`, …) | 28 |
+| host-specific shell command | 14 |
+| unfilled `<placeholder>` (12 with no fixture value + 2 placeholder-or-glob) | 14 |
+| runs inline code, not a script in the tree | 13 |
+| a glob the fixture cannot guarantee | 11 |
+| a git subcommand the harness refuses | 7 |
+| a path named in prose that is not in the tree | 6 |
+| a `cli.mjs` verb that is not read-only | 4 |
+| a ref the fixture does not contain | 3 |
+| empty segment - a line the parser cannot read as a command | 3 |
+| needs a live network endpoint | 2 |
+| `--json` printed nothing against the fixture store | 1 |
+
+### The figures on record before this entry were a branch state
+
+"**54 runbooks, 198 Diagnose command lines, 92 executed, 116 gaps, 17 never-executable**" reproduces
+exactly at `item-6330` @ `4696b656` - that tip's own demo prints those numbers and exits 0 - but
+`git merge-base --is-ancestor 4696b656 main` exits **1**: it is not on main. So those totals are a
+branch state, not the baseline.
+
+They are also not the same measure. That branch's PASS line reads "92 executed (exit 0 **or a verdict
+the command itself returned**; any `--json` output parsed)"; main's reads "73 executed (exit 0, `--json`
+parseable)". A pass criterion that accepts a non-zero verdict counts lines main refuses to count.
+
+Two more figures in that record do not survive measurement on main:
+
+- **"26 inline `node -e`, 28 host shell, 22 globs"** is exactly **2x** main's single-print counts
+  (13, 14, 11). Cause: `DIAG_DEBUG=1` prints the gap list twice - `grep -c "^GAP"` gives 320 while the
+  PASS line reports 160 gaps (`demo/runbook-diagnose.test.mjs:258` and `:326`). Tally classes from the
+  grouped `gap reasons` section, never from the `GAP` lines.
+- **"fixture-absence 308"** is not reproducible on main. The fixture-absence family - files the
+  throwaway rig cannot contain (28) + refs it does not have (3) + unfilled placeholders (14) - is **45**
+  gap lines of the 160. If you see 308 quoted, ask for the tree and the command.
+
+**Revival rule for anyone quoting a runbook-health number:** the command, the ref, the date, and the
+seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 
 ## Agent execution (from the research report)
 
@@ -191,7 +262,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Runbook | Use when | Writes? |
 |---|---|---|
 | [slow-loop.md](slow-loop.md) | a change takes minutes-to-hours to verify; one test or area dominates wall-clock; a test is red **only** because it needs a key/network/a model; you are about to run the whole suite "to be safe"; or you are reviewing a design and need to state what it costs to iterate on it (the operator's fast-iteration policy, D213 — measured here: full suite **257/258 in 57.0 s**, `demo/cli.test.mjs` alone **20.1 s**, `demo/offline.mjs` full delegation loop **0.301 s**, model-call **p50 52 ms / p95 9.0 s**, and **185 generations (0.29%) holding 64.6% of generation busy time**) | no |
-| [suite-red-standalone-green.md](suite-red-standalone-green.md) | a demo exits 0 alone but the suite prints `FAIL` or `TIMEOUT` for it; a red appears only while another suite run or a seat turn is live; the report's 8-line tail shows `signal: null, output: null` and no cause (measured 2026-11-10: one-file fixture reproduces the false TIMEOUT — demo exit 0, runner 60.1 s, exit 1; two concurrent `--all` runs drive `SwapFree` to 0 kB and manufacture one extra red) |
+| [suite-red-standalone-green.md](suite-red-standalone-green.md) | a demo exits 0 alone but the suite prints `FAIL` or `TIMEOUT` for it; a red appears only while another suite run or a seat turn is live; the report's 8-line tail shows `signal: null, output: null` and no cause (measured 2026-11-10: one-file fixture reproduces the false TIMEOUT — demo exit 0, runner 60.1 s, exit 1; two concurrent `--all` runs drive `SwapFree` to 0 kB and manufacture one extra red; the inverse shape - red standalone AND red in the suite but green in a tree where the pin was linked - is the dependency set, measured 2026-11-11 on the same main `35001c3a`: 279/300 exit 1 unlinked (pi-durable 1.3.0) vs 300/300 exit 0 linked (1.5.1)) |
 | [process-leak-reap.md](process-leak-reap.md) | RAM climbs while nothing is running; the suite is slow or a demo times out; the verifier model server has no headroom; `ps` shows node processes with `0:00:00` CPU time — `node tools/process-leak-scan.mjs` (**0.04 s**, 644 pids, reads `/proc` only) names every suspect with age, RSS and a verdict, and `--kill` SIGTERMs only the reparented ones (measured 2026-11-12: 30 orphans / 2.42 GB, then 5 / 310 MB after a 38-minute recurrence — the leak is recurring, and its second generation, `fake-broker.mjs` fixture children, is now in the default pattern) | no |
 | [in-turn-read-hangs.md](in-turn-read-hangs.md) | a seat's turn hangs on `cli.mjs queue` / `status` / `scripts/clockin.mjs`; a broker window overruns its `--max-duration` bound while the log stops mid-pass; the read never returns and you cannot tell "the drain is stalled" from "the store is broken" | no |
 | [session-start-cost.md](session-start-cost.md) | a session is spending its first 30–60 minutes re-deriving rig state an instrument already prints; you are about to hand-query `selfdev.sqlite`; or you are deciding how many seats to wake (each wake is the expensive verb, and a failed one deposits rows) | no |
@@ -206,6 +277,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [verifier-serving-headroom.md](verifier-serving-headroom.md) | a seat or verifier turn settles `unanswered` with reason `model_error` and the `check` notice carries **no cause** — the cause is the submission record's **`detail`** field (Step 0: `json_extract(record,'$.detail')`; there is no `detail` COLUMN), and 3 of the 4 measured cases were **compaction** casualties, not shape; a verifier turn dies at `stopReason=length` mid-review; a provider answers a tiny probe but refuses a real request; a turn fails in **~30 ms with ZERO tokens generated** (a strict-template refusal on the **verifier** engine — this rig's seat model accepted two consecutive `user` turns, measured 2026-11-05, so a shape read never explains a dead seat by itself); or you are about to spend GPU capacity on a model slot and need its KV cost (Step 2-4 are **HISTORICAL**: the verifier is a hosted endpoint now) | no |
 | [docs-encoding-mojibake.md](docs-encoding-mojibake.md) | an em dash, section sign, ellipsis or arrow in a doc, a rig spec or a seat instruction reads as garbage, or a file shows a change you did not make | yes |
 | [delegate-doc-hygiene.md](delegate-doc-hygiene.md) | an edit reported success but the text is not in the file; the NEXT pointer went red on its 200-line cap or its archive proof; a citation check flags findings you did not make; you quoted a commit sha that turns out not to exist; a `cat >> … <<'EOF'` ate its own body; **a roadmap or spec row quotes a number and nobody can tell whether it was measured or merely proposed** (INTENDED vs RESOLVED, #6077/#6080); **you are about to mint a DECISIONS entry for a ruling the record already holds — reference it, do not restate it** (#5568, #6332) | no |
+| [decision-ledger-collisions.md](decision-ledger-collisions.md) | the decisions ledger reads green but two entries share one `D`-number, a heading still says `## D###`, the same ruling appears twice, or a `DECISIONS.md:<line>` pin lands on the wrong entry (measured 2026-11-11 on main: 13 colliding numbers, 8 placeholder headings, `doc-integrity-guard` exit 0 on all of it) | no |
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) | seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale `PASS` (dormant); log stops after a storage error or `database is locked`; **or `cli.mjs status`/`queue` time out with `read health: timed out awaiting the broker's result` while a direct read of the store answers in milliseconds — the deadline linger, ROADMAP 303**; or a read verb HANGS to exit 124 with zero output while the store answers directly (#5663, section "Reads when the broker is gone or dark") | yes |
 | [broker-safe-change.md](broker-safe-change.md) | a model/constitution/reset change must apply without corrupting the store | yes |
 | [broker-down-or-stalled.md](broker-down-or-stalled.md) §2026-11-08 | `cli.mjs queue`/`status` return **nothing at all** (exit 124, 0 bytes, no error line) while a direct read of the store answers in milliseconds — the read verb blocks on the broker's stalled pass loop instead of failing; `genlock` is empty yet generations are still being created | no (read-only diagnose; the `Do` steps are unchanged) |
@@ -268,6 +340,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | Store / `pi.live` | store-corruption-recovery, store-secret-detected, store-probe-identity |
 | Comparing the store to a baseline without a second writer, and why a store hash is a timestamp rather than an identity (main file vs `-wal`) | store-baseline-comparison, store-probe-identity, broker-down-or-stalled |
 | The suite gate reports a TIMEOUT for a demo that exited 0, or the failure report hides the cause | suite-red-standalone-green, slow-loop |
+| A demo is red alone and red in the suite, yet green in another worktree of the same commit | suite-red-standalone-green (the dependency set: `node scripts/sync-pi.mjs` -> `dependencySet`) |
 | Tool results | tool-result-redacted |
 | Seats | seat-reset, compact-a-seat |
 | A turn moved more tokens than the seat's window (`context_over_window`, `check` rule `context-over-window`), and whether that fraction is current at all | context-over-window, compact-a-seat, seat-reset, compaction-eval |
@@ -317,4 +390,3 @@ New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROAD
 (`runbook-stale`/`runbook-unverified` check rules, mandatory front-matter, the hard write guard, a
 `--dry-run`, executable `Diagnose` blocks, verification provenance, a gated agent runtime, the daemon
 runbook).
-
