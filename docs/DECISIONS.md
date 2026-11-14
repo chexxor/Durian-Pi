@@ -11783,6 +11783,82 @@ the very condition it diagnoses. Every route must print which path served the re
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
 
+## D277 — A LIVE item's branch may be taken only by handoff onto an EMPTY ref, gated by a broker-authoritative run probe; otherwise the answer is a refusal that names what to do (lead ruling #4751, ADR minted by scribe #4758, 2026-11-11)
+
+*(Numbered 266, not 265: D265 is reserved by scribe #3094's cadence entry on branch `item-3094`, which has
+not landed yet. Collision is the failure mode this numbering convention exists to prevent.)*
+
+**Decision — four clauses.**
+
+1. **Handoff is permitted only when BOTH gates hold:** the holder is **not running**, **and** the branch
+   carries **no holder-authored commits** (`tip == base`). The second gate is not optional: handoff
+   transfers the REF, and a ref carrying the holder's work makes the taker the **carrier** of another
+   seat's commits — that work then lands through the wrong branch without the holder's verify, which is
+   the R-D / stack-order violation ruled in #3346. Taking an empty branch is not the same act as taking
+   someone's work.
+2. **Where the holder has commits, the answer is a refusal with an actionable message, not a handoff.**
+   Where the holder is dead or retired and the branch carries commits, the path is a **disposition**
+   (cancel the claim, record the sha, authorship not transferred) — never a handoff.
+3. **The probe is a precondition, not a detail.** It must be **broker-authoritative** (the broker knows
+   which seats have runs in flight) and the acquisition must be **atomic with it**, because a filesystem
+   or heuristic check is a race: the holder can start a run between the probe and the acquire.
+   **Off-ramp, written in advance so it is not discovered in the build:** if the probe cannot be made
+   cheap and honest, clause 1 is **withdrawn** and the policy falls back to clause 2 alone — the legible
+   refusal with no path out.
+4. **Naming consequence (recorded, not re-litigated):** the branch must not name a seat, because under
+   handoff the seat is mutable and a seat-named branch becomes a lie after the first handoff. BRANCH =
+   `item-<id>`; WORKTREE PATH = `item-<id>-<seat>` — the worktree is seat-owned, the branch is not. This
+   is a **narrowing of D110**, not a repeal: the path half of that taxonomy stands, the branch half of
+   #3179/#3185 does not.
+
+**Rejected, and recorded because it will be proposed again:** **sharing the worktree.** It makes the
+worktree shared in order to make the branch shared — one index, shared staging, one seat's `git status`
+showing another seat's work. That spends the F12/seat-root isolation the system exists to protect in
+order to buy a fix to a problem about the ref.
+
+**What the code does today, measured in this tree** (branch `item-4758` off `main 35001c3a`; the worktree
+is UN-linked, so it resolves `@earendil-works/pi-durable` 1.3.0 from the lockfile while the seat root
+resolves 1.5.1 — this entry's claims are greps, line reads and one demo run, none of which depend on the
+pi version):
+- **One ref per item is real.** `itemBranchFor(itemId)` returns `item-<id>` (`src/worktree.mjs:893-895`);
+  a legacy `<seat>-item-<id>` ref is **adopted**, renamed to `item-<id>` when no worktree holds it, and
+  **refused outright** when two such refs exist, because guessing a side would silently pick one
+  (`adoptLegacyItemBranch`, `src/worktree.mjs:913-937`).
+- **The live-holder gate is the #3174 rule, narrower than clause 1.** If another worktree holds
+  `item-<id>` and that item is not terminal, `prepareSeatWorkspace` throws — verbatim:
+  `refusing to prepare item <id>: branch <branch> is checked out by another worktree <path> (holder item <id>). Detaching it would free the branch, but that is safe only once the holder's item is TERMINAL (done/cancelled); it is not, so this is refused rather than stolen. Finish or cancel the holder's item first, or prepare a different item.` (`src/worktree.mjs:1004-1010`). When the item IS terminal, the holder is detached losslessly. Liveness fails CLOSED: an unknown status is not terminal (`isTerminalItemStatus`, `src/worktree.mjs:943-952`). A second refusal shape exists for the reused-path case — "`refusing to prepare item <id>: <path> is a valid worktree on branch <current> (another seat's item branch, item <id>). Switching it to <branch> would silently steal that seat's working state. The holder's item must be TERMINAL (done/cancelled) first. Never steal, never force.`" (`src/worktree.mjs:1053-1057`).
+- **Proven by:** `node demo/prepare-workspace.test.mjs` → exit 0 in this tree (VERDICT line: "PREPARE-WORKSPACE PASS … a held branch is resolved, never stolen"); §9 asserts the live-holder refusal names the item and the branch and that the holder is left on its branch (`demo/prepare-workspace.test.mjs:270-289`), §9b–9c the adopt / refuse / rename paths for legacy refs.
+
+**Gaps, surfaced rather than skipped** — each of these is a clause of the ruling that the code does NOT
+yet satisfy, and a reader must not take the entry as a description of shipped behaviour:
+- **`tip == base` is not checked.** Nothing in acquisition compares the branch tip to its base before a
+  handoff.
+- **There is no broker-authoritative run probe, and no handoff verb.** `grep -n "reassign\|acquire" cli.mjs`
+  → 0 hits; acquisition is `prepare_workspace` refusing, not a transfer being granted. Clause 1 is
+  therefore, today, clause 2 only.
+- **The refusal is only half actionable** in the sense clause 3 demands: it names the item, the branch and
+  the holder's worktree path, but NOT the holder's seat, the holder's item status, or the literal command
+  that releases the ref. Verified in the emitted text quoted above and in the test's assertions
+  (`demo/prepare-workspace.test.mjs:289-291`, which can only match the item id, the branch and the path).
+- **Clause 4 (runbook fidelity) was unmet and is now met at the wording level:** before this item,
+  `docs/runbooks/prepare-workspace-refused.md:80-82` quoted only two fragments (`checked out by another
+  worktree`, `another seat's item branch`). It now carries both full refusal sentences verbatim, with the
+  `src/worktree.mjs` line numbers, and names what the message leaves out — the holder's SEAT, its item
+  status, and any literal command (`grep -rni "never steal" docs/` had zero hits before this commit).
+- **Clause 3's off-ramp has not been exercised:** nobody has measured whether a cheap, honest probe is
+  possible, so the withdrawal condition is untested rather than resolved.
+- **The path half of clause 4 is not implemented.** The path is `join(worktreeRoot, "item-<id>")`
+  (`src/worktree.mjs:968-969`; `prepareSeatWorkspace` itself is `:966`), with **no seat component**; `git
+  worktree list` on the live rig shows `item-1158`, `item-3087`, `item-3094`, `item-4758` — none seat-suffixed.
+  **The code wins**: the ruled path shape is a target, not a present fact, and D110's table still prints
+  the old pair. Amending that table is the separate D-entry this item explicitly excludes from scope.
+
+**Boundary.** This decides *who may take a live item's branch and when*. It does not implement anything,
+does not amend D110's table, does not decide the scratch/throwaway naming taxonomy, and does not authorise
+worktree sharing in any form. **Residual for the implementer:** the probe plus the `tip == base` gate plus
+a handoff verb plus a runbook that quotes the refusal are the open work; if the probe cannot be made cheap
+and honest, clause 1 is withdrawn by this entry's own terms and the refusal stands alone.
+
 ## D275 — topic-doc re-verification runs on TRIGGERS, not a calendar, and a doc that cannot be auto-verified is SURFACED as uncheckable (operator ruling 2026-10-19, item 2; ruled by `lead` on pm's #2936, registered by lead #3090, minted by scribe #3094, 2026-11-11)
 
 **Decision.** The cadence for periodic **topic-doc** re-verification is trigger-based, and the trigger has
