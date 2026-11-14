@@ -25,7 +25,15 @@ import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
 import { driveOnce } from "./driver.mjs";
 import { isLocalProviderId } from "./providers/local.mjs";
 import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
-import { listWorktrees, removeClaimedWorktree, uncommittedCount, pruneWorktrees } from "./worktree.mjs";
+import {
+	branchLandedness,
+	declaredCarrierRows,
+	listWorktrees,
+	removeClaimedWorktree,
+	soleContentPaths,
+	uncommittedCount,
+	pruneWorktrees,
+} from "./worktree.mjs";
 
 /**
  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
@@ -1422,6 +1430,140 @@ export async function removeVerifyScratch({ worktree, force = false } = {}) {
 }
 
 /**
+ * The ONE keep-decision every reap path shares (#5301, ROADMAP 311 cut 2).
+ *
+ * WHY IT IS SHARED: the automatic startup sweep and the explicit `worktree reap` verb were two
+ * separate decisions, so fixing one left the other free to eat a sole carrier. One predicate, two
+ * callers.
+ *
+ * WHAT MAKES A `reapable` TREE A SOLE CARRIER — two mechanisms, both git-checked:
+ *  - `sole-content`: the tree holds IGNORED paths git cannot restore (`git status --porcelain
+ *    --ignored`, minus `REGENERATED_IGNORED`). This is the loss that already happened here once —
+ *    docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md.
+ *  - `declared-carrier`: a NON-TERMINAL queue row names the branch as a carrier (keep-gate #5280:
+ *    `item-4829`, `item-5147`). The refusal names the ROW IDS, so the gate is endable: resolving the
+ *    row resolves the keep.
+ * Branch reachability (`branchLandedness`) rides every record as EVIDENCE but is NOT a refusal
+ * cause, because a worktree reap keeps the ref: `git worktree remove` deletes the checkout, not the
+ * branch, and `worktree prune-branch` refuses an unlanded ref (#3491). Refusing every
+ * unlanded-branch tree would keep most of the leaked set and buy no safety — see the measurement
+ * recorded on `branchLandedness`.
+ */
+async function soleCarrierCheck({ repoPath, entry, liveRows = [], mainRef = "main" }) {
+  const branchShort = entry.branch ? String(entry.branch).replace(/^refs\/heads\//, "") : null;
+  const soleContent = await soleContentPaths(entry.worktree);
+  const keptBy = declaredCarrierRows(liveRows, branchShort);
+  const landedness = await branchLandedness({ repoPath, branch: branchShort, mainRef });
+  const causes = [];
+  if (soleContent.length > 0) causes.push("sole-content");
+  if (keptBy.length > 0) causes.push("declared-carrier");
+  return { branchShort, causes, soleContent, keptBy, landedness };
+}
+
+/**
+ * Decide a reap WITHOUT touching anything: classify, split the `reapable` set into what is safe to
+ * reap and what is a sole carrier, and pull the locked-over-TERMINAL-item trees into their own
+ * bucket. Exposed because a dry run and a decision test both need the split, and a seat that has to
+ * report a leak needs the buckets without taking the risk.
+ */
+export async function planReap({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots = [], liveRows = [], mainRef = "main" } = {}) {
+  const empty = { entries: [], candidates: [], refusedSoleCarrier: [], lockedOverTerminalItem: [], kept: [] };
+  if (!repoPath) return empty;
+  const entries = await auditWorktrees({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots });
+  const out = { entries, candidates: [], refusedSoleCarrier: [], lockedOverTerminalItem: [], kept: [] };
+  for (const entry of entries) {
+    const base = {
+      itemId: entry.itemId,
+      branch: entry.branch ? String(entry.branch).replace(/^refs\/heads\//, "") : null,
+      worktree: entry.worktree,
+    };
+    if (entry.keepReason === "reapable") {
+      const check = await soleCarrierCheck({ repoPath, entry, liveRows, mainRef });
+      const rec = {
+        ...base,
+        // The branch evidence rides on BOTH records: "the ref survived the reap, and here is where it
+        // stands against main" is the fact a reader needs before trusting a reap.
+        branchLanded: check.landedness.landed,
+        branchHow: check.landedness.how,
+      };
+      if (check.causes.length > 0) {
+        out.refusedSoleCarrier.push({
+          ...rec,
+          causes: check.causes,
+          soleContent: check.soleContent,
+          keptBy: check.keptBy,
+          remedy:
+            "commit or move the named content by hand (docs/runbooks/leaked-worktrees.md has the" +
+            " relocate recipe), then resolve the queue row that names the branch; the tree stays until" +
+            " BOTH clear",
+        });
+        continue;
+      }
+      out.candidates.push(rec);
+      continue;
+    }
+    // THREE CAUSES, THREE MESSAGES. A locked tree over a TERMINAL item is the deadlock family (#3165:
+    // a lock that outlived its item) and reads nothing like a sole-carrier refusal or a reap. One
+    // shared "skipped" line is what made all three unreadable.
+    if (entry.keepReason === "locked" && entry.itemId != null && terminalItemIds.has(entry.itemId)) {
+      out.lockedOverTerminalItem.push({ ...base, lockReason: entry.lockReason ?? null });
+      continue;
+    }
+    if (entry.keepReason !== "non-item" && entry.keepReason !== "seat-root") {
+      out.kept.push({ ...base, keepReason: entry.keepReason, locked: entry.locked, uncommitted: entry.uncommitted });
+    }
+  }
+  return out;
+}
+
+/**
+ * The EXPLICIT reap verb (`cli.mjs worktree reap`, ROADMAP 311 cut 2 / #5301): CONSUME the audit's
+ * `reapable` set instead of only reporting it. The audit knew 21 trees were reapable and nothing
+ * acted on that set, so every bounded pass converted finished work into an unreaped worktree while
+ * `ok: true` read as "nothing to do".
+ *
+ * Four named buckets come back — `reaped` / `refusedSoleCarrier` / `lockedOverTerminalItem` /
+ * `removalFailed` — plus the `kept` set, so no tree falls through unreported and no two causes share
+ * one line. `dryRun` decides and reports without touching git. One bad tree never aborts the pass
+ * (#2602): a teardown that THROWS is recorded in `removalFailed` with its message (the junction
+ * family, ROADMAP 311 cut 3 / #5001).
+ */
+export async function reapWorktrees({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots = [], liveRows = [], mainRef = "main", dryRun = false } = {}) {
+  const plan = await planReap({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots, liveRows, mainRef });
+  const reaped = [];
+  const removalFailed = [];
+  if (!dryRun) {
+    for (const candidate of plan.candidates) {
+      try {
+        const result = await removeClaimedWorktree({ worktree: candidate.worktree });
+        if (result?.removed) reaped.push(candidate);
+        else if (!result?.skipped) removalFailed.push({ ...candidate, error: result?.refused ?? "not-removed" });
+      } catch (err) {
+        removalFailed.push({ ...candidate, error: String(err?.message ?? err) });
+      }
+    }
+    await pruneWorktrees(repoPath);
+  }
+  return {
+    dryRun,
+    reaped,
+    refusedSoleCarrier: plan.refusedSoleCarrier,
+    lockedOverTerminalItem: plan.lockedOverTerminalItem,
+    removalFailed,
+    kept: plan.kept,
+    counts: {
+      reapable: plan.candidates.length + plan.refusedSoleCarrier.length,
+      reaped: reaped.length,
+      pendingReap: dryRun ? plan.candidates.length : plan.candidates.length - reaped.length,
+      refusedSoleCarrier: plan.refusedSoleCarrier.length,
+      lockedOverTerminalItem: plan.lockedOverTerminalItem.length,
+      removalFailed: removalFailed.length,
+      kept: plan.kept.length,
+    },
+  };
+}
+
+/**
  * Remove `item-<id>` worktrees whose queue item is TERMINAL and which are unlocked and clean.
  *
  * A leaked worktree (a crash before its item's cleanup, or the recorded recursive-nesting
@@ -1445,24 +1587,28 @@ export async function removeVerifyScratch({ worktree, force = false } = {}) {
  * that is absent from it — non-terminal, or not in the store at all — is KEPT, and so is a
  * branch-held worktree whose branch does not resolve an id (the safe default).
  */
-export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots = [], onDiagnostic } = {}) {
+export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots = [], liveRows = [], onDiagnostic } = {}) {
   if (!repoPath) return [];
-  const entries = await auditWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots });
+  // THE SAME GUARD THE EXPLICIT VERB USES (#5301): two reap paths, one keep-decision. Before this a
+  // sole-carrier tree was safe from the verb and fair game for the startup sweep. `planReap` also
+  // keeps the audit's reason vocabulary (ROADMAP 76) for every keep it reports.
+  const plan = await planReap({ repoPath, liveItemIds, terminalItemIds, seatRoots, liveRows });
   const removed = [];
   const keep = (itemId, worktree, reason) =>
     onDiagnostic?.({ kind: "worktree-orphan-kept", itemId, worktree, reason });
-  for (const entry of entries) {
-    // `reapable` is the ONLY reason the sweep acts on; every other reason is a KEEP, reported
-    // with the SAME reason vocabulary the audit surface shows (ROADMAP 76).
-    if (entry.keepReason !== "reapable") {
-      if (entry.keepReason !== "non-item" && entry.keepReason !== "seat-root") {
-        keep(entry.itemId, entry.worktree, entry.keepReason);
-      }
-      continue;
-    }
-    const result = await removeClaimedWorktree({ worktree: entry.worktree });
-    if (result?.removed) removed.push(entry.itemId);
-    else keep(entry.itemId, entry.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
+  for (const refusal of plan.refusedSoleCarrier) {
+    keep(refusal.itemId, refusal.worktree, `sole-carrier:${refusal.causes.join(",")}`);
+  }
+  for (const entry of plan.lockedOverTerminalItem) {
+    keep(entry.itemId, entry.worktree, "locked-over-terminal-item");
+  }
+  for (const kept of plan.kept) {
+    keep(kept.itemId, kept.worktree, kept.keepReason);
+  }
+  for (const candidate of plan.candidates) {
+    const result = await removeClaimedWorktree({ worktree: candidate.worktree });
+    if (result?.removed) removed.push(candidate.itemId);
+    else keep(candidate.itemId, candidate.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
   }
   // PRUNE AFTER REMOVE (#2329): a directory deleted out-of-band leaves a STALE registration that
   // keeps listing and confuses the audit (25 were cleared on 2026-10-19). Prune once at the end
@@ -1492,7 +1638,10 @@ export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagn
     // ROADMAP 76: a worktree that is some seat's persisted cwd (`pi.agent`.cwd) is IN USE, so the
     // sweep must not reap it even when its item is terminal and the tree is clean.
     const seatRoots = await readSeatRootsFromStorage(probeStorage, harness, context);
-    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots, onDiagnostic });
+    // #5301: the NON-TERMINAL rows ride into the sweep so a declared carrier gate (keep-gate #5280)
+    // is honoured on the automatic path too, not only on the explicit verb.
+    const liveRows = items.filter((it) => LIVE_STATUSES.includes(it.status));
+    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots, liveRows, onDiagnostic });
   }
   return { leases, worktrees };
 }
