@@ -124,3 +124,29 @@ isolate the slow part — D213).
 > for this rig's store, the broker/spool model, `tools/broker-serve.mjs`, `tools/channel-preflight.mjs`, or the
 > `rig.selfdev.json` self-dev rig, and its worktree examples use Windows paths. The current operating surface is in
 > `docs/runbooks/session-start-cost.md` and `.agents/skills/delegating-to-durian-pi/SKILL.md`. Registered as ROADMAP **288**.
+
+## Seat self-merge: the author lands their own item (armed via `DURIG_EXTENSIONS`)
+
+Measured 2026-11-14 on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1,
+git 2.56.0. The verbs live in `extensions/self-merge.mjs`, loaded only through the explicit
+`DURIG_EXTENSIONS` list (`src/extensions.mjs` has no auto-discovery). A seat running its own item does:
+
+```bash
+landing_health                      # which of my refs are ready, and how long they have waited
+land_my_item                        # merge my branch in a scratch, run the derived gate there, FF LOCAL main
+```
+
+`land_my_item` calls the rig's own chokepoint — `scripts/land.mjs <branch> --repo <shared root> --db <store>
+--changed-suite` — with the shared root resolved from `git worktree list`, so a seat in a linked worktree cannot
+land into the wrong repository (#4247). It cannot contain `push`; publishing is the operator's grant.
+
+The delegate's view of the same backlog, in one bounded call:
+
+```bash
+node tools/self-merge-sla.mjs --db ./selfdev.sqlite      # 9.2 s / 197 refs: landed, conflicted, ready, ready-unverified, in-flight
+node cli.mjs check rig.selfdev.json --json               # 14.3 s; the rule `ready-ref-stale` (severity error) fails the audit
+```
+
+`check` exits 1 when a ready ref is older than the SLA (24 h default; `DURIG_SELF_MERGE_SLA_HOURS` to override).
+Proof it works without a model: `node demo/self-merge-seat.test.mjs` (0.94 s). See
+`docs/runbooks/land.md` §"Seat self-merge (the default)".
