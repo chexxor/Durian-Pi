@@ -11783,6 +11783,54 @@ the very condition it diagnoses. Every route must print which path served the re
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
 
+## D275 — topic-doc re-verification runs on TRIGGERS, not a calendar, and a doc that cannot be auto-verified is SURFACED as uncheckable (operator ruling 2026-10-19, item 2; ruled by `lead` on pm's #2936, registered by lead #3090, minted by scribe #3094, 2026-11-11)
+
+**Decision.** The cadence for periodic **topic-doc** re-verification is trigger-based, and the trigger has
+to be computable rather than judged:
+
+1. **The trigger set is "the thing the doc describes changed"** — (a) an incident touched the procedure
+   the doc covers, (b) a source file the doc names changed, (c) a `check` rule the doc references changed.
+   A date passing is not a trigger.
+2. **Each topic doc declares, machine-readably, what underlies it (`underlies`) and when it was last
+   verified (`last_verified`).** A change to anything in `underlies` re-opens the doc for verification.
+   Without those two fields the trigger is a judgement call, and a judgement call is not a cadence.
+3. **Uncheckable-surfacing.** A doc that cannot be auto-verified is SURFACED as uncheckable, never skipped
+   in silence. A rule that quietly never runs is worse than a rule that fails, because the reader reads
+   the silence as a pass.
+
+**Why.** A calendar sweep fires whether or not anything moved: it spends re-verification on docs that
+are unchanged and still misses drift that happens between ticks. A doc can only be stale when what it
+describes moves, so the change is the only signal that is both timely and cheap. This is the same shape
+the runbook rules already use — `runbook-stale` fires when `last_verified` predates a named file's
+change (`src/checkup.mjs:91-103`) — and the same shape as the README's own maintenance policy
+("Re-verify on trigger, not calendar", `docs/runbooks/README.md:102`).
+
+**Alternatives considered.** (a) **Calendar sweep** — rejected: nags on fresh docs, misses urgent drift,
+and needs a scheduler we do not have. (b) **Decide staleness by reading the doc** — rejected: not
+computable, and it makes verification a matter of opinion rather than a command that exits. (c) **Skip
+what cannot be checked** — rejected: it produces invisible coverage, which is exactly the failure the
+`UNKNOWN` render exists to prevent.
+
+**Status at minting, measured in this tree (`item-3094` worktree, off `main 580c1343`), so the entry is
+not read as a shipped mechanism:**
+- The contract is prose so far: `docs/runbooks/README.md:62-84` ("Topic docs — the map behind the
+  procedures", "Periodic verification (the contract)") and `:102` for the trigger rule.
+- Five docs already carry a `How to re-verify this document` block, and the README states the contract twice
+  (`:68`, `:81`): `docs/BRANCH-AND-WORKTREE-LIFECYCLE.md:18`,
+  `docs/SEAT-CAPABILITY-PROFILE.md:107`, `docs/VERIFY-PROVENANCE.md:92`, `docs/WORK-ITEM-LIFECYCLE.md:352`,
+  `docs/reviews/delivery-channel-linux-2026-10-28.md:141` (`grep -rn "How to re-verify this document" docs/`).
+- `underlies` is **not yet a field anything reads**: outside this entry, `grep -rn underlies docs/ src/ tools/`
+  returns exactly one line — the prose table column at `docs/runbooks/README.md:70`.
+- The only machine-checked verification rules are the runbook trio (`src/checkup.mjs:91-103`), and
+  `cli.mjs`'s `check` call (`cli.mjs:3422`) passes no `runbooks` collection, so all three report
+  **UNKNOWN (not judged)** (`src/checkup.mjs:660-666`, rendered at `:1100-1103`). That render is the
+  precedent for point 3: an unjudged rule prints in yellow rather than passing.
+
+**Boundary.** Cadence only. This entry does not authorise #2938 (still gated on #2934) and does not
+restate the topic-doc check rule. **Residual (the gap, surfaced rather than skipped):** the `underlies` /
+`last_verified` wiring and a check rule that reads it do not exist yet — the wiring is routed to `pm`, and
+until it lands, topic-doc verification remains manual by contract.
+
 ## D265 — 2026-11-12T01:5xZ: **a work item's branch is a temporary isolation, not a namespace; `staging` is a queue with a human promotion gate; and an artefact the rig did not mint is never swept** (delegate, on the operator's objective "give the team a work-item lifecycle it can run itself"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
 
 **Decision.** Three rules, in that order:
