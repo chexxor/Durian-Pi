@@ -358,6 +358,7 @@
       "demo/landing-preflight-dirt.test.mjs",
       "demo/landing-gate.test.mjs",
       "demo/chain-resolve-rules.test.mjs",
+      "demo/conflict-hunk-shape.test.mjs",
       "demo/local-model-pointer.test.mjs",
       "demo/local-provider.test.mjs",
       "demo/local-slot-gate.test.mjs",
