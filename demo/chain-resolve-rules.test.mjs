@@ -13,7 +13,12 @@
 //      dropped 74 lines of a seat's demo that way (item-7103, demo/restart-limit-behaviour.test.mjs);
 //   4. a ref that edits a region main already rewrote -> REFUSED, and the chain is left clean: no
 //      conflict markers, no half-written file;
-//   5. exit 0 when at least one ref merged, 1 when none did.
+//   5. rule 8, the IMPORT UNION: main and the ref each changed the same `import { ... } from "mod"`
+//      line. The names are unioned ONLY IF every name the merged file imports from a local module is
+//      exported by that module in the merged tree - a union that cannot be proven to link is refused;
+//   6. rule 9, the PROVENANCE UNION: two runbook frontmatter values for the same key are joined, and
+//      `last_verified` keeps the later date. No key disappears;
+//   7. exit 0 when at least one ref merged, 1 when none did.
 //
 // Cost: ~2-4 s (measured in the run that shipped this file); no network, no model, no store. It
 // builds its own git repo under a temp dir and removes it; nothing in the rig's tree is touched.
@@ -47,6 +52,10 @@ try {
 	writeFileSync(join(repo, "docs/DECISIONS.md"), "## D1 — the only decision so far\n\nbody of D1\n");
 	writeFileSync(join(repo, "docs/NEXT.md"), "pointer v1\n");
 	writeFileSync(join(repo, "docs/RUNBOOK.md"), "## the procedure\n\nline one\nline two\nline three\n");
+	writeFileSync(join(repo, "docs/PROC.md"), "---\nlast_verified: 2026-11-01\nverified_by: impl\n---\n\nthe procedure\n");
+	mkdirSync(join(repo, "src"), { recursive: true });
+	writeFileSync(join(repo, "cli.mjs"), "import { foo } from \"./src/mod.mjs\";\nconsole.log(foo());\n");
+	writeFileSync(join(repo, "src/mod.mjs"), "export function foo() { return 1; }\n");
 	g(["add", "-A"]);
 	g(["commit", "-q", "-m", "base"]);
 	const base = g(["rev-parse", "HEAD"]);
@@ -55,6 +64,9 @@ try {
 	writeFileSync(join(repo, "docs/LEDGER.md"), "# ledger\n\n- row A (the only row at the fork point)\n- row B (main's append)\n");
 	writeFileSync(join(repo, "docs/DECISIONS.md"), "## D1 — the only decision so far\n\nbody of D1\n\n## D2 — minted at land by main\n\nmain's body\n");
 	writeFileSync(join(repo, "docs/RUNBOOK.md"), "## the procedure\n\nline one\nline two (reworded by main, 2026-11-14)\nline three\n");
+	writeFileSync(join(repo, "docs/PROC.md"), "---\nlast_verified: 2026-11-14\nverified_by: delegate\n---\n\nthe procedure\n");
+	writeFileSync(join(repo, "cli.mjs"), "import { foo, baz } from \"./src/mod.mjs\";\nconsole.log(foo());\n");
+	writeFileSync(join(repo, "src/mod.mjs"), "export function foo() { return 1; }\nexport const baz = 2;\n");
 	writeFileSync(join(repo, "demo/new-behaviour.test.mjs"), "// main's version of the test\nassert(1);\n");
 	g(["add", "-A"]);
 	g(["commit", "-q", "-m", "main moves ahead"]);
@@ -79,6 +91,26 @@ try {
 	writeFileSync(join(repo, "docs/RUNBOOK.md"), "## the procedure\n\nline one\nline two as the diverging ref wrote it\nline three\n- a new row the ref wanted to add\n");
 	g(["add", "-A"]);
 	g(["commit", "-q", "-m", "ref 3: edits a line main already changed"]);
+
+	// REF 4: the import-line shape, and the ref DOES define the symbol it imports (as item-5301,
+	// item-6173 and item-6211 did). Rule 8 unions the names and the link proof proves it links.
+	g(["checkout", "-q", "-b", "ref-import", base]);
+	writeFileSync(join(repo, "cli.mjs"), "import { foo, qux } from \"./src/mod.mjs\";\nconsole.log(foo());\n");
+	writeFileSync(join(repo, "src/mod.mjs"), "export function foo() { return 1; }\nexport const qux = 3;\n");
+	g(["add", "-A"]);
+	g(["commit", "-q", "-m", "ref 4: same import line, a symbol the ref also exports"]);
+
+	// REF 5: the same shape, but the symbol is nowhere in the merged module -> the link proof refuses.
+	g(["checkout", "-q", "-b", "ref-ghost", base]);
+	writeFileSync(join(repo, "cli.mjs"), "import { foo, ghost } from \"./src/mod.mjs\";\nconsole.log(foo());\n");
+	g(["add", "-A"]);
+	g(["commit", "-q", "-m", "ref 5: imports a symbol nothing exports"]);
+
+	// REF 6: provenance frontmatter, the shape the runbooks actually collide on.
+	g(["checkout", "-q", "-b", "ref-prov", base]);
+	writeFileSync(join(repo, "docs/PROC.md"), "---\nlast_verified: 2026-11-10\nverified_by: qa (#6177, the seam section)\n---\n\nthe procedure\n");
+	g(["add", "-A"]);
+	g(["commit", "-q", "-m", "ref 6: provenance only"]);
 
 	const wt = join(repo, ".spike-chain");
 	const run = (branch, refs, worktree = wt) => {
@@ -113,13 +145,32 @@ try {
 	const ledgerAfter = readFileSync(join(wt, "docs/RUNBOOK.md"), "utf8");
 	check("the refused ref left no half-merged file", !ledgerAfter.includes("a new row the ref wanted to add") && !/^<<<<<<</m.test(ledgerAfter), ledgerAfter.replace(/\n/g, " | "));
 
-	// 5: nothing provable merges -> nonzero exit.
+	// 5: rule 8 - the import union, with the link proof.
+	const r5 = run("landing-import", "ref-import", join(repo, ".spike-chain3"));
+	check("an import line both sides changed merges (exit 0)", r5.status === 0, `exit ${r5.status} ${r5.stderr}`);
+	const cliMerged = readFileSync(join(repo, ".spike-chain3", "cli.mjs"), "utf8");
+	const modMerged = readFileSync(join(repo, ".spike-chain3", "src/mod.mjs"), "utf8");
+	check("the import line is the UNION of names, not a side", /import \{ foo, baz, qux \} from "\.\/src\/mod\.mjs";/.test(cliMerged), cliMerged.replace(/\n/g, " | "));
+	check("...and both module additions survived", modMerged.includes("export const baz = 2;") && modMerged.includes("export const qux = 3;"), modMerged.replace(/\n/g, " | "));
+
+	const r6 = run("landing-ghost", "ref-ghost", join(repo, ".spike-chain4"));
+	check("a union that cannot link is REFUSED by the link proof", (r6.json.refused || []).length === 1 && /does not export it/.test(r6.json.refused[0].decisions.join(" ")), JSON.stringify(r6.json));
+	check("the refused ghost import never reached the chain", !readFileSync(join(repo, ".spike-chain4", "cli.mjs"), "utf8").includes("ghost"), "ghost landed anyway");
+
+	// 6: rule 9 - provenance union.
+	const r7 = run("landing-prov", "ref-prov", join(repo, ".spike-chain5"));
+	check("a frontmatter-only conflict merges (exit 0)", r7.status === 0, `exit ${r7.status} ${r7.stderr}`);
+	const proc = readFileSync(join(repo, ".spike-chain5", "docs/PROC.md"), "utf8");
+	check("both verifiers are credited, neither dropped", proc.includes("delegate") && proc.includes("qa (#6177, the seam section)"), proc.replace(/\n/g, " | "));
+	check("last_verified keeps the LATER date", proc.includes("last_verified: 2026-11-14") && !proc.includes("2026-11-10"), proc.replace(/\n/g, " | "));
+
+	// 7: nothing provable merges -> nonzero exit.
 	const r4 = run("landing-only-bad", "ref-diverge", join(repo, ".spike-chain2"));
 	check("a chain where nothing merges exits nonzero", r4.status === 1, `exit ${r4.status}`);
 
 	console.log(failures
 		? `FAIL: ${failures} check(s) — demo/chain-resolve-rules.test.mjs`
-		: "CHAIN-RESOLVE RULES PASS (union at a shared anchor, land-time re-mint, code add/add refused, unlocatable edit refused, no markers left, exit code honest)");
+		: "CHAIN-RESOLVE RULES PASS (union at a shared anchor, land-time re-mint, code add/add refused, unlocatable edit refused, import union proven by the link proof, provenance union, no markers left, exit code honest)");
 	process.exit(failures ? 1 : 0);
 } finally {
 	rmSync(repo, { recursive: true, force: true });

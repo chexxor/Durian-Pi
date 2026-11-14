@@ -11,6 +11,9 @@
 //   F the two sides are the same sentence with a different measured number;
 //   G the same claim in different words -> wording, a human must choose;
 //   E genuinely different decisions at the same place -> a re-cut;
+//   I both sides changed ONE import line for the SAME module -> the union of names is the only
+//      lossless merge (tools/chain-resolve.mjs rule 8 then proves the merged tree exports them);
+//   P both sides are runbook frontmatter keys -> bookkeeping, unionable (rule 9);
 //   the verdict bar: a ref with an E is `semantic`, one with only G is `wording-only`, a ref with
 //   nothing but A/B/C/D/U is `mechanical`; and the argument/exit-code contract.
 //
@@ -20,7 +23,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { classifyHunk } from "../tools/conflict-hunk-shape.mjs";
+import { classifyHunk, isProvenance } from "../tools/conflict-hunk-shape.mjs";
 
 const TOOL = join(process.cwd(), "tools", "conflict-hunk-shape.mjs");
 let failures = 0;
@@ -45,6 +48,13 @@ check("G: the same claim in different words is wording, not mechanics",
 check("E: different decisions at the same place",
 	classifyHunk(["return item status queued only when nobody has claimed it"],
 		["return held rows too because a held row is still unclaimed work"]).cls === "E");
+check("I: two name lists for the same import are a provable union, not a fight",
+	classifyHunk(["import { foo, baz } from \"./src/mod.mjs\";"], ["import { foo, qux } from \"./src/mod.mjs\";"]).cls === "I");
+check("I is not triggered when the modules differ", classifyHunk(["import { foo } from \"./src/a.mjs\";"], ["import { foo } from \"./src/b.mjs\";"]).cls !== "I");
+check("P: runbook frontmatter on both sides is bookkeeping, not a decision",
+	classifyHunk(["last_verified: 2026-11-14", "verified_by: delegate"], ["last_verified: 2026-11-10", "verified_by: qa (#6177)"]).cls === "P");
+check("...but a wrapped evidence line is not frontmatter, so it stays a decision",
+	!isProvenance(["verified_by: qa", "the second line of the value continues here"]));
 check("identical sides are C, not a conflict", classifyHunk(["same text here"], ["same text here"]).cls === "C");
 
 // 2) the pipeline against a real git merge
@@ -97,7 +107,7 @@ try {
 
 	console.log(failures
 		? `FAIL: ${failures} check(s) — demo/conflict-hunk-shape.test.mjs`
-		: "CONFLICT-HUNK-SHAPE PASS (A/B/C/D/U provable, F stale number, G paraphrase, E semantic; verdict bar and exit codes pinned)");
+		: "CONFLICT-HUNK-SHAPE PASS (A/B/C/D/U provable, I import union, P provenance union, F stale number, G paraphrase, E semantic; verdict bar and exit codes pinned)");
 	process.exit(failures ? 1 : 0);
 } finally {
 	rmSync(repo, { recursive: true, force: true });

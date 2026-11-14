@@ -110,6 +110,8 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `26f35059` | docs(dispositions): the seven wording-only hunks read in full — stale imports, provenance, one superseded pin |
 | `38deb7d1` | docs(pointer): rows for the two previous carriers, the run-list counts re-measured, pointer at 199 lines |
 | `3d07f9f5` | docs(pointer): the suite number at this HEAD, the POOL-QUEUE-SPEC pointer folded into the pool row |
+| `1a60386b` | docs(SELFDEV+NEXT): pitfall 343 (DECISIONS.md D265/D266 collide; `tools/probes/adr-number-collisions.mjs` exit 1), pitfall 342, suite 346/346 in 154.6 s |
+| `e6aad7a5` | merge: land landing-20261114-docsonly onto main — `item-6537`, `item-6549` union-resolved by rule, containment proven 0 loss, docs area 8/8 |
 | *(this commit)* | docs(SELFDEV+NEXT): pitfalls 339–343 — the seven hunks read in full, the patch-lane measurement, the DECISIONS.md number collisions — exempt: it carries this file |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
@@ -186,14 +188,11 @@ side-picking one. (b) pool, options in
 enforced at claim; `devtools` vs `code`; should `send_work` refuse an unadvertised `requires`; should a pool claim
 notify its author. `node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` has NO write path by design.
 
-
 **Traps this window** — `docs/SELFDEV.md` **330–343**: a landing plan is valid only against the HEAD it was computed on;
-`git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved merge
+`git merge-tree` prints a tree oid on line 1 even when it CONFLICTS (the exit code is the verdict); a hand-resolved merge
 that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area mapping is
-not landable and only the gate catches it; a prune plan that omits `deferred` from the live set names a live seat's
-branch (`src/broker.mjs` `LIVE_STATUSES` is the authority); a quoted count in a ledger is read as a live claim; measure
-hunk shape before deciding who resolves a conflict; a `wording-only` code hunk is usually a stale import. Older **318–329**: `seats` LIST vs DOCUMENT roster;
-`usableWindow: null` from `up`; "armed" ≠ "fired"; a count is not a trace; `check` auditing `./rig.json`; `--local`
-control-read staleness; `--max-duration` bounds the loop not the wall clock; a hand-written sha table skips a sha.
+not landable; a quoted count in a ledger reads as a live claim; a `wording-only` code hunk is a provable import union only
+if the merged module exports every name it imports. Older **318–329**: `seats` LIST vs DOCUMENT roster; "armed" ≠ "fired";
+a count is not a trace; `--max-duration` bounds the loop not the wall clock; a hand-written sha table skips a sha.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)

@@ -16,10 +16,10 @@
 // Read-only. Exit 0 = every added line of every ref is present in the branch at the same path.
 // Exit 1 = at least one ref lost lines (they are printed).
 //
-// Known limits: it compares LINES, not semantics. A `## D<n>` heading re-minted at land time is
-// matched on its title with the number normalised to `D<n>` (rule 6 of tools/chain-resolve.mjs),
-// so renumbering is not counted as loss. It cannot tell whether the minted number is the right
-// one, only that the content survived.
+// Known limits: it compares LINES, not semantics, with two narrow exceptions written down above - a
+// re-minted `## D<n>` heading (matched on its title with the number normalised) and a line whose
+// whole content survived inside a UNION line (rule 8 imports, rule 9 provenance). It cannot tell
+// whether the minted number is the right one, only that the content survived.
 
 import { spawnSync } from "node:child_process";
 import process from "node:process";
@@ -33,6 +33,14 @@ const baseBranch = argv.includes("--base") ? argv[argv.indexOf("--base") + 1] : 
 const git = (a) => { const r = spawnSync("git", a, { cwd: repo, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }); return { ok: r.status === 0, status: r.status, out: (r.stdout || "").trim() }; };
 const HEAD_RE = /^## (?:STUB OF )?D(\d+|MINT|###)/;
 const norm = (l) => l.replace(HEAD_RE, "## D<n>");
+// tools/chain-resolve.mjs rules 8 and 9 join content onto ONE line (the union of an import's name
+// list, the union of a runbook's provenance values), so a strict line-for-line check would report a
+// loss where none happened. The fallback below is deliberately narrow: a line counts as preserved if
+// its VALUE survives inside a line of the same key, or if every symbol it imports is in the merged
+// import line for the same module. Everything else still has to appear verbatim.
+
+const PROV_KEYS = ["last_verified", "verified_by", "evidence", "owner", "status", "symptom", "related", "milestone", "source", "updated"];
+const IMPORT_RE = /^import\s+\{([^}]*)\}\s+from\s+(['"])([^'"]+)\2\s*;?\s*$/;
 
 if (!branch || !refs.length) { console.error("need --branch and --refs"); process.exit(2); }
 const t0 = Date.now();
@@ -54,7 +62,32 @@ for (const ref of refs) {
 	 const diff = git(["diff", "--no-color", base, refname, "--", p]).out;
 	 const addedLines = diff.split("\n").filter(l => l.startsWith("+") && !l.startsWith("+++")).map(l => l.slice(1));
 		added += addedLines.length;
-		const miss = addedLines.filter(l => set.has(l) ? false : (HEAD_RE.test(l) ? !headings.has(norm(l)) : true));
+		const miss = addedLines.filter(l => {
+			if (set.has(l)) return false;
+			if (HEAD_RE.test(l)) return !headings.has(norm(l));
+			const t = String(l).trim();
+			if (PROV_KEYS.some((k) => t.startsWith(k + ":"))) {
+				const key = t.split(":")[0];
+				let val = t.slice(key.length + 1).trim();
+				if (key === "last_verified") {
+					const mine = (t.match(/20\d\d-\d\d-\d\d/) || [""])[0];
+					const theirs = lines.map(o => (o.match(/20\d\d-\d\d-\d\d/) || [""])[0]).filter(Boolean).sort();
+					return !(mine && theirs.length && theirs[theirs.length - 1] >= mine);
+				}
+				if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+				const segs = val.split("; ").map((s) => s.trim()).filter(Boolean);
+				if (!segs.length) return false;
+				return segs.some(seg => !lines.some(o => { const ot = o.trim(); return ot.startsWith(key + ":") && ot.slice(key.length + 1).includes(seg); }));
+			}
+			const m = IMPORT_RE.exec(t);
+			if (m) {
+				const line = lines.find(o => { const mm = IMPORT_RE.exec(o.trim()); return mm && mm[3] === m[3]; });
+				if (!line) return true;
+				const names = new Set(IMPORT_RE.exec(line.trim())[1].split(",").map((x) => x.trim()));
+				return m[1].split(",").map((x) => x.trim()).some((n) => !names.has(n));
+			}
+			return true;
+		});
 		if (miss.length) lost.push({ path: p, count: miss.length, sample: miss.slice(0, 3) });
 	}
 	if (lost.length) bad++;

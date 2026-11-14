@@ -15,6 +15,7 @@
 // Exact command:
 //   node tools/conflict-hunk-shape.mjs --refs item-3570,item-6101 --json .spike/hunk-shape.json
 //   node tools/conflict-hunk-shape.mjs --brief            # one line per conflicting ref
+//   node tools/conflict-hunk-shape.mjs --refs item-6177 --with-text --json .spike/packet.json
 // Cost: measured 2026-11-14, Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
 // git 2.56.0 — 40 refs in the `elapsed_s` field it prints (~2 s). READ-ONLY: no branch moves, no
 // worktree is created, no store is opened; the trees `git merge-tree --write-tree` materialises are
@@ -27,6 +28,14 @@
 //   B EMPTY_REF    the ref's side is empty -> main already deleted that region. Nothing to do.
 //   C SUPERSET_REF every main-side line is also on the ref side -> take the ref, nothing lost.
 //   D SUPERSET_MAIN every ref-side line is already on main -> the change is already landed.
+//   I IMPORT_UNION both sides are ONE `import { ... } from "mod"` line for the SAME module, with
+//                  different name lists. The union of the names is the only merge that loses no
+//                  symbol; tools/chain-resolve.mjs rule 8 applies it and then PROVES every name is
+//                  exported by that module in the merged tree, so it cannot land a dangling import.
+//   P PROVENANCE   both sides are runbook frontmatter keys only (last_verified / verified_by /
+//                  evidence / owner / status / symptom / related / milestone / source). The values
+//                  are bookkeeping, not a decision: chain-resolve rule 9 unions the values and keeps
+//                  the later `last_verified`. Nothing is dropped, so it is mechanical.
 //   U BOTH_ADD     both sides add lines at the same anchor and neither rewrites a base line: an
 //                  append-only ledger collision. tools/chain-resolve.mjs rule 1 unions it; nothing
 //                  is dropped, so it is mechanical.
@@ -53,6 +62,7 @@ const BASE = argv.includes("--base") ? argv[argv.indexOf("--base") + 1] : "refs/
 const outJson = argv.includes("--json") ? argv[argv.indexOf("--json") + 1] : null;
 const brief = argv.includes("--brief");
 const refsArg = argv.includes("--refs") ? argv[argv.indexOf("--refs") + 1].split(",").filter(Boolean) : null;
+const withText = argv.includes("--with-text");
 
 const STOP = new Set(["this", "that", "with", "from", "have", "been", "were", "which", "their", "there", "would", "could", "should", "about", "because", "nothing", "something", "where", "when", "what", "while", "into", "only", "also", "more", "than", "over", "under", "after", "before", "without", "within", "another", "other", "same", "both", "either", "neither", "some", "each", "such", "using", "used", "must", "need", "needs", "done", "must"]);
 
@@ -94,6 +104,28 @@ export function rewritesBase(line, baseLines) {
 	return false;
 }
 
+const IMPORT_RE = /^import\s+\{([^}]*)\}\s+from\s+(['"])([^'"]+)\2\s*;?\s*$/;
+const FRONT_KEYS = ["last_verified", "verified_by", "evidence", "owner", "status", "symptom", "related", "milestone", "source", "updated"];
+
+/** Both sides are exactly one import statement for the same module? Then the lossless merge is the
+ * union of the name lists - and nothing else can be, since each side names a symbol the other omits. */
+export function importUnion(mainLines, refLines) {
+	if (mainLines.length !== 1 || refLines.length !== 1) return null;
+	const a = IMPORT_RE.exec(mainLines[0]), b = IMPORT_RE.exec(refLines[0]);
+	if (!a || !b || a[3] !== b[3]) return null;
+	const names = [];
+	for (const s of [a[1], b[1]]) for (const n of s.split(",").map((x) => x.trim()).filter(Boolean)) if (!names.includes(n)) names.push(n);
+	return { names, specifier: a[3] };
+}
+
+/** Is every line of this side a runbook frontmatter key? (A wrapped value is NOT a key, so a
+ * multi-line evidence block does not qualify - the rule is deliberately narrow.) */
+export function isProvenance(lines) {
+	const nonEmpty = lines.map((l) => l.trim()).filter(Boolean);
+	if (!nonEmpty.length) return false;
+	return nonEmpty.every((l) => FRONT_KEYS.some((k) => l.startsWith(k + ":")));
+}
+
 /** Classify ONE conflict hunk, given its two sides and the base version of the file.
  * The hunk is reduced to what is *only* on each side; lines on both sides are shared context and
  * cannot be the disagreement. */
@@ -108,6 +140,9 @@ export function classifyHunk(mainSide, refSide, baseLines = []) {
 	const rOnly = rLines.filter((l) => !mset.has(l));
 	if (!mOnly.length) return { cls: "C", note: "the ref side contains every main line - take the ref, nothing is lost" };
 	if (!rOnly.length) return { cls: "D", note: "main already contains every ref line - the change is already landed" };
+	const imp = importUnion(mLines, rLines);
+	if (imp) return { cls: "I", names: imp.names, specifier: imp.specifier, note: "same import, different name lists - the union is provable" };
+	if (isProvenance(mLines) && isProvenance(rLines)) return { cls: "P", note: "frontmatter bookkeeping on both sides - values can be unioned" };
 	const baseSet = new Set(baseLines.map((l) => l.trim()));
 	if (baseLines.length &&
 		!mOnly.some((l) => baseSet.has(l) || rewritesBase(l, baseLines)) &&
@@ -164,6 +199,7 @@ export function census(refs, { gitRun = git } = {}) {
 			hunks.push(...hunksFromMerged(merged.out, p, baseBlob.ok ? baseBlob.out.split("\n") : []));
 		}
 		const cls = hunks.reduce((a, h) => (a[h.cls] = (a[h.cls] || 0) + 1, a), {});
+		const provable = (cls.A || 0) + (cls.B || 0) + (cls.C || 0) + (cls.D || 0) + (cls.U || 0) + (cls.I || 0) + (cls.P || 0);
 		rows.push({
 			ref: name,
 			clean: false,
@@ -172,8 +208,10 @@ export function census(refs, { gitRun = git } = {}) {
 			cls,
 			semantic: cls.E || 0,
 			wording: (cls.G || 0) + (cls.F || 0),
-			mechanical: (cls.A || 0) + (cls.B || 0) + (cls.C || 0) + (cls.D || 0) + (cls.U || 0),
+			mechanical: provable,
 			verdict: cls.E ? "semantic" : cls.G ? "wording-only" : "mechanical",
+			unionable: !cls.E && !cls.G,
+			...(withText ? { hunks } : {}),
 		});
 	}
 	return {
@@ -198,7 +236,7 @@ if (outJson) fs.writeFileSync(outJson, JSON.stringify(result, null, 1));
 if (brief) {
 	for (const r of result.rows) {
 		if (r.clean) continue;
-		console.log(`${r.ref}\t${r.verdict}\tpaths=${r.paths} hunks=${r.hunks} E=${r.cls.E || 0} G=${r.cls.G || 0} F=${r.cls.F || 0} U=${r.cls.U || 0} A/B/C/D=${(r.cls.A||0)+(r.cls.B||0)+(r.cls.C||0)+(r.cls.D||0)}`);
+		console.log(`${r.ref}\t${r.verdict}\tpaths=${r.paths} hunks=${r.hunks} E=${r.cls.E || 0} G=${r.cls.G || 0} F=${r.cls.F || 0} U=${r.cls.U || 0} I=${r.cls.I || 0} P=${r.cls.P || 0} A/B/C/D=${(r.cls.A||0)+(r.cls.B||0)+(r.cls.C||0)+(r.cls.D||0)}`);
 	}
 } else {
 	console.log(JSON.stringify({

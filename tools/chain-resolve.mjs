@@ -52,6 +52,17 @@
 //     the 51 downstream DECISIONS.md line-pins do not shift").
 //  7. A ref with ANY unresolved conflict is not merged at all: the merge is aborted and the
 //     chain stays at the last good ref.
+//  8. IMPORT UNION (added 2026-11-14, measured, not assumed): when the only disagreement at a code
+//     path is ONE `import { ... } from "mod"` line on each side for the SAME module, the lossless
+//     merge is the union of the name lists. It is then PROVEN: every name the merged tree imports
+//     from a local module must be exported by that module in that tree. A union rule without the
+//     proof lands a dangling import - the four refs it was written for (item-5301,
+//     item-5301-resolved, item-6173, item-6211) each carry the definition of the symbol they
+//     import, so the proof, not the shape, is what decides.
+//  9. PROVENANCE UNION: when both sides of a docs/runbook hunk are ONLY frontmatter keys
+//     (last_verified / verified_by / evidence / owner / status / symptom / related / milestone /
+//     source / updated), the values are bookkeeping, not a decision: values are joined and
+//     `last_verified` keeps the later date. No key is dropped, so nothing is lost.
 //
 // Exit 0 = chain built, every merged ref proved. Nonzero = nothing merged.
 // Side effects: a worktree under .spike/ and a branch. main is not advanced, nothing is pushed,
@@ -132,6 +143,84 @@ function findSeq(out, seq) {
 // the mint step re-derives a real number afterwards.
 const normLine = (s) => s.replace(/D(?:\d+|###|MINT)/g, "D#").replace(/\s+/g, " ").trim();
 
+const IMPORT_RE = /^import\s+\{([^}]*)\}\s+from\s+(['"])([^'"]+)\2\s*;?\s*$/;
+const FRONT_KEYS = ["last_verified", "verified_by", "evidence", "owner", "status", "symptom", "related", "milestone", "source", "updated"];
+const isProvLine = (l) => FRONT_KEYS.some((k) => l.trim().startsWith(k + ":"));
+const importNames = (line) => { const m = IMPORT_RE.exec(String(line).trim()); return m ? m[1].split(",").map((x) => x.trim()).filter(Boolean) : []; };
+
+/** Rule 8. Both sides are one import statement for the same module: write the union of names. */
+function applyImportUnion(out, h) {
+	if (h.removed.length !== 1 || h.added.length !== 1) return null;
+	const a = IMPORT_RE.exec(h.removed[0].trim()), b = IMPORT_RE.exec(h.added[0].trim());
+	if (!a || !b || a[3] !== b[3]) return null;
+	const idx = out.findIndex((l) => { const m = IMPORT_RE.exec(l.trim()); return m && m[3] === a[3]; });
+	if (idx < 0) return null;
+	const names = [];
+	for (const s of [IMPORT_RE.exec(out[idx].trim())[1], b[1]]) for (const n of s.split(",").map((x) => x.trim()).filter(Boolean)) if (!names.includes(n)) names.push(n);
+	const line = `import { ${names.join(", ")} } from ${b[2]}${b[3]}${b[2]};`;
+	out[idx] = line;
+	return line;
+}
+
+/** Union two frontmatter values without repeating a claim: split on the rig's "; " segment
+ * separator and append only the segments the merged line does not already contain. */
+function unionValue(curVal, addVal) {
+	const quoted = curVal.startsWith('"') && curVal.endsWith('"') && addVal.startsWith('"') && addVal.endsWith('"')
+		&& !curVal.slice(1, -1).includes('"') && !addVal.slice(1, -1).includes('"');
+	const a = (quoted ? curVal.slice(1, -1) : curVal).split("; ").map((s) => s.trim()).filter(Boolean);
+	const b = (quoted ? addVal.slice(1, -1) : addVal).split("; ").map((s) => s.trim()).filter(Boolean);
+	for (const seg of b) if (!a.some((x) => x === seg || x.includes(seg))) a.push(seg);
+	const joined = a.join("; ");
+	return quoted ? `"${joined}"` : joined;
+}
+
+/** Rule 9. Both sides are frontmatter keys: union the values, keep the later last_verified. */
+function applyProvenanceUnion(out, h) {
+	if (!h.removed.every(isProvLine) || !h.added.every(isProvLine)) return null;
+	let changed = 0;
+	for (const line of h.added) {
+		const key = line.trim().split(":")[0];
+		if (!FRONT_KEYS.includes(key)) return null;
+		const idx = out.findIndex((l) => l.trim().startsWith(key + ":"));
+		if (idx < 0) return null; // main has no such key - inserting it is a decision, not a union
+		const cur = out[idx], add = line.trim();
+		if (cur.trim() === add) continue;
+		if (key === "last_verified") {
+			const d1 = (cur.match(/20\d\d-\d\d-\d\d/) || [""])[0], d2 = (add.match(/20\d\d-\d\d-\d\d/) || [""])[0];
+			if (d2 && d1 && d1 && d2 > d1) { out[idx] = cur.replace(d1, d2); changed++; }
+			continue;
+		}
+		const curVal = cur.slice(cur.indexOf(":") + 1).trim(), addVal = add.slice(add.indexOf(":") + 1).trim();
+		if (curVal.includes(addVal) || addVal.includes(curVal)) continue;
+		out[idx] = `${cur.slice(0, cur.indexOf(":") + 1)} ${unionValue(curVal, addVal)}`;
+		changed++;
+	}
+	return { changed };
+}
+
+/** Every symbol a merged code file imports from a LOCAL module must be exported by that module in
+ * the tree we just built - the proof that rule 8 cannot land a dangling import. */
+function proveImportsResolve(wt, paths) {
+	const bad = [];
+	for (const path of paths) {
+		if (!CODE_RE.test(path) || path.endsWith(".json")) continue;
+		const text = fs.existsSync(`${wt}/${path}`) ? fs.readFileSync(`${wt}/${path}`, "utf8") : "";
+		for (const m of text.matchAll(/import\s+\{([^}]*)\}\s+from\s+"(\.[^"]+)"/g)) {
+			const mod = `${wt}/${path.split("/").slice(0, -1).join("/")}/${m[2]}`;
+			if (!fs.existsSync(mod)) { bad.push(`${path}: imports from ${m[2]} which does not exist in the merged tree`); continue; }
+			const modText = fs.readFileSync(mod, "utf8");
+			const exported = new Set();
+			for (const mm of modText.matchAll(/export\s+(?:async\s+)?(?:function|const|let|var|class)\s+([A-Za-z_$][\w$]*)/g)) exported.add(mm[1]);
+			for (const mm of modText.matchAll(/export\s*\{([^}]*)\}/g)) for (const n of mm[1].split(",").map((x) => x.trim().split(/\s+as\s+/)[1] || x.trim())) if (n) exported.add(n);
+			if (/export\s+default/.test(modText)) exported.add("default");
+			for (const n of m[1].split(",").map((x) => x.trim()).filter(Boolean)) {
+				if (!exported.has(n)) bad.push(`${path}: imports ${n} from ${m[2]} but the merged module does not export it`);
+			}
+		}
+	}
+	return bad;
+}
+
 // Mint: renumber headings added by this ref that collide with a number already in the file, or
 // that carry a "mint at land" placeholder. Line-neutral. Returns {text, mints:[{from,to}]}.
 function mintHeadings(text, addedHeadingLines) {
@@ -210,6 +299,7 @@ for (const ref of refs) {
 			if (addAll === 0 && delAll === 0) { const text = oursT.endsWith("\n") ? oursT : oursT + "\n"; fs.writeFileSync(`${wt}/${path}`, text); git(["add", path], wt); resolved.push({ path, rule: "ref changed nothing at this path - took main" }); continue; }
 			const out = oursT.split("\n");
 			const anchors = [];
+			const unionProof = new Map();
 			let ok = true;
 			for (const h of hRef) {
 				if (h.del === 0) {
@@ -224,13 +314,23 @@ for (const ref of refs) {
 						hit = findAll(out.map(normLine), h.removed.map(normLine), 0);
 						via = "in-place edit, anchor matched after land-time D-number normalisation";
 					}
-					if (hit.length !== 1) { ok = false; break; }
+					if (hit.length !== 1) {
+						const merged = applyImportUnion(out, h);
+						if (merged) { unionProof.set(h, { kind: "import", names: importNames(merged) }); anchors.push({ start: h.start, added: h.add, removed: h.del, via: "rule 8: import union" }); continue; }
+						if (applyProvenanceUnion(out, h)) { unionProof.set(h, { kind: "provenance", values: h.added.filter((l) => !l.trim().startsWith("last_verified:")).flatMap((l) => { const t = l.trim(); const v = t.slice(t.indexOf(":") + 1).trim(); const q = v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v; return q.split("; ").map((s) => s.trim()).filter(Boolean); }) }); anchors.push({ start: h.start, added: h.add, removed: h.del, via: "rule 9: provenance union" }); continue; }
+						ok = false; break;
+					}
 					out.splice(hit[0], h.removed.length, ...h.added);
 					anchors.push({ start: h.start, added: h.add, removed: h.del, via });
 				}
 			}
 			if (!ok) { decisions.push({ path, rule: "anchor/edit not locatable in the current file" }); continue; }
-		 const missing = hRef.reduce((n, h) => n + h.added.filter(l => !out.includes(l)).length, 0);
+		const missing = hRef.reduce((n, h) => {
+			const proof = unionProof.get(h);
+			if (!proof) return n + h.added.filter((l) => !out.includes(l)).length;
+			if (proof.kind === "import") return n + proof.names.filter((nm) => !out.some((l) => l.includes(nm))).length;
+			return n + proof.values.filter((v) => v && !out.some((l) => l.includes(v))).length;
+		}, 0);
 			if (missing > 0) { decisions.push({ path, rule: `containment proof FAILED (${missing} added lines missing)` }); continue; }
 		 let text = out.join("\n") + (out[out.length - 1] === "" ? "" : "\n");
 			if (path === "docs/DECISIONS.md") {
@@ -264,6 +364,8 @@ for (const ref of refs) {
 			const t = fs.existsSync(`${wt}/${path}`) ? fs.readFileSync(`${wt}/${path}`, "utf8") : "";
 			if (/^<<<<<<<|^=======$|^>>>>>>>/m.test(t)) decisions.push({ path, rule: "unresolved conflict markers left in the file" });
 		}
+		const linkBad = proveImportsResolve(wt, conflicted);
+		if (linkBad.length) decisions.push({ path: "(link proof)", rule: linkBad.join("; ") });
 		if (decisions.length) {
 			if (!m.ok) git(["merge", "--abort"], wt);
 		report.refused.push({ ref, decisions: decisions.map(d => `${d.path}: ${d.rule}`) });

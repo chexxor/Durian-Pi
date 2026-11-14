@@ -545,3 +545,32 @@ They are not wording:
 | `item-6643`, `item-6664` | `docs/runbooks/continuation-notes.md` `verified_by: architect` (ref) vs `verified_by: impl` (main); `item-6664` also adds a `## D271` block in `docs/DECISIONS.md` | a provenance attribution and a decision record — a merge cannot decide who verified what, and a side-pick deletes a decision |
 
 Cheap probe for any future ledger row (0.4 s): for each ref, `git merge-tree --write-tree refs/heads/main refs/heads/<ref>` then read the conflict markers out of the merged blob — see `tools/conflict-hunk-shape.mjs` `hunksFromMerged`. **Verdict:** none of the seven is landable by rule; the ruling the operator is asked for is not "may main win" but "may the rig grow a **union-import** rule" (keep both sides, then prove every named symbol is exported by the module in the merged tree). That rule would land none of these four today, and that is the proof it works.
+
+## Correction, same pass, later in the window (2026-11-14) — the union-import rule exists and was measured
+
+The paragraph above is now **false for four of the seven refs**, and was replaced by a rule rather than a ruling.
+Reading the refs' own diffs: each "stale import" ref **defines** the symbol it imports —
+`git diff "$(git merge-base refs/heads/main refs/heads/item-5301)" refs/heads/item-5301 | grep -E 'reapWorktrees|runControlSettings'`
+shows `export async function reapWorktrees(...)` in that ref's own `src/broker.mjs`, and the same for
+`runControlSettings` / `progressSettings` in `item-6173` / `item-6211`'s `src/config.mjs`. So the disagreement is an
+import name list, and the lossless merge is the union — **provided the merged tree exports every name**.
+
+`tools/chain-resolve.mjs` now carries **rule 8 (import union)** with a **link proof**, and **rule 9 (provenance union)**
+(values joined by `"; "`, `last_verified` keeps the later date). `tools/conflict-hunk-shape.mjs` gained the classes
+`I` and `P` and `--with-text`; `tools/merge-containment-proof.mjs` matches a union line by its surviving segments instead
+of requiring verbatim text. Pinned by `demo/chain-resolve-rules.test.mjs` (18 checks, ~4 s, throwaway repo) and
+`demo/conflict-hunk-shape.test.mjs`.
+
+Measured, host Linux / Fedora Linux 45 / kernel `7.2.15-300.fc45.x86_64` / node v24.22.1 / git 2.56.0:
+
+| state | refs | evidence |
+|---|---|---|
+| **LANDED** (main `1a60386b` → `e6aad7a5`) | `item-6537`, `item-6549` | `node scripts/land.mjs landing-20261114-docsonly --db ./selfdev.sqlite --changed-suite --docs-only` exit 0; `git merge-base --is-ancestor refs/heads/item-6537 refs/heads/main` exit 0 (same for 6549); `tools/merge-containment-proof.mjs --branch refs/heads/main --refs item-6537,item-6549` → `refs_with_loss 0`; `node scripts/test.mjs --area docs` 8/8 in 60.9 s |
+| **CHAIN-READY, gate red — held** | `item-6173`, `item-6238` | `node tools/chain-resolve.mjs --branch landing-20261114-c9 --refs item-6173,item-6238,item-6537,item-6549` merged 4, containment 0 loss; `scripts/land.mjs --suite` refused at `demo/stop.test.mjs` (exit 1), which **passes** (exit 0) run directly in `.spike/chain-landing-20261114-c9` with the root's `node_modules` symlinked — the red is not yet attributed |
+| **HELD — the branch's own demo fails** | `item-7232` | `scripts/land.mjs` STOPPED: `demo/by-id-claim-gate.test.mjs` (added by this ref) fails 12 checks on the merged tree — it asserts a by-id claim is refused on an open/cancelled/held gate and main claims it. Needs a re-cut, not a merge |
+| **HELD — a dependency decision, not a merge** | `item-6373` | merges by rule, but its diff bumps **every** vendor pin in `package.json` (`pi-durable ^1.3.0` → `1.5.1`, plus chord/pi-ai/pi-coding-agent/pi-tui) and rewrites `scripts/sync-pi.mjs` |
+| **still refused by rule** | the other 33 | `node tools/chain-resolve.mjs … --refs <all 40>` → 6 merged, 34 refused; the reason is printed per ref, overwhelmingly "anchor/edit not locatable in the current file" — two seats rewrote the same line |
+
+**A number that kills the "main wins" shortcut for good:** `node .spike/containment-in-main.mjs refs/heads/<the 40 held refs>`
+(≈2 s) — **no** held ref's added lines are all already in main. Fewest missing: `item-5002` 6 lines, `item-6435` 44,
+`item-6373` 1752. Full JSON: `.spike/containment-in-main.json`. Any "take main" rule deletes work, measured per ref.

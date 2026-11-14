@@ -4444,7 +4444,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     cannot trust. Fixed in place: the tool mirrors the broker's list and honours `keepReason === "live"`. The general
     rule: when a delegate tool and the base disagree about a state name, read the base, do not infer the set.
 
-## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-343, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-344, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
 
 335. **`git diff` omits `,1` in a one-line hunk header.** `@@ -1 +1 @@`, not `@@ -1,1 +1,1 @@`. A hunk parser
    written as `/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/` silently drops every single-line hunk, so a conflicted file
@@ -4507,3 +4507,17 @@ at `:743`). Re-measure every `path:line` before repeating it.
    ~50 DECISIONS.md line-pins sit downstream. Before running it, read the citations: `docs/NEXT.md` uses "D265" for
    the work-item lifecycle, which is the entry at line **12239**, not the one at 2330 — a rename that keeps the wrong
    referent makes every "see D265" point at the wrong decision. Disambiguation is a ruling, not a sweep.
+344. **A "stale import" hunk is usually a provable union, and a scratch red is not a branch red.** Pitfall 341 said
+   the seven `wording-only` refs import symbols main no longer exports. Reading the ref's OWN diff says otherwise:
+   `git diff "$(git merge-base main item-5301)" item-5301 | grep -E 'reapWorktrees|runControlSettings|progressSettings'`
+   shows each ref **defines** the symbol it imports (`export async function reapWorktrees` in its own `src/broker.mjs`).
+   So the rule `tools/chain-resolve.mjs` now carries is rule 8 (union the import name lists) **plus a link proof**: every
+   name a merged code file imports from a local module must be exported by that module in the merged tree. Import union
+   without the proof lands a dangling import; with it, `item-6173` merged and `demo/chain-resolve-rules.test.mjs` proves
+   the ghost case is refused. Rule 9 does the same for runbook frontmatter (`last_verified` / `verified_by` / `evidence`):
+   values are unioned by `"; "` segment, the later date wins, and `tools/merge-containment-proof.mjs` now matches a line
+   by its surviving segments rather than requiring verbatim text — otherwise a union reads as a loss.
+   The second half: `scripts/land.mjs --suite` reds in a scratch whose dependency set is not the one you measured, while
+   the SAME demo passes in the chain worktree with the root's `node_modules` symlinked in (`demo/stop.test.mjs`, exit 0,
+   measured 2026-11-14, Linux Fedora 45 kernel `7.2.15-300.fc45.x86_64` node v24.22.1). Run the demo in the chain before
+   blaming the branch (#5793 is the same trap in the other direction).
