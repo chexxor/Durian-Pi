@@ -25,6 +25,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `7b417971` | docs(NEXT): the `80a87fca` row — the audit names every range commit except its own carrier |
 | `0e46df03` | docs(NEXT): rows for the two pointer-fix commits (`230ee8dd`, `80a87fca`) |
 | `352b5fcb` | docs(NEXT): the pointer-fix rows in commit order (`80a87fca` before `230ee8dd`) — the audit reported an ordering defect |
+| `7cb34194` | docs(NEXT): rows for `7b417971`, `0e46df03`, `352b5fcb` — `pointer-sha-coverage --base 8b5a19e1` exits **0** (158 range commits, 80 covered by landing-merge rows, 0 holes) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -60,19 +61,19 @@ one line: `lockedTrees` (17) and `counts.locked` (0) answer different questions 
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json --strict    # 4.6 s, exit 0 — 25 landed / 26 conflicted / 2 gate-refused
+DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json --strict    # 2.6 s, exit 0 — 25 landed / 26 conflicted / 2 gate-refused
 node tools/branch-census.mjs --db ./selfdev.sqlite                          # 4.0 s, exit 0 — 53 refs / 28 worktrees, plan 0
 node cli.mjs worktree audit --json                                          # 2.0 s — lockedTrees 17, lockedKept 0, both named
 node tools/branch-prune.mjs --retire-ruled --dry-run --db ./selfdev.sqlite  # 1.3 s, exit 1 — plans item-7232-recut, skips it: no --bundle-dir
 node demo/by-id-claim-gate.test.mjs                                         # 0.31 s — ROADMAP 371, the by-id claim door
 node demo/edge-fail-closed.test.mjs                                         # 0.78 s — ROADMAP 368, a bad org edge refuses, never throws
 node demo/branch-prune.test.mjs                                             # 0.68 s — §15 pins --retire-ruled
-node tools/pointer-sha-coverage.mjs --base 8b5a19e1                         # 0.4 s — exit 1 if this file skips a shipped sha
-timeout 320 node scripts/test.mjs --all --jobs 4                            # 192 s, 361/361
+node tools/pointer-sha-coverage.mjs --base 8b5a19e1                         # 1.3 s, exit 0 — exit 1 if this file skips a shipped sha
+timeout 320 node scripts/test.mjs --all --jobs 4                            # 183.1 s, 361/361
 node cli.mjs check rig.selfdev.json --json                                  # 14.3 s, exit 1 — one error finding: pool-dead-gate #7660
 ```
 
-**Suite tally:** **361/361 in 192.3 s, exit 0**. The two reds before it were instrument defects, not fleet defects,
+**Suite tally:** **361/361 in 183.1 s, exit 0** (re-measured at `7cb34194`; 192.3 s at `1f1a881c`). The two reds before it were instrument defects, not fleet defects,
 and both are closed (ROADMAP **375**): `demo/human-defer-lease.test.mjs` read the wall clock while the fixture
 asserted a named one (red two days after shipping, exit 1 in 0.145 s), and
 `demo/restart-limit-behaviour.test.mjs` charged 4 restarts for 5 landed crashes because the simulated host died one

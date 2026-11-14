@@ -4599,6 +4599,12 @@ at `:743`). Re-measure every `path:line` before repeating it.
     Six successive NEXT.md-only commits each left the *previous* NEXT.md commit un-named, so the verdict stayed at
     "1 hole(s)" forever. **Fix: squash the pointer churn** (`git reset --soft <last real commit>` then one commit)
     or make every commit name its predecessor in the same commit. Do not loop on adding rows — the loop is the defect.
+    **Addendum, measured 2026-11-14 at `7cb34194`** (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node
+    v24.22.1, git 2.56.0, 1.3 s): the second fix works — five pointer commits (`3a8bce52`, `054da8d3`, `80a87fca`,
+    `230ee8dd`, `7b417971`, `0e46df03`, `352b5fcb`) each named its predecessors in commit order and the range closed at
+    **0 holes / 0 ordering defects** over 158 commits. Two things the tool now does that a hand-pass cannot: a landing
+    **merge** row covers the commits inside its side branch (80 of the 158 here), and rows in `docs/NEXT-ARCHIVE.md`
+    count as named (201 of them) while the ORDER check still applies to the live pointer only.
 357. **The locally served model now demands a credential, and a broker started without it looks like a dead seat.**
     Measured 2026-11-14 (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1): `curl 127.0.0.1:8080/health`
     → `{"api_key": true}`; `/v1/models` and `/v1/chat/completions` return **401** with the rig's loopback placeholder
