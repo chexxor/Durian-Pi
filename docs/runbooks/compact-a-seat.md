@@ -5,7 +5,7 @@ writes: true
 precondition: "none"
 last_verified: 2026-10-30
 verified_by: devtools (the compaction path) + delegate (the no-op mechanism, read from shipped source 2026-10-30)
-evidence: "#1904 (demo/compact-spool.test.mjs — broker applies op:compact live) + #873 (demo/compact.test.mjs) + pi-durable dist/harness/compaction.js:69-71,194-201,211-234 and generation.js:236-245, read 2026-10-30; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
+evidence: "#1904 (demo/compact-spool.test.mjs — broker applies op:compact live) + #873 (demo/compact.test.mjs) + pi-durable dist/harness/compaction.js:69-71,194-201,211-234 and generation.js:236-245, read 2026-10-30; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB); the "never sets a policy" claim and the remedy triples corrected by #6435 (2026-11-11, tree item-6435 off main 35001c3a, checks named in the section below)"
 check_rule: null
 ---
 
@@ -96,9 +96,16 @@ The verb's wording implies a failure. pi-durable's shipped source says otherwise
 2. `selectCut` returns `undefined` when walking back from the newest message never accumulates `keepRecentTokens`
    tokens, or when nothing before the chosen cut has content (`compaction.js:211-234`). In plain terms: **the
    context is smaller than the “keep recent” budget, so there is nothing old enough to summarize.**
-3. durian-pi **never sets a compaction policy.** The only harness setting passed is `settings: streamSettings(CFG)`
-   (`cli.mjs:414-423`), and `streamSettings` returns `stream.timeoutMs` alone (`src/config.mjs:246-259`). So every
-   seat runs `DEFAULT_COMPACTION_POLICY` — `enabled: true, reserveTokens: 16384, keepRecentTokens: 20000,
+3. **Corrected 2026-11-11 (#6435): durian-pi DOES set a compaction policy.** The harness settings are
+   `settings: { ...streamSettings(CFG), ...compactionSettings(CFG) }` at `cli.mjs:537`, and
+   `compactionSettings` (`src/config.mjs:511`) reads the five `DURIG_COMPACTION_*` keys. Nesting is pinned by
+   `node demo/compaction-nesting.test.mjs` → exit 0 (`PASS — compaction nesting, 0 failing check(s)`).
+   **The original claim stayed true in practice because of a second mechanism:** on a rig whose config declares
+   no model for a family, the shipped overrides are **inert**. `overrideKeysForFamily("verifier/*", cfg)` returns
+   `[]` when `DURIG_VERIFIER_MODEL` is absent, the entry is dropped, and
+   `compactionSettings(<durig.config.default.json>)` returns `{}` — measured, exit 0. So the shipped default's
+   `DURIG_COMPACTION_MODEL_OVERRIDES` block changes nothing on a fresh rig, and every seat still runs
+   `DEFAULT_COMPACTION_POLICY` — `enabled: true, reserveTokens: 16384, keepRecentTokens: 20000,
    backgroundTokens: 32768` (`harness/agent.js:10-15`).
 4. Against a **24,576-token** window those defaults contradict each other. Automatic compaction is gated by the same
    selection: `thresholdCompaction` fires above `contextWindow - reserveTokens` (blocking) or
@@ -136,12 +143,26 @@ the harness-wide policy, field by field (`compaction.js:194-201`). So the fix is
    is worse than one never set.
 2. One call site: `settings: { ...streamSettings(CFG), ...compactionSettings(CFG) }` at the single `Harness.open`
    (`cli.mjs:414-423`), and correct the comment there that says only `stream` is configurable.
-3. Values that stop contradicting each other for the **verifier class** (window 24,576;
-   `DURIG_VERIFIER_MAX_TOKENS 3000`): `reserveTokens: 4096` → blocking at 20,480, and the summary request
-   `min(0.8·reserveTokens, model.maxTokens)` = 3,000 instead of the default **13,107**, which is larger than the
-   window the compaction exists to protect; `keepRecentTokens: 8192` → a cut exists once >8,192 tokens are kept;
-   `backgroundTokens: 8192` → background fires at 12,288, while the seat can still run. **Local class (window
-   200,000): leave the defaults** — blocking 183,616 / background 150,848 / cut at 20,000 is coherent there.
+3. **The remedy numbers published in this runbook are superseded (#6435, measured 2026-11-11).**
+   `reserveTokens 4096 / keepRecentTokens 8192 / backgroundTokens 8192` (the #6063 proposal, and the
+   `3072 / 6144 / 3072` variant) fail the headroom rule #6064 wrote down: **a family's reserve must be at least
+   as large as that family's declared output budget**, and `keepRecentTokens + summaryBudget` must fit inside the
+   window, with `summaryBudget = min(floor(0.8 · reserveTokens), family maxTokens)`. On this rig the verifier
+   family declares **6,000** (`durig.config.json` `DURIG_VERIFIER_MAX_TOKENS`, read directly; this row was written
+   against 3,000), so a 4,096 reserve funds a 3,276-token summary — below what the family says it will emit.
+   The example that satisfies the rule is **`16384 / 8192 / 4096`**: 16,384 ≥ 6,000; 8,192 + 6,000 = 14,192 ≤ 24,576;
+   background threshold (24,576 − 16,384) − 4,096 = 4,096 ≥ 0. Run the arithmetic, do not copy the triple:
+   `(window − reserve) − background >= 0` and `keep + min(floor(0.8·reserve), maxTokens) <= window`.
+   **Nothing refuses a bad triple today**: the coherence gate (#6063/#6064) was reverted out of main at
+   `22c397a1` (`git show 22c397a1 --stat` lists `demo/compaction-coherence.test.mjs | 252 ------` and
+   `src/config.mjs | 257 ------`), so the rule is a human check, not a rig refusal.
+   Check what a seat actually runs before setting anything:
+   ```bash
+   DURIG_DB=./selfdev.sqlite node cli.mjs compact <seat> --dry-run   # reports the seat's tokens against the policy
+   ```
+   and read the resolved object rather than the config text (`node -e` over `src/config.mjs`'s
+   `compactionSettings(CFG)` returns `{}` when no family declares a model). **Local class (window 200,000):
+   leave the defaults** — blocking 183,616 / background 150,848 / cut at 20,000 is coherent there.
 4. Fix the **reporting** too, because that is what misled four sessions: `cmdCompact` fails with
    `compact: no compaction entry was written` (`cli.mjs:1344`) and the spool path repeats it (`src/broker.mjs:689`),
    while pi-durable distinguishes the outcomes — the live doc carries `compactionFailure` only for a real failure
