@@ -704,6 +704,76 @@ export function dependencySet(pin, durigDir = DURIG, buildDir = BUILD_DIR) {
 	return installed ? "lockfile-released" : "not-installed";
 }
 
+/**
+ * The version the pin NAMES, as npm would resolve it. A tag ref like "v1.5.1" is the release the
+ * vendored build is built from; a sha or branch pin names no version, and the honest answer is null.
+ * Pure - no network, no file. */
+export function pinVersion(pin) {
+	const ref = pin?.ref;
+	if (typeof ref !== "string" || !ref) return null;
+	const m = ref.match(/^v?(\d+\.\d+\.\d+)/);
+	return m ? m[1] : null;
+}
+
+/**
+ * The DECLARED dependency plane (package.json + package-lock.json) read against the PIN (#6373).
+ *
+ * Why this exists. `--link` points node_modules at the built tree with `npm install --no-save`, so
+ * package.json and the lock stay untouched - and that is exactly how the two planes drifted apart:
+ * the pin moved to tag v1.5.1 while package.json still declared `^1.3.0` and the lock still resolved
+ * 1.3.0. An item worktree has no vendored build to link, so it installs the LOCKFILE, and a released
+ * pi-durable 1.3.0 cannot open a store at schema version 2. Measured in the item-6373 worktree on
+ * 2026-11-11: `openNodeSqliteStorage(<copy of selfdev.sqlite>)` threw "Durable SQLite schema version 2
+ * is newer than supported version 1" and exited 1, and `node scripts/suite.mjs --jobs 12` in that tree
+ * answered pass=279 fail=20; with the plane declared at the pin's release the same tree answered
+ * pass=299 fail=0. So the mismatch is not cosmetic - it is why a verdict from a worktree is not
+ * comparable with a verdict from the seat root, and it is the lockout docs/runbooks/pi-pin-update.md
+ * describes.
+ *
+ * Reported, not enforced: sync-pi keeps exit 0 so an in-progress pin move (package.json bumped a step
+ * later) is not mistaken for a broken tool. The verdict names the remedy in the imperative. */
+export function declaredPlane(pin, durigDir = DURIG) {
+	const expected = pinVersion(pin);
+	const pkgPath = join(durigDir, "package.json");
+	const lockPath = join(durigDir, "package-lock.json");
+	if (!existsSync(pkgPath)) {
+		return {
+			expected,
+			checked: 0,
+			mismatches: [],
+			verdict: `no package.json at ${pkgPath}, so the declared plane cannot be checked`,
+		};
+	}
+	let deps = {};
+	try {
+		deps = JSON.parse(readFileSync(pkgPath, "utf8")).dependencies ?? {};
+	} catch (err) {
+		return { expected, checked: 0, mismatches: [], verdict: `package.json is not readable JSON: ${err.message}` };
+	}
+	let lockPackages = {};
+	if (existsSync(lockPath)) {
+		try {
+			lockPackages = JSON.parse(readFileSync(lockPath, "utf8")).packages ?? {};
+		} catch (err) {
+			return { expected, checked: 0, mismatches: [], verdict: `package-lock.json is not readable JSON: ${err.message}` };
+		}
+	}
+	const rows = (pin.packages ?? []).map((pkg) => {
+		const declared = deps[pkg.name] ?? null;
+		const resolved = lockPackages[`node_modules/${pkg.name}`]?.version ?? null;
+		return { name: pkg.name, declared, resolved };
+	});
+	const mismatches = expected
+		? rows.filter((r) => (r.declared !== null && r.declared !== expected) || (r.resolved !== null && r.resolved !== expected))
+		: [];
+	const verdict = mismatches.length
+		? `PLANE DRIFT (#6373): the pin is ${pin.ref ?? pin.sha}, so packages must resolve ${expected}, but ${mismatches.length} of the ${rows.length} vendored pi packages do not (${mismatches.map((m) => `${m.name}: declared ${m.declared ?? "(undeclared)"}, lock resolves ${m.resolved ?? "(nothing)"}`).join("; ")}). Declare them at ${expected} and run npm install to refresh the lock - an item worktree installs the lockfile, not the vendored build, and a released pi older than the pin cannot open a store the pin has migrated.`
+		: expected
+			? `the declared plane agrees with the pin: ${rows.length} vendored packages, all resolving ${expected}`
+			: `the pin names no version ref (${pin.sha}), so the declared plane cannot be compared with it`;
+	return { expected, checked: rows.length, mismatches, rows, verdict };
+}
+
 function out(payload) {
 	console.log(JSON.stringify(payload, null, 2));
 }
@@ -853,12 +923,12 @@ function main(argv) {
 		pinFileWritten: pinWritten,
 		drift,
 		upstream: drift, // kept: the old key name, same finding, so an existing reader still finds it
-		upstream: drift,
 		buildTree: tree.head,
 		buildTreeAtPin: tree.atPin,
 		built: inspectBuilt(pin),
 		linked: inspectLinked(pin),
 		dependencySet: dependencySet(pin),
+		declaredPlane: declaredPlane(pin),
 	});
 }
 
