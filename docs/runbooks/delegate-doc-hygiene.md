@@ -260,7 +260,7 @@ prints it but still exits 0; the demo suite is what goes red, and the landing ga
 
 Write the count with its source, not as a bare assertion:
 
-> `check` (23 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
+> `check` (24 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
 
 Or drop the number entirely and name the declaring export. Either is honest; a number without a source is not.
 

@@ -5,7 +5,7 @@ writes: false                    # the procedure routes rows; it never opens a H
 precondition: "none"
 last_verified: 2026-11-11
 verified_by: architect
-evidence: "item #6782; `node tools/probes/gate-authority-census-6782.mjs <dump>` exit 1 (63 dead-gate rows, 95 parked-gate rows, 0 gated/ungated events) at HEAD 35001c3a; `node tools/probes/gate-write-surface.mjs` exit 0; `node tools/probes/gate-reference-validation.mjs` exit 0"
+evidence: "item #6782; `node tools/probes/gate-authority-census-6782.mjs <dump>` exit 1 (63 dead-gate rows, 95 parked-gate rows, 0 gated/ungated events) at HEAD 35001c3a; `node tools/probes/gate-write-surface.mjs` exit 0; `node tools/probes/gate-reference-validation.mjs` exit 0"; "item #6225; `node tools/probes/revise-authority-boundary.mjs` exit 0 in worktree item-6185 @ f192f543; `node demo/queue-held-gates.test.mjs` exit 0 (42 held rows with NO recorded gate in the fixture); env name corrected to `DURIG_DB` in both commands (#6336, 2026-11-11, tree `35001c3a`: `cli.mjs:161` reads `DURIG_DB` only, so `DURIAN_PI_DB=` opened the fallback `./rig.sqlite`). The commands themselves were not re-run here - this item worktree has no `./selfdev.sqlite`."
 check_rule: null                 # nothing re-tests gate reachability after the fact — see Evidence
 ---
 

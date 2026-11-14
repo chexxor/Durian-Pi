@@ -54,10 +54,14 @@ try {
   const seamBody = seamMatch ? seamMatch[0] : "";
   const settingsExpr = (seamBody.match(/settings:\s*(\{[^}]*\})/) || [])[1];
   check("the seam passes a settings object", settingsExpr !== undefined, settingsExpr);
-  const evaluated = new Function("streamSettings", "compactionSettings", "runControlSettings", "CFG", `return ${settingsExpr};`)(
-    () => ({}),
-    () => ({}),
-    runControlSettings,
+  // The spread LIST is what the seam assembles, and it grows as settings are pinned (#6173 restart limit,
+  // #6211 progress cadence). Naming the three names by hand is the drift class this rig keeps hitting: a
+  // later item adds a spread and this eval throws ReferenceError. Derive the names from the seam itself.
+  const spreads = [...(settingsExpr.match(/\.\.\.([A-Za-z_]+)\(CFG\)/g) ?? [])].map((s) => s.slice(3, -5));
+  check("the seam spreads every settings module it assembles", spreads.length >= 3, spreads.join(", ") || settingsExpr);
+  check("the restart limit comes from a named settings module, not a literal", spreads.includes("runControlSettings"), spreads.join(", "));
+  const evaluated = new Function(...spreads, "CFG", `return ${settingsExpr};`)(
+    ...spreads.map((name) => (name === "runControlSettings" ? runControlSettings : () => ({}))),
     {},
   );
   check("the evaluated seam object carries restartLimit = 3", evaluated.restartLimit === 3, JSON.stringify(evaluated));

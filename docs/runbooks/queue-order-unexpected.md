@@ -5,7 +5,7 @@ writes: false                 # every step here is a read; the lease itself is a
 precondition: "read-only"     # safe with the broker up: status/queue reads are broker-served (D111)
 last_verified: 2026-11-12
 verified_by: scribe
-evidence: "#7117 (this runbook). Mechanism: D266 (docs/DECISIONS.md, 'D266 — 2026-11-12T06:5xZ: claim order is a declared POLICY...'). Commands run 2026-11-12 in the item-7117 worktree (pi-durable 1.3.0 from the lockfile, NOT the linked 1.5.1 plane): node demo/workstrategy.test.mjs exit 0; node demo/workstrategy-claim.test.mjs exit 0; node demo/workstrategy-up.test.mjs exit 0; DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status exit 0 with the workStrategy block quoted below; grep -c 'priority=' .durig/queue-all.md = 24, zero of them '~lapsed@' or '!invalid' at that instant"
+evidence: "#7117 (this runbook). Mechanism: D266b (docs/DECISIONS.md, 'D266b — 2026-11-12T06:5xZ: claim order is a declared POLICY...'). Commands run 2026-11-12 in the item-7117 worktree (pi-durable 1.3.0 from the lockfile, NOT the linked 1.5.1 plane): node demo/workstrategy.test.mjs exit 0; node demo/workstrategy-claim.test.mjs exit 0; node demo/workstrategy-up.test.mjs exit 0; DURIG_DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite node cli.mjs status exit 0 with the workStrategy block quoted below; grep -c 'priority=' .durig/queue-all.md = 24, zero of them '~lapsed@' or '!invalid' at that instant"
 check_rule: demo/workstrategy.test.mjs
 ---
 

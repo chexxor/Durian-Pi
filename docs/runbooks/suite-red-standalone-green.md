@@ -4,8 +4,8 @@ symptom: "a demo exits 0 on its own but the suite reports it FAIL or TIMED OUT; 
 writes: false
 precondition: "read-only"
 last_verified: 2026-11-11
-verified_by: devtools
-evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10. The inverse shape, measured 2026-11-11 (#6207): the SAME tree main `35001c3a` in two dependency sets - unlinked (`dependencySet: lockfile-released`, pi-durable **1.3.0** from the lockfile, `dist/index.js` sha256 `467d9cf6b27c…`) gives **279/300, exit 1, 134.5 s**, and every one of the 21 failures is ALSO red standalone (`node demo/<f>.test.mjs` exit 1 each; `demo/broker.test.mjs` hangs to the 120 s kill); the identical tree with the pin built and linked (`dependencySet: built-pin`, **1.5.1**) gives **300/300, exit 0, 89.7 s** (item-6200). Signatures: 4 broker demos `SessionFailed: Session failed after a storage error; close and reopen it`, 4 `TypeError: Cannot read properties of undefined (reading 'id')`, 5 tui-durable assertion mismatches, and `demo/commit-discipline-personas.test.mjs` dying with `ERR_MODULE_NOT_FOUND: @earendil-works/pi-schema` - a workspace package that only exists when the pin is built. All 21 are dependency-graph artefacts, not content defects."
+verified_by: devtools; qa (2026-11-10, scripts/test.mjs); impl (2026-11-11, scripts/suite.mjs half - see Evidence)
+evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10. The inverse shape, measured 2026-11-11 (#6207): the SAME tree main `35001c3a` in two dependency sets - unlinked (`dependencySet: lockfile-released`, pi-durable **1.3.0** from the lockfile, `dist/index.js` sha256 `467d9cf6b27c…`) gives **279/300, exit 1, 134.5 s**, and every one of the 21 failures is ALSO red standalone (`node demo/<f>.test.mjs` exit 1 each; `demo/broker.test.mjs` hangs to the 120 s kill); the identical tree with the pin built and linked (`dependencySet: built-pin`, **1.5.1**) gives **300/300, exit 0, 89.7 s** (item-6200). Signatures: 4 broker demos `SessionFailed: Session failed after a storage error; close and reopen it`, 4 `TypeError: Cannot read properties of undefined (reading 'id')`, 5 tui-durable assertion mismatches, and `demo/commit-discipline-personas.test.mjs` dying with `ERR_MODULE_NOT_FOUND: @earendil-works/pi-schema` - a workspace package that only exists when the pin is built. All 21 are dependency-graph artefacts, not content defects."; runs 2026-11-10. The scripts/suite.mjs half (#6268) verified 2026-11-11 in worktree item-6268 (linked tree, pi-durable 1.5.1): `node demo/suite-runner-exit-verdict.test.mjs` exit 0 on the branch and exit 1 with 5 failed checks in a detached worktree at base e01e9256 (leak fixture wall 15.100s there vs 0.309s on the branch); the real runner on the real suite printed `SUITE GREEN: pass=300 environmental=0 fail=0`, exit 0"
 check_rule: null
 ---
 
@@ -118,15 +118,42 @@ The dependency-set check was run 2026-11-11 on the same main `35001c3a` in two w
 (`dependencySet: lockfile-released`, `built: 0 linked: 0`) → **279/300, exit 1**; after
 `node scripts/sync-pi.mjs --sync --link` (36 s, 10 packages) → **300/300, exit 0**.
 
+## The second runner: `scripts/suite.mjs` (#6268)
+
+`scripts/suite.mjs` is a different runner from `scripts/test.mjs` and it had the identical bug after #6104
+fixed the first one: `runOne` resolved on `child.once("close", ...)`, and `close` waits for every writer of
+the stderr pipe to finish.
+
+Measure it, do not argue about it:
+
+```bash
+node demo/suite-runner-exit-verdict.test.mjs; echo "exit=$?"   # exit 0 on the branch, 1 on the base tree
+```
+
+Its five groups assert, in order: a demo that exits 0 while a detached grandchild lingers is reported GREEN
+in under 4 s (base: **15.100 s** for an 8 s linger — measured 30.108 s with a 30 s linger before the fix); a
+failure that also lingers is still FAILED, promptly; a hung demo is bounded and reported as
+`timed out (killed at the suite timeout, exit 124)` rather than swallowed as an environmental abort; a
+commit-starvation stderr marker is still classified ENVIRONMENTAL; and `pass + environmental + fail` equals
+the number of demos, so no row is quietly dropped (`results.filter(Boolean)` used to allow exactly that).
+
 ## If it fails
 If the leak fixture reports TIMEOUT again, `runOne` has gone back to waiting on `close`; restore the
-`child.on("exit", ...)` verdict in `scripts/test.mjs`. If `/tmp/durig-suite-*` keeps growing, the
-runner is not cleaning scratch for passing tests — file it, do not delete by hand.
+`child.on("exit", ...)` verdict in `scripts/test.mjs`. The same shape in **`scripts/suite.mjs`** is now
+fixed (#6268): if that runner ever waits for the pipe again, its `runOne` has reverted from `child.on("exit")`
+and `node demo/suite-runner-exit-verdict.test.mjs` goes red on the wall-clock checks. Two things to keep
+straight in that runner: a demo the runner killed for hanging is a FAILURE (`timed out (killed at the suite
+timeout, exit 124)`), not an environmental abort — the kill signal is deliberately reported as null so it
+cannot be read as an OS abort; and a row with no verdict at all is reported as a failure, never dropped.
+If `/tmp/durig-suite-*` keeps growing, the runner is not cleaning scratch for passing tests — file it, do
+not delete by hand (measured 2026-11-11: one run printed `suite: could not remove /tmp/durig-suite-o8il2x:
+ENOTEMPTY` after a GREEN verdict — a lingering child was still writing into its scratch dir when cleanup
+ran; it does not change the verdict).
 
 ## Escalate to
-`devtools` — a red that survives a quiet single run is real. Note that **`scripts/suite.mjs` still
-takes its verdict from `close`** (`runOne`, ~line 89), so that runner has the same manufactured-red
-path; it is not fixed here.
+`devtools` — a red that survives a quiet single run is real. **`scripts/suite.mjs` used to take its verdict
+from `close`** (`runOne`) and so had the same manufactured-red path; it is fixed as of #6268 and pinned by
+`demo/suite-runner-exit-verdict.test.mjs`.
 
 ## Evidence
 Item 6104, 2026-11-10. Old-vs-new pair, one command each: `node scripts/old-test.mjs --area leak

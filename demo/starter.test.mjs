@@ -105,9 +105,21 @@ try {
 	const result = cli(["check", STARTER], "applied");
 	assert.equal(result.status, 0, `check must exit 0 on the starter:\n${result.text.slice(0, 600)}`);
 	assert.equal(result.json.store, "read", "check must have read a store, or the rules assert nothing");
-	for (const key of ["error", "fix-now"]) {
-		assert.equal(result.json.summary[key], 0, `starter has ${key} findings: ${JSON.stringify(result.json.findings)}`);
-	}
+	// #6374: the dependency-plane rule measures the CHECKOUT this CLI runs from, not the starter rig, so
+	// its verdict legitimately differs between a tree on the pin and an un-linked worktree. The starter
+	// itself must still be clean, and the plane finding must match the measurement exactly.
+	assert.ok(result.json.plane?.line, "check did not measure the dependency plane of the tree it ran in");
+	const rigFindings = result.json.findings.filter((f) => f.id !== "pi-dependency-plane");
+	assert.equal(rigFindings.length, 0, `starter has findings of its own: ${JSON.stringify(rigFindings)}`);
+	assert.equal(result.json.summary.error, 0, "the starter has error findings");
+	const expectedPlaneFindings =
+		(result.json.plane.versionAgrees ? 0 : 1) +
+		(result.json.plane.storeSchema > result.json.plane.supportedSchema ? 1 : 0);
+	assert.equal(
+		result.json.findings.filter((f) => f.id === "pi-dependency-plane").length,
+		expectedPlaneFindings,
+		"the dependency-plane finding appears exactly when the measured plane disagrees with the pin",
+		);
 	// "0 findings" would also be true if every rule bailed out, so require that
 	// each one genuinely ran. A `skipped` status here means the starter is being
 	// audited by a check that could not actually judge it.
@@ -142,6 +154,16 @@ try {
 		// Anywhere else it must genuinely run and pass.
 		if (c.id === "shared-tree-on-main" && c.status === "skipped") {
 			assert.match(c.why ?? "", /LINKED worktree/, `rule ${c.id} skipped for an unexpected reason`);
+			continue;
+		}
+		// #6374: this rule judges the tree the check runs in, not the rig, so it is the one rule that may
+		// legitimately FAIL here (an un-linked worktree resolves the lockfile's pi, not the pin's). It must
+		// still RUN, and every finding it raises must carry a runnable fix.
+		if (c.id === "pi-dependency-plane") {
+			assert.ok(c.status === "pass" || c.status === "fail", `${c.id} is "${c.status}" - it must run, not skip`);
+			for (const f of result.json.findings.filter((f) => f.id === c.id)) {
+				assert.match(f.fix ?? "", /sync-pi\.mjs|npm install/, `${c.id} names no runnable fix: ${f.fix}`);
+			}
 			continue;
 		}
 		assert.equal(c.status, "pass", `rule ${c.id} is "${c.status}", not "pass": ${c.why ?? ""}`);
@@ -249,6 +271,7 @@ try {
 		"human-deferral-past-clock": "demo/human-defer-lease.test.mjs",
 		"pool-dead-gate": "demo/check-pool-gate.test.mjs",
 		"pool-claim-without-capability": "demo/check-pool-gate.test.mjs",
+		"pi-dependency-plane": "demo/depplane.test.mjs", // #6374: a mismatched plane is driven there, and the no-data case is pinned as UNKNOWN
 	};
 	for (const rule of RULES) {
 		assert.ok(

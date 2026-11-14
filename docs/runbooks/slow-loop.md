@@ -3,7 +3,7 @@ runbook: slow-loop
 symptom: "a change takes minutes-to-hours to verify; the suite, a seat turn, or one test dominates wall-clock; a test is red only because it needs a key/network/a model; you are about to run the whole suite 'to be safe'"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-05
+last_verified: 2026-11-12
 verified_by: delegate
 evidence: "measured 2026-11-05 (Linux Fedora 45 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0): `node scripts/test.mjs` → 257/258 in 57.0s (1 FAIL = demo/deepinfra-catalog.test.mjs, needs DEEPINFRA_API_KEY); per-area broker 25.4s/63, rig 24.0s/63 (demo/cli.test.mjs alone 20.1s), tui 12.4s/46, toolchain 11.1s/16, worktree 7.8s/23, check 6.3s/12, readapi 3.8s/5, guard 2.0s/24, docs 1.2s/6; `node demo/offline.mjs` (full pm→worker→done loop on faux models, no network) 0.301s; tools/latency-budget.mjs cost 3.1s over 63,172 generations: model-call p50 52ms p95 9.0s p99 1.8m max 2.0h; tool-call p50 59ms p95 4.7s p99 2.9m max 28.8m; compaction p50 23.2s p95 4.2m max 8.3h; 50.8% of generations ≤5s hold 1.8% of busy time while 185 (0.29%) >10min hold 517.5h = 64.6%; item latency WAIT 72.4% / WORK 13.0% / HELD 5.9%; 308.7h with 0 generations in flight; provider waste 14,377 generations 22.5h"
 check_rule: null
@@ -102,6 +102,13 @@ node scripts/test.mjs 2>&1 | tail -2                                     # full:
 node demo/offline.mjs >/dev/null; echo $?                                # the 0.3 s end-to-end proof
 ```
 
+The wake census is pinned too (run 2026-11-12 by qa, both exit **0**):
+
+```bash
+node demo/noop-wake-census.test.mjs   # fixture: classes classified, the two wake sources reconciled, a reason-less SKIP not counted, a missing log refused
+node tools/noop-wake-census.mjs --log /home/chexxor/Git/Durian-Pi/selfdev.sqlite.broker.log --sessions 2
+```
+
 Exit criterion for any "slow loop" fix: the **area** that contains the change runs in the time its budget declares, the
 default loop stays hermetic (no key/network-dependent test in it), and nothing that got faster stopped asserting the thing
 it used to assert — a test that passes because it no longer exercises the seam is a fake green, not a speed-up.
@@ -156,6 +163,16 @@ for (const g of db.prepare("SELECT id, conversation_id, record FROM tasks WHERE 
 }
 db.close();
 ```
+
+**Wake decisions vs actual wakes: is the loop burning turns, or just logging refusals?**
+`node tools/noop-wake-census.mjs --log <db>.broker.log --sessions 4` (exit 0) - run it from the shared checkout, where the log sits beside the store (`./selfdev.sqlite.broker.log`); an item worktree has no store and no log, and the tool says so rather than reporting a zero census. It splits every
+`SKIP <seat> reason=...` line in `<db>.broker.log` into classes - gated, deduped, cooldown, pending, busy,
+no-work - and counts the `WAKE <seat>` lines that are real turns, so a "the fleet is waking into nothing"
+complaint can be measured instead of remembered. Read the classes before blaming the loop: `pending`,
+`busy` and `cooldown` are a seat already mid-work, not a wasted wake; only `gated`, `deduped` and
+`no-work` are refusals to wake at all, and a refusal costs no provider call. The two wake sources (the
+PASS line's `woke=` list and the `WAKE` line) must agree, and the census prints both so a mismatch is
+visible rather than averaged away.
 
 **What a seat actually did in its turn.** If commits are absent, look at the tool calls before blaming the provider:
 `devtools` filled a worktree with a 25 MB `.scratch/all-queue.json` this morning while the fleet ran 205 generations

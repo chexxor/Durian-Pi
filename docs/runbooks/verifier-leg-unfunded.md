@@ -5,7 +5,7 @@ writes: false
 precondition: "read-only"
 last_verified: 2026-11-10
 verified_by: scribe
-evidence: "#6130 (item-6130, branch `item-6130`, forked from `main f192f543`). Measured there 2026-11-10: `node demo/local-provider.test.mjs` exit 0; `node demo/keycheck.test.mjs` exit 0; `node tools/verifier-arm-probe.mjs --family=VERIFIER --model=openai/gpt-oss-120b --base=https://api.deepinfra.com/v1/openai --ceiling=0.15` printed `"keyPresentInEnv": false` and `"verdict": "NOT-ARMABLE"`, exit 1; `node tools/broker-serve.mjs --dry-run --db ./selfdev.sqlite` reported `store: ./selfdev.sqlite (MISSING)`, and piping it to `grep -o DURIG_VERIFIER_API_KEY` returns 1 hit when the variable is set (even empty) and 0 hits when it is absent from the env (grep exit 1)."
+evidence: "#6130 (item-6130, branch `item-6130`, forked from `main f192f543`). Measured there 2026-11-10: `node demo/local-provider.test.mjs` exit 0; `node demo/keycheck.test.mjs` exit 0; `node tools/verifier-arm-probe.mjs --family=VERIFIER --model=openai/gpt-oss-120b --base=https://api.deepinfra.com/v1/openai --ceiling=0.15` printed `"keyPresentInEnv": false` and `"verdict": "NOT-ARMABLE"`, exit 1; `node tools/broker-serve.mjs --dry-run --db ./selfdev.sqlite` reported `store: ./selfdev.sqlite (MISSING)`, and piping it to `grep -o DURIG_VERIFIER_API_KEY` returns 1 hit when the variable is set (even empty) and 0 hits when it is absent from the env (grep exit 1). Env name corrected to `DURIG_DB` in the status probe above (#6336, 2026-11-11, tree `35001c3a`): with `DURIAN_PI_DB=` the probe reads the fallback `./rig.sqlite` instead of the store its own line names, so a missing `no_model` hit would have been unattributable."
 check_rule: null
 ---
 

@@ -14,7 +14,7 @@ durian-pi runs a **team of LLM seats** on `pi-durable`: one single-writer **brok
 each **seat** is a long-lived conversation (persona + constitution) that claims queue items and edits its own git
 worktree; a **delegate** operates for the human operator; a TUI/CLI are read surfaces. Two model **families** share one
 rig: `local/…` (loopback, priced $0, window 200,000, 7 seats) and `verifier/…` (metered cross-family verifier, window
-**24,576**, max completion 6,000, 5 seats) — the cross-family split is a deliberate anti-collusion invariant (D48/D119),
+**24,576**, max completion 6,000, 5 seats) — the cross-family split is a deliberate anti-collusion invariant (D134/D137/D166),
 not a cost choice. Compaction is **non-destructive**: it summarizes an old prefix and appends a summary entry; raw entries
 stay in the append-only store, only the model `ContextView` shrinks (D105/D107). Two decisions already in force constrain
 any answer: **D105** (a fresh `pi.reset` at the cross-item boundary, so context does not carry between items) and **D107**

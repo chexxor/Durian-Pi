@@ -28,8 +28,11 @@ three actors straight is the whole job:
    below). A measured tool already exists for most of the recurring work on this rig.
 5. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work. Use
    `DURIG_DB` for the **CLI**: `src/config.mjs` (`CONFIG_KEYS`, `cli.mjs:142`) reads only `DURIG_*`, so
+4. `DURIG_DB=./selfdev.sqlite node cli.mjs status` — the team's attention and non-terminal work. Use
+   `DURIG_DB` for the **CLI**: `src/config.mjs` (`CONFIG_KEYS`, `cli.mjs:161` — line numbers re-checked 2026-11-11 on
+   `main 35001c3a`) reads only `DURIG_*`, so
    `DURIAN_PI_DB` there silently opens an empty `./rig.sqlite`. The rename is half-applied and points the
-   other way in other entry points — `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB` first, and `tui.mjs:42`
+   other way in other entry points — `scripts/clockin.mjs:468` accepts `DURIAN_PI_DB` first, and `tui.mjs:42-47`
    treats `DURIG_TUI_DB` as the deprecated alias of `DURIAN_PI_TUI_DB` (D103). Registered as ROADMAP 191.
 5. If this session is an **operating situation a runbook covers** — broker down/stalled, store
    corruption, a degenerate seat, leaked worktrees, a merge/conflict, session-start cost (**read
