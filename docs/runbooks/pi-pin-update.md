@@ -206,6 +206,19 @@ Two config decisions must be **in config and named by a demo**, never in prose:
   cut-off restarts; 1.5.0 ends parked tasks **visibly**, `restart_limit`). Measured 2026-11-04: **no** `CONFIG_KEYS`
   entry matches `HARNESS/SETTINGS/RESTART/CHECKPOINT` (24 keys), and the Harness is constructed at one seam,
   `openHarness()` in `cli.mjs` — so the value goes there and a demo must pin it.
+  **Done (#6173, measured 2026-11-11 in the item-6173 worktree off main `35001c3a`, dependency set `built-pin`,
+  pi-durable 1.5.1):** `src/config.mjs` exports `SEAT_RESTART_LIMIT = 3` and `runControlSettings()`, and the seam
+  spreads it — `settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG) }`.
+  It is a code constant, deliberately NOT a `CONFIG_KEYS` entry: an unregistered key is the
+  accepted-and-ignored class #5071 names, and "never 0" should not be one operator typo away.
+  Pinned by `demo/restart-limit-seam.test.mjs` (exit 0): pi-durable's own exported `DEFAULT_RESTART_LIMIT` is 5,
+  the seam's settings expression is extracted from `cli.mjs` and EVALUATED (not grepped) and yields
+  `restartLimit: 3`, a real `Harness.open` accepts it, `runControlSettings(CFG)` is spread exactly once, and no
+  literal `restartLimit` appears anywhere else in `cli.mjs` or `src/`. RED before the change: the same extraction
+  on HEAD returned `{}` — effective limit 5.
+  RESIDUAL, not closed by this row: the interactive TUI host opens its own harness
+  (`src/tui/durable/adapter.mjs:638`) with whatever `options.settings` the caller passes, and `tui.mjs` passes
+  none — a human at `cli.mjs tui` still runs the library default of 5. Seats do not go through that path.
 - `defineDoc`'s required `checkpointWhen` on our 6 docs (`src/rig.mjs`) — checkpoint the transitions a reader
   **acts on** (claim, complete, defer, hold, release), not every prose or metric edit; report the store-size delta
   against the step-1 baseline.

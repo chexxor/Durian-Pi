@@ -62,7 +62,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS } from "./src/config.mjs";
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings } from "./src/config.mjs";
 import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs";
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
@@ -542,7 +542,9 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       // verifier-class window of 24,576, so the policy fired too late to leave room to answer. ONE
       // call site, and no second mechanism - pi-durable's `modelOverrides` layering does the per-model
       // work. See `streamSettings` and `compactionSettings` for why each one matters.
-      settings: { ...streamSettings(CFG), ...compactionSettings(CFG) },
+      // `restartLimit` is set HERE and nowhere else (#6173 / ROADMAP 355 C): pi-durable's default is 5 and
+      // an unconfigured seat silently runs it. One seam, one value — see `runControlSettings`.
+      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG) },
     },
     BACKGROUND_CONTEXT,
   );
