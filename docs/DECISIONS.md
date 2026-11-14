@@ -13002,7 +13002,7 @@ estimate refuses real work and the refusal reads like an unlucky claim rather th
 capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
 part of N19 may assume otherwise. It edits files and runs demos.
 
-## D310 — The landing verify pair is a RE-RUN, not a sha match (2026-11-13, queue #7643)
+## D313 — The landing verify pair is a RE-RUN, not a sha match (2026-11-13, queue #7643)
 
 **Decision.** A landing entry's paired `VERIFY` row certifies the landing only when its recorded
 `evidence.command` **exits 0 when re-executed in the scratch worktree at the tree being landed**. Ancestry
@@ -13040,8 +13040,10 @@ pin the squash and stale cases. Landing the implementation must add `demo/landin
 pinning PASS / REFUSE / ABSENT.
 
 **Status:** design and review only — no code changed in `src/` or `scripts/`. Implementation routed to `pm`
-for sequencing; the refusal trigger and override authority are `lead`'s (#7641). ADR number to be re-derived
-at land time: `D275` is referenced in this file's tail and `item-7208` carries a `D275` not yet on `main`.
+for sequencing; the refusal trigger and override authority are `lead`'s (#7641). ADR number minted from the
+MERGED tree before landing (renumber pass #7702): the merged scratch carries `D274` as its highest heading and
+`D275` in this file's tail, and `#7669`'s entry keeps `D276` because #7657, #7693 and #7694 already cite it, so
+this entry takes `D277`.
 
 **D### — the landing gate is a DELTA: "no NEW red", and an unmeasured baseline REFUSES (lead ruling #7269; recorded by scribe, item #7274, 2026-11-12).**
 
