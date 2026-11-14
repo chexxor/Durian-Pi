@@ -13339,6 +13339,7 @@ is worth:
     `SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
     usable window))`.
 ## D271b — (provisional; re-mint at land from the MERGED tree) `blockedBy-resolves` is split: strict at mint, reported at read; severity comes from a census, not from assertion (architect, item #6664, 2026-11-11)
+## D271 — (provisional; re-mint at land from the MERGED tree) `blockedBy-resolves` is split: strict at mint, reported at read; severity comes from a census, not from assertion (architect, item #6664, 2026-11-11)
 
 **Status.** Design ruling on lead's #6664 scope rulings. Implementation is devtools' (#6659) and pm's to route.
 
@@ -13351,6 +13352,7 @@ is worth:
 **Consequences.** The reporting rule must land with, or after, the gate-clearing verb (#6530): `release_work` already refuses to un-park a row whose gate names a cancelled row (`src/rig.mjs:1346`), so today the only exit for 14 stranded held rows is `cancel` — terminal, intent destroyed. `cancelItem` must record `strandedDependents` and notify the dependent rows' parties, or the population keeps growing and every severity measured later is measured on a moving target. §8 of the schema now says "declared, not enforced" so no seat plans around enforcement that is not there.
 
 ## D272b — (provisional; re-mint at land from the MERGED tree) the wake trigger is left event-driven; the gate-blindness is fixed in the wake predicate, not in the scheduler (architect, item #6665, 2026-11-11)
+## D272 — (provisional; re-mint at land from the MERGED tree) the wake trigger is left event-driven; the gate-blindness is fixed in the wake predicate, not in the scheduler (architect, item #6665, 2026-11-11)
 
 **Status.** Design ruling on pm's question "does a gate-closing queue write dirty the scheduler, or must the scheduler read the store each turn?". Build routing is pm's; implementation is impl's (`src/driver.mjs`, `src/rig.mjs`) / devtools' for the diagnostic.
 
