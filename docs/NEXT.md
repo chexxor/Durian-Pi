@@ -4,9 +4,13 @@ commit is the one carrying this file (the restart-limit fixture fix ships in it)
 [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md). Nothing pushed — the push grant is the operator's.
 
 **Milestone this window worked** — **making self-merging the team default (the work-item lifecycle, D265; the
-landing rule now D314)**, on top of the branch catch-up it closed: 36 conflicted refs dispositioned, 28 refs made
-ancestors of `main` (5 landed through `scripts/land.mjs`, 9 absorbed, 19 proven ancestors), no ref deleted, nothing
-pushed. Every commit in `8b5a19e1..HEAD`, oldest first:
+landing rule now D314)**, on top of the branch catch-up it closed: 36 conflicted refs dispositioned, no ref deleted,
+nothing pushed — and the seat-landing mechanism **proved on a live fleet**: seat `impl` ran `land_my_item` on its
+own branch and advanced local main (`item-1` `0470697b` → merge `07e0e76f`, derived gate 26/357, containment
+`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally at HEAD `c608e5b4`: of the 36 census
+refs, 10 are ancestors of `main` with 0 loss, 26 are not ancestors and each carries a dated `docs/DISPOSITIONS.md`
+row (19 with verbatim residue in `docs/evidence/2026-11-14-recut-residue/`); 5 of the 36 landed as `-recut` branches.
+Every commit in `8b5a19e1..HEAD`, oldest first:
 
 | sha | shipped |
 |---|---|
@@ -47,6 +51,10 @@ pushed. Every commit in `8b5a19e1..HEAD`, oldest first:
 | `f5dc28be` | instruments: four instrument-side failures fixed on contact (depplane rig seam, branch-census exit-code handling, restart-limit fixture, channel-preflight config) |
 | `df256ae0` | docs(SELFDEV): pitfalls 349-354 — a non-zero audit exit is a verdict, a rig is not a config, a demo must not assert the live rig's exit code |
 | `5b1daea5` | docs(NEXT): register the instrument-repair commit row — `pointer-sha-coverage --base 8b5a19e1` exits 0 |
+| `ea857be9` | demo(restart-limit-behaviour): a 40-deep scripted-response stack — one response per crash drained on retries, so the streak never reached the limit; suite 357/357 |
+| `c608e5b4` | fix(land.mjs): the gate's environment carries the landing repo's armed extensions; report `gateRig{extensions,source}` — pinned in `demo/land-helper.test.mjs` §10 (8.6 s), pitfall 355 |
+| `07e0e76f` | merge: land `item-1` onto main — the FIRST seat self-landing its own item (`land_my_item`, derived gate 26/357, containment 0 loss) |
+| `c7f2a4d5` | docs(ROADMAP): rows 368 (`assertSendAllowed` TypeError on an Edges link with no `maySendTo`) and 369 (the bare-scratch gate, shipped in `c608e5b4`) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -77,17 +85,26 @@ timeout 320 node scripts/test.mjs --all --jobs 4                        # ~214 s
 node tools/pointer-sha-coverage.mjs --base 8b5a19e1                     # 0.3 s — exit 1 if this file skips a shipped sha
 ```
 
-**Suite tally at this HEAD:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 215.9 s**
-(slowest: `demo/runbook-diagnose.test.mjs` 102.8 s, `demo/starter.test.mjs` 71.1 s, `demo/check-pool-gate.test.mjs`
-28.4 s). Host: Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1. The one red at the previous
-HEAD, `demo/restart-limit-behaviour.test.mjs`, is fixed (one scripted response per crash was not enough — a restart
+**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 215.9 s** at `5b1daea5`; re-run at the
+final HEAD before closing the window (slowest: `runbook-diagnose` 102.8 s, `starter` 71.1 s). Host: Linux, Fedora
+Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1. The one red at the previous HEAD,
+`demo/restart-limit-behaviour.test.mjs`, is fixed (one scripted response per crash is not enough — a restart
 consumes another, so the run settled `done` and the streak never reached the limit).
 
-**Blocker:** three things, in order. (1) **Live fleet proof IN FLIGHT, not yet proven**: a two-seat proof rig
-(`.spike/fleet-proof/rig.proof.json`, private store `.spike/fleet-proof/proof.sqlite`, both seats on
-`local/qwen3.8-flash-next-q2_0`, declared $0) is running on local main; `impl` claimed pool row #1 at
-2026-11-14T13:12:46Z and has its worktree `item-1`. The production 12-seat fleet is still NOT woken — the broker
-is down and `--start` refuses without the operator's `--yes-pm-wakes` grant. (2) **17 refs still need a seat's semantic judgement** (rows in `docs/DISPOSITIONS.md`, verbatim hunk in
+**The gate-rig trap now fixed (pitfall 355).** The gate runs in a detached scratch worktree, and
+`durig.config.json` is gitignored, so the scratch armed ZERO extensions: `cli.mjs check rig.selfdev.json --json`
+lists 29 rules in the root and 28 in a fresh worktree (`ready-ref-stale` missing). That refused a seat's
+`land_my_item` twice on a docs-only, merge-clean branch. `scripts/land.mjs` now passes the landing repo's
+`DURIG_EXTENSIONS` to every gate child and reports `gateRig: {extensions, source}`.
+
+**Blocker:** three things, in order. (1) **Live fleet proof DONE on a scratch rig, not on the production fleet.**
+The two-seat proof rig (`.spike/fleet-proof/rig.proof.json`, store `.spike/fleet-proof/proof.sqlite`, seats on
+`local/qwen3.8-flash-next-q2_0`, declared $0) landed its own item in ~40 s of wall clock (broker wake 13:46:26Z →
+merge `07e0e76f` 13:47:08Z). The production 12-seat fleet is still NOT woken: the broker is down and `--start`
+refuses without the operator's `--yes-pm-wakes` grant. (1b) **Every seat run needs the local model credential in
+the broker's environment**: `127.0.0.1:8080` now answers 401 to the rig's loopback placeholder; start with
+`node --env-file="$HOME/.config/durig/env" cli.mjs serve` (`docs/runbooks/local-provider-down.md` Do 0). A broker
+started without it wakes seats that die in ~3 ms with `provider_auth`. (2) **17 refs still need a seat's semantic judgement** (rows in `docs/DISPOSITIONS.md`, verbatim hunk in
 `docs/evidence/2026-11-14-recut-residue/`); 52 refs report `conflicted` in the SLA census. `wip/seat-prompt-files`
 has no DISPOSITIONS row yet. (3) **`cli.mjs check` on this rig exits 1 for two pre-existing error findings**
 (`store-missing-seat`, `pool-dead-gate` #7660) — that is why `demo/depplane.test.mjs` is red at this HEAD; it is
