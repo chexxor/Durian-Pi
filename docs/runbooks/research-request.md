@@ -86,6 +86,11 @@ prompt (`<topic>-followup-research-prompt.md`) or the topic is explicitly declar
 **Citation integrity is measured, not assumed:** count in-body markers against defined ones (a `grep -o` check, not a
 judgement) and HTTP-check every URL in the evidence table. Dangling anchors and dead URLs are a finding to register
 (ROADMAP **243**), not a style complaint — round 2 measured **64 distinct markers, 14 defined, 50 dangling, 3 URLs 404**.
+**A competing-products pass is not routable until it carries the D213 iteration-architecture questions.** The check is a
+grep, not a judgement: `grep -ci "iteration\|hermetic\|mock\|regression" docs/reviews/<topic>-research-prompt.md` returning
+0 means the commission answers *who contains agents* and not *how fast the containment can change*, which is the half that
+decides our own architecture. Measured on `agent-fleet-containment-domain-map-research-prompt.md` at intake (#5148,
+2026-11-11): seven zero counts before the addendum.
 
 ## If it fails
 - **The report leaves a question open** — do not guess; extend the prompt or defer the decision with `defer_work`.
