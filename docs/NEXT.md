@@ -9,80 +9,107 @@ commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts o
 
 | sha | shipped |
 |---|---|
-| `851c3e9c` | ← new: the `broker-down-or-stalled` runbook, in the code's own verdict words (#4786) |
-| `655c44e2` | `revise_work` takes `requires` (normalised, one `revised` transition, two refusals) |
-| `1782b495` | pool doctrine in the shared `constitution.txt`; `peek_queue`/`WAKE_CONTENT`/`queueItemLine` aligned |
-| `4ed6b8d0` | `tools/pool-migrate.mjs` — read-only proposal instrument |
-| `517dc58d` | window seam: `up --refresh` records `usableWindow` for all 12 seats (gate armed) |
-| `36f57a36` | pool-migrate: read the roster through the seats DOCUMENT view (an AMEND of `01ff4c91`, off `main`) |
-| `657d8c60` | ← new: merge of the `win/item-4786` landing onto `main` |
-| `99250682` | spec §13, FEATURES, D275 addenda (f)–(k), pitfalls, pointer rewrite |
-| `78bc0364` | live `check rig.selfdev.json` finding on #7660 + pitfall 324 |
-| `1c0c5920` | gate proven on the roster; `pool-gated:<n> #<id>(<reason>)` |
-| `2bfb9e43` | frozen-broker note |
-| `f6177f21` | authority narrowed to the contract, gate number 115023, §13.3b reconciliation |
-| `02105352` | demo prints the refusal + reads the LIVE roster; broker windows; live decline line |
-| `c4b0ea7e` | `tools/pool-gate-live-probe.mjs` + test (refusal from a byte-copy of the live store) |
-| `d37bd216` | the gate-proof demo's header: 117891 → 115023 |
-| `5363e377` | pointer sha table names every object, no "this commit" |
-| `ac6b7a8a` | lifecycle field table gives `requires` its own row; live census |
-| `4f9e87d9` | the LIVE scheduler refuses #7700 by name for every seat |
-| `8abc961e` | flake recorded (restart-limit under --jobs 4) |
-| `35ff79f2` | broker windows 4-5, blocker (1) TRIGGERED, rate window closed at 22:13Z |
-| `7008d11d` | pointer re-cut to fit the clockin digest budget (115 lines) |
-| `446c4084` | the gate FIRED live: #7700 refused by architect and pm; spec/D275 corrected |
-| `06de1bba` | deleted the sentences that still DENIED the live firing (spec §13.4, D275 (m)) |
-| `18c7a3b8` | pool census re-read (5 pooled / 3 open; #7722 minted organically) |
-| `3fb50030` | pause/unpause evidence + refresh timing; pointer arithmetic (104 = 85+19) and shas |
-| `5b8e3644` | ← new: the pointer's HEAD-row fix (a sha table that cannot name itself) |
-| `0de543ae` | ← new: unpause the fleet, fix the `priority-directive-scope` time bomb, record the pause sequence |
-| `11290f1e` | windows/pointer record: the green `--jobs 2` suite run and the two concurrency flakes |
-| `280d6ad3` | unpause verified by behaviour (#7722 claimed 6 min after it), fresh census, suite re-run |
-| `8f4a63ce` | the sha table becomes a TOOL-checked claim (`tools/pointer-sha-coverage.mjs` + test); the window lease; the bound recorded per window and the lease measurement |
-| `313c525b` | the suite table with its seconds, the pointer cut back under the 200-line cap, pitfalls 328–329 |
-| `54fa9649` | the pointer records the re-leased window `1903310`, the one open at clock-out |
-| `ab96bf0b` | `docs/DISPOSITIONS.md`: 20 LANDED rows with ancestry+content evidence, `item-6959` KEEP-HELD with the gate refusal quoted; no ref deleted (rule R-B #3270) |
-| `16166492` | pitfalls 330–333 + the `tools/landing-batch-plan.mjs` addendum (a plan is HEAD-scoped; `merge-tree`'s exit code is the verdict) |
+| `851c3e9c` | docs(runbook): broker-down-or-stalled.md - the he… |
+| `8c0de873` | #5065: runbook row - a thin item worktree CAN run… |
+| `d34b15d1` | feat(tools): landing-closure probe (#4378) — a ro… |
+| `a15a5a48` | docs(dispositions): ledger row superseding #5611'… |
+| `6c8b0320` | #7601: re-anchor the stale G11 line pin in the sa… |
+| `5140de6e` | docs(roadmap+dispositions): #5501 — RM-318 closes… |
+| `d04f124d` | docs(spec,#7615): make the landing spec's numbers… |
+| `e375f724` | docs(dispositions): #7353 - register scribe-item-… |
+| `655c44e2` | N19 pool row 3: revise_work can annotate `require… |
+| `1782b495` | N19 pool doctrine: one paragraph in the shared co… |
+| `4ed6b8d0` | N19 pool tranche 1: read-only pool-migrate propos… |
+| `517dc58d` | N19 row 5 seam: usableContextBudget falls back to… |
+| `bfa0472e` | #5347 landing preflight: refuse on dirt the landi… |
+| `9780b0bf` | #5347 runbook (docs/runbooks/land.md): the pre-fl… |
+| `c91b3550` | docs(dispositions): #7371 - register scribe-item-… |
+| `3c9e6337` | docs(runbook): #7371 - land.md's remaining H2->H4… |
+| `36f57a36` | pool-migrate: read the roster through the seats D… |
+| `69a63baf` | docs(dispositions): #7372 - register scribe-item-… |
+| `657d8c60` | merge: land win/item-4786 onto main |
+| `c0f4709a` | #5459 runbook: the landing gate trips over the sp… |
+| `a6d2b6e7` | docs(decisions): #7373 - D122 mint status recorde… |
+| `06b5d2ec` | docs(dispositions): #7373 - register scribe-item-… |
+| `99250682` | N19 pool: record what shipped and was measured, a… |
+| `78bc0364` | pool: the live check finding on #7660, and the tr… |
+| `55d2fba1` | docs(runbook): #7374 - land.md's lock figures are… |
+| `dea8f63f` | docs(dispositions): #7374 - register scribe-item-… |
+| `1c0c5920` | pool: the gate is proven on the real roster, and … |
+| `2bfb9e43` | NEXT: the resident broker predates the skip-line … |
+| `f6177f21` | pool: narrow the annotation authority back to the… |
+| `02105352` | pool: print the refusal, record the LIVE roster r… |
+| `784bc2a9` | docs(runbook): #7375 - land.md's KEEP-ALL-SECTION… |
+| `a5fff83c` | docs(dispositions): #7375 - register scribe-item-… |
+| `c4b0ea7e` | pool: the gate refusing a project row from a byte… |
+| `d37bd216` | pool-gate-live-roster: the header still carried t… |
+| `5363e377` | NEXT: the sha table now names c4b0ea7e and d37bd2… |
+| `9caf9638` | #5819 runbook worktree-unlinked-deps: the pi-sche… |
+| `3f3de023` | #5819 runbook land.md: a landing proof is a tripl… |
+| `ac6b7a8a` | pool: the lifecycle doc stops contradicting the v… |
+| `2e5e8f18` | feat(landing): one queue split rule for the row s… |
+| `4f9e87d9` | pool: the LIVE scheduler now refuses #7700 by nam… |
+| `8abc961e` | NEXT: record the one 336/337 flake (restart-limit… |
+| `44da626c` | docs(test-areas): map demo/tui-queue-split.test.m… |
+| `35ff79f2` | NEXT: the broker record is five windows with the … |
+| `7008d11d` | NEXT: re-cut to 115 lines / 8.8 KB — the clockin … |
+| `1f6605db` | docs(dispositions): #7376 - register scribe-item-… |
+| `446c4084` | pool: the gate FIRED on two live seats — #7700 re… |
+| `06de1bba` | pool: delete the sentences that denied the live f… |
+| `a8bd182b` | docs(runbook): #7377 - date the race/lock measure… |
+| `28004fd0` | docs(dispositions): #7377 - register scribe-item-… |
+| `18c7a3b8` | NEXT: pool census re-read (5 pooled / 3 open; arc… |
+| `8135b68c` | docs(reviews, #5854): re-measure #4922's addendum… |
+| `f52b05e0` | fix(genlock, #5020): the lander's live-holder pro… |
+| `88ec4aeb` | docs(runbooks, #5020): land.md states what the la… |
+| `3fb50030` | pool: record the pause/unpause evidence and when … |
+| `5b8e3644` | NEXT: the sha table ends with a HEAD row so the p… |
+| `a3e8f7d4` | docs(reviews) #7515: content probe of the 119 alr… |
+| `0e6445f4` | docs(runbooks) #7515: stale-held-backlog gains ru… |
+| `0de543ae` | pool: unpause the fleet, fix the time-bomb demo, … |
+| `11290f1e` | NEXT: record the live window 1574499, the green -… |
+| `280d6ad3` | pointer: the fleet is unpaused and seen to drive … |
+| `8f4a63ce` | pointer: every shipped sha is a row, in commit or… |
+| `313c525b` | pointer+pitfalls: the suite numbers at HEAD, the … |
+| `54fa9649` | pointer: the re-leased window 1903310 is the one … |
+| `6f478c69` | merge: land item-4378 onto main |
+| `fb056834` | merge: land item-4812 onto main |
+| `847bb984` | merge: land item-5020 onto main |
+| `fafb14f9` | merge: land item-5065 onto main |
+| `1069cc89` | merge: land item-5347 onto main |
+| `8b803244` | merge: land item-5459 onto main |
+| `c7942ed8` | merge: land item-5501 onto main |
+| `dd7615a0` | merge: land item-5825 onto main |
+| `f0beb3d5` | merge: land item-7515 onto main |
+| `bc90acb9` | merge: land item-7601 onto main |
+| `33cee497` | merge: land item-7615 onto main |
+| `a0caa286` | merge: land item-5819 (append-only ledger conflic… |
+| `1977e058` | merge: land item-6002 (append-only ledger conflic… |
+| `70ae5124` | merge: land item-7371 (append-only ledger conflic… |
+| `03e3fe9d` | merge: land item-7372 (append-only ledger conflic… |
+| `d1e78382` | merge: land item-7373 (append-only ledger conflic… |
+| `81b77238` | merge: land item-7374 (append-only ledger conflic… |
+| `007cca82` | merge: land item-7375 (append-only ledger conflic… |
+| `9e9dab59` | merge: land item-7376 (append-only ledger conflic… |
+| `45ef4633` | merge: land item-7377 (append-only ledger conflic… |
+| `94f21a75` | merge-correction: place the #5819 runbook additio… |
+| `8d3f3dad` | merge-correction: restore the trailing newline th… |
+| `82a3c51d` | merge: land landing-20261114 onto main |
+| `ab96bf0b` | docs(dispositions): landing pass 2026-11-14 — 20 … |
+| `16166492` | docs+tools: landing-pass pitfalls 330-333 and the… |
+| `dd47ef89` | the pointer rewrite: the landing pass, 20 refs landed, item-6959 held, suite 341/341 |
 | *(this commit)* | the landing-pass pointer rewrite — exempt: it carries this file |
 
-The two ordering defects this table had (the tool now catches both) were `36f57a36` before `517dc58d` and `7008d11d` before `35ff79f2`.
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
-**Broker windows this session — the commanded bound, the OUTER lease, and what actually happened.** A window is a
-LEASE, and it is now leased from outside as well as inside (see the defect below):
-| pid | `--max-duration` | outer lease | START → EXIT | actual | verdict / cause |
-|---|---|---|---|---|---|
-| 98022 | 3600 s | none | 17:32:55.451Z → 19:11:54.118Z | 5,939 s | **OVERRAN** by 2,339 s (replaced a 05:57:09Z deadline exit) |
-| 311912 | 3600 s (keepalive) | none | 19:11:56.490Z → 20:42:10.249Z | 5,414 s | **OVERRAN** by 1,814 s — STRANDED (no pass 2,350 s, 1 intent) |
-| 540123 | 1800 s | none | 20:42:21.399Z → 21:32:41.503Z | 3,020 s | **OVERRAN** by 1,220 s; `serve --stop` refused → `kill -TERM` |
-| 774849 | 1800 s | none | 21:34:01.725Z → 22:13:24.335Z | 2,363 s | **OVERRAN** by 563 s; exited `reason=deadline` after the TERM |
-| 899525 | **NOT recorded** (keepalive spawned it; the tool passes `--max-duration` but wrote no bound into its ledger, and this store keeps no tick for that window — the 3,600 s is the tool's DEFAULT, so it is INFERRED, not recorded) | none | 22:13:26.113Z → 00:10:24.944Z | 6,418 s | **OVERRAN**; exited `reason=max-duration passes=335` |
-| 1574499 | 1800 s | none | 00:22:11.251Z → 00:57:58.038Z | **2,146.8 s** | **OVERRAN** by 346.8 s and PARKED: last pass 00:49:21 frozen 8 min while `READ-DRAIN` kept serving; ended by `kill -TERM`, `EXIT reason=deadline` **5 s** later |
-| 1799704 | 600 s | `timeout --signal=TERM --kill-after=30 120` | 00:58:04.244Z → 01:00:09.236Z | **125.0 s** | **WITHIN the lease** — 120 s + a 5 s exit path; `STOP-REQUESTED source=signal` → `EXIT reason=deadline passes=-` |
-| 1806797 | 3600 s | `timeout … 1800` | 01:01:21.405Z → 01:15:46.004Z | 864.6 s | ended by the operator's own TERM to re-lease (it was inside its lease); `PASS 1 ms=1064 woke=pm,impl,qa,lead,advocate,scribe,devtools,auditor,security,qa2,architect` — the fleet woke |
-| 1903310 | 7200 s | `timeout … 3600` | 01:15:55.288Z → open (ends ~02:15:55Z) | — | the window open at clock-out; `resume` ran first (exit 0) so the TERM cut no submission loose |
-
-**The defect, in code and in a measurement (this is why the earlier record's "bounded" claim was false).**
-`--max-duration` is checked at the TOP of the broker loop (`src/broker.mjs:2058`), so a pass in flight — or a pass that
-never settles — defers the deadline indefinitely: that is why six consecutive windows "commanded" 1,800–3,600 s ran
-2,146–6,418 s. The measurement that separates the two mechanisms is pid 1574499: its bound was 00:52:11Z, its last
-pass froze at 00:49:21, `READ-DRAIN served=1` lines kept arriving, and **SIGTERM at 00:57:53Z produced
-`EXIT pid=1574499 reason=deadline passes=-` at 00:57:58.038Z — 5 s**. So the exit path is prompt; only the *deadline
-check* is starved. It is a base defect, recorded as such, and the delegate did not "fix" it in `src/broker.mjs`
-(out of this goal's IN list) — instead the PROCEDURE now leases the wall clock from outside:
-
-```bash
-set -a; . "$HOME/.config/durig/env"; set +a
-DURIG_DB=./selfdev.sqlite nohup timeout --signal=TERM --kill-after=60 1800 \
-  node cli.mjs serve --max-duration 3600 > .spike/window-leased.out 2>&1 &
-# close a leased window, ALWAYS, in this order:
-node cli.mjs resume                      # re-arms submissions the TERM cut (measured: 4 placed, run-cancelled)
-```
-
-The window open at clock-out is `1903310` (`01:15:55.288Z`, outer lease 3,600 s). Each window is opened inside
-`timeout --signal=TERM`, so the wall clock is bounded by the command that opened it.
-Liveness is the last ` PASS ` line (pitfall 304): `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` plus `cat selfdev.sqlite.broker.json`, BEFORE acting.
+**Broker windows this pass.** A window is a LEASE and must be leased from OUTSIDE: `--max-duration` is checked only
+at the top of the broker loop (`src/broker.mjs:2058`), so a pass in flight starves the deadline — six consecutive
+windows "commanded" 1,800–3,600 s actually ran **2,146–6,418 s** (measured pid 1574499: bound 00:52:11Z, last pass
+froze 00:49:21, SIGTERM 00:57:53Z → `EXIT reason=deadline` 5 s later; the exit path is prompt, only the deadline
+check is starved). Procedure now: `nohup timeout --signal=TERM --kill-after=60 1800 node cli.mjs serve --max-duration 3600 …`,
+and close a leased window with `node cli.mjs resume` FIRST. The window open at clock-out was `1903310`
+(01:15:55.288Z, outer lease 3,600 s). Liveness is the last ` PASS ` line (pitfall 304), never the pid or heartbeat.
 
 **The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection, so the evidence is spelled out).
 The audit read `paused:true, pausedAt:23:50:48.611Z` and was right: `23:46:33.518Z pause`, `23:49:41.162Z unpause`,
