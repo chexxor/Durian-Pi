@@ -15,6 +15,8 @@ import {
 	loadConfig,
 	loadShippedDefaults,
 	mergeConfig,
+	PROGRESS_PERSIST_WITHIN_MS,
+	progressSettings,
 	streamSettings,
 } from "../src/config.mjs";
 
@@ -256,7 +258,24 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 		(cliSource.match(/\.\.\.runControlSettings\(CFG\)/g) ?? []).length,
 		1,
 		"exactly one Harness.open settings site may spread runControlSettings(CFG)",
+		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\),\s*\.\.\.progressSettings\(CFG\)\s*\}/,
+		"openHarness must pass streamSettings(CFG), compactionSettings(CFG) and progressSettings(CFG) as the harness settings (#4898, #6211)",
 	);
+	// #6211: the progress cadence is PINNED, not inherited. One seam, and the pin lives in
+	// src/config.mjs rather than a literal in the cli.
+	assert.deepEqual(progressSettings({}), { progress: { persistWithinMs: PROGRESS_PERSIST_WITHIN_MS } }, "the rig states the cadence explicitly instead of leaving it to upstream");
+	assert.equal(PROGRESS_PERSIST_WITHIN_MS, 1000, "the pinned cadence is 1,000 ms (#6211 lead ruling from #6172)");
+	assert.equal(progressSettings({ DURIG_PROGRESS_PERSIST_WITHIN_MS: 250 }).progress.persistWithinMs, 250, "the tuning rule allows a smaller EXPLICIT value");
+	for (const bad of [0, -1, "abc"]) {
+		assert.throws(
+			() => progressSettings({ DURIG_PROGRESS_PERSIST_WITHIN_MS: bad }),
+			/0 is refused|positive number/,
+			`${JSON.stringify(bad)} must be rejected, not silently defaulted`,
+			);
+	}
+	assert.ok(CONFIG_KEYS.includes("DURIG_PROGRESS_PERSIST_WITHIN_MS"), "an unregistered key in a config file is an inert key (#5125 rule)");
+	assert.equal((cliSource.match(/settings: \{/g) ?? []).length, 1, "there is exactly one harness settings seam (#6211: no second mechanism)");
+	assert.ok(!/persistWithinMs:\s*\d/.test(cliSource), "the numeric pin lives in src/config.mjs, not in cli.mjs");
 	// #491 C6: the shipped defaults must be in the REAL load path (wiring, not just
 	// exports): the cli anchors the shipped file to its own install directory.
 	assert.match(

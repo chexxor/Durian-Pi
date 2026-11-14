@@ -89,6 +89,14 @@ Clean: `Harness.taskGraph()` (0 hits), no custom `Storage`, no TypeBox-only feat
    live-reload to how a version gets pinned); today a config change needs `up`/restart.
 6. **`settings.progress.persistWithinMs`** → upstream measures 5.7× fewer storage transactions and 2.9× fewer disk
    writes with 32 parallel streams; our history is single-writer and `database is locked`.
+   **DECIDED (#6211, lead ruling #6172):** the rig pins it at 1,000 ms explicitly rather than inheriting it —
+   `PROGRESS_PERSIST_WITHIN_MS` / `progressSettings` in `src/config.mjs`, spread at the single `openHarness`
+   seam, override key `DURIG_PROGRESS_PERSIST_WITHIN_MS` (0 refused), pinned by `demo/persist-cadence.test.mjs`.
+   Measured here on pi-durable 1.5.1: 14 commit-stream publications during one run at a 0 ms cadence, 4 at the
+   pin. Note the boundary the measurement drew: the cadence defers the STORAGE flush, it does not gate live
+   visibility — a `watchDoc(LiveDoc, ...)` listener still saw partials at a 600,000 ms cadence. The granularity
+   cost therefore lands on the commit stream (`src/commitstream.mjs`, now labelled a compatibility layer), which
+   is why live progress is routed to `watchDoc()`.
 7. **`HarnessOptions.identity`** (ClientIdentity → `User-Agent`/provider attribution) and
    **`HarnessOptions.telemetry`** (`DURABLE_TELEMETRY_SCHEMA`, no payloads) → the metrics layer and the D205
    attribution question.

@@ -66,6 +66,7 @@
       "demo/note-wake-seed.test.mjs",
       "demo/optimizer.test.mjs",
       "demo/peekqueue.test.mjs",
+      "demo/persist-cadence.test.mjs",
       "demo/persistence.test.mjs",
       "demo/primer.test.mjs",
       "demo/queue-lifecycle-deferred-stage.test.mjs",
