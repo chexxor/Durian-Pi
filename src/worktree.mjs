@@ -845,6 +845,9 @@ export function declaredCarrierRows(liveRows, branch) {
 	const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	const re = new RegExp(`(^|[^A-Za-z0-9_-])${esc}([^A-Za-z0-9_-]|$)`);
 	return (liveRows ?? [])
+		// The docstring promises a resolved row stops gating; without this filter the gate is
+		// un-endable - the tree stays refused forever after the row closes (#5312 on #5280).
+		.filter((row) => !TERMINAL_ITEM_STATUSES.has(String(row?.status ?? "").toLowerCase()))
 		.filter((row) => re.test(String(row?.subject ?? "")) || re.test(String(row?.body ?? "")))
 		.map((row) => row.id);
 }
@@ -1623,10 +1626,15 @@ export async function listWorktrees(repoPath, { strict = false } = {}) {
 			const value = rest.join(" ");
 			if (key === "worktree") current.worktree = value;
 			if (key === "branch") current.branch = value || null;
-			if (key === "locked") current.locked = true;
-			// The `locked` line can carry a REASON (`git worktree lock --reason`, porcelain prints a
-			// `reason <text>` line right after it). Captured additively so the locked-over-terminal-item
-			// message can name WHY the tree is held instead of just that it is (#5301).
+			if (key === "locked") {
+				current.locked = true;
+				// git 2.56 puts the reason on the SAME line: `locked <text>`. Measured 2026-11-14
+				// (Linux, git 2.56.0): `git worktree lock w1 --reason "verifier is checking the
+				// artifact"` then `git worktree list --porcelain` prints
+				// `locked verifier is checking the artifact`. A separate `reason` line is also
+				// accepted, so neither build shape loses the WHY (#5301).
+				if (value) current.lockReason = value;
+			}
 			if (key === "reason" && current.locked) current.lockReason = value || null;
 			if (line === "" && current.worktree) {
 				// Normalize the DEFAULTS FIRST and let the parsed values override them: the old

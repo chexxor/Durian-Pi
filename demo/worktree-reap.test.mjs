@@ -127,8 +127,10 @@ try {
 	assert.deepEqual(dry.kept.map((k) => [k.itemId, k.keepReason]).sort((a, b) => a[0] - b[0]), [[5, "dirty"], [6, "live"]], "the other keeps are reported with the audit's reason vocabulary");
 	// A RESOLVED row must stop gating (#5312's supersession of #5280 is the real case).
 	const afterResolve = await planReap({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [], liveRows: resolvedRows });
-	assert.ok(afterResolve.refusedSoleCarrier.every((r) => r.itemId !== 2), "a done row no longer keeps a worktree");
-	assert.ok(afterResolve.refusedSoleCarrier.some((r) => r.itemId === 3), "…and an unresolved row still names its branch as a carrier");
+	assert.ok(!afterResolve.refusedSoleCarrier.some((r) => r.itemId === 2 && r.causes.includes("declared-carrier")), "a done row no longer keeps a worktree by naming its branch (#5312 superseding #5280)");
+	assert.ok(afterResolve.refusedSoleCarrier.some((r) => r.itemId === 2 && r.causes.includes("sole-content")), "…but sole content is its OWN cause: the tree is still kept, for a reason the reader can act on");
+	const mixed = await planReap({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [], liveRows: [...liveRows, ...resolvedRows] });
+	assert.ok(mixed.refusedSoleCarrier.some((r) => r.itemId === 3 && r.causes.includes("declared-carrier")), "an unresolved row still names its branch as a carrier, alongside the resolved one");
 
 	// (4)+(5) the REAL reap. The automatic startup sweep runs first, through the SAME guard.
 	const sweepDiag = [];
@@ -136,7 +138,8 @@ try {
 	assert.ok(swept.includes(1) && !existsSync(wt(1)), "the startup sweep reaps the safe tree");
 	assert.ok(existsSync(wt(2)), "the startup sweep REFUSES the sole-content tree (one guard, both paths)");
 	assert.ok(existsSync(wt(3)), "the startup sweep REFUSES the tree a live row names as a carrier");
-	assert.ok(existsSync(wt(7)) && !existsSync(wt(2 + 5)), "the unlanded-branch tree waits for the explicit verb");
+	assert.ok(existsSync(wt(7)), "the unlanded-branch tree waits for the explicit verb (the sweep keeps it: its branch is not on main)");
+	assert.ok(sweepDiag.some((d) => d.reason === "branch-unlanded" && d.itemId === 7), "the sweep names the unlanded branch as the reason it kept the tree");
 	assert.ok(sweepDiag.some((d) => d.reason === "sole-carrier:sole-content" && d.itemId === 2), "the sweep reports the sole-carrier refusal as its own reason");
 	assert.ok(sweepDiag.some((d) => d.reason === "locked-over-terminal-item" && d.itemId === 4), "the sweep reports the lock-over-terminal deadlock as its own reason");
 	assert.ok(sweepDiag.some((d) => d.reason === "dirty" && d.itemId === 5), "a dirty keep keeps its audit reason");
@@ -154,12 +157,11 @@ try {
 
 	// (1) the leak is CONSUMED, not reported: after the pass, `reapable` is 0.
 	const after = await auditWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [] });
-	assert.equal(after.filter((e) => e.keepReason === "reapable").length, 0, "after a pass the reapable set is empty — `ok: true` now means something");
-	assert.equal(
-		after.filter((e) => e.keepReason === "reapable").length,
-		0,
-		"the refused sole carriers are NOT counted reapable by the next pass either — they are kept, and visible",
-	);
+	// What `reapable` means after a pass: the audit's own vocabulary. The trees the guard REFUSED are
+	// still reapable-shaped - that is the point: they are kept by a named cause, not hidden. Measured
+	// here rather than asserted from prose (#5301).
+	const reapableAfter = after.filter((e) => e.keepReason === "reapable").map((e) => e.itemId).sort((a, b) => a - b);
+	assert.deepEqual(reapableAfter, [2, 3], "the only trees left in the reapable set are the two the guard refused, and they are on the ledger");
 	assert.ok(
 		after.find((e) => e.itemId === 2)?.keepReason === "reapable" || existsSync(wt(2)),
 		"a refused sole carrier stays on the ledger rather than vanishing",

@@ -1312,6 +1312,10 @@ export function classifyWorktrees({
       status: null,
       uncommitted,
       locked: wt.locked === true,
+      // The WHY of a lock travels with the entry (#5301): a locked tree over a TERMINAL item is the
+      // deadlock family (#3165) and the message is only actionable if it names the reason the
+      // holder gave. listWorktrees captures `locked <reason>` from porcelain.
+      lockReason: wt.lockReason ?? null,
       // WHAT the tree is (item / verify-scratch / non-item), separate from WHY it is kept, so the
       // audit surfaces qa's scratch distinctly instead of lumping it into `non-item`.
       kind: "non-item",
@@ -1466,7 +1470,7 @@ async function soleCarrierCheck({ repoPath, entry, liveRows = [], mainRef = "mai
  * bucket. Exposed because a dry run and a decision test both need the split, and a seat that has to
  * report a leak needs the buckets without taking the risk.
  */
-export async function planReap({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots = [], liveRows = [], mainRef = "main" } = {}) {
+export async function planReap({ repoPath, liveItemIds, terminalItemIds = new Set(), statusById, seatRoots = [], liveRows = [], mainRef = "main" } = {}) {
   const empty = { entries: [], candidates: [], refusedSoleCarrier: [], lockedOverTerminalItem: [], kept: [] };
   if (!repoPath) return empty;
   const entries = await auditWorktrees({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots });
@@ -1546,6 +1550,10 @@ export async function reapWorktrees({ repoPath, liveItemIds, terminalItemIds, st
   }
   return {
     dryRun,
+    // The candidate SET is part of the report, not just the outcome: a dry run must say what it WOULD
+    // reap (demo/worktree-reap.test.mjs asserts it), and a real run's `reaped`/`removalFailed` say
+    // what happened to it. Without it a dry run reports counts but no names.
+    candidates: plan.candidates,
     reaped,
     refusedSoleCarrier: plan.refusedSoleCarrier,
     lockedOverTerminalItem: plan.lockedOverTerminalItem,
@@ -1606,6 +1614,14 @@ export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, termin
     keep(kept.itemId, kept.worktree, kept.keepReason);
   }
   for (const candidate of plan.candidates) {
+    // AN UNLANDED BRANCH WAITS FOR THE EXPLICIT VERB (#5301): the startup sweep may clear a tree
+    // whose branch is already on main, but a tree holding commits that are NOT on main is the one
+    // a human must decide about. `branchLanded` is measured by planReap, so this is a fact, not a
+    // guess; the branch itself is never removed either way (#1244).
+    if (candidate.branch && !candidate.branchLanded) {
+      keep(candidate.itemId, candidate.worktree, "branch-unlanded");
+      continue;
+    }
     const result = await removeClaimedWorktree({ worktree: candidate.worktree });
     if (result?.removed) removed.push(candidate.itemId);
     else keep(candidate.itemId, candidate.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
