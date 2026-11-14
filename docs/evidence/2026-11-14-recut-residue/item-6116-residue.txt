@@ -1,0 +1,917 @@
+Ref refs/heads/item-6116 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 7afd549cc34f868c30ad918b5ce36ec766926c92. Lost lines: 150 across 10 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6116 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6116
+
+--- cli.mjs (3 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/cli.mjs b/cli.mjs
+index ed8c14cb..328ad4c4 100644
+--- a/cli.mjs
++++ b/cli.mjs
+@@ -3022,7 +3022,7 @@ async function cmdStatus(args = []) {
+   // precedent), so it answers even when the broker is wedged and every broker-routed read times out.
+   const noteCensus = args.includes("--no-notes")
+     ? { skipped: true, why: "--no-notes; run without it for the per-seat continuity-note census" }
+-    : safeNoteCensus(DB_PATH, health.seats);
++    : safeNoteCensus(DB_PATH, health.seats, "live seat plane (this rig's store, read directly)");
+   // #4403: the note is CARRIED IN THE JSON, not written to stderr. `status` IS the machine-readable
+   // queue view (stdout is JSON by default, and `--json` is accepted), but a consumer that merges
+   // streams (`2>&1`) parses the note as a JSON value and fails with "Invalid JSON primitive: note" —
+@@ -3099,10 +3099,11 @@ async function cmdStatus(args = []) {
+  * the reason in the section rather than taking `status` down with it. `--no-notes` skips the scan for a
+  * faster read (one pass over `entries`, ~1.4 s on this rig's 424k-entry store).
+  */
+-function safeNoteCensus(dbPath, seats) {
++function safeNoteCensus(dbPath, seats, plane = null) {
+   try {
+     const census = readNoteCensus(dbPath, {
+       seats: (seats ?? []).map((seat) => ({ name: seat.name, conversationId: seat.conversationId })),
++      plane,
+     });
+     return { ...census, lines: renderCensus(census).split("\n") };
+   } catch (error) {
+--- demo/failure-ledger.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/failure-ledger.test.mjs b/demo/failure-ledger.test.mjs
+new file mode 100644
+index 00000000..180e409b
+--- /dev/null
++++ b/demo/failure-ledger.test.mjs
+@@ -0,0 +1,155 @@
++// demo/failure-ledger.test.mjs — the known-red ledger is checkable, not a list (#3795).
++//
++// The claim being pinned is narrow and mechanical: a landing entry can CITE docs/FAILURE-LEDGER.md instead
++// of copying a list, and the citation is only worth having if the tool can tell four things apart:
++//   1. a red that HAS a row and a red that has NO row (the hole "ignore all red" lives in);
++//   2. two reds with DIFFERENT causes classified as two causes, not one bucket;
++//   3. a row naming a demo that now PASSES - reported as stale, not as a red;
++//   4. a row whose recorded cause no longer matches what is failing - drift, not a pass.
++// No model, no network, no broker: the capture is handed in as text.
++//
++// Run: node demo/failure-ledger.test.mjs  (exit 0 = pass)
++import { execFileSync } from "node:child_process";
++import { readFileSync, writeFileSync } from "node:fs";
++import { dirname, join, resolve } from "node:path";
++import { fileURLToPath } from "node:url";
++
++import {
++  AGING_DAYS,
++  CLASSES,
++  ageInDays,
++  citationLine,
++  compareLedger,
++  parseLedger,
++  renderLedger,
++  validateRow,
++} from "../src/failureledger.mjs";
++
++const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
++let failures = 0;
++function check(label, cond, detail = "") {
++  if (!cond) failures++;
++  console.log(`  ${cond ? "OK" : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
++}
++
++/* ---- 1. the vocabulary and the row shape ---- */
++console.log("\n=== 1. a row is only usable if it says who owns it and what clears it ===");
++check("the class vocabulary is closed", CLASSES.length === 5 && CLASSES.includes("fixture-drift"), CLASSES.join(","));
++check("a row with no clearing condition is refused",
++  validateRow({ demo: "demo/x.test.mjs", class: "accepted-defect", owner: "#1", measuredOn: "2026-11-11" }).some((e) => e.startsWith("clearsWhen is required")));
++check("a borrowed class is refused",
++  validateRow({ demo: "demo/x.test.mjs", class: "pre-existing", owner: "#1", clearsWhen: "someday", measuredOn: "2026-11-11" }).some((e) => e.startsWith("class must be")));
++check("a date that is not a date is refused",
++  validateRow({ demo: "demo/x.test.mjs", class: "accepted-defect", owner: "#1", clearsWhen: "the fix lands", measuredOn: "Nov 11" }).some((e) => e.startsWith("measuredOn")));
++check("a well-formed row passes",
++  validateRow({ demo: "demo/x.test.mjs", class: "fixture-drift", owner: "#6646", clearsWhen: "the anchor is re-derived", measuredOn: "2026-11-11" }).length === 0);
++
++/* ---- 2. the ledger in the repo parses, and every row in it is valid ---- */
++console.log("\n=== 2. docs/FAILURE-LEDGER.md is machine-readable and every row in it is shaped ===");
++const ledgerText = readFileSync(join(ROOT, "docs", "FAILURE-LEDGER.md"), "utf8");
++const parsed = parseLedger(ledgerText);
++check("the ledger block parses", parsed.errors.length === 0, parsed.errors.join(" | "));
++check("the ledger has rows", parsed.rows.length > 0, `${parsed.rows.length} row(s)`);
++check("every row names a demo, class, owner, clearing condition and date",
++  parsed.rows.every((r) => validateRow(r).length === 0), parsed.rows.map((r) => r.demo).join(","));
++
++/* ---- 3. a real capture: one red, classified ---- */
++console.log("\n=== 3. the real signature recorded in the ledger matches a real capture ===");
++// The capture below is the runner's stderr for the ONE red on this tree (tree 4d96c740, 2026-11-11):
++// demo/gate-clean-scorer.test.mjs dies because corpus.mjs anchors a mutant to a line main no longer has.
++const realCapture = `--- demo/gate-clean-scorer.test.mjs (exit 1) ---
++AssertionError [ERR_ASSERTION]: gate.mjs --rescore on the fixture failed: file:///home/chexxor/Git/Durian-Pi/item-6116/tools/model-probes/corpus.mjs:500
++    if (!main.includes(it.find)) throw new Error(\`\${it.id}: anchor not on main — the mutant is stale\`);
++                                       ^
++Error: M3-pause-still-claims: anchor not on main - the mutant is stale
++    at buildCorpus (file:///home/chexxor/Git/Durian-Pi/item-6116/tools/model-probes/corpus.mjs:500:40)
++code: 'ERR_ASSERTION',
++`;
++const real = compareLedger(ledgerText, realCapture);
++check("the capture yields exactly one red in one cause", real.redCount === 1 && real.causeCount === 1, `${real.redCount} red, ${real.causeCount} cause`);
++check("the recorded signature still matches what is failing (no drift)",
++  real.rows[0].state === "red", `state=${real.rows[0].state} current=${real.rows[0].currentSignature}`);
++check("nothing is unclassified", real.unclassified.length === 0, real.unclassified.join(","));
++check("the citation line names the pointer, the count and the date",
++  citationLine(real).includes("docs/FAILURE-LEDGER.md") && citationLine(real).includes("1 red in 1 cause") && citationLine(real).includes("2026-11-11"),
++  citationLine(real));
++
++/* ---- 4. two reds, two causes: they may not be flattened ---- */
++console.log("\n=== 4. '5 pre-existing reds' is not one class: distinct causes stay distinct ===");
++const twoReds = `--- demo/tui-durable-boot.test.mjs (exit 1) ---
++Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './codemode' is not defined by "exports"
++    at exports (file:///home/chexxor/Git/Durian-Pi/item-6116/node_modules/@earendil-works/pi-ai/utils/exports.js:12:3)
++code: 'ERR_PACKAGE_PATH_NOT_EXPORTED',
++--- demo/tui-durable-persistence.test.mjs (exit 1) ---
++Error: EPERM: operation not permitted, open 'C:\\Windows\\Temp\\durig-x\\note.json'
++    at open (file:///home/chexxor/Git/Durian-Pi/item-6116/demo/tui-durable-persistence.test.mjs:77:9)
++code: 'EPERM',
++`;
++const two = compareLedger(
++  [
++    "```json:failure-ledger",
++    JSON.stringify([
++      { demo: "demo/tui-durable-boot.test.mjs", class: "dependency-artifact", owner: "#3765", clearsWhen: "the pin is linked in this tree", measuredOn: "2026-11-11", signature: "Error[ERR_PACKAGE_PATH_NOT_EXPORTED] at exports.js:12:3" },
++      { demo: "demo/tui-durable-persistence.test.mjs", class: "environment-artifact", owner: "operator", clearsWhen: "the temp dir is writable", measuredOn: "2026-11-11", signature: "Error at tui-durable-persistence.test.mjs:77:9" },
++    ]),
++    "```",
++  ].join("\n"),
++  twoReds,
++);
++check("two reds produce two cause groups, not one bucket", two.causeCount === 2, `${two.causeCount}`);
++check("the two classes are different", two.rows[0].class !== two.rows[1].class, `${two.rows[0].class} vs ${two.rows[1].class}`);
++check("both are measured red and classified", two.rows.every((r) => r.state === "red"), two.rows.map((r) => r.state).join(","));
++
++/* ---- 5. the ledger can be WRONG, and says so ---- */
++console.log("\n=== 5. a stale ledger is a finding, not a silent pass ===");
++const fencedLedger = "```json:failure-ledger\n" + JSON.stringify([{ demo: "demo/gone.test.mjs", class: "accepted-defect", owner: "#1", clearsWhen: "it lands", measuredOn: "2026-11-01" }]) + "\n```";
++const stale = compareLedger(fencedLedger, "");
++check("a row naming a demo that passes is reported as cleared", stale.cleared.length === 1 && stale.cleared[0] === "demo/gone.test.mjs", stale.cleared.join(","));
++check("the citation calls it stale rather than calling it red", citationLine(stale).includes("STALE"), citationLine(stale));
++
++const drifted = compareLedger(
++  "```json:failure-ledger\n" + JSON.stringify([{ demo: "demo/a.test.mjs", class: "content-clobber", owner: "#2", clearsWhen: "the comment is restored", measuredOn: "2026-11-11", signature: "AssertionError[ERR_ASSERTION] at a.test.mjs:10:5" }]) + "\n```",
++  "--- demo/a.test.mjs (exit 1) ---\nTypeError [ERR_INVALID_ARG_TYPE]: The \"path\" argument must be of type string\n    at fn (file:///x/demo/a.test.mjs:44:9)\ncode: 'ERR_INVALID_ARG_TYPE',\n",
++);
++check("a red whose cause changed is drift, not a pass", drifted.drift.length === 1 && drifted.rows[0].state === "drift", `state=${drifted.rows[0].state}`);
++
++const unclassified = compareLedger(fencedLedger, "--- demo/new-red.test.mjs (exit 1) ---\nError: boom\n    at x (file:///x/demo/new-red.test.mjs:1:1)\n");
++check("a red with no row is named, not swallowed", unclassified.unclassified.length === 1 && unclassified.unclassified[0] === "demo/new-red.test.mjs", unclassified.unclassified.join(","));
++check("the rendered ledger shows the unclassified red", renderLedger(unclassified).includes("UNCLASSIFIED"), renderLedger(unclassified).split("\n").slice(-1)[0]);
++
++/* ---- 6. the date is load-bearing ---- */
++console.log("\n=== 6. a classification ages, and the ledger says how old it is ===");
++check("today's date is not aging", ageInDays("2026-11-11", new Date("2026-11-11T12:00:00Z")) === 0);
++check("a 30-day-old row is aging", ageInDays("2026-10-12", new Date("2026-11-11T12:00:00Z")) > AGING_DAYS, `${ageInDays("2026-10-12", new Date("2026-11-11T12:00:00Z"))} days`);
++const aged = compareLedger(
++  "```json:failure-ledger\n" + JSON.stringify([{ demo: "demo/a.test.mjs", class: "environment-artifact", owner: "operator", clearsWhen: "the temp dir is writable", measuredOn: "2026-10-12" }]) + "\n```",
++  "--- demo/a.test.mjs (exit 1) ---\nError: EPERM\n    at open (file:///x/demo/a.test.mjs:3:3)\n",
++);
++check("an aged row is flagged as aged", aged.aging.length === 1 && aged.rows[0].aging, JSON.stringify(aged.aging));
++
++/* ---- 7. the CLI agrees with the module ---- */
++console.log("\n=== 7. scripts/failure-ledger.mjs exits 0 when the ledger matches the suite, 1 when it does not ===");
++const scratchDir = join(ROOT, ".spike");
++const goodCapture = join(scratchDir, "ledger-good.err");
++const badCapture = join(scratchDir, "ledger-unclassified.err");
++writeFileSync(goodCapture, realCapture);
++writeFileSync(badCapture, "--- demo/something-new.test.mjs (exit 1) ---\nError: nobody classified me\n    at x (file:///x/demo/something-new.test.mjs:1:1)\n");
++let exitGood = null;
++try {
++  execFileSync(process.execPath, [join(ROOT, "scripts", "failure-ledger.mjs"), "--capture", goodCapture], { encoding: "utf8" });
++  exitGood = 0;
++} catch (err) {
++  exitGood = err?.code ?? 1;
++}
++check("the CLI exits 0 when every red has a matching row", exitGood === 0, `exit=${exitGood}`);
++let exitBad = null;
++try {
++  execFileSync(process.execPath, [join(ROOT, "scripts", "failure-ledger.mjs"), "--capture", badCapture], { encoding: "utf8" });
++  exitBad = 0;
++} catch (err) {
++  exitBad = err?.code ?? 1;
++}
++check("the CLI exits 1 for a red with no row", exitBad === 1, `exit=${exitBad}`);
++
++console.log(`\n${failures === 0 ? "PASS" : "FAIL"}: ${failures} failed check(s) — demo/failure-ledger.test.mjs`);
++process.exit(failures === 0 ? 0 : 1);
+--- demo/note-census.test.mjs (56 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/note-census.test.mjs b/demo/note-census.test.mjs
+index 81a41eb2..0dbfa043 100644
+--- a/demo/note-census.test.mjs
++++ b/demo/note-census.test.mjs
+@@ -28,7 +28,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
+ 
+ import { loadExtensions } from "../src/extensions.mjs";
+ import { registerSeat, RigQueue, Router } from "../src/rig.mjs";
+-import { compactionSource, noteStateIsEmpty, readNoteCensus, renderCensus } from "../src/notecensus.mjs";
++import { compactionSource, formatCensusProvenance, noteStateIsEmpty, readNoteCensus, renderCensus } from "../src/notecensus.mjs";
+ 
+ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+ const ctx = BACKGROUND_CONTEXT;
+@@ -121,8 +121,26 @@ try {
+   await worker.harness.close(ctx);
+ }
+ 
+-/* ---- 3. the control: the same rig, no extension, compacted by the summariser ---- */
+-console.log("\n=== 3. the control seat: no extension, so compaction goes to the summariser ===");
++/* ---- 3b. armed but never written: the extension IS installed, the seat never wrote a note ---- */
++console.log("\n=== 3. the seat the census used to mislead about: extension armed, no note ever written ===");
++const unnoted = await openRig(join(dir, "unnoted.sqlite"), { withContinuity: true, seatName: "unnoted" });
++try {
++  const conv = await unnoted.harness.conversation(unnoted.conversationId, ctx);
++  for (let i = 0; i < 20; i++) {
++    unnoted.faux.setResponses([fauxAssistantMessage(fauxText(`ack-${i}`))]);
++    await (await conv.submit({ type: "input", content: `turn-${i} ${"x".repeat(2000)} marker-${i}` }, ctx)).wait(ctx);
++  }
++  const before = unnoted.faux.state.callCount;
++  const taskId = await conv.compact("fold the early turns", ctx);
++  await unnoted.harness.waitForTask(taskId, ctx);
++  check("the extension still intercepted: zero summariser calls even with no note",
++    unnoted.faux.state.callCount === before, `before=${before} after=${unnoted.faux.state.callCount}`);
++} finally {
++  await unnoted.harness.close(ctx);
++}
++
++/* ---- 4. the control: the same rig, no extension, compacted by the summariser ---- */
++console.log("\n=== 4. the control seat: no extension, so compaction goes to the summariser ===");
+ const control = await openRig(join(dir, "control.sqlite"), { withContinuity: false, seatName: "control" });
+ try {
+   const conv = await control.harness.conversation(control.conversationId, ctx);
+@@ -143,7 +161,7 @@ try {
+ }
+ 
+ /* ---- 4. the census, read off the store the rigs just wrote ---- */
+-console.log("\n=== 4. the census reports all three facts per seat ===");
++console.log("\n=== 5. the census reports all three facts per seat ===");
+ const census = readNoteCensus(store, {
+   seats: [{ name: "worker", conversationId: worker.conversationId }, { name: "never-woke", conversationId: 9999 }],
+ });
+@@ -178,11 +196,32 @@ check("without a seat map the rows are labelled by conversation, not invented na
+ check("the store totals are consistent with the per-seat rows",
+   wholeStore.totals.compactions === wholeStore.totals.note + wholeStore.totals.digest + wholeStore.totals.summariser,
+   JSON.stringify(wholeStore.totals));
+-check("the rendering is one line per seat plus a header",
+-  renderCensus(census).split("\n").length === census.seats.length + 1, renderCensus(census));
++check("the rendering is one line per seat plus the header and the provenance line",
++  renderCensus(census).split("\n").length === census.seats.length + 2, renderCensus(census));
++
++/* ---- 5b. provenance: a census number must say which plane it came from (#6116) ---- */
++console.log("\n=== 5b. the census names its plane, its store and its tree before it names a number ===");
++const labelled = readNoteCensus(store, {
++  plane: "mocked plane (demo fixture store)",
++  seats: [{ name: "worker", conversationId: worker.conversationId }],
++});
++const prov = labelled.provenance;
++check("the census records WHICH STORE it read", prov.db === store, `db=${prov.db}`);
++check("the caller's PLANE is carried through to the output", prov.plane === "mocked plane (demo fixture store)", `plane=${prov.plane}`);
++check("the tree the reading code ran in is named, with its dirtiness", typeof prov.tree === "string" && prov.tree.length >= 7,
++  `tree=${prov.tree} dirty=${prov.dirty}`);
++check("a measurement is timestamped, so a stale number can be dated", !Number.isNaN(Date.parse(prov.measuredAt)), prov.measuredAt);
++const renderedLines = renderCensus(labelled).split("\n");
++check("the rendered census LEADS with the provenance line: a quoted number cannot be read as the live plane's",
++  renderedLines[0].startsWith("plane:") && renderedLines[0].includes("mocked plane") && renderedLines[0].includes(store),
++  renderedLines[0]);
++check("no plane is assumed when the caller does not say one",
++  readNoteCensus(store).provenance.plane === "direct store read", readNoteCensus(store).provenance.plane);
++check("formatCensusProvenance degrades to a named gap, never a bare number",
++  formatCensusProvenance(null).includes("provenance unknown"), formatCensusProvenance(null));
+ 
+ /* ---- 5. the control store reads as the un-exercised case ---- */
+-console.log("\n=== 5. the control store: compaction happened, no note was involved ===");
++console.log("\n=== 6. the control store: compaction happened, no note was involved ===");
+ const controlCensus = readNoteCensus(join(dir, "control.sqlite"), { seats: [{ name: "control", conversationId: control.conversationId }] });
+ const controlRow = controlCensus.seats[0];
+ check("no note document exists for a seat without the extension", !controlRow.noteDoc && !controlRow.noteWritten);
+@@ -192,6 +231,27 @@ check("nothing offered the note tools, so nothing could have used them",
+ check("its compaction is attributed to the summariser", controlRow.compactionVia.summariser >= 1 && controlRow.compactionVia.note === 0,
+   JSON.stringify(controlRow.compactionVia));
+ 
++/* ---- 7. the armed-but-unnoted store: the fallback line is NOT a continuity note ---- */
++console.log("\n=== 7. the seat with no note: its summary must read as DIGEST, never as NOTE ===");
++const unnotedCensus = readNoteCensus(join(dir, "unnoted.sqlite"), { seats: [{ name: "unnoted", conversationId: unnoted.conversationId }] });
++const unnotedRow = unnotedCensus.seats[0];
++check("no note was ever WRITTEN, so the census cannot say the note was used",
++  !unnotedRow.noteWritten, `noteWritten=${unnotedRow.noteWritten} revisions=${unnotedRow.noteRevisions}`);
++check("its compaction is the DIGEST fallback, not a note",
++  unnotedRow.compactionVia.digest >= 1 && unnotedRow.compactionVia.note === 0 && unnotedRow.latestCompactionVia === "digest",
++  JSON.stringify(unnotedRow.compactionVia) + ` latest=${unnotedRow.latestCompactionVia}`);
++// THE TRAP THIS CHECK EXISTS FOR, measured live 2026-11-11: the extension's fallback sentence reads
++// "No continuity note was written for this conversation before the boundary". SQLite LIKE is CASE-INSENSITIVE
++// for ASCII, so `record like '%CONTINUITY NOTE%'` matches it, and a seat that never wrote a note is counted
++// as a seat whose compaction ran on its note. GLOB is case-sensitive; the census must use it for markers.
++const likeTrap = new DatabaseSync(join(dir, "unnoted.sqlite"), { readOnly: true })
++  .prepare("select count(*) n from entries where record like ?").get("%CONTINUITY NOTE%").n;
++check("LIKE does match the fallback sentence case-insensitively - that is why the census cannot use LIKE here",
++  likeTrap >= 1 && unnotedRow.compactionVia.note === 0, `LIKE counts ${likeTrap}, census note ${unnotedRow.compactionVia.note}`);
++check("the un-noted seat's buckets still sum to its compaction count",
++  unnotedRow.compactionVia.note + unnotedRow.compactionVia.digest + unnotedRow.compactionVia.summariser === unnotedRow.compactions,
++  JSON.stringify(unnotedRow.compactionVia) + ` vs ${unnotedRow.compactions}`);
++
+ rmSync(dir, { recursive: true, force: true });
+ 
+ console.log(`\n${failures === 0 ? "PASS" : "FAIL"}: ${failures} failed check(s) — demo/note-census.test.mjs`);
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 71690ac9..fbcde5cf 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -52,6 +52,7 @@
+       "demo/extensions.test.mjs",
+       "demo/feature-row.test.mjs",
+       "demo/features-drift.test.mjs",
++      "demo/failure-ledger.test.mjs",
+       "demo/held-gate-audit.test.mjs",
+       "demo/hold-queued-row.test.mjs",
+       "demo/init.test.mjs",
+--- docs/FAILURE-LEDGER.md (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/FAILURE-LEDGER.md b/docs/FAILURE-LEDGER.md
+new file mode 100644
+index 00000000..d53b410a
+--- /dev/null
++++ b/docs/FAILURE-LEDGER.md
+@@ -0,0 +1,75 @@
++# Failure ledger (`docs/FAILURE-LEDGER.md`)
++
++**One classified set of the suite's KNOWN REDS, with an owner and a clearing condition.** Landing entries and
++verify reports **cite this file** instead of restating a list. A copy goes stale the moment it is written; a
++citation points at a dated source that says when it was last true.
++
++`node scripts/failure-ledger.mjs --capture suite.err` (or `--run --jobs 6`) prints the ledger and the citation
++line, and exits 1 when the ledger no longer matches the suite: a red with **no row**, a row naming a demo that
++now **passes**, or a row whose recorded cause no longer matches what is failing.
++
++## Why this exists (#3795)
++
++The auditor's re-verify showed the same claim written into fifteen landing entries in one day:
++"KNOWN RED, do not misattribute: broker-one-connection, seat-instruction-encoding, 5 tui-durable-*". Two
++failures follow from writing a list instead of a pointer:
++
++- **The set moves and the copy does not.** impl caught pm's "seven red at 557ceb3" list (#3692) naming four
++  demos that were already green when the entry landed.
++- **The label is uniform when the causes are not.** "5 tui-durable-* are pre-existing" flattened three owners:
++  two content clobbers, two dependency-state artifacts (`ERR_PACKAGE_PATH_NOT_EXPORTED './codemode'`) and one
++  Windows `EPERM` temp-dir artifact. A verifier that cannot tell a clobber from an environment artifact
++  defaults to "ignore all red" — which is how #2279's blanket "37 pre-existing failures not introduced by this
++  change" became false in two directions at once (the set had shrunk, and the survivors were not uniformly
++  environmental).
++
++The ledger is the only artifact that makes "do not misattribute" checkable: each row names the demo, the
++class, the owner, the condition that clears it, and the date it was last measured.
++
++## The classes
++
++| class | what it means | how it clears |
++|---|---|---|
++| `content-clobber` | tracked content was changed and broke the test | the content is restored or the change is re-landed correctly |
++| `dependency-artifact` | the resolved dependency set / pin-link state, not the code | the pin is synced and linked in the tree the suite runs in |
++| `environment-artifact` | host, OS or permission state of the machine running the suite | the environment is fixed (permissions, temp dir, network) |
++| `fixture-drift` | the test's own fixture is stale against the tree it probes | the fixture anchor is re-derived from current main |
++| `accepted-defect` | a known defect with an owner item that has not landed yet | the owner item lands |
++
++A red whose cause fits none of these gets a **new class**, never a borrowed one. (`fixture-drift` is not in
++pm's original four; it was added because the measured red below is neither a clobber, a dependency artifact,
++nor an environment artifact, and filing it under "pre-existing" is exactly the flattening this ledger exists
++to prevent.)
++
++## How to use it
++
++1. **Diagnose a red run:** capture the runner output and classify it by CAUSE (not by the first matching line):
++   ```bash
++   node scripts/test.mjs --all --jobs 6 > suite.out 2> suite.err
++   node tools/suite-signature.mjs suite.err          # cause groups (#6176)
++   node scripts/failure-ledger.mjs --capture suite.err   # ledger vs. reality
++   ```
++2. **Write a landing entry:** paste the citation line, not a list:
++   `see docs/FAILURE-LEDGER.md (measured 2026-11-11): 1 red in 1 cause, classified 1 fixture-drift`
++3. **Update a row:** re-measure, then rewrite that row with the new date. This ledger is a **current-state**
++   ledger (unlike `docs/DISPOSITIONS.md`, which is append-only because a decision is immutable); a red set is
++   a snapshot, so the honest thing is to date it, not to accumulate rows forever.
++
++## The ledger
++
++```json:failure-ledger
++[
++  {
++    "demo": "demo/gate-clean-scorer.test.mjs",
++    "class": "fixture-drift",
++    "owner": "#6646",
++    "clearsWhen": "tools/model-probes/corpus.mjs M3-pause-still-claims anchor is re-anchored to main's `const hasQueued = !paused && queuedVerdicts.some((v) => v.workable);` line and the demo is re-run",
++    "measuredOn": "2026-11-11",
++    "signature": "AssertionError[ERR_ASSERTION] at corpus.mjs:500:40",
++    "evidence": "node scripts/test.mjs --all --jobs 6 -> 298/299, exit 1; node tools/suite-signature.mjs .spike/suite-3795.err -> 1 block, 1 distinct cause"
++  }
++]
++```
++
++Run: `node scripts/failure-ledger.mjs --run --jobs 6` — exit 0 means every red has a row, no row is stale, and
++no row's cause has drifted.
+--- docs/runbooks/continuation-notes.md (17 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/continuation-notes.md b/docs/runbooks/continuation-notes.md
+index 560ac5ec..e460798e 100644
+--- a/docs/runbooks/continuation-notes.md
++++ b/docs/runbooks/continuation-notes.md
+@@ -3,9 +3,9 @@ runbook: continuation-notes
+ symptom: "a seat cannot finish its item inside one context window; compaction summaries come back truncated ('Summarization hit the token limit'); a seat woken into a fresh context has no idea what it already established; `status`/`queue` return tens of megabytes; nobody can say WHICH seat the note mechanism has actually reached"
+ writes: true                       # arming the extension writes config; the diagnosis below is read-only
+ precondition: "read-only"          # Diagnose is read-only; the Do steps that edit config need the broker stopped
+-last_verified: 2026-11-10
++last_verified: 2026-11-11
+ verified_by: devtools
+-evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (0.464 s, exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0)"
++evidence: "D240; demo/continuity-note.test.mjs (0.40 s, exit 0); demo/offline.mjs (0.29 s); demo/status-view-bound.test.mjs (1.8 s); docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09.txt; #6082: src/notecensus.mjs + demo/note-census.test.mjs (0.464 s, exit 0), live census read on ./selfdev.sqlite 2026-11-10T04:5xZ (`node cli.mjs status --json`, exit 0); #6116: `node demo/note-census.test.mjs` exit 0 (provenance checks §5b), live census `node cli.mjs status --json` exit 0 on ./selfdev.sqlite 2026-11-11T08:2xZ"
+ check_rule: null
+ ---
+ 
+@@ -98,6 +98,30 @@ Three readings that the numbers do **not** support, and are easy to take from th
+ - **`digest 0` is expected, not missing.** `beforeCompact` always renders a note — the seat's own note, or a
+   seed from its claimed/queued item — so the bare-digest bucket only fires when neither exists.
+ 
++### Which plane did this number come from? (#6116)
++
++The census runs against TWO different stores and the prose around it routinely quotes one while reading the
++other. `tools/compaction-acceptance.mjs` and `demo/note-census.test.mjs` run the MOCKED plane: a fixture store,
++faux provider, 100 compaction tasks, **0 summariser requests** - that number proves the mechanism, it says
++nothing about the fleet. The LIVE seat plane is this rig's `selfdev.sqlite`, and its numbers look nothing like
++the fixture's.
++
++As of 2026-11-11 the census prints its own provenance as its FIRST line, so a bare number cannot be lifted out
++of context (`src/notecensus.mjs` `censusProvenance`, reusing `src/provenance.mjs` `gitProvenance` rather than a
++second emitter):
++
++```bash
++node cli.mjs status --json | node -e 'const j=JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));console.log(j.noteCensus.lines[0])'
++# plane: live seat plane (this rig's store, read directly) · store /…/selfdev.sqlite · code 4d96c740 clean · measured 2026-11-11T08:3xZ
++```
++
++Read the line before the counts: `plane` says WHICH RIG, `store` says WHICH FILE, `code` says WHICH TREE the
++reading code ran in (and `DIRTY` warns that the revision does not describe what ran), `measured` dates the
++number. A figure with no plane attached is a gap to name, not a fact to quote.
++
++**Verify:** `node demo/note-census.test.mjs` exits 0 and §5b asserts the provenance line names the store, the
++caller's plane, the tree and the timestamp, and that an unlabelled call degrades to `direct store read`.
++
+ **The fleet-wide fact the census is for:** 1,893 of 1,905 compactions on this store still went to the
+ summariser. The note path is real (12 compactions, zero model calls, proven by the demo's unchanged
+ `callCount`) but it has only been in the running recently; a seat whose `latest:` is `summariser` is a seat the
+--- docs/runbooks/suite-red-standalone-green.md (20 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/suite-red-standalone-green.md b/docs/runbooks/suite-red-standalone-green.md
+index 4e94c4a8..27080351 100644
+--- a/docs/runbooks/suite-red-standalone-green.md
++++ b/docs/runbooks/suite-red-standalone-green.md
+@@ -3,9 +3,9 @@ runbook: suite-red-standalone-green
+ symptom: "a demo exits 0 on its own but the suite reports it FAIL or TIMED OUT"
+ writes: false
+ precondition: "read-only"
+-last_verified: 2026-11-10
+-verified_by: qa
+-evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10"
++last_verified: 2026-11-11
++verified_by: devtools
++evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10; #3795 failure ledger: node demo/failure-ledger.test.mjs exit 0 and node scripts/failure-ledger.mjs --capture .spike/suite.err exit 0 against a real capture 2026-11-11"
+ check_rule: null
+ ---
+ 
+@@ -82,13 +82,40 @@ prints a `MERGED:` note whenever it groups, so a merge is always a claim you can
+ what the old one could not: a killed test reports `exit null` (SIGKILL has no code), and a thrown class that
+ does not end in "Error" (`SessionFailed`) is still a named cause.
+ 
++## The known-red set is a ledger now, not a list you retype (#3795)
++
++`docs/FAILURE-LEDGER.md` is the one place a known red is classified: demo, CLASS, OWNER item, the CONDITION
++that clears it, and the DATE it was last measured. Cause grouping reuses `tools/suite-signature.mjs` rather
++than inventing a second classifier, and the checker fails when the ledger and the suite disagree:
++
++```bash
++node scripts/failure-ledger.mjs --capture .spike/suite.err      # exit 0 = every red has a row, none stale
++node scripts/failure-ledger.mjs --run --jobs 6                  # run the suite, then compare
++node scripts/failure-ledger.mjs --capture .spike/suite.err --json
++```
++
++Exit 1 names the three ways the ledger can be wrong: a red with **no row** (unclassified - this is the set
++that tempts a verifier into "ignore all red"), a row whose demo now **passes** (stale), or a row whose
++**recorded cause no longer matches** what is failing (drift). Rows older than `AGING_DAYS` (14) are flagged
++as aging: not fatal, but a signal to re-measure before quoting.
++
++Measured 2026-11-11 on tree 4d96c740: `node scripts/test.mjs --all --jobs 6` → 298/299, exit 1, one cause; the
++ledger has exactly that row and the CLI exits 0. The row's class is `fixture-drift` (the mutant corpus anchors
++to a `driver.mjs` line main no longer has, owner #6646) - a class pm's original four did not contain, which is
++the point: filing it under "pre-existing" is the flattening this ledger exists to prevent.
++
+ ## Verify
+ ```bash
+ node demo/test-runner-concurrency.test.mjs   # exit 0, prints TEST-RUNNER-CONCURRENCY TEST PASS
+ node demo/suite-signature.test.mjs           # exit 0, prints SUITE-SIGNATURE TEST PASS
++node demo/failure-ledger.test.mjs            # exit 0, "PASS: 0 failed check(s)"
+ ```
+-Measured 2026-11-10: both exit 0. And the verdict change is provably verdict-neutral on real failures:
++Measured 2026-11-10: the first two exit 0. And the verdict change is provably verdict-neutral on real failures:
+ `node scripts/test.mjs --all` → exit 1, `261/282 passed`, the same 21 reds before and after.
++The ledger fixture pins the vocabulary, the row shape, distinct causes staying distinct, stale rows being
++called stale, drift being caught, and the CLI's exit codes (measured 2026-11-11, exit 0).
++
++## If it fails
+ 
+ ## If it fails
+ If the leak fixture reports TIMEOUT again, `runOne` has gone back to waiting on `close`; restore the
+--- scripts/failure-ledger.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/scripts/failure-ledger.mjs b/scripts/failure-ledger.mjs
+new file mode 100644
+index 00000000..93928c02
+--- /dev/null
++++ b/scripts/failure-ledger.mjs
+@@ -0,0 +1,84 @@
++#!/usr/bin/env node
++// scripts/failure-ledger.mjs — report the KNOWN-RED set in a form a landing entry can CITE (#3795).
++//
++// WHY A SCRIPT AND NOT A HABIT. "5 pre-existing reds, do not misattribute" is a claim a verifier cannot
++// check: it has no date, no cause and no owner. This prints the ledger the same way every time - counts,
++// classes, owners, clearing conditions, and the date the classification was measured - and fails when the
++// ledger no longer matches the suite: a red with no row, or a row naming a demo that now passes.
++//
++// Usage:
++//   node scripts/test.mjs --all --jobs 6 > suite.out 2> suite.err
++//   node scripts/failure-ledger.mjs --capture suite.err            # compare the ledger against that capture
++//   node scripts/failure-ledger.mjs --run --jobs 6                 # run the suite itself, then compare
++//   node scripts/failure-ledger.mjs --capture suite.err --json     # machine-readable
++//   node scripts/failure-ledger.mjs --cite                         # just the citation line (needs --capture/--run)
++// Exit: 0 when every red has a row and no row is stale; 1 when a red is unclassified, a row is stale, a row
++// has drifted cause, or the ledger block is malformed; 2 for a usage error.
++import { execFileSync } from "node:child_process";
++import { readFileSync } from "node:fs";
++import { dirname, join, resolve } from "node:path";
++import { fileURLToPath } from "node:url";
++
++import { citationLine, compareLedger, renderLedger, CLASSES } from "../src/failureledger.mjs";
++
++const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
++const args = process.argv.slice(2);
++const flag = (name) => args.includes(name);
++const value = (name) => {
++  const i = args.indexOf(name);
++  return i >= 0 ? args[i + 1] : null;
++};
++
++const usage = () => {
++  console.error(
++    "usage: node scripts/failure-ledger.mjs [--capture <file>] [--run] [--jobs N] [--json] [--cite] " +
++      `[--ledger <path>]  (classes: ${CLASSES.join(", ")})`,
++  );
++  process.exit(2);
++};
++
++const ledgerPath = value("--ledger") ?? join(ROOT, "docs", "FAILURE-LEDGER.md");
++let ledgerText;
++try {
++  ledgerText = readFileSync(ledgerPath, "utf8");
++} catch (err) {
++  console.error(`cannot read the ledger at ${ledgerPath}: ${err.message}`);
++  process.exit(2);
++}
++
++let capture;
++if (flag("--run")) {
++  const jobs = value("--jobs") ?? "6";
++  try {
++    const out = execFileSync(process.execPath, [join(ROOT, "scripts", "test.mjs"), "--all", "--jobs", jobs], {
++      cwd: ROOT,
++      encoding: "utf8",
++      maxBuffer: 1 << 26,
++    });
++    capture = ""; // a green suite has nothing to classify; compareLedger then reports every row as cleared
++    void out;
++  } catch (err) {
++    capture = String(err.stderr ?? err.stdout ?? err);
++  }
++} else if (flag("--capture")) {
++  const file = value("--capture");
++  if (!file) usage();
++  capture = file === "-" ? readFileSync(0, "utf8") : readFileSync(file, "utf8");
++} else {
++  usage();
++}
++
++const status = compareLedger(ledgerText, capture);
++
++if (flag("--json")) {
++  console.log(JSON.stringify({ ok: !status.ledgerErrors.length && !status.unclassified.length && !status.cleared.length && !status.drift.length, ...status }, null, 2));
++} else {
++  console.log(renderLedger(status, ledgerPath));
++  if (status.ledgerErrors.length) console.log("ledger malformed:", status.ledgerErrors.join(" | "));
++}
++
++const bad = status.ledgerErrors.length || status.unclassified.length || status.cleared.length || status.drift.length;
++if (bad) {
++  console.error(citationLine(status, ledgerPath));
++  process.exit(1);
++}
+--- src/failureledger.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/failureledger.mjs b/src/failureledger.mjs
+new file mode 100644
+index 00000000..52ad322c
+--- /dev/null
++++ b/src/failureledger.mjs
+@@ -0,0 +1,171 @@
++// src/failureledger.mjs — the ONE classified set of known suite reds (#3795).
++//
++// WHY THIS EXISTS. Landing entries and verify reports have spent a whole session restating lists of known
++// reds: "KNOWN RED, do not misattribute: broker-one-connection, seat-instruction-encoding, 5 tui-durable-*".
++// A list in a body is a SNAPSHOT with no date and no cause. Two failures followed from that:
++//   1. STALENESS - impl caught pm's "seven red at 557ceb3" list (#3692) naming four demos that were already
++//      green by the time the entry was written;
++//   2. FLATTENING - "5 tui-durable-* are pre-existing" put THREE different owners in one bucket: two content
++//      clobbers, two dependency-state artifacts (ERR_PACKAGE_PATH_NOT_EXPORTED './codemode'), and one Windows
++//      EPERM environment artifact. A verifier that cannot tell a clobber from an environment artifact reads
++//      "ignore all red", which is exactly how #2279's blanket "37 pre-existing failures not introduced by
++//      this change" went false in both directions at once.
++//
++// WHAT THIS MODULE IS. A parser, a validator and a comparator for `docs/FAILURE-LEDGER.md`, whose rows carry
++// five fields: the demo, the CLASS, the OWNER item, the CONDITION under which it clears, and the DATE the
++// classification was last measured. A landing entry cites the ledger instead of copying it; a citation cannot
++// go stale the way a copy does, and where the ledger itself is stale, the date says so.
++//
++// WHAT IT DOES NOT DO. It does not decide a class. The class is a human/seat declaration backed by the
++// signature; this module checks that the declaration still MATCHES the suite, and names every red that has no
++// row (an unclassified red is the hole "ignore all red" lives in). Cause grouping is reused from
++// tools/suite-signature.mjs (#6176) rather than re-implemented here - two classifiers would drift, and drift
++// is the thing being fixed.
++
++import { classify } from "../tools/suite-signature.mjs";
++
++/** The vocabulary. A red whose cause fits none of these gets a NEW class, never a borrowed one. */
++export const CLASSES = [
++  "content-clobber",       // tracked content changed and broke the test (restoring the content clears it)
++  "dependency-artifact",   // the resolved dependency set / pin link state, not the code
++  "environment-artifact",  // host/OS/permission state of the machine running the suite
++  "fixture-drift",         // the test's own fixture is stale against the tree it probes
++  "accepted-defect",       // a known defect with an owner item that has not landed yet
++];
++
++const BLOCK = /```json:failure-ledger\n([\s\S]*?)```/;
++
++/** A row measured longer than this ago is AGING: still valid, but the reader should re-measure before
++ * trusting it. Aging is reported, never fatal - red sets move and nobody can keep a date current by force. */
++export const AGING_DAYS = 14;
++
++/** Parse the ledger document. Returns {rows, errors} - never throws, so a bad ledger is reportable rather
++ * than fatal: a rig whose ledger is malformed must still be able to say what is wrong with it. */
++export function parseLedger(text) {
++  const m = BLOCK.exec(String(text ?? ""));
++  if (!m) return { rows: [], errors: ["no ```json:failure-ledger block found in the ledger document"] };
++  let parsed;
++  try {
++    parsed = JSON.parse(m[1]);
++  } catch (err) {
++    return { rows: [], errors: [`the ledger block is not valid JSON: ${err.message}`] };
++  }
++  const rows = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.rows) ? parsed.rows : [];
++  const errors = [];
++  for (const [i, row] of rows.entries()) {
++    const bad = validateRow(row, i);
++    if (bad.length) errors.push(`row ${i} (${row?.demo ?? "?"}): ${bad.join("; ")}`);
++  }
++  return { rows, errors };
++}
++
++/** A row is only usable if every field a reader needs is present and shaped. */
++export function validateRow(row, index = 0) {
++  const errors = [];
++  if (!row || typeof row.demo !== "string" || !row.demo.trim()) errors.push("demo is required");
++  if (!CLASSES.includes(row?.class)) errors.push(`class must be one of ${CLASSES.join(", ")} (got ${String(row?.class)})`);
++  const owner = row?.owner;
++  if (typeof owner !== "string" || !owner.trim()) errors.push("owner is required (an item id like #6646, or a named seat/operator)");
++  if (typeof row?.clearsWhen !== "string" || !row.clearsWhen.trim()) errors.push("clearsWhen is required (the condition that makes this red green)");
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(row?.measuredOn ?? ""))) errors.push("measuredOn must be an ISO date YYYY-MM-DD");
++  if (row?.evidence !== undefined && typeof row.evidence !== "string") errors.push("evidence must be a string (a command, a sha, a row id)");
++  return errors;
++}
++
++/**
++ * Compare the ledger against a suite capture (the runner's stderr, in the format
++ * tools/suite-signature.mjs parses). Returns:
++ *   groups       - every cause group the capture produced, with its members
++ *   unclassified - reds with no ledger row (the dangerous set: "ignore all red" starts here)
++ *   cleared      - ledger rows whose demo is not red in this capture (the ledger is stale)
++ *   drift        - ledger rows still red, but whose recorded signature no longer matches what is failing
++ *   rows         - the ledger rows, annotated with their current state
++ */
++export function compareLedger(ledgerText, capture) {
++  const { rows, errors } = parseLedger(ledgerText);
++  const classified = classify(capture);
++  const groups = classified.groups ?? [];
++  const byFile = new Map();
++  for (const g of groups) for (const member of g.members) byFile.set(member, g);
++
++  const annotated = rows.map((row) => {
++    const group = byFile.get(row.demo);
++    // The signature is compared as a PREFIX: the label embeds an absolute worktree path, so a stored
++    // signature naming the error class and the site survives a different checkout while still catching a
++    // genuine change of cause.
++    const matches = group && (!row.signature || group.label.startsWith(row.signature));
++    const age = ageInDays(row.measuredOn);
++    return {
++      ...row,
++      state: !group ? "cleared" : matches ? "red" : "drift",
++      ageDays: age,
++      aging: age !== null && age > AGING_DAYS,
++      currentSignature: group?.label ?? null,
++    };
++  });
++
++  const covered = new Set(rows.map((r) => r.demo));
++  const unclassified = [...byFile.keys()].filter((f) => !covered.has(f));
++
++  return {
++    groups,
++    rows: annotated,
++    unclassified,
++    cleared: annotated.filter((r) => r.state === "cleared").map((r) => r.demo),
++    drift: annotated.filter((r) => r.state === "drift").map((r) => r.demo),
++    aging: annotated.filter((r) => r.aging).map((r) => `${r.demo} (${r.ageDays} days)`),
++    ledgerErrors: errors,
++    redCount: byFile.size,
++    causeCount: groups.length,
++    blocksClassified: classified.blocks,
++  };
++}
++
++/** The line a landing entry or verify report should PASTE INSTEAD OF A LIST: a pointer plus the count, so
++ * the reader goes to the dated source rather than trusting the copy. */
++export function citationLine(status, path = "docs/FAILURE-LEDGER.md") {
++  const classes = status.rows
++    .filter((r) => r.state !== "cleared")
++    .reduce((acc, r) => {
++      acc[r.class] = (acc[r.class] ?? 0) + 1;
++      return acc;
++    }, {});
++  const classText = Object.keys(classes).length
++    ? Object.entries(classes).map(([c, n]) => `${n} ${c}`).join(", ")
++    : "none classified";
++  const lastMeasured = status.rows
++    .filter((r) => r.state !== "cleared")
++    .map((r) => r.measuredOn)
++    .sort()
++    .pop() ?? null;
++  const stale = status.cleared.length ? ` - STALE: ${status.cleared.length} row(s) name a demo that now passes` : "";
++  const unclassifiedNote = status.unclassified.length
++    ? ` - UNCLASSIFIED RED (no row): ${status.unclassified.join(", ")}`
++    : "";
++  return (
++    `failure ledger ${path}: ${status.redCount} red in ${status.causeCount} cause(s), classified ${classText}` +
++    (lastMeasured ? `, last measured ${lastMeasured}` : "") + stale + unclassifiedNote
++  );
++}
++
++/** Render the ledger as one line per red, grouped by class - the human view of the machine block. */
++/** How old a classification is, in days; null when the date is not a real date. */
++export function ageInDays(measuredOn, now = new Date()) {
++  const parsed = Date.parse(String(measuredOn ?? ""));
++  if (Number.isNaN(parsed)) return null;
++  return Math.floor((now.getTime() - parsed) / 86400000);
++}
++
++/** Render the ledger as one line per red, grouped by class - the human view of the machine block. */
++export function renderLedger(status, path = "docs/FAILURE-LEDGER.md") {
++  const lines = [citationLine(status)];
++  for (const row of status.rows) {
++    lines.push(
++      `  ${row.demo.padEnd(34)} ${String(row.class).padEnd(20)} owner ${String(row.owner).padEnd(8)} ` +
++        `measured ${row.measuredOn}  clears when: ${row.clearsWhen}` +
++        (row.state === "cleared" ? "  [NOT RED IN THIS RUN - stale row]" : row.aging ? `  [aging: ${row.ageDays} days]` : ""),
++    );
++  }
++  for (const file of status.unclassified) lines.push(`  ${file.padEnd(34)} UNCLASSIFIED - no row in the ledger`);
++  return lines.join("\n");
++}
+--- src/notecensus.mjs (49 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/notecensus.mjs b/src/notecensus.mjs
+index c19e0afd..dccf38d5 100644
+--- a/src/notecensus.mjs
++++ b/src/notecensus.mjs
+@@ -29,12 +29,17 @@
+ //      a seat the mechanism has never reached, whatever the config says.
+ 
+ import { DatabaseSync } from "node:sqlite";
++import { dirname } from "node:path";
++import { fileURLToPath } from "node:url";
++import { gitProvenance } from "./provenance.mjs";
+ 
+ /** What pi-durable puts in the record of a compaction summary entry. */
+ const COMPACTION_KIND = '"kind":"pi.compaction"';
+ /** The two markers the continuity extension writes into a summary it supplied. */
+ const NOTE_MARKER = "CONTINUITY NOTE";
+ const DIGEST_MARKER = "Deterministic digest";
++/** SQLite pattern equivalent, GLOB rather than LIKE: GLOB is CASE-SENSITIVE for ASCII, LIKE is not. */
++const glob = (s) => `*${s}*`;
+ 
+ /**
+  * Pure: classify ONE compaction summary text by the thing that produced it. Kept separate from the store
+@@ -72,18 +77,33 @@ export function noteStateIsEmpty(content) {
+ /**
+  * Read the census. `seats` is [{name, conversationId}]; when it is missing the rows are labelled by
+  * conversation id and `unnamed: true`, rather than inventing a name (the fleet-health rule).
++ *
++ * `plane` names WHERE THE NUMBER CAME FROM (#6116). The same census is run against a temp fixture in
++ * `demo/note-census.test.mjs` and against the live rig store, and a number lifted out of one is routinely
++ * quoted as if it came from the other: the delegate's "100 compaction tasks, 0 truncated, 0 summariser
++ * requests" is a MOCKED-plane figure, while "1959 compactions -> 52 note / 14 digest / 1893 summariser" is
++ * the LIVE seat plane. Those two cannot be compared unless each carries its provenance, so the census now
++ * records the store it read, the plane the caller says it is, and the revision of the CODE doing the
++ * reading (src/provenance.mjs `gitProvenance` - no second emitter).
+  */
+-export function readNoteCensus(dbPath, { seats = null } = {}) {
++export function readNoteCensus(dbPath, { seats = null, plane = null } = {}) {
+   const db = new DatabaseSync(dbPath, { readOnly: true });
+   try {
+-    // ONE pass over entries answers facts 2 and 3 for every conversation at once. TWO traps the first version
+-    // fell into, both measured on the live store (2026-11-10):
++    // ONE pass over entries answers facts 2 and 3 for every conversation at once. THREE traps the first
++    // version fell into, all measured (2026-11-10, and the third on the live store 2026-11-11):
+     //   - `pi.system` entries carry the REQUEST's tool declarations, so a plain `record like '%"name":"read_note"%'`
+     //     counts every turn in which the tool was OFFERED: on this rig that read 25 "read_note calls" for a fleet
+     //     that had actually made 5. "Offered" and "used" are different facts and both are useful, so they are
+     //     counted separately and named differently.
+     //   - the three compaction buckets must be mutually exclusive: the extension's summary contains the note AND
+     //     the digest beneath it, so a row matching both markers would be counted twice.
++    //   - the SOURCE markers must be matched with GLOB, not LIKE. When the seat never wrote a note, the extension
++    //     still supplies the summary, and its first line reads "No continuity note was written for this
++    //     conversation before the boundary". SQLite LIKE is case-insensitive for ASCII, so `like '%CONTINUITY
++    //     NOTE%'` matches that sentence, and every note-less compaction is counted as a compaction that ran ON a
++    //     note. Measured live 2026-11-11: LIKE said 65 note / 0 digest over 1,958 compactions; GLOB says 51 note /
++    //     14 digest. The JS classifier (`compactionSource`, case-sensitive) already said digest, so the totals and
++    //     the per-seat `latest` line disagreed inside one tool. Tool NAMES stay in LIKE - a name is not a marker.
+     const rows = db.prepare(
+       `select conversation_id,
+               sum(case when json_extract(record, '$.kind') = 'pi.assistant'
+@@ -93,10 +113,10 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
+               sum(case when json_extract(record, '$.kind') = 'pi.assistant'
+                         and record like '%"type":"toolCall"%' and record like ? then 1 else 0 end) as handoff_calls,
+               sum(case when json_extract(record, '$.kind') = 'pi.system' and record like ? then 1 else 0 end) as note_tools_offered,
+-              sum(case when record like ? then 1 else 0 end) as compactions,
+-              sum(case when record like ? and record like ? then 1 else 0 end) as via_note,
+-              sum(case when record like ? and record not like ? and record like ? then 1 else 0 end) as via_digest,
+-              sum(case when record like ? and record not like ? and record not like ? then 1 else 0 end) as via_summariser
++              sum(case when record GLOB ? then 1 else 0 end) as compactions,
++              sum(case when record GLOB ? and record GLOB ? then 1 else 0 end) as via_note,
++              sum(case when record GLOB ? and record not GLOB ? and record GLOB ? then 1 else 0 end) as via_digest,
++              sum(case when record GLOB ? and record not GLOB ? and record not GLOB ? then 1 else 0 end) as via_summariser
+          from entries
+          group by conversation_id`,
+     ).all(
+@@ -104,10 +124,10 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
+       '%"name":"write_note"%',
+       '%"name":"continue_from_note"%',
+       '%"name":"read_note"%',
+-      `%${COMPACTION_KIND}%`,
+-      `%${COMPACTION_KIND}%`, `%${NOTE_MARKER}%`,
+-      `%${COMPACTION_KIND}%`, `%${NOTE_MARKER}%`, `%${DIGEST_MARKER}%`,
+-      `%${COMPACTION_KIND}%`, `%${NOTE_MARKER}%`, `%${DIGEST_MARKER}%`,
++      glob(COMPACTION_KIND),
++      glob(COMPACTION_KIND), glob(NOTE_MARKER),
++      glob(COMPACTION_KIND), glob(NOTE_MARKER), glob(DIGEST_MARKER),
++      glob(COMPACTION_KIND), glob(NOTE_MARKER), glob(DIGEST_MARKER),
+     );
+     const byConv = new Map(rows.map((r) => [r.conversation_id, r]));
+ 
+@@ -171,12 +191,35 @@ export function readNoteCensus(dbPath, { seats = null } = {}) {
+       { seats: census.length, notes: 0, noteDocs: 0, readNoteCalls: 0, noteToolsOffered: 0, compactions: 0, note: 0, digest: 0, summariser: 0 },
+     );
+ 
+-    return { seats: census, totals };
++    return { seats: census, totals, provenance: censusProvenance(dbPath, plane) };
+   } finally {
+     db.close();
+   }
+ }
+ 
++/** The tree the reading code runs in + the store it read. Pure enough to assert in a demo. */
++export function censusProvenance(dbPath, plane = null) {
++  const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
++  const git = gitProvenance(repoRoot);
++  return {
++    plane: plane ?? "direct store read",
++    db: dbPath,
++    tree: git.revision,
++    dirty: git.dirty,
++    treeReason: git.reason,
++    measuredAt: new Date().toISOString(),
++  };
++}
++
++/** One line: which plane, which store, which tree. Never a bare number. */
++export function formatCensusProvenance(p) {
++  if (!p) return "continuity notes: provenance unknown (the census did not record its plane)";
++  const tree = p.tree
++    ? p.tree + (p.dirty === true ? " DIRTY" : p.dirty === false ? " clean" : " tree unreadable")
++    : `tree unknown (${p.treeReason ?? "unavailable"})`;
++  return `plane: ${p.plane} · store ${p.db} · code ${tree} · measured ${p.measuredAt}`;
++}
++
+ function latestCompactionSource(db, conversationId) {
+   const row = db
+     .prepare(
+@@ -194,6 +237,7 @@ function latestCompactionSource(db, conversationId) {
+ /** Compact human rendering: one line per seat, sorted by the thing that is most actionable. */
+ export function renderCensus(census) {
+   const lines = [];
++  if (census.provenance) lines.push(formatCensusProvenance(census.provenance));
+   lines.push(
+     `continuity notes: ${census.totals.notes}/${census.totals.seats} seats have a written note; ` +
+       `${census.totals.readNoteCalls} read_note calls across ${census.totals.noteToolsOffered} turns that offered the tools; ` +

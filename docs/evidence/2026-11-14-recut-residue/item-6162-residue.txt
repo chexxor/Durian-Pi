@@ -1,0 +1,1610 @@
+Ref refs/heads/item-6162 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 4100031540577594e893ae2faba6a0747860c720. Lost lines: 744 across 9 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6162 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6162
+
+--- demo/compaction-acceptance-gate.test.mjs (160 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/compaction-acceptance-gate.test.mjs b/demo/compaction-acceptance-gate.test.mjs
+index b782b2bd..be94456e 100644
+--- a/demo/compaction-acceptance-gate.test.mjs
++++ b/demo/compaction-acceptance-gate.test.mjs
+@@ -17,6 +17,13 @@
+ // Measured on the live rig store (seat root, 2026-11-10, pi-durable 1.5.1): armed --target 100 -> 100
+ // tasks, 0 truncated, exit 0, 27.9 s; control --target 12 --stopReason length -> 10 truncated, exit 0.
+ //
++// #6162 ADDS THE REPORT SHAPE. A driven 100/0 and a natural 12/0 are two different claims, and until this
++// wrapper pinned them apart they were quoted as one number. The instrument now prints three labelled blocks
++// - DRIVEN, NEGATIVE CONTROL, NATURAL - each naming its own store, and the NATURAL block excludes every
++// compaction this instrument itself created. This demo asserts the blocks exist, that the natural count is
++// NOT the driven count, and that the natural block can actually go red on a store that contains
++// truncations. A block that can never fail is not a measurement.
++//
+ // RED BEFORE: on HEAD, selectTests(root,{all:true}) returns 282 files and none of them invoke the
+ // instrument; the 28-check gate added by #6127 was the only compaction guard inside the suite.
+ //
+@@ -27,11 +34,19 @@
+ 
+ import assert from "node:assert/strict";
+ import { spawnSync } from "node:child_process";
+-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
++import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
++import { DatabaseSync } from "node:sqlite";
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ 
+-import { areaNames, discoverTests, filesForArea, readManifest, selectTests, validateManifest } from "../src/testareas.mjs";
++import {
++	areaNames,
++	discoverTests,
++	filesForArea,
++	readManifest,
++	selectTests,
++	validateManifest,
++} from "../src/testareas.mjs";
+ 
+ const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+ const INSTRUMENT = "tools/compaction-acceptance.mjs";
+@@ -65,16 +80,38 @@ function numbers(out) {
+ 		growthTurns: grab(/= (\d+) growth turns/),
+ 		summariserRequests: grab(/\+ (\d+) summariser requests\)/),
+ 		markers: grab(/summary markers placed in this tranche: (\d+)/),
+-		noteBacked: grab(/note-backed (\d+)/),
+-		digestBacked: grab(/digest-backed (\d+)/),
++		noteBacked: grab(/continuity note (\d+)/),
++		digestBacked: grab(/deterministic digest (\d+)/),
+ 		completed: grab(/completed outcomes: (\d+)/),
+ 		truncated: grab(/TRUNCATED summaries \("hit the token limit"\): (\d+)/),
+ 		verdict: /VERDICT (PASS|FAIL)/.exec(out)?.[1],
+ 	};
+ }
+ 
++/**
++ * Strip the instrument's own label from a store's compaction tasks so its driven compactions read as
++ * ordinary seat compactions. Used only to build the RED case for the NATURAL block: if the natural counter
++ * reports 0 truncations in a store that contains them, it is a constant, not a measurement.
++ */
++function stripInstrumentLabel(dbPath) {
++	const s = new DatabaseSync(dbPath);
++	try {
++		return s
++			.prepare(
++				`update tasks set record = json_set(record, '$.input.instructions', null)
++             where kind = '"pi.compaction"'
++               and json_extract(record, '$.input.instructions') like '%acceptance tranche%'`,
++			)
++			.run().changes;
++	} finally {
++		s.close();
++	}
++}
++
+ const credentialish = (env) =>
+-	Object.keys(env).filter((k) => /API_KEY|TOKEN|SECRET|CREDENTIAL|ANTHROPIC|OPENAI|GOOGLE_API/.test(k.toUpperCase()));
++	Object.keys(env).filter((k) =>
++		/API_KEY|TOKEN|SECRET|CREDENTIAL|ANTHROPIC|OPENAI|GOOGLE_API/.test(k.toUpperCase()),
++	);
+ 
+ try {
+ 	// 1. DISCOVERED, not merely present. Ask the discovery code, not the filesystem.
+@@ -82,15 +119,28 @@ try {
+ 	assert.ok(found.includes(SELF), `${SELF} is not in discoverTests() — the suite never sees it`);
+ 	const manifest = readManifest(ROOT);
+ 	const areas = areaNames(manifest).filter((a) => filesForArea(manifest, a).includes(SELF));
+-	assert.equal(areas.length, 1, `${SELF} must map to exactly one area; found ${areas.join(", ") || "NONE"}`);
++	assert.equal(
++		areas.length,
++		1,
++		`${SELF} must map to exactly one area; found ${areas.join(", ") || "NONE"}`,
++	);
+ 	assert.ok(
+ 		selectTests(ROOT, { area: areas[0] }).files.includes(SELF),
+ 		`scripts/test.mjs --area ${areas[0]} would not run the instrument`,
+ 	);
+-	assert.ok(selectTests(ROOT, { all: true }).files.includes(SELF), "the full suite would not run the instrument");
++	assert.ok(
++		selectTests(ROOT, { all: true }).files.includes(SELF),
++		"the full suite would not run the instrument",
++	);
+ 	const coverage = validateManifest(ROOT);
+-	assert.ok(coverage.ok, `the area manifest does not partition the suite: ${coverage.errors.join("; ")}`);
+-	assert.ok(existsSync(join(ROOT, INSTRUMENT)), `the instrument is not in the tracked tree at ${INSTRUMENT}`);
++	assert.ok(
++		coverage.ok,
++		`the area manifest does not partition the suite: ${coverage.errors.join("; ")}`,
++	);
++	assert.ok(
++		existsSync(join(ROOT, INSTRUMENT)),
++		`the instrument is not in the tracked tree at ${INSTRUMENT}`,
++	);
+ 
+ 	// 2. A STORE THIS DEMO BUILT — never the live rig store. The instrument snapshots whatever it is
+ 	//    given and writes only to the snapshot, but a gate must not depend on a rig being running.
+@@ -109,24 +159,72 @@ try {
+ 	//    (20000 in the rig's own policy). A brand-new seat conversation has none, so the armed tranche
+ 	//    would "place 0 summaries and truncate 0" — a zero that measures nothing. This seed run gives
+ 	//    the seats real history, and it must itself place summaries or the depth is fake.
+-	const seed = runInstrument(["--db", baseDb, "--copyDir", join(dir, "seed"), "--target", "120", "--mode", "armed"]);
++	const seed = runInstrument([
++		"--db",
++		baseDb,
++		"--copyDir",
++		join(dir, "seed"),
++		"--target",
++		"120",
++		"--mode",
++		"armed",
++	]);
+ 	assert.equal(seed.code, 0, `seed run failed: ${seed.err.slice(0, 300)}`);
+ 	const seedN = numbers(seed.out);
+-	assert.ok(seedN.markers > 0, `seed placed no summaries (${seed.out.slice(0, 400)}) — the tranche had no cut to make`);
++	assert.ok(
++		seedN.markers > 0,
++		`seed placed no summaries (${seed.out.slice(0, 400)}) — the tranche had no cut to make`,
++	);
+ 	const seededDb = join(dir, "seed", "acceptance-snapshot.sqlite");
+ 	assert.ok(existsSync(seededDb), "the seed snapshot was not written");
+ 
+ 	// 4. THE ARMED TRANCH: 100 compactions, every one placing a summary, none truncated, and no
+ 	//    summariser request at all (the extension supplies the summary, so the harness never builds one).
+-	const armed = runInstrument(["--db", seededDb, "--copyDir", join(dir, "armed"), "--target", "100", "--mode", "armed"]);
+-	assert.equal(armed.code, 0, `armed tranche failed (exit ${armed.code}): ${armed.err.slice(0, 300)}`);
++	const armed = runInstrument([
++		"--db",
++		seededDb,
++		"--copyDir",
++		join(dir, "armed"),
++		"--target",
++		"100",
++		"--mode",
++		"armed",
++	]);
++	assert.equal(
++		armed.code,
++		0,
++		`armed tranche failed (exit ${armed.code}): ${armed.err.slice(0, 300)}`,
++	);
+ 	const a = numbers(armed.out);
+ 	assert.equal(a.verdict, "PASS", `instrument verdict ${a.verdict}: ${armed.out.slice(-300)}`);
+-	assert.ok(a.completed >= 100, `armed tranche completed only ${a.completed} compaction tasks, not 100`);
+-	assert.ok(a.markers >= 100, `armed tranche placed ${a.markers} summaries for 100 compactions — the zero is not measuring anything`);
+-	assert.equal(a.truncated, 0, `armed tranche truncated ${a.truncated} summaries — the milestone claim is 0`);
+-	assert.equal(a.summariserRequests, 0, `armed tranche issued ${a.summariserRequests} summariser requests; the extension should short-circuit them`);
+-	assert.ok(a.noteBacked + a.digestBacked === a.markers, "every placed summary must be accounted for by a path");
++	assert.ok(
++		a.completed >= 100,
++		`armed tranche completed only ${a.completed} compaction tasks, not 100`,
++	);
++	assert.ok(
++		a.markers >= 100,
++		`armed tranche placed ${a.markers} summaries for 100 compactions — the zero is not measuring anything`,
++	);
++	assert.equal(
++		a.truncated,
++		0,
++		`armed tranche truncated ${a.truncated} summaries — the milestone claim is 0`,
++	);
++	assert.equal(
++		a.summariserRequests,
++		0,
++		`armed tranche issued ${a.summariserRequests} summariser requests; the extension should short-circuit them`,
++	);
++	// A summary can carry BOTH paths (a continuity note plus the deterministic digest of the cut turns),
++	// so the two counts do not sum to the marker count. They must each be <= it, and together cover it.
++	assert.ok(
++		a.noteBacked <= a.markers && a.digestBacked <= a.markers,
++		`a path count exceeded the summaries placed (note ${a.noteBacked}, digest ${a.digestBacked}, markers ${a.markers})`,
++	);
++	assert.ok(
++		a.noteBacked + a.digestBacked >= a.markers,
++		"some placed summary is backed by neither a continuity note nor a deterministic digest",
++	);
+ 
+ 	// 5. THE NEGATIVE CONTROL. Same instrument, extension absent, canned reply with stopReason=length:
+ 	//    the harness's own truncation branch fires and the counter counts it. This is what makes the
+@@ -143,10 +241,21 @@ try {
+ 		"--stopReason",
+ 		"length",
+ 	]);
+-	assert.equal(control.code, 0, `negative control failed (exit ${control.code}): ${control.err.slice(0, 300)}`);
++	assert.equal(
++		control.code,
++		0,
++		`negative control failed (exit ${control.code}): ${control.err.slice(0, 300)}`,
++	);
+ 	const c = numbers(control.out);
+-	assert.ok(c.truncated > 0, `negative control reproduced NO truncation (${control.out.slice(-300)}) — the instrument cannot count a non-zero, so the armed 0 proves nothing`);
+-	assert.equal(c.truncated, c.summariserRequests, `control counted ${c.truncated} truncations for ${c.summariserRequests} summariser requests — the count is not tied to real requests`);
++	assert.ok(
++		c.truncated > 0,
++		`negative control reproduced NO truncation (${control.out.slice(-300)}) — the instrument cannot count a non-zero, so the armed 0 proves nothing`,
++	);
++	assert.equal(
++		c.truncated,
++		c.summariserRequests,
++		`control counted ${c.truncated} truncations for ${c.summariserRequests} summariser requests — the count is not tied to real requests`,
++	);
+ 	assert.equal(c.growthTurns, 12, `control ran ${c.growthTurns} growth turns, not the 12 measured`);
+ 
+ 	// 6. THE COUNTER IS NOT A CONSTANT. Identical control tranche, canned reply with a clean stopReason
+@@ -164,20 +273,107 @@ try {
+ 		"--stopReason",
+ 		"stop",
+ 	]);
+-	assert.equal(clean.code, 1, `clean-stop control exited ${clean.code}; the instrument must FAIL when nothing is truncated: ${clean.out.slice(-300)}`);
+-	assert.equal(numbers(clean.out).truncated, 0, "the clean-stop control should have produced no truncation");
++	assert.equal(
++		clean.code,
++		1,
++		`clean-stop control exited ${clean.code}; the instrument must FAIL when nothing is truncated: ${clean.out.slice(-300)}`,
++	);
++	assert.equal(
++		numbers(clean.out).truncated,
++		0,
++		"the clean-stop control should have produced no truncation",
++	);
+ 
+-	// 7. $0: no credential, no network.
+-	for (const [name, env] of [["up", { PATH: process.env.PATH, DURIG_DB: baseDb, DURIG_PI_DB: baseDb, DURIG_PROVIDER: "faux" }], ["seed", { PATH: process.env.PATH }]]) {
+-		assert.equal(credentialish(env).length, 0, `${name} ran with credentials in the environment: ${credentialish(env).join(", ")}`);
++	// 7. THE REPORT SHAPE (#6162): three blocks, each naming its own store, and the natural count is NOT
++	//    the driven count. The seeded snapshot the armed run read contains 120 compactions this instrument
++	//    created; if the NATURAL block reported those as natural, the two claims would be one number.
++	const blockHeads = ["== DRIVEN -", "== NEGATIVE CONTROL -", "== NATURAL -"];
++	for (const head of blockHeads)
++		assert.ok(
++			armed.out.includes(head),
++			`the report is missing the ${head} block: ${armed.out.slice(0, 400)}`,
++		);
++	const nat = /== NATURAL[\s\S]*?natural compactions: (\d+), completed (\d+), TRUNCATED (\d+)/.exec(
++		armed.out,
++	);
++	assert.ok(nat, `the NATURAL block states no numbers of its own: ${armed.out.slice(-400)}`);
++	const excluded = /EXCLUDED from the natural count: (\d+)/.exec(armed.out)?.[1];
++	assert.ok(
++		excluded !== undefined,
++		"the NATURAL block did not report how many driven compactions it excluded",
++	);
++	assert.equal(
++		Number(nat[1]),
++		0,
++		`the NATURAL block counted ${nat[1]} compactions created by the instrument - driven and natural collapsed into one number`,
++	);
++	assert.ok(
++		Number(excluded) >= 100,
++		`only ${excluded} instrument-created compactions were excluded, but the seed drove 120`,
++	);
++	assert.ok(/store read: /.test(armed.out), "the NATURAL block does not name the store it read");
++
++	// 8. THE NATURAL BLOCK CAN GO RED. Take the control copy - it holds real harness truncations - strip
++	//    the instrument label so they read as seat compactions, and measure with --natural-only. If the
++	//    block still says 0, the natural half of the report is a constant.
++	const poisonDir = join(dir, "natural-red");
++	mkdirSync(poisonDir, { recursive: true });
++	const poisonDb = join(poisonDir, "poison.sqlite");
++	copyFileSync(join(dir, "control", "acceptance-snapshot.sqlite"), poisonDb);
++	const stripped = stripInstrumentLabel(poisonDb);
++	assert.ok(
++		stripped > 0,
++		"nothing to strip - the control tranche is not labelled, so the exclusion test is vacuous",
++	);
++	const red = runInstrument([
++		"--db",
++		poisonDb,
++		"--copyDir",
++		join(poisonDir, "run"),
++		"--natural-only",
++	]);
++	assert.equal(
++		red.code,
++		1,
++		`the NATURAL block exited ${red.code} on a store containing ${stripped} truncations: ${red.out.slice(-400)}`,
++	);
++	assert.ok(
++		/WARNING: \d+ NATURAL summaries truncated/.test(red.out),
++		`the natural warning never fired: ${red.out.slice(-400)}`,
++	);
++	assert.ok(/DRIVEN: NOT RUN/.test(red.out), "--natural-only still ran a driven tranche");
++	assert.ok(
++		/VERDICT FAIL/.test(red.out),
++		"the verdict did not follow the natural block it printed",
++	);
++
++	// 9. $0: no credential, no network.
++	for (const [name, env] of [
++		[
++			"up",
++			{ PATH: process.env.PATH, DURIG_DB: baseDb, DURIG_PI_DB: baseDb, DURIG_PROVIDER: "faux" },
++		],
++		["seed", { PATH: process.env.PATH }],
++	]) {
++		assert.equal(
++			credentialish(env).length,
++			0,
++			`${name} ran with credentials in the environment: ${credentialish(env).join(", ")}`,
++		);
+ 	}
+ 	const source = readFileSync(join(ROOT, INSTRUMENT), "utf8");
+-	assert.ok(!/fetch\(|node:http|node:https|node:net|require\("http/.test(source), "the instrument reaches the network — the $0 claim is false");
+-	const total = seed.ms + armed.ms + control.ms + clean.ms;
+-	assert.ok(total < 60000, `the gate took ${total} ms — it must stay inside the suite budget (measured 27.9 s against the live store)`);
++	assert.ok(
++		!/fetch\(|node:http|node:https|node:net|require\("http/.test(source),
++		"the instrument reaches the network — the $0 claim is false",
++	);
++	const total = seed.ms + armed.ms + control.ms + clean.ms + red.ms;
++	assert.ok(
++		total < 60000,
++		`the gate took ${total} ms — it must stay inside the suite budget (measured 27.9 s against the live store)`,
++	);
+ 
+ 	console.log(
+-		`COMPACTION-ACCEPTANCE GATE TEST PASS (#6128): the instrument is in discoverTests() and mapped to exactly one area ("${areas[0]}"); armed 100 compactions placed ${a.markers} summaries with 0 truncated and 0 summariser requests; the negative control reproduced ${c.truncated} truncations (== its ${c.summariserRequests} summariser requests); the clean-stop control exits 1, so the counter is not a constant; all four tranches ran with PATH only and no network module in the instrument; ${total} ms total on a fixture store this demo built`,
++		`COMPACTION-ACCEPTANCE GATE TEST PASS (#6128, #6162): the instrument is in discoverTests() and mapped to exactly one area ("${areas[0]}"); armed 100 compactions placed ${a.markers} summaries with 0 truncated and 0 summariser requests; the negative control reproduced ${c.truncated} truncations (== its ${c.summariserRequests} summariser requests); the clean-stop control exits 1, so the counter is not a constant; the report carries DRIVEN/NEGATIVE CONTROL/NATURAL blocks and the natural count excluded the ${excluded} instrument-created compactions rather than counting them; stripping the instrument label from ${stripped} compactions made the NATURAL block go red (exit 1), so the natural half is not a constant; all tranches ran with PATH only and no network module in the instrument; ${total} ms total on a fixture store this demo built`,
+ 	);
+ } finally {
+ 	rmSync(dir, { recursive: true, force: true });
+--- demo/release-deferred-row.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/release-deferred-row.test.mjs b/demo/release-deferred-row.test.mjs
+new file mode 100644
+index 00000000..21194df7
+--- /dev/null
++++ b/demo/release-deferred-row.test.mjs
+@@ -0,0 +1,223 @@
++// demo/release-deferred-row.test.mjs — release_work can undo a DEFERRAL, not just a hold (#6164).
++//
++// The defect is a missing write path, not a wrong value: `release_work` acted only on `held` rows, and the
++// only exit from a `deferred` row was `resume_work`, which belongs to the RECIPIENT. pm tested #5931, #5933,
++// #5936, #5939 — all `deferredTo: human`, all parked on a question whose answer already existed — and every
++// one answered "not held (status=deferred)"; lead got the identical refusal on #5938, a row it minted itself.
++// So a parked row whose gate had closed was unreachable by anyone except the seat that parked it, and the
++// remaining lever was cancel-and-re-issue: a new id that orphans every gate naming the old one (the
++// #3747/#3863 starvation shape). This demo pins the widened VERB and, in the same breath, the boundary that
++// must NOT move: the authority is still sender-or-recipient, and release is not a claim.
++//
++// Run: node demo/release-deferred-row.test.mjs  (exit 0 = pass)
++import assert from "node:assert/strict";
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import {
++	fauxAssistantMessage,
++	fauxProvider,
++	fauxText,
++	fauxToolCall,
++} from "@earendil-works/pi-ai/providers/faux";
++import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
++
++import { gateView, parkOf } from "../src/queue-lifecycle.mjs";
++import {
++	DEFERRED_TO_NOBODY,
++	Edges,
++	RigQueue,
++	Router,
++	Seats,
++	compilePersona,
++	enqueueItem,
++	registerSeat,
++} from "../src/rig.mjs";
++
++const ctx = BACKGROUND_CONTEXT;
++const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
++const models = createModels();
++models.setProvider(faux.provider);
++const registry = createRegistry();
++registry.install(Router);
++const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
++
++await harness.commit(async (tx) => {
++	const mk = async (name, role) => {
++		const c = await tx.createConversation({ ownership: { kind: "ownerless" } });
++		await configure(tx, c.id, {
++			model: { provider: "faux", modelId: "faux-seat" },
++			instructions: compilePersona({ role }),
++		});
++		await registerSeat(tx, name, c.id, role);
++	};
++	await mk("pm", "program manager");
++	await mk("worker", "implementation engineer");
++	// Deliberately granted no edges: the authority refusal has something real to refuse.
++	await mk("intruder", "unaffiliated agent");
++	const ed = await tx.doc(Edges);
++	ed.edges = [
++		{ from: "pm", maySendTo: ["worker"] },
++		{ from: "worker", maySendTo: ["pm"] },
++	];
++	// Six rows, so the cases never fight over the same one:
++	//  1 pm->worker  deferred to nobody      -> the RECIPIENT releases it
++	//  2 pm->worker  deferred to pm         -> the SENDER releases it (the gap pm hit)
++	//  3 pm->worker  held                   -> the regression: held still releases
++	//  4 pm->worker  deferred, gated on 5   -> release does not walk past the gate
++	//  5 pm->worker  the open gate          -> never closed, so 4 stays unworkable
++	//  6 pm->worker  completed              -> a terminal row still refuses
++	await enqueueItem(tx, "pm", "worker", "Ship the widget", "details");
++	await enqueueItem(tx, "pm", "worker", "Ship the gadget", "details");
++	await enqueueItem(tx, "pm", "worker", "Hold and release me", "details");
++	// enqueueItem takes POSITIONAL args (optimizedVia, notice, tier, held, blockedBy, requires, block):
++	// the gate is the 10th, not an options object.
++	await enqueueItem(tx, "pm", "worker", "Gated row", "details", null, false, null, false, [5]);
++	await enqueueItem(tx, "pm", "worker", "The gate that is still open", "details");
++	await enqueueItem(tx, "pm", "worker", "The finished row", "details");
++}, ctx);
++
++const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
++const queue = async () => harness.snapshot(RigQueue, undefined, ctx);
++const item = async (id) => (await queue()).items.find((it) => it.id === id);
++
++let firstTurn = true;
++async function call(name, toolName, toolArgs) {
++	const batch = [
++		fauxAssistantMessage([fauxToolCall(toolName, toolArgs)], { stopReason: "toolUse" }),
++		fauxAssistantMessage(fauxText("ok")),
++	];
++	if (firstTurn) {
++		faux.setResponses(batch);
++		firstTurn = false;
++	} else {
++		faux.appendResponses(batch);
++	}
++	const c = await harness.conversation(roster[name].conversationId, ctx);
++	await (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
++}
++
++async function transcript(name) {
++	const c = await harness.conversation(roster[name].conversationId, ctx);
++	return (await c.entries({}, 200, undefined, ctx)).items.map((e) => JSON.stringify(e)).join("\n");
++}
++
++/* 1. THE SENDER CAN RELEASE A DEFERRED ROW. This is the gap: #5938, minted by lead, deferred, refused to lead. */
++await call("worker", "claim_work", { itemId: 2 });
++await call("worker", "defer_work", { itemId: 2, question: "Which gadget?", to: "pm" });
++assert.equal(
++	(await item(2)).status,
++	"deferred",
++	"the row is parked on the question before anyone releases it",
++);
++assert.equal((await item(2)).deferredTo, "pm", "and the resolver is named");
++
++await call("pm", "release_work", { itemId: 2 });
++const released = await item(2);
++assert.equal(released.status, "queued", "the sender released the deferred row back to queued");
++assert.equal(
++	released.deferredTo,
++	null,
++	"and the deferral fields go: a running row must not read as parked",
++);
++assert.equal(released.question, null, "the question leaves the row, it does not linger as a gate");
++const rel = released.transitions.at(-1);
++assert.equal(rel.event, "released", "the release is in the audit trail");
++assert.equal(rel.from, "deferred", "and it says WHICH parked state it came out of");
++assert.equal(
++	rel.question,
++	"Which gadget?",
++	"the question is preserved in the transition, not lost",
++);
++// The park census must not count it: before release it is a recorded park, after it is not parked at all.
++assert.equal(
++	parkOf(await item(2)).class,
++	"unattributed",
++	"the released row is no longer classified as parked",
++);
++
++/* 2. THE ROW IS STILL THE RECIPIENT'S TO CLAIM. Release is not a handover. */
++await call("worker", "claim_work", { itemId: 2 });
++assert.equal((await item(2)).status, "claimed", "the recipient claims it itself after the release");
++assert.match(
++	await transcript("worker"),
++	/ITEM #2 \| from=pm \| subject=Ship the gadget \| status=claimed/,
++	"and the claim header names the row it took",
++);
++await call("worker", "complete_work", { itemId: 2, resultSummary: "gadget shipped" });
++
++/* 3. NEGATIVE CONTROL: the authority did not widen to any seat. A third seat is still refused. */
++await call("worker", "claim_work", { itemId: 1 });
++await call("worker", "defer_work", { itemId: 1, question: "Is the spec settled?" });
++assert.equal(
++	(await item(1)).deferredTo,
++	DEFERRED_TO_NOBODY,
++	"a no-target deferral records that nobody was asked",
++);
++const beforeIntruder = (await item(1)).status;
++await call("intruder", "release_work", { itemId: 1 });
++assert.equal(
++	(await item(1)).status,
++	beforeIntruder,
++	"a seat that neither sent nor received the row changes NOTHING",
++);
++assert.match(
++	await transcript("intruder"),
++	/only the sender or recipient may release it/,
++	"and is refused by name — if this case succeeded, the authority would be too broad, which is the defect",
++);
++
++/* 4. The RECIPIENT may also release its own deferred row (same authority rule, other side of it). */
++await call("worker", "release_work", { itemId: 1 });
++assert.equal((await item(1)).status, "queued", "the recipient can un-park its own deferral");
++assert.equal((await item(1)).deferredTo, null, "and the deferral target is cleared with it");
++await call("worker", "claim_work", { itemId: 1 });
++await call("worker", "complete_work", { itemId: 1, resultSummary: "widget shipped" });
++
++/* 5. REGRESSION: held rows still release, and the refusal now names both parked states. */
++await call("worker", "claim_work", { itemId: 3 });
++await call("worker", "hold_work", { itemId: 3, reason: "awaiting upstream" });
++assert.equal((await item(3)).status, "held", "hold_work parks it");
++await call("pm", "release_work", { itemId: 3 });
++assert.equal((await item(3)).status, "queued", "release_work still restores a held row");
++assert.equal(
++	(await item(3)).transitions.at(-1).from,
++	"held",
++	"the transition records where it came from",
++);
++await call("worker", "claim_work", { itemId: 3 });
++await call("worker", "complete_work", { itemId: 3, resultSummary: "released and done" });
++await call("worker", "claim_work", { itemId: 6 });
++await call("worker", "complete_work", { itemId: 6, resultSummary: "done" });
++await call("worker", "release_work", { itemId: 6 });
++assert.match(
++	await transcript("worker"),
++	/is already done \(terminal\); there is nothing to release/,
++	"terminality is checked before the parked-state check, so a closed row is never described as releasable",
++);
++assert.equal((await item(6)).status, "done", "and nothing changed");
++
++/* 6. RELEASING DOES NOT WALK PAST A GATE. Row 4 is deferred and gated on row 5, which is still open. */
++await call("worker", "claim_work", { itemId: 4 });
++await call("worker", "defer_work", { itemId: 4, question: "Ready?" });
++await call("pm", "release_work", { itemId: 4 });
++assert.equal((await item(4)).status, "queued", "the release took effect");
++// Everything addressed to worker except #4 and #5 is now terminal, so this claim runs the
++// oldest-workable scan and must pass OVER #4: the release changed its status, not its gate.
++await call("worker", "claim_work", {});
++assert.match(
++	await transcript("worker"),
++	/SKIPPED \(addressed to you, not workable yet\): #4 \(gate-open:#5\(queued\)\)/,
++	"wake selection still refuses the gated row - releasing it did not walk past the gate",
++);
++assert.equal((await item(4)).status, "queued", "and it stays queued, unclaimed");
++assert.equal(
++	(await item(5)).status,
++	"claimed",
++	"the claim went to the ungated row behind it instead",
++);
++
++await harness.close(ctx);
++console.log(
++	"RELEASE-DEFERRED-ROW TEST PASS (#6164): a deferred row releases to queued for its sender and its recipient, a third seat is refused, the deferral fields are cleared so the park census cannot count a running row as parked, held rows still release, and an unmet blockedBy gate keeps the released row unworkable",
++);
++process.exit(0);
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 1a5e0c26..2461d536 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -69,6 +69,7 @@
+       "demo/ratchet.test.mjs",
+       "demo/rearmclaim.test.mjs",
+       "demo/refresh.test.mjs",
++      "demo/release-deferred-row.test.mjs",
+       "demo/release-terminal-first.test.mjs",
+       "demo/repeat-call.test.mjs",
+       "demo/reset.test.mjs",
+--- docs/WORK-ITEM-SCHEMA.md (7 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/WORK-ITEM-SCHEMA.md b/docs/WORK-ITEM-SCHEMA.md
+index 1e987c85..ed500429 100644
+--- a/docs/WORK-ITEM-SCHEMA.md
++++ b/docs/WORK-ITEM-SCHEMA.md
+@@ -107,7 +107,13 @@ Use the structured `kind` field with this **closed vocabulary**. Do not invent a
+ ### R4 — State lives in `status`, once
+ `queued → claimed → done|cancelled`, with `held` and `deferred` as parked states. A title never restates
+ it (R2). A `held` item is not claimable; a `deferred` item is waiting on an answer, and the answer is owed
+-by the named party.
++by the named party. Both parked states have the same exit: `release_work` restores a `held` **or**
++`deferred` row to `queued` (#6164), and only for the sender or the recipient. Before that, a `deferred` row
++was reachable only by the seat that parked it, via `resume_work`, so a row whose answer had already arrived
++could not be un-parked by anyone else — the coordinator's only lever was cancel-and-re-issue, which mints a
++new id and orphans every gate that named the old one. Releasing clears `deferredTo` and `question` (the
++question is kept in `transitions`), so the park census cannot count a running row as parked; it does NOT
++bypass `blockedBy`.
+ 
+ ### R5 — Gates and links are structured
+ `blockedBy: [ids]` — a list; each entry must resolve to a terminal `done` (a `cancelled` gate is a
+--- docs/runbooks/README.md (2 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/README.md b/docs/runbooks/README.md
+index 6c0fb227..88053a39 100644
+--- a/docs/runbooks/README.md
++++ b/docs/runbooks/README.md
+@@ -191,6 +191,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
+ | [tracked-files-missing-on-disk.md](tracked-files-missing-on-disk.md) | `git status` shows tracked DELETIONS nobody made; a whole directory (e.g. `scripts/`) is empty on disk while the index and `HEAD` still hold it | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) §Umbrella rows are pointers, never gates | **a row can never be claimed** and the scan says `gate-cancelled:#<id>`; a dependent is stuck on a container row that was cancelled; you are about to `cancel_work` an umbrella whose children are all registered | no |
++| [stale-held-backlog.md](stale-held-backlog.md) §Do | a `deferred` row's answer has arrived but only the recipient can `resume_work` it; the coordinator's remaining lever is cancel-and-re-issue (#6164) | no |
+ | [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
+ | [attach-a-gate.md](attach-a-gate.md) | you know a row must wait on another row, but you are neither its sender nor its recipient, and every way of writing that gate is refused or silently dropped (`revise_work` with `blockedBy` drops the whole call, including the body edit riding in it) | no |
+ | [intent-stuck-in-inbox.md](intent-stuck-in-inbox.md) | a spooled intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; a command vanishes with no verdict and no diagnostic | no |
+@@ -246,6 +247,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
+ | Missing files on disk | tracked-files-missing-on-disk |
+ | Stranded submissions / settle | resume-while-broker-runs, broker-down-or-stalled |
+ | Queue / parked work | stale-held-backlog, block-shape-refused, attach-a-gate |
++| A parked row nobody can release: `held` or `deferred`, both exit through `release_work` | stale-held-backlog |
+ | An umbrella (container) row used as a `blockedBy` gate — `workable()`, `gate-cancelled`, `gate-open` | stale-held-backlog §Umbrella rows are pointers, never gates |
+ | The broker receive path: what may enforce, who may write the audit sink, and a refused intent that never leaves the spool | intent-stuck-in-inbox, broker-down-or-stalled |
+ | Who may change a row: intent vs gate vs disposition, and the mint-only gate write path | attach-a-gate, stale-held-backlog |
+--- docs/runbooks/compaction-acceptance-measure.md (39 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/compaction-acceptance-measure.md b/docs/runbooks/compaction-acceptance-measure.md
+index 746464a1..7b8af270 100644
+--- a/docs/runbooks/compaction-acceptance-measure.md
++++ b/docs/runbooks/compaction-acceptance-measure.md
+@@ -1,11 +1,11 @@
+ ---
+ runbook: compaction-acceptance-measure
+-symptom: "'truncated summaries dropped to zero' — but I need the number, not the claim"; "is the acceptance instrument still able to fail?"; "the 100-compaction run took half an hour and reported FAIL and I do not know why"
++symptom: "'truncated summaries dropped to zero' — but I need the number, not the claim"; "is the acceptance instrument still able to fail?"; "the 100-compaction run took half an hour and reported FAIL and I do not know why"; "the 100/0 acceptance number and the fleet's 52/0 number are being quoted as one number"
+ writes: false
+ precondition: "read-only against the store you point it at; the LIVE tranche needs the broker stopped"
+ last_verified: 2026-11-10
+ verified_by: devtools
+-evidence: "#6131 (tools/compaction-acceptance.mjs, branch item-6131); measured in that tree, pi-durable 1.5.1 built-pin, node v24.22.1, Linux kernel 7.2.15-300.fc45.x86_64: seed 0.99 s exit 0; armed 1.02 s exit 0 (100 tasks, 100 summaries placed, 0 truncated, 0 summariser requests); negative control 0.4 s exit 0 (9 truncated == 9 summariser requests); inverse control exit 1 (0 truncated, 9 summaries placed); live store with the broker resident: exit 1, 70 of 100 tasks settled, 1809.7 s"
++evidence: "#6131 (tools/compaction-acceptance.mjs, branch item-6131); measured in that tree, pi-durable 1.5.1 built-pin, node v24.22.1, Linux kernel 7.2.15-300.fc45.x86_64: seed 0.99 s exit 0; armed 1.02 s exit 0 (100 tasks, 100 summaries placed, 0 truncated, 0 summariser requests); negative control 0.4 s exit 0 (9 truncated == 9 summariser requests); inverse control exit 1 (0 truncated, 9 summaries placed); live store with the broker resident: exit 1, 70 of 100 tasks settled, 1809.7 s. **Re-measured 2026-11-10 by devtools on branch item-6162 (tree 410003154057, pi-durable 1.5.1 built-pin after `sync-pi --sync` + `--link`, node v24.22.1): seed exit 0 (120 tasks, 68 markers, 0 truncated, 0.9 s); armed with the inline control exit 0 (driven 100 tasks, 100 markers, 0 truncated, 0.8 s; control 12 tasks, 9 truncated == 9 summariser requests); standalone control exit 0 (9 truncated); inverse control exit 1; `--natural-only` against the live store exit 0 (52 natural compactions since 2026-11-10T00:13:44.045Z, 0 truncated, 52 summaries placed, 52 continuity-note, 52 digest); `node demo/compaction-acceptance-gate.test.mjs` exit 0 in 2576 ms; and the RED leg: copy the control snapshot, `update tasks set record=json_set(record,'$.input.instructions',null)` to strip the instrument label (132 rows), run `--natural-only` → exit 1 with `WARNING: 7 NATURAL summaries truncated`, which is what proves the NATURAL block is a measurement and not a constant."
+ check_rule: null
+ ---
+ 
+@@ -36,12 +36,44 @@ node tools/compaction-acceptance.mjs --db ./selfdev.sqlite --copyDir .spike/acce
+ node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance --target 100 --mode armed
+ node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-ctl --target 12 --mode control --stopReason length
+ node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-inv --target 12 --mode control --stopReason stop
++node tools/compaction-acceptance.mjs --db ./selfdev.sqlite --copyDir .spike/acceptance-nat --natural-only
+ ```
+ 
++`--natural-only` drives nothing: it opens no tranche and reports only the NATURAL block against the store named by
++`--db`. A driven tranche on a live store needs the broker stopped and takes tens of minutes; the fleet number
++needs neither.
++
+ Every run prints `PROVENANCE tree=<sha> branch=… pi-durable=… dependencySet=…` and names the snapshot file it
+ counted. **A number without that line is not a measurement**: an item worktree without `sync-pi --link` resolves
+ pi-durable 1.3.0 from the lockfile while the live store was written by 1.5.1, and the two do not agree.
+ 
++## The report is three blocks, and they are not one number (#6162)
++
++`100/0` and `52/0` answered different questions, and before #6162 nothing in the output kept them apart. Every
++run now prints, in order:
++
++- **DRIVEN** — compactions this instrument forced on a snapshot copy: mode, target, tasks, truncations, wall
++  clock, the copy it counted **and its sha256**. It proves the harness *can* place 100 summaries without
++  truncating. It says nothing about what the fleet does.
++- **NEGATIVE CONTROL** — printed beside the driven number, run in the same invocation by default: a
++  `stopReason=length` tranche that reproduces a non-zero truncation. If it is skipped (`--noControl`) the report
++  says so in words, because a 0 with no control beside it is not evidence.
++- **NATURAL** — compactions the seats actually ran, read from the store named by `--db`, counted from a
++  boundary the report names (the first note-backed summary in that store, or `--since <ISO>` if you give one),
++  broken out **per seat**, with the summaries placed and what backed them.
++
++The exclusion that makes the NATURAL block mean anything: every compaction this instrument creates carries the
++instruction text `durig acceptance tranche (#6162)`, and the natural query drops those tasks and prints how many
++it dropped. Without that, running against a snapshot this instrument wrote would report its own driven
++compactions as fleet behaviour.
++
++Truncations are counted from the **error field** of the task outcome
++(`json_extract(record,'$.state.outcome.error.message') like 'Summarization hit the token limit%'`), not from a
++loose `record like`. On the live store both come to 219 (all before the arming date), so the tightening changed
++nothing there — but a summary ENTRY can quote the phrase (a seat's transcript describing a probe matched 1 such
++entry), and an entry-based count would call that a truncation. Say which field you counted.
++
++
+ ## Verify (all four exit codes were run, 2026-11-10, branch item-6131)
+ 
+ | tranche | expected | measured |
+@@ -50,6 +82,8 @@ pi-durable 1.3.0 from the lockfile while the live store was written by 1.5.1, an
+ | **positive** (armed, 100) | exit 0, 100 tasks, **0 truncated**, **0 summariser requests** | 1.02 s, exit 0, 100 tasks, 100 markers, 0 truncated, 0 requests |
+ | **negative control** (control, `stopReason=length`) | exit 0, truncated **> 0** and equal to the summariser-request count | 0.4 s, exit 0, 9 truncated == 9 requests, 0 summaries placed |
+ | **inverse control** (control, `stopReason=stop`) | exit **1**, 0 truncated | exit 1, 0 truncated, 9 summaries placed |
++| **natural-only** (live store, `--natural-only`) | exit 0, natural count > 0, truncated 0 | exit 0, 52 natural compactions since 2026-11-10T00:13:44.045Z, 0 truncated, 52 summaries placed (52 note-backed, 52 digest-backed), 8 seats |
++| **natural RED leg** (control snapshot with the instrument label stripped) | exit **1**, natural truncated > 0 | exit 1, 132 rows stripped, `WARNING: 7 NATURAL summaries truncated` |
+ 
+ The suite runs the same three halves against a fixture store it builds itself:
+ `node demo/compaction-acceptance-gate.test.mjs` (2.4 s, exit 0). That is the gate; `tools/compaction-acceptance.mjs`
+@@ -62,6 +96,14 @@ is the instrument the gate wraps, and its exit code is not the pre-landing gate.
+ - **Markers placed = 0 in the positive tranche** — the store you seeded has no conversation deep enough to cut
+   (`keepRecentTokens = 20000`; a growth turn is ~1,150 tokens, so ~18 turns are needed per seat before a cut
+   exists). Re-run the seed with a larger `--target`, or point `--db` at a store with real seat history.
++- **The NATURAL number equals the DRIVEN number** — the label exclusion is not firing. Check that the run
++  printed `compactions created by this instrument ... EXCLUDED from the natural count: N`; if it printed no such
++  line and the store you pointed `--db` at is a snapshot this instrument wrote, the two claims have merged and
++  the natural figure is meaningless.
++- **The NATURAL block never moves** — prove it can go red: copy a control-run snapshot, strip the label with
++  `update tasks set record = json_set(record, '$.input.instructions', null) where kind = '"pi.compaction"' and
++  json_extract(record, '$.input.instructions') like '%acceptance tranche%'`, then run `--natural-only`. Exit 1
++  with a truncation count is the expected result; exit 0 means the block is a constant.
+ - **The live tranche stalls** ("growth turn did not settle within 20000 ms", ~30 min wall clock, exit 1): the
+   snapshot was taken while a broker was mid-turn, so the copy carries in-flight tasks (docs/SELFDEV.md pitfall 223).
+   Stop the broker (`kill -INT <pid>`, see `docs/runbooks/broker-down-or-stalled.md`) and re-run, or use the fixture
+@@ -72,4 +114,5 @@ pm, if the negative control stops firing or if the live tranche is the only way
+ broker cannot be stopped inside the measurement window.
+ 
+ ## Evidence
+-#6131 (promotion) and #6128 (the suite wrapper), branch `item-6131`, measured 2026-11-10 in that tree.
++#6131 (promotion), #6128 (the suite wrapper) and #6162 (the three-block report, the driven/natural exclusion and
++the natural RED leg), measured 2026-11-10 on branch `item-6162` in that worktree.
+--- docs/runbooks/stale-held-backlog.md (19 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/stale-held-backlog.md b/docs/runbooks/stale-held-backlog.md
+index 4befa1fa..899aa78e 100644
+--- a/docs/runbooks/stale-held-backlog.md
++++ b/docs/runbooks/stale-held-backlog.md
+@@ -1,6 +1,6 @@
+ ---
+ runbook: stale-held-backlog
+-symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so; ALSO: a queued row can NEVER be claimed and the scan says `gate-cancelled:#<id>""
++symptom: "an effort has stopped progressing with nothing broken: held rows sit unreleased after their gates finished, and nothing in status/attention says so; ALSO: a queued row can NEVER be claimed and the scan says `gate-cancelled:#<id>`; ALSO: a row DEFERRED on a question whose answer already exists cannot be released by anyone but the seat that parked it""
+ writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
+ precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
+ last_verified: 2026-11-10        # the tool below was run against the live store; see Evidence
+@@ -113,7 +113,13 @@ to `pm`; `pm` issues the transition. For each candidate:
+    legitimately gated on the operator (`#994` quiet window), a provider, or a roadmap intent that merely
+    cites a terminal item.
+ 2. **Decide the correct action:**
+-   - gate cleared, still right to do → `release_work(<id>)` (sender or recipient);
++   - gate cleared, still right to do → `release_work(<id>)` (sender or recipient). As of #6164 this verb
++     un-parks a **deferred** row as well as a held one — before it, a `deferred` row had exactly one exit,
++     `resume_work`, which belongs to the recipient, so a coordinator holding the answer had no path at all
++     (live: pm on #5931/#5933/#5936/#5939 and lead on its own #5938, all refused);
++   - **do not** reach for `cancel_work` + re-issue as the routine. Cancelling and re-issuing works, but it
++     mints a new id, orphans every `blockedBy` that named the old one, and is the mechanism behind the
++     #3747/#3863 starvation shape. It is the fallback for a row that is genuinely no longer worth doing;
+    - no longer worth doing → `cancel_work(<id>, reason)`;
+    - genuinely still blocked → leave it, but ask `pm` to record `blockedBy` so it is queryable
+      ([`WORK-ITEM-SCHEMA.md`](../WORK-ITEM-SCHEMA.md) R5) rather than prose.
+@@ -212,6 +218,19 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore
+ 
+   Its assertion reads `a gate on a CANCELLED item is NOT workable (terminal != done)` and
+   `...reason is gate-cancelled` (`demo/workable-claim.test.mjs:74-75`).
++- **A deferred row can be released, and the authority did not widen** (#6164, run 2026-11-10, exit 0):
++
++  ```bash
++  node demo/release-deferred-row.test.mjs; echo "exit=$?"   # exit 0
++  ```
++
++  Six legs, and the two that make it a test rather than a demo: a **third** seat (neither sender nor
++  recipient) calling `release_work` on a deferred row is refused and changes nothing — if that case
++  passed, the authority is too broad and that is the defect; and releasing a row gated on a still-live
++  item leaves it `queued` but unworkable, so wake selection still reports `gate-open:#5`. Falsifier,
++  actually run (2026-11-10): restoring `if (item.status !== "held")` in the `release_work` handler of
++  `src/rig.mjs` makes the demo exit 1 on "the sender released the deferred row back to queued";
++  restoring `held || deferred` returns it to exit 0.
+ - **The entry is reachable from the symptom index, not only from the rule text** (run 2026-11-10, exit 0):
+ 
+   ```bash
+@@ -248,6 +267,8 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore
+ ## Evidence
+ 
+ - Incident: `docs/incidents/2026-10-19-held-rows-orphaned-by-cleared-gates.md`.
++- #6164 (the `release_work` widening onto `deferred` rows, `src/rig.mjs`, pinned by
++  `demo/release-deferred-row.test.mjs`; the third-seat refusal is the negative control).
+ - Live audit (2026-10-19): 153 `held`, 113 to `impl`, median ~16 h, 49 >24 h, ~51 orphan candidates.
+ - The intent that unstuck the durable-TUI chain:
+   `selfdev.sqlite.broker.inbox.out/operator-durable-tui-unblock-2026-10-19-1.json` (`delivered:true`).
+--- src/rig.mjs (25 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/rig.mjs b/src/rig.mjs
+index 1dbc5c7f..083b9e24 100644
+--- a/src/rig.mjs
++++ b/src/rig.mjs
+@@ -1257,7 +1257,8 @@ const Router = defineExtension({
+ 		defineTool({
+ 			name: "release_work",
+ 			description:
+-				"Restore a held item to queued, so the driver can re-wake the seat. The recipient may release an item addressed to it; the SENDER may release a held item it created (e.g. a parked backlog registration).",
++				"Restore a held item to queued, so the driver can re-wake the seat. The recipient may release an item addressed to it; the SENDER may release a held item it created (e.g. a parked backlog registration). " +
++				"A DEFERRED row can be released the same way (#6164): a row parked on a question whose answer already exists is otherwise reachable only by its recipient through resume_work, so every coordinator's only lever was cancel-and-re-issue - a new id that orphans every gate naming the old one. The authority is NOT broadened: sender or recipient only. Releasing is not a handover - the recipient still has to claim it, and wake selection still runs `workable()`, so an unmet `blockedBy` gate keeps the row un-wakeable after release.",
+ 			parameters: obj({ itemId: num() }),
+ 			replay: "safe",
+ 			execute: async (args, api, context) => {
+@@ -1276,18 +1277,39 @@ const Router = defineExtension({
+ 						return `item #${args.itemId} is already ${item.status} (terminal); there is nothing to release`;
+ 					if (item.to !== me && item.from !== me)
+ 						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender or recipient may release it`;
+-					if (item.status !== "held")
+-						return `item #${args.itemId} is not held (status=${item.status})`;
++					// #6164: `held` was the only state this verb could undo. A DEFERRED row is parked too, but
++					// its only exit was `resume_work`, which belongs to the RECIPIENT — pm tested #5931, #5933,
++					// #5936, #5939 (all `deferredTo: human`, all parked on a question whose answer existed) and
++					// every one answered "not held (status=deferred)"; lead got the identical refusal on #5938,
++					// a row it minted itself. So the row sat as unstarted work while the answer was already known,
++					// and the remaining lever was cancel-and-re-issue, which mints a new id and orphans every gate
++					// naming the old one (the #3747/#3863 starvation shape). Widened STATES, not AUTHORITY: the
++					// sender-or-recipient check above is unchanged, and a release is not a claim - `workable()`
++					// still gates wake selection on `blockedBy`.
++					if (item.status !== "held" && item.status !== "deferred")
++						return `item #${args.itemId} is not parked (status=${item.status}); release_work restores a held or deferred row to queued`;
++					const wasDeferred = item.status === "deferred";
+ 					item.status = "queued";
+ 					// #6150: a released row is no longer parked, so its park record goes — leaving a stale
+-					// `park` behind would make a metric count a running row as parked.
++					// `park` behind would make a metric count a running row as parked. The deferral's own fields
++					// go for the same reason: `deferredTo`/`question` on a QUEUED row would make the gate census
++					// read a running row as parked. The question is not lost - it is in the transition.
+ 					item.park = null;
+ 					item.transitions.push({
+ 						at: new Date().toISOString(),
+ 						event: "released",
+ 						by: me,
++						from: wasDeferred ? "deferred" : "held",
++						question: wasDeferred ? item.question ?? null : null,
++						resolverWas: wasDeferred ? item.deferredTo ?? null : null,
+ 					});
+-					return `item #${item.id} released back to queued.`;
++					if (wasDeferred) {
++						item.question = null;
++						item.deferredTo = null;
++					}
++					return wasDeferred
++						? `item #${item.id} released from its deferral back to queued; ${item.to} must claim it, and any unmet blockedBy gate still refuses that claim.`
++						: `item #${item.id} released back to queued.`;
+ 				}, context);
+ 				return toolText(out);
+ 			},
+--- tools/compaction-acceptance.mjs (490 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/tools/compaction-acceptance.mjs b/tools/compaction-acceptance.mjs
+index f4a250ef..69a9fa65 100644
+--- a/tools/compaction-acceptance.mjs
++++ b/tools/compaction-acceptance.mjs
+@@ -1,11 +1,12 @@
++#!/usr/bin/env node
+ // tools/compaction-acceptance.mjs — the N18 acceptance measurement (ROADMAP 331: "truncated summaries
+ // drop to zero over 100 compactions").
+ //
+-// WHY this exists: the milestone gate counts NATURAL compactions in the live store, and only 1 has
++// WHY this exists: the milestone gate counts NATURAL compactions in the live store, and only a handful have
+ // happened since the continuity extension was armed. 100 natural seat compactions cannot happen in one
+-// session, so this driver drives 100 compactions on a SNAPSHOT COPY of a store and counts the outcomes
+-// the harness actually wrote. The store it is pointed at is never opened for write - the copy is made
+-// with SQLite's own backup API.
++// session, so this driver drives 100 compactions on a SNAPSHOT COPY of a store and counts the outcomes the
++// harness actually wrote. The store it is pointed at is never opened for write - the copy is made with
++// SQLite's own backup API.
+ //
+ // PROVENANCE OF THIS FILE: written in gitignored `.spike/` during the 2026-11-09/10 delegate session, then
+ // preserved in the tracked tree, then promoted to `tools/` by #6131. An instrument that lives only in
+@@ -16,6 +17,16 @@
+ // against a fixture store the suite builds; the recurring numbers come from that demo, and this file is
+ // what you run when you want the measurement against a real store.
+ //
++// #6162 — THE REPORT HAS THREE BLOCKS AND THEY ARE NEVER MERGED.
++//   DRIVEN  = compactions WE forced on a snapshot copy. It proves the harness can place 100 summaries
++//             without truncating. It says NOTHING about what the fleet experiences.
++//   NATURAL = compactions the seats actually ran in the live store since the mechanism was armed.
++//   CONTROL = the negative control, printed beside the driven number: the same counter, shown counting a
++//             non-zero. A 0 with no control next to it is not evidence.
++// Before #6162 the driven and natural figures both appeared as bare "compactions: N, truncated: 0" lines
++// and got quoted as one number (D240 could not be closed honestly). The blocks are labelled, each names
++// its own store, and the NATURAL block names the boundary it counted from.
++//
+ // Tranches (no key, no network, no spend - the "model" is the in-process faux provider):
+ //   --mode armed   extensions/continuity.mjs installed: beforeCompact supplies the summary, so pi-durable
+ //                  never builds a summariser request (dist/harness/compaction.js:82-89 -> place() :374).
+@@ -30,12 +41,13 @@
+ // placing nothing at all):
+ //   node tools/compaction-acceptance.mjs --db ./selfdev.sqlite --copyDir .spike/acceptance-seed --target 120 --mode armed
+ //   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance --target 100 --mode armed
+-//   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-ctl --target 12 --mode control --stopReason length
++//   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-ctl --target 12 --mode control --stopReason length   # --noControl makes the instrument run this itself, beside the driven number
+ //   node tools/compaction-acceptance.mjs --db .spike/acceptance-seed/acceptance-snapshot.sqlite --copyDir .spike/acceptance-inv --target 12 --mode control --stopReason stop   # exits 1, by design
+ //
+-// Exit 0 when the armed tranche placed >= target compactions with 0 truncated summaries, or when the
+-// control tranche reproduced the truncation it is meant to reproduce. Everything printed names the TREE
+-// and the STORE SNAPSHOT it counted, because a number without its tree is not a measurement.
++// Exit 0 when the armed tranche placed >= target compactions with 0 truncated summaries AND its negative
++// control reproduced a non-zero truncation, or when the control tranche reproduced the truncation it is
++// meant to reproduce. Everything printed names the TREE and the STORE SNAPSHOT it counted, because a
++// number without its tree is not a measurement.
+ //
+ // MEASURED, this tree (#6131, branch item-6131, pi-durable 1.5.1 built-pin, node v24.22.1, Linux):
+ //   seed+armed fixture  -> exit 0, 100 tasks, 100 summaries placed, 0 truncated, 0 summariser requests, 1.4 s
+@@ -47,7 +59,16 @@
+ //   the broker stopped, and the number it produces is not comparable to the fixture number.
+ 
+ import { execFileSync } from "node:child_process";
+-import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
++import { createHash } from "node:crypto";
++import {
++	closeSync,
++	existsSync,
++	mkdirSync,
++	openSync,
++	readFileSync,
++	readSync,
++	realpathSync,
++} from "node:fs";
+ import { dirname, join, resolve } from "node:path";
+ import os from "node:os";
+ import { fileURLToPath, pathToFileURL } from "node:url";
+@@ -58,6 +79,7 @@ import { createModels } from "@earendil-works/pi-ai/models";
+ import { fauxAssistantMessage, fauxProvider, fauxText } from "@earendil-works/pi-ai/providers/faux";
+ import { CompactionEntry, configure, createRegistry, Harness } from "@earendil-works/pi-durable";
+ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
++
+ const HERE = fileURLToPath(import.meta.url);
+ // Walk up to the repository root so the instrument runs from any depth (docs/evidence/... or tools/).
+ let ROOT = dirname(HERE);
+@@ -72,15 +94,30 @@ const arg = (name, dflt) => {
+ 	const i = args.indexOf(`--${name}`);
+ 	return i >= 0 ? args[i + 1] : dflt;
+ };
++const has = (name) => args.includes(`--${name}`);
+ const TARGET = Number(arg("target", "100"));
+ const MODE = arg("mode", "armed");
+ const STOP_REASON = arg("stopReason", "stop");
+ const LIVE_DB = resolve(arg("db", join(ROOT, "selfdev.sqlite"))); // an absolute --db is used as given
+ const COPY_DIR = resolve(arg("copyDir", join(ROOT, ".spike", "acceptance")));
+-const COPY_DB = join(COPY_DIR, "acceptance-snapshot.sqlite");
++const CONTROL_TARGET = Number(arg("controlTarget", "12"));
++// #6162: the negative control runs beside the driven number by default. `--noControl` skips it - and the
++// report then says so, because a driven 0 without a control is not evidence.
++const NATURAL_ONLY = has("natural-only");
++// The negative control rides with the driven number: without it, a 0 is an absence, not a measurement.
++// It is meaningless when nothing was driven.
++const WITH_CONTROL = MODE === "armed" && !NATURAL_ONLY && !has("noControl");
++// The natural window. `--since <ISO>` overrides; otherwise the boundary is DERIVED from the store (the
++// first note-backed summary the mechanism produced), and the report prints the derived date.
++const SINCE = arg("since") ? Date.parse(arg("since")) : null;
++const WAIT_BOUND_MS = Number(arg("waitBoundMs", "20000"));
++// Every compaction this instrument creates carries this instruction text. It is what tells the DRIVEN
++// number apart from the NATURAL one when the store being measured is itself a snapshot this instrument
++// wrote: without it, 100 driven compactions get reported as 100 fleet compactions.
++const TRANCHE_LABEL = "durig acceptance tranche (#6162)";
+ 
+ const t0 = Date.now();
+-const secs = () => ((Date.now() - t0) / 1000).toFixed(1);
++const secs = (from = t0) => ((Date.now() - from) / 1000).toFixed(1);
+ 
+ /* ---- 0. PROVENANCE: name the tree and the snapshot BEFORE any number is printed ---- */
+ const git = (...a) => {
+@@ -92,37 +129,71 @@ const git = (...a) => {
+ };
+ const TREE = git("rev-parse", "HEAD");
+ const BRANCH = git("rev-parse", "--abbrev-ref", "HEAD");
+-const dirtyPaths = git("status", "--porcelain").split("\n").filter((l) => l.trim()).length;
++const dirtyPaths = git("status", "--porcelain")
++	.split("\n")
++	.filter((l) => l.trim()).length;
+ const pkgDir = realpathSync(join(ROOT, "node_modules", "@earendil-works", "pi-durable"));
+ const dependencySet = pkgDir.includes(join("vendor", "pi-main")) ? "built-pin" : "lockfile";
+ const piDurableVersion = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")).version;
+-console.log(
+-	`PROVENANCE tree=${TREE.slice(0, 12)} branch=${BRANCH} uncommittedPaths=${dirtyPaths} node=${process.version} host=${process.platform} ${os.release()} pi-durable=${piDurableVersion} dependencySet=${dependencySet}`,
+-);
+-console.log(`store read (NEVER opened for write): ${LIVE_DB}`);
+-console.log(`snapshot the numbers are counted from: ${COPY_DB}`);
++
++// The truncation marker is the harness's own failure text (dist/harness/compaction.js:288). Read it from
++// the ERROR FIELD of the task outcome, not from `record like '%hit the token limit%'`: a summary entry
++// can QUOTE that phrase (a seat's transcript describing a probe) and a loose `like` counts the quote as a
++// truncation. Measured on the live store 2026-11-10: the loose pattern matched 1 natural compaction entry
++// whose text was a quoted tool call, while the error-field extraction matched 0. That is the difference
++// between a zero that is true and a zero that is lucky.
++const TRUNCATED_SQL =
++	"json_extract(record,'$.state.outcome.error.message') like 'Summarization hit the token limit%'";
+ 
+ /* ---- 1. snapshot: the live store is read through SQLite's own backup API, never opened for write ---- */
+-mkdirSync(COPY_DIR, { recursive: true });
+-execFileSync("python3", ["-c", `
++function backup(src, dst) {
++	mkdirSync(dirname(dst), { recursive: true });
++	execFileSync("python3", [
++		"-c",
++		`
+ import sqlite3
+-src = sqlite3.connect(${JSON.stringify(LIVE_DB)})
+-dst = sqlite3.connect(${JSON.stringify(COPY_DB)})
+-src.backup(dst)
+-dst.close(); src.close()
+-`]);
+-console.log(`snapshot -> ${COPY_DB} (${secs()} s). The live store was never opened for write.`);
+-// max(id) is NULL on an empty store, and `id > NULL` matches nothing in SQLite: a snapshot taken from a
+-// store with no entries would then count zero summaries placed and still report "0 truncated" - a green
+-// that measured nothing. Coerce to 0 so the tranche's own entries are counted.
+-const baseline = new DatabaseSync(COPY_DB, { readOnly: true }).prepare("select max(id) m from entries").get().m ?? 0;
++s = sqlite3.connect(${JSON.stringify(src)})
++d = sqlite3.connect(${JSON.stringify(dst)})
++s.backup(d)
++d.close(); s.close()
++`,
++	]);
++}
++function sha256(path) {
++	// Read in chunks: a live rig store is hundreds of MB and must not be held whole.
++	const h = createHash("sha256");
++	const fd = openSync(path, "r");
++	const buf = Buffer.alloc(1 << 20);
++	try {
++		for (;;) {
++			const n = readSync(fd, buf, 0, buf.length);
++			if (n === 0) break;
++			h.update(buf.subarray(0, n));
++		}
++	} finally {
++		closeSync(fd);
++	}
++	return h.digest("hex").slice(0, 12);
++}
+ 
+ /* ---- 2. the seat compaction policy, read from the rig's own config ---- */
+ // `durig.config.json` is the operator's local config and is gitignored: a scratch worktree (the landing
+ // gate runs the suite in one) has only `durig.config.default.json`. Fall back rather than crash, and say
+ // which file the policy came from so the number can be attributed to a tree.
+-const CONFIG_FILE = existsSync(join(ROOT, "durig.config.json")) ? "durig.config.json" : "durig.config.default.json";
+-const cfg = JSON.parse(execFileSync("node", ["-e", "process.stdout.write(require('fs').readFileSync(process.argv[1],'utf8'))", join(ROOT, CONFIG_FILE)], { encoding: "utf8" }));
++const CONFIG_FILE = existsSync(join(ROOT, "durig.config.json"))
++	? "durig.config.json"
++	: "durig.config.default.json";
++const cfg = JSON.parse(
++	execFileSync(
++		"node",
++		[
++			"-e",
++			"process.stdout.write(require('fs').readFileSync(process.argv[1],'utf8'))",
++			join(ROOT, CONFIG_FILE),
++		],
++		{ encoding: "utf8" },
++	),
++);
+ const overrides = cfg.DURIG_COMPACTION_MODEL_OVERRIDES ?? {};
+ const localPolicy = overrides["local/*"] ?? {};
+ const SETTINGS = {
+@@ -133,112 +204,460 @@ const SETTINGS = {
+ 		backgroundTokens: Number(localPolicy.backgroundTokens ?? 32768),
+ 	},
+ };
+-console.log(`policy used: ${JSON.stringify(SETTINGS.compaction)} (from ${CONFIG_FILE}; pi-durable defaults 16384/20000/32768)`);
+-
+-/* ---- 3. open the copy; arm or not arm the extension ---- */
+-const storage = await openNodeSqliteStorage(COPY_DB);
+-const rosterRec = await storage.findDocument({ kind: "durig.seats", scope: { kind: "session" } }, "current", ctx);
+-const roster = rosterRec ? (await storage.document(rosterRec.id, "current", ctx))?.value?.seats ?? {} : {};
+-const seatNames = Object.keys(roster);
+-console.log(`seats in the snapshot roster: ${seatNames.length}`);
+-
+-const faux = fauxProvider({ models: [{ id: "faux-seat", contextWindow: 204800 }] });
+-const models = createModels();
+-models.setProvider(faux.provider);
+-
+-const registry = createRegistry();
+-registry.install(Router);
+-if (MODE === "armed") {
+-	const loaded = await loadExtensions(["extensions/continuity.mjs"], { cwd: ROOT });
+-	if (!loaded[0]?.extension) {
+-		console.error("FAIL: the continuity extension did not load");
+-		process.exit(1);
++
++/* ---- 3. ONE TRANCHE: drive compactions on a copy, then count what the copy recorded ---- */
++async function runTranche({ mode, target, stopReason, copyDb, label }) {
++	const startedAt = Date.now();
++	// max(id) BEFORE anything is written. Taken after the run, `id > max(id)` matches nothing and the
++	// tranche reports 0 summaries placed - a green that measured nothing.
++	const baseline =
++		new DatabaseSync(copyDb, { readOnly: true }).prepare("select max(id) m from entries").get().m ??
++		0;
++	const storage = await openNodeSqliteStorage(copyDb);
++	const rosterRec = await storage.findDocument(
++		{ kind: "durig.seats", scope: { kind: "session" } },
++		"current",
++		ctx,
++	);
++	const roster = rosterRec
++		? ((await storage.document(rosterRec.id, "current", ctx))?.value?.seats ?? {})
++		: {};
++	const seatNames = Object.keys(roster);
++
++	const faux = fauxProvider({ models: [{ id: "faux-seat", contextWindow: 204800 }] });
++	const models = createModels();
++	models.setProvider(faux.provider);
++
++	const registry = createRegistry();
++	registry.install(Router);
++	if (mode === "armed") {
++		const loaded = await loadExtensions(["extensions/continuity.mjs"], { cwd: ROOT });
++		if (!loaded[0]?.extension) {
++			console.error("FAIL: the continuity extension did not load");
++			process.exit(1);
++		}
++		registry.install(loaded[0].extension);
+ 	}
+-	registry.install(loaded[0].extension);
+-	console.log(`extension installed: ${loaded[0].name}`);
+-} else {
+-	console.log(`control tranche: no extension; summariser reply stopReason=${STOP_REASON}`);
+-}
+ 
+-const harness = await Harness.open(storage, { models, registry, settings: SETTINGS }, ctx);
++	const harness = await Harness.open(storage, { models, registry, settings: SETTINGS }, ctx);
+ 
+-/* A snapshot taken while the broker has a seat mid-turn contains unsettled tasks. Unbounded waits on
+- * those hang the run (exit 13: unsettled top-level await, measured 2026-11-10), so every wait here is
+- * bounded and the unsettled ones are counted rather than trusted. */
+-const WAIT_BOUND_MS = Number(arg("waitBoundMs", "20000"));
+-const bounded = (p, label) => Promise.race([
+-	p,
+-	new Promise((res) => setTimeout(() => res({ __timeout: true, label }), WAIT_BOUND_MS)),
+-]);
+-
+-// +1 slack per seat: a snapshot taken while the broker is live can carry a conversation with an
+-// in-flight task, and that seat's submits park. Slack lets the tranche still reach the target.
+-const PER_SEAT = Math.ceil(TARGET / Math.max(1, seatNames.length)) + 1;
+-let attempted = 0;
+-let growthTurns = 0;
+-let unsettled = 0;
+-const samples = [];
+-
+-for (const seat of seatNames) {
+-	const convId = roster[seat]?.conversationId;
+-	if (convId == null) continue;
+-	const conv = await harness.conversation(convId, ctx);
+-	await harness.commit(async (tx) => {
+-		await configure(tx, convId, { model: { provider: "faux", modelId: "faux-seat" } });
+-	}, ctx);
+-	for (let i = 0; i < PER_SEAT && attempted < TARGET; i++) {
+-		attempted += 1;
+-		// Grow the visible context so a cut exists, then compact. One faux reply per provider request:
+-		// the growth turn, and (control only) the summariser request.
+-		faux.setResponses([
+-			fauxAssistantMessage(fauxText(`growth ${growthTurns++}`)),
+-			...(MODE === "control" ? [fauxAssistantMessage(fauxText("summarised the cut turns"), { stopReason: STOP_REASON })] : []),
++	// A snapshot taken while the broker has a seat mid-turn contains unsettled tasks. Unbounded waits on
++	// those hang the run (exit 13: unsettled top-level await, measured 2026-11-10), so every wait here is
++	// bounded and the unsettled ones are counted rather than trusted.
++	const bounded = (p, name) =>
++		Promise.race([
++			p,
++			new Promise((res) => setTimeout(() => res({ __timeout: true, label: name }), WAIT_BOUND_MS)),
+ 		]);
+-		let run = null;
+-		for (let retry = 0; retry < 2; retry++) {
+-			run = await bounded((await conv.submit({ type: "input", content: `acceptance growth turn ${attempted} ${"x".repeat(4000)}` }, ctx)).wait(ctx), "growth turn");
+-			if (!run.__timeout && run.status === "done") break;
+-		}
+-		if (run.__timeout) {
+-			samples.push(`seat ${seat}: growth turn did not settle within ${WAIT_BOUND_MS} ms (skipped, retried 2x)`);
+-			attempted -= 1;
+-			continue;
++
++	// +1 slack per seat: a snapshot taken while the broker is live can carry a conversation with an
++	// in-flight task, and that seat's submits park. Slack lets the tranche still reach the target.
++	const PER_SEAT = Math.ceil(target / Math.max(1, seatNames.length)) + 1;
++	let attempted = 0;
++	let growthTurns = 0;
++	let unsettled = 0;
++	const samples = [];
++
++	for (const seat of seatNames) {
++		const convId = roster[seat]?.conversationId;
++		if (convId == null) continue;
++		const conv = await harness.conversation(convId, ctx);
++		await harness.commit(async (tx) => {
++			await configure(tx, convId, { model: { provider: "faux", modelId: "faux-seat" } });
++		}, ctx);
++		for (let i = 0; i < PER_SEAT && attempted < target; i++) {
++			attempted += 1;
++			// Grow the visible context so a cut exists, then compact. One faux reply per provider request:
++			// the growth turn, and (control only) the summariser request.
++			faux.setResponses([
++				fauxAssistantMessage(fauxText(`growth ${growthTurns++}`)),
++				...(mode === "control"
++					? [fauxAssistantMessage(fauxText("summarised the cut turns"), { stopReason: stopReason })]
++					: []),
++			]);
++			let run = null;
++			for (let retry = 0; retry < 2; retry++) {
++				run = await bounded(
++					(
++						await conv.submit(
++							{ type: "input", content: `acceptance growth turn ${attempted} ${"x".repeat(4000)}` },
++							ctx,
++						)
++					).wait(ctx),
++					"growth turn",
++				);
++				if (!run.__timeout && run.status === "done") break;
++			}
++			if (run.__timeout) {
++				samples.push(
++					`seat ${seat}: growth turn did not settle within ${WAIT_BOUND_MS} ms (skipped, retried 2x)`,
++				);
++				attempted -= 1;
++				continue;
++			}
++			if (run.status !== "done") {
++				samples.push(`seat ${seat}: growth turn did not settle (${run.status})`);
++				attempted -= 1;
++				break;
++			}
++			const taskId = await conv.compact(TRANCHE_LABEL, ctx);
++			const settled = await bounded(harness.waitForTask(taskId, ctx), "compaction task");
++			if (settled.__timeout) unsettled += 1;
++			if (samples.length < 3)
++				samples.push(
++					`${seat}: ${JSON.stringify(settled?.state?.outcome ?? settled).slice(0, 160)}`,
++				);
+ 		}
+-		if (run.status !== "done") {
+-			samples.push(`seat ${seat}: growth turn did not settle (${run.status})`);
+-			attempted -= 1;
+-			break;
++		if (attempted >= target) break;
++	}
++	await harness.close(ctx);
++
++	// Count what the COPY recorded. max(id) is NULL on an empty store, and `id > NULL` matches nothing: a
++	// snapshot taken from a store with no entries would count zero summaries placed and still report "0
++	// truncated" - a green that measured nothing. Coerce to 0 so the tranche's own entries are counted.
++	const s = new DatabaseSync(copyDb, { readOnly: true });
++	const tasks = s
++		.prepare(
++			`select count(*) n,
++                sum(${TRUNCATED_SQL}) truncated,
++                sum(json_extract(record,'$.state.outcome.status')='completed') completed
++         from tasks where kind=? and json_extract(record,'$.startedAt') >= ?`,
++		)
++		.get('"pi.compaction"', startedAt);
++	const placed = s
++		.prepare(
++			"select id, record from entries where id > ? and json_extract(record,'$.kind')='pi.compaction'",
++		)
++		.all(baseline);
++	const noteBacked = placed.filter((e) => String(e.record).includes("CONTINUITY NOTE")).length;
++	const digestBacked = placed.filter((e) =>
++		String(e.record).includes("Deterministic digest of"),
++	).length;
++	// Entries that QUOTE the truncation phrase without being a truncation - the false-positive class the
++	// loose `record like` pattern used to count. Reported, not hidden.
++	const quotedNotTruncated = s
++		.prepare(
++			"select count(*) n from entries where id > ? and record like ? and json_extract(record,'$.kind') <> 'pi.compaction'",
++		)
++		.get(baseline, "%hit the token limit%").n;
++	s.close();
++
++	return {
++		mode,
++		target,
++		seatByConv: new Map(Object.entries(roster).map(([name, seat]) => [seat?.conversationId, name])),
++		stopReason,
++		tasks: tasks.n,
++		truncated: tasks.truncated ?? 0,
++		completed: tasks.completed ?? 0,
++		placed: placed.length,
++		noteBacked,
++		digestBacked,
++		quotedNotTruncated,
++		unsettled,
++		providerCalls: faux.state.callCount,
++		growthTurns: attempted,
++		summariserRequests: faux.state.callCount - attempted,
++		wall: secs(startedAt),
++		copyDb,
++		copySha: sha256(copyDb),
++		samples,
++		ok:
++			mode === "armed"
++				? tasks.n >= target && (tasks.truncated ?? 0) === 0
++				: (tasks.truncated ?? 0) > 0,
++	};
++}
++
++/* ---- 4. NATURAL: what the seats actually did, read from the LIVE store, never from the copy ---- */
++function measureNatural(dbPath, sinceMs, seatByConv) {
++	if (!existsSync(dbPath))
++		return { available: false, why: `no store at ${dbPath} - reading does not create one` };
++	let s;
++	try {
++		s = new DatabaseSync(dbPath, { readOnly: true });
++	} catch (e) {
++		return {
++			available: false,
++			why: `the store could not be opened for reading: ${e.message}`,
++		};
++	}
++	// A compaction this instrument created is not a fleet compaction. When --db points at a snapshot
++	// this instrument (or an earlier run of it) wrote, every compaction in it is driven, and reporting
++	// it as "natural" is exactly the conflation #6162 is about.
++	const naturalWhere = `t.kind = ? and json_extract(t.record,'$.startedAt') >= ?
++             and (json_extract(t.record,'$.input.instructions') is null
++                  or json_extract(t.record,'$.input.instructions') not like '%acceptance tranche%')`;
++	const NATURAL_PARAMS = (boundary) => ['"pi.compaction"', boundary];
++	// A summary is placed either through a write submission (conversation-owned compaction) or by
++	// appending to a busy conversation the generation owns (entryId). Both paths are counted; missing
++	// one under-counts, and an under-count reads as a clean mechanism.
++	const summaryJoin = `join entries e on e.id = coalesce(
++             (select json_extract(sub.record,'$.entry') from submissions sub
++               where sub.id = json_extract(t.record,'$.state.outcome.result.submissionId')),
++             json_extract(t.record,'$.state.outcome.result.entryId'))`;
++	try {
++		// Derive the arming boundary if the caller did not give one: the first note-backed summary the
++		// mechanism produced. Without a derivable boundary there is no natural window, and the honest
++		// answer is "not measurable yet", not "0 truncated".
++		let boundary = sinceMs;
++		let derived = "";
++		if (boundary == null) {
++			const firstNote = s
++				.prepare(
++					`select min(json_extract(t.record,'$.startedAt')) mn
++             from tasks t ${summaryJoin}
++             where t.kind=? and e.record like '%CONTINUITY NOTE%'
++               and (json_extract(t.record,'$.input.instructions') is null or json_extract(t.record,'$.input.instructions') <> ?)`,
++				)
++				.get('"pi.compaction"', TRANCHE_LABEL);
++			if (firstNote?.mn != null) {
++				boundary = firstNote.mn;
++				derived = "the first note-backed summary this store recorded";
++			} else {
++				const first = s
++					.prepare(
++						"select min(json_extract(record,'$.startedAt')) mn from tasks where kind=? and json_extract(record,'$.startedAt') is not null",
++					)
++					.get('"pi.compaction"');
++				if (first?.mn != null) {
++					boundary = first.mn;
++					derived =
++						"the first compaction recorded in this store - no note-backed summary exists yet, so the arming date is the earliest compaction, not the mechanism's debut";
++				}
++			}
+ 		}
+-		const taskId = await conv.compact("N18 acceptance tranche", ctx);
+-		const settled = await bounded(harness.waitForTask(taskId, ctx), "compaction task");
+-		if (settled.__timeout) unsettled += 1;
+-		if (samples.length < 3) samples.push(`${seat}: ${JSON.stringify(settled?.state?.outcome ?? settled).slice(0, 160)}`);
+-		if (attempted % 25 === 0) console.log(`  ${attempted} compactions attempted, ${secs()} s`);
++		if (boundary == null)
++			return {
++				available: false,
++				why: "no compaction has ever been recorded in this store, so there is no window to count",
++			};
++
++		const excludedDriven = s
++			.prepare(
++				`select count(*) n from tasks t
++             where t.kind=? and json_extract(t.record,'$.startedAt') >= ?
++               and json_extract(t.record,'$.input.instructions') like '%acceptance tranche%'`,
++			)
++			.get('"pi.compaction"', boundary).n;
++		const perSeat = s
++			.prepare(
++				`select t.conversation_id conv,
++                    count(*) n,
++                    sum(${TRUNCATED_SQL}) truncated
++             from tasks t
++             where ${naturalWhere}
++             group by t.conversation_id
++             order by n desc`,
++			)
++			.all(...NATURAL_PARAMS(boundary));
++		const total = s
++			.prepare(
++				`select count(*) n,
++                    sum(${TRUNCATED_SQL}) truncated,
++                    sum(json_extract(record,'$.state.outcome.status')='completed') completed
++             from tasks t
++             where ${naturalWhere}`,
++			)
++			.get(...NATURAL_PARAMS(boundary));
++		const backed = s
++			.prepare(
++				`select count(*) n,
++                    sum(e.record like '%CONTINUITY NOTE%') note,
++                    sum(e.record like '%Deterministic digest of%') digest
++             from tasks t ${summaryJoin}
++             where ${naturalWhere}`,
++			)
++			.get(...NATURAL_PARAMS(boundary));
++		return {
++			available: true,
++			boundary,
++			boundaryLabel: derived || "given via --since",
++			total: total.n,
++			excludedDriven,
++			truncated: total.truncated ?? 0,
++			completed: total.completed ?? 0,
++			summaries: backed.n,
++			noteBacked: backed.note ?? 0,
++			digestBacked: backed.digest ?? 0,
++			perSeat: perSeat.map((r) => ({
++				seat: seatByConv.get(r.conv) ?? `conversation ${r.conv} (not in the current roster)`,
++				n: r.n,
++				truncated: r.truncated ?? 0,
++			})),
++		};
++	} finally {
++		s.close();
++	}
++}
++
++/* ---- 5. RUN ---- */
++console.log(
++	`PROVENANCE tree=${TREE.slice(0, 12)} branch=${BRANCH} uncommittedPaths=${dirtyPaths} node=${process.version} host=${process.platform} ${os.release()} pi-durable=${piDurableVersion} dependencySet=${dependencySet}`,
++);
++console.log(`store read (NEVER opened for write): ${LIVE_DB}`);
++console.log(
++	`policy used: ${JSON.stringify(SETTINGS.compaction)} (from ${CONFIG_FILE}; pi-durable defaults 16384/20000/32768)`,
++);
++
++const COPY_DB = join(COPY_DIR, "acceptance-snapshot.sqlite");
++backup(LIVE_DB, COPY_DB);
++console.log(`snapshot -> ${COPY_DB} (${secs()}). The live store was never opened for write.`);
++
++// --natural-only: read the fleet numbers without driving anything. A full driven tranche against a live
++// store takes tens of minutes (measured 1809.7 s with a broker resident) and needs the broker stopped;
++// the natural claim does not need that. The roster still comes from a snapshot copy, so the live store
++// is still never opened for write.
++
++async function rosterFromSnapshot(dbPath, copyDir) {
++	const copy = join(copyDir, "roster-snapshot.sqlite");
++	backup(dbPath, copy);
++	const storage = await openNodeSqliteStorage(copy);
++	const rec = await storage.findDocument(
++		{ kind: "durig.seats", scope: { kind: "session" } },
++		"current",
++		ctx,
++	);
++	const seats = rec ? ((await storage.document(rec.id, "current", ctx))?.value?.seats ?? {}) : {};
++	return new Map(Object.entries(seats).map(([name, seat]) => [seat?.conversationId, name]));
++}
++
++let driven = null;
++if (!NATURAL_ONLY) {
++	driven = await runTranche({
++		mode: MODE,
++		target: TARGET,
++		stopReason: STOP_REASON,
++		copyDb: COPY_DB,
++		label: "acceptance",
++	});
++}
++
++let control = null;
++if (WITH_CONTROL) {
++	const controlDb = join(COPY_DIR, "control", "acceptance-snapshot.sqlite");
++	// A fresh backup of the SAME snapshot: the driven tranche has already written into COPY_DB, so the
++	// control must not see its compactions. Counting the control on the driven copy would report one
++	// set of compactions twice and label it two claims.
++	backup(COPY_DB, controlDb);
++	control = await runTranche({
++		mode: "control",
++		target: CONTROL_TARGET,
++		stopReason: "length",
++		copyDb: controlDb,
++		copyDir: join(COPY_DIR, "control"),
++		label: "negative control",
++	});
++}
++
++const natural = measureNatural(
++	LIVE_DB,
++	SINCE,
++	driven?.seatByConv ?? (await rosterFromSnapshot(LIVE_DB, COPY_DIR)),
++);
++
++/* ---- 6. THE REPORT: three labelled blocks, never one number ---- */
++function printDriven(d) {
++	if (d === null) {
++		console.log("== DRIVEN: NOT RUN (--natural-only). Nothing here is a driven number. ==");
++		return;
++	}
++	console.log(
++		`== DRIVEN - compactions WE forced on a snapshot copy (${d.mode}, target ${d.target}) ==`,
++	);
++	console.log(`  store counted: ${d.copyDb}`);
++	console.log(`  copy sha256:   ${d.copySha}`);
++	console.log(`  RESULT mode=${d.mode} target=${d.target} providerCalls(faux)=${d.providerCalls}`);
++	console.log(
++		`  provider calls in the tranche: ${d.providerCalls} (= ${d.growthTurns} growth turns + ${d.summariserRequests} summariser requests)`,
++	);
++	console.log(
++		`  summary markers placed in this tranche: ${d.placed} (continuity note ${d.noteBacked}, deterministic digest ${d.digestBacked}; the same summary can carry both)`,
++	);
++	console.log(`  completed outcomes: ${d.completed}`);
++	console.log(`  compaction tasks that did not settle within ${WAIT_BOUND_MS} ms: ${d.unsettled}`);
++	console.log(`  TRUNCATED summaries ("hit the token limit"): ${d.truncated}`);
++	console.log(
++		`  entries that QUOTE the truncation phrase but are not truncations: ${d.quotedNotTruncated}`,
++	);
++	console.log(`  wall clock: ${d.wall} s`);
++	for (const sample of d.samples) console.log(`  sample: ${sample}`);
++}
++
++function printControl(c) {
++	if (c === null) {
++		console.log(
++			"== NEGATIVE CONTROL: NOT RUN. A driven 0 with no control beside it is not evidence. ==",
++		);
++		return;
+ 	}
+-	if (attempted >= TARGET) break;
++	console.log(
++		`== NEGATIVE CONTROL - the same counter, proven able to count a non-zero (control, target ${c.target}, stopReason length) ==`,
++	);
++	console.log(`  store counted: ${c.copyDb}`);
++	console.log(`  copy sha256:   ${c.copySha}`);
++	console.log(`  RESULT mode=${c.mode} target=${c.target} providerCalls(faux)=${c.providerCalls}`);
++	console.log(
++		`  provider calls in the tranche: ${c.providerCalls} (= ${c.growthTurns} growth turns + ${c.summariserRequests} summariser requests)`,
++	);
++	console.log(`  TRUNCATED summaries ("hit the token limit"): ${c.truncated}`);
++	console.log(
++		`  control verdict: ${c.ok ? "the counter CAN count a non-zero" : "FAIL - the counter counted 0, so the driven 0 proves nothing"}`,
++	);
++	if (c.truncated !== c.summariserRequests)
++		console.log(
++			`  note: ${c.truncated} truncations for ${c.summariserRequests} summariser requests - the count is not tied to real requests`,
++		);
+ }
+-await harness.close(ctx);
+-
+-/* ---- 4. count what the store actually recorded, the same way the milestone gate counts it ---- */
+-const s = new DatabaseSync(COPY_DB, { readOnly: true });
+-const during = s.prepare(
+-	"select count(*) n, sum(record like ?) truncated, sum(record like ?) completed from tasks where kind=? and json_extract(record,'$.startedAt') >= ?",
+-).get("%hit the token limit%", "%\"status\":\"completed\"%", '"pi.compaction"', t0);
+-const getEntry = s.prepare("select record from entries where id=?");
+-const placedSummaries = s.prepare("select id, record from entries where id > ? and record like ?").all(baseline, "%was compacted into the following summary%");
+-const notePath = placedSummaries.filter((e) => String(e.record).includes("CONTINUITY NOTE")).length;
+-const digestPath = placedSummaries.filter((e) => String(e.record).includes("Deterministic digest of")).length;
+-s.close();
+-
+-console.log(`\nRESULT mode=${MODE} target=${TARGET} providerCalls(faux)=${faux.state.callCount}`);
+-console.log(`  provider calls in the tranche: ${faux.state.callCount} (= ${attempted} growth turns + ${faux.state.callCount - attempted} summariser requests)`);
+-console.log(`  summary markers placed in this tranche: ${placedSummaries.length} (note-backed ${notePath}, digest-backed ${digestPath})`);
+-console.log(`  completed outcomes: ${during.completed ?? 0}`);
+-console.log(`  compaction tasks that did not settle within ${WAIT_BOUND_MS} ms: ${unsettled}`);
+-console.log(`  TRUNCATED summaries ("hit the token limit"): ${during.truncated ?? 0}`);
+-console.log(`  wall clock: ${secs()} s`);
+-for (const sample of samples) console.log(`  sample: ${sample}`);
+-const truncated = during.truncated ?? 0;
+-const ok = MODE === "armed" ? during.n >= TARGET && truncated === 0 : truncated > 0;
+-console.log(`VERDICT ${ok ? "PASS" : "FAIL"} (tree ${TREE.slice(0, 12)}, snapshot ${COPY_DB}, mode ${MODE}, target ${TARGET})`);
+-process.exit(ok ? 0 : 1);
++
++console.log("");
++printDriven(driven);
++
++console.log("");
++if (WITH_CONTROL) printControl(control);
++else if (driven !== null) printControl(null);
++
++console.log("");
++console.log(
++	"== NATURAL - compactions the seats actually ran, none of them driven by this instrument ==",
++);
++console.log(
++	LIVE_DB === COPY_DB
++		? "  store read: " +
++				LIVE_DB +
++				" - this run's OWN snapshot copy, so every compaction in it is driven"
++		: `  store read: ${LIVE_DB}`,
++);
++if (!natural.available) {
++	console.log(`  not measurable: ${natural.why}`);
++} else {
++	console.log(
++		`  window: since ${new Date(natural.boundary).toISOString()} (${natural.boundaryLabel})`,
++	);
++	if (natural.excludedDriven > 0)
++		console.log(
++			`  compactions created by this instrument in that store, EXCLUDED from the natural count: ${natural.excludedDriven}`,
++		);
++	console.log(
++		`  natural compactions: ${natural.total}, completed ${natural.completed}, TRUNCATED ${natural.truncated}`,
++	);
++	console.log(
++		`  summaries placed in that window: ${natural.summaries} (continuity note ${natural.noteBacked}, deterministic digest ${natural.digestBacked}; the same summary can carry both)`,
++	);
++	for (const r of natural.perSeat)
++		console.log(`  seat ${r.seat}: ${r.n} compactions, ${r.truncated} truncated`);
++	if (natural.truncated > 0)
++		console.log(
++			`  WARNING: ${natural.truncated} NATURAL summaries truncated - the driven number cannot cover this.`,
++		);
++}
++
++console.log("");
++const verdict =
++	driven === null
++		? natural.available && natural.truncated === 0
++		: driven.ok && (control === null || control.ok);
++console.log(
++	`VERDICT ${verdict ? "PASS" : "FAIL"} (tree ${TREE.slice(0, 12)}, driven ${driven === null ? "not run" : `${driven.tasks} tasks, ${driven.truncated} truncated`}, control ${control === null ? "not run" : `${control.truncated} truncated`}, natural ${natural.available ? `${natural.total} tasks, ${natural.truncated} truncated` : "not measurable"})`,
++);
++process.exit(verdict ? 0 : 1);

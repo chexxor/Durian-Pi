@@ -1,0 +1,404 @@
+Ref refs/heads/item-6556 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base e01e92560b49da35dd84ab2fcd764a01fb1ff63b. Lost lines: 93 across 5 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6556 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6556
+
+--- demo/resume-gate.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/resume-gate.test.mjs b/demo/resume-gate.test.mjs
+new file mode 100644
+index 00000000..01571e6b
+--- /dev/null
++++ b/demo/resume-gate.test.mjs
+@@ -0,0 +1,155 @@
++// demo/resume-gate.test.mjs — #6556: the gate rule is ONE rule, and the resume path obeys it.
++//
++// THE DEFECT (qa sweep #6447): `release_work` refuses to un-park a row whose gate names a CANCELLED
++// item, and the oldest-workable selection refuses to claim one — but `resume_work` checked only
++// `status === "deferred"` and then wrote `claimed`, and `claim_work` by id checked only
++// `to === me && status === "queued"`. So a row whose prerequisite had been cancelled could be resumed
++// straight into a status the claim predicate rejects. On the live rig 9 deferred rows were claimable
++// with a cancelled prerequisite: the seat burns a turn, the claim refuses, and nothing says why.
++//
++// THE CONTRACT: every transition that makes a row startable — release, resume, claim-by-id, and the
++// oldest-workable selection — goes through ONE predicate, `gateViolation`, which returns
++//   {kind:"gate-cancelled", id}  the prerequisite was DROPPED: the gate can never clear;
++//   {kind:"gate-open", id, status} the prerequisite is not DONE yet;
++//   null                          every gate is DONE, or names nothing in the queue.
++// The conservative default of #2677 is kept: an id that names nothing is passed over, because a false
++// refusal starves work invisibly while a false allowance is at worst legible.
++//
++// THE PAIRINGS, asserted, because a refusal without them is just a wedge: a gate that is DONE still
++// resumes; an unresolvable gate id still resumes; a gate that is merely OPEN resumes once the
++// prerequisite closes.
++//
++// FAILING-FIRST: on the base tree (`e01e9256`) `gateViolation` does not exist, `resume_work` answers
++// "resumed" for the dead-gate row, and `claim_work` by id claims it. Run this file in a detached
++// worktree at that base and it exits 1.
++//
++// Run: node demo/resume-gate.test.mjs  (exit 0 = pass)
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
++import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
++
++import { deadGateId, gateViolation, registerSeat, RigQueue, Router, Seats, workable } from "../src/rig.mjs";
++
++const ctx = BACKGROUND_CONTEXT;
++let failures = 0;
++function check(label, condition, detail = "") {
++	if (condition) console.log(`  ok   ${label}`);
++	else {
++		failures += 1;
++		console.log(`  FAIL ${label}${detail ? ` -- ${detail}` : ""}`);
++	}
++}
++
++/* ─── 1. the predicate, pure ─────────────────────────────────────────────── */
++console.log("\npure — one predicate, three outcomes");
++check("a CANCELLED prerequisite is a dead gate", gateViolation({ blockedBy: [1] }, [{ id: 1, status: "cancelled" }])?.kind === "gate-cancelled");
++check("an OPEN prerequisite is a live gate, not a dead one", gateViolation({ blockedBy: [1] }, [{ id: 1, status: "queued" }])?.kind === "gate-open");
++check("a DONE prerequisite clears the gate", gateViolation({ blockedBy: [1] }, [{ id: 1, status: "done" }]) === null);
++check("no gate at all is no violation", gateViolation({}, []) === null);
++check("an id that names nothing is ambiguous, not blocking (the #2677 conservative default)", gateViolation({ blockedBy: [77] }, []) === null);
++check("deadGateId is the same predicate seen from the release side", deadGateId({ blockedBy: [1] }, [{ id: 1, status: "cancelled" }]) === 1 && deadGateId({ blockedBy: [1] }, [{ id: 1, status: "queued" }]) === null);
++check("the reason strings the claim predicate emits are unchanged",
++	workable({ status: "queued", blockedBy: [1] }, "impl", { items: [{ id: 1, status: "cancelled" }] }).reason === "gate-cancelled:#1" &&
++	workable({ status: "queued", blockedBy: [1] }, "impl", { items: [{ id: 1, status: "claimed" }] }).reason === "gate-open:#1(claimed)");
++
++/* ─── 2. on a real harness ───────────────────────────────────────────────── */
++const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
++const models = createModels();
++models.setProvider(faux.provider);
++const registry = createRegistry();
++registry.install(Router);
++const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
++
++await harness.commit(async (tx) => {
++	const mk = async (name, role, capabilities) => {
++		const c = await tx.createConversation({ ownership: { kind: "ownerless" } });
++		await configure(tx, c.id, { model: { provider: "faux", modelId: "faux-seat" } });
++		await registerSeat(tx, name, c.id, role);
++		const seatDoc = await tx.doc(Seats);
++		seatDoc.seats[name].capabilities = capabilities;
++	};
++	await mk("pm", "program manager", ["route", "plan"]);
++	await mk("impl", "implementation engineer", ["implement", "code"]);
++	await mk("qa", "independent verifier", ["verify"]);
++	const q = await tx.doc(RigQueue);
++	const seed = (id, to, subject, status, extra = {}) =>
++		q.items.push({ id, from: "pm", to, subject, body: "seeded for the demo", status, blockedBy: [], transitions: [], ...extra });
++	seed(1, "qa", "the prerequisite that was cancelled", "cancelled");
++	seed(2, "impl", "deferred row whose gate is dead", "deferred", { blockedBy: [1] });
++	seed(5, "qa", "the prerequisite that closed properly", "done");
++	seed(4, "impl", "deferred row whose gate is DONE", "deferred", { blockedBy: [5] });
++	seed(6, "impl", "deferred row whose gate id names nothing", "deferred", { blockedBy: [77] });
++	seed(8, "qa", "the prerequisite still open", "queued");
++	seed(7, "impl", "deferred row whose gate is still open", "deferred", { blockedBy: [8] });
++	q.nextId = 9;
++}, ctx);
++
++const roster = (await harness.snapshot(Seats, undefined, ctx)).seats;
++const item = async (id) => (await harness.snapshot(RigQueue, undefined, ctx)).items.find((it) => it.id === id);
++
++let first = true;
++const call = async (seat, tool, args) => {
++	const batch = [
++		fauxAssistantMessage([fauxToolCall(tool, args)], { stopReason: "toolUse" }),
++		fauxAssistantMessage(fauxText("ok")),
++	];
++	if (first) {
++		faux.setResponses(batch);
++		first = false;
++	} else faux.appendResponses(batch);
++	const c = await harness.conversation(roster[seat].conversationId, ctx);
++	return (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
++};
++const reply = async (seat, tool) => {
++	const c = await harness.conversation(roster[seat].conversationId, ctx);
++	const page = await c.entries({ order: "descending" }, 200, undefined, ctx);
++	for (const entry of page.items) {
++		const model = Array.isArray(entry.model) ? entry.model : [];
++		for (const block of model) {
++			if (block?.role === "toolResult" && block.toolName === tool) {
++				const parts = Array.isArray(block.content) ? block.content : [];
++				return parts.map((t) => (typeof t === "string" ? t : t?.text ?? "")).join("");
++			}
++		}
++	}
++	return "";
++};
++
++console.log("\nresume — a row whose prerequisite was CANCELLED is not resumed (red on the base tree)");
++await call("impl", "resume_work", { itemId: 2 });
++const resumeReply = await reply("impl", "resume_work");
++check("the refusal names the dead gate", /not resumed/.test(resumeReply) && /#1/.test(resumeReply) && /CANCELLED/.test(resumeReply), resumeReply.slice(0, 200));
++check("and the row stays deferred — it is not written into `claimed`", (await item(2)).status === "deferred", JSON.stringify(await item(2)));
++check("the refusal says what to do about it", /cancel_work|re-record the prerequisite/.test(resumeReply), resumeReply.slice(0, 220));
++
++console.log("\nclaim by id — the same row cannot be claimed past its dead gate either");
++await harness.commit(async (tx) => {
++	const q = await tx.doc(RigQueue);
++	q.items.push({ id: 3, from: "pm", to: "impl", subject: "queued row whose gate is dead", body: "seeded", status: "queued", blockedBy: [1], transitions: [] });
++}, ctx);
++console.log("\npairings — the rule is not a blanket refusal");
++await call("impl", "claim_work", { itemId: 3 });
++const claimReply = await reply("impl", "claim_work");
++check("by-id claim refuses and says why", /NOT CLAIMED/.test(claimReply) && /gate-cancelled:#1/.test(claimReply), claimReply.slice(0, 200));
++check("...and the row stays queued", (await item(3)).status === "queued", JSON.stringify(await item(3)));
++
++await call("impl", "resume_work", { itemId: 4 });
++check("a gate whose prerequisite is DONE resumes normally", (await item(4)).status === "claimed", JSON.stringify(await item(4)));
++await call("impl", "resume_work", { itemId: 6 });
++check("a gate id naming nothing is ambiguous, so it does NOT block (the conservative default)", (await item(6)).status === "claimed", JSON.stringify(await item(6)));
++
++console.log("\nan OPEN gate refuses now and admits the row when it closes");
++await call("impl", "resume_work", { itemId: 7 });
++check("a prerequisite still queued is not DONE, so resume is refused", (await item(7)).status === "deferred" && /still queued/.test(await reply("impl", "resume_work")), JSON.stringify(await item(7)));
++await call("qa", "claim_work", { itemId: 8 });
++check("the prerequisite itself is claimable", (await item(8)).status === "claimed", JSON.stringify(await item(8)));
++await call("qa", "complete_work", { itemId: 8, resultSummary: "prerequisite closed" });
++check("the prerequisite is now done", (await item(8)).status === "done", JSON.stringify(await item(8)));
++await call("impl", "resume_work", { itemId: 7 });
++check("so the gated row resumes — the refusal is a gate, not a dead end", (await item(7)).status === "claimed", JSON.stringify(await item(7)));
++
++console.log(failures === 0
++	? "\nPASS — release, resume, claim-by-id and the selection all read ONE gate predicate"
++	: `\nFAIL — ${failures} check(s) failed`);
++process.exit(failures === 0 ? 0 : 1);
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 18fe6c49..fd9b9995 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -72,6 +72,7 @@
+       "demo/release-terminal-first.test.mjs",
+       "demo/repeat-call.test.mjs",
+       "demo/reset.test.mjs",
++      "demo/resume-gate.test.mjs",
+       "demo/resume.test.mjs",
+       "demo/revise-work-contract.test.mjs",
+       "demo/run.test.mjs",
+--- docs/runbooks/README.md (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/README.md b/docs/runbooks/README.md
+index 357cf36b..80e2982e 100644
+--- a/docs/runbooks/README.md
++++ b/docs/runbooks/README.md
+@@ -191,6 +191,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
+ | [tracked-files-missing-on-disk.md](tracked-files-missing-on-disk.md) | `git status` shows tracked DELETIONS nobody made; a whole directory (e.g. `scripts/`) is empty on disk while the index and `HEAD` still hold it | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) §Umbrella rows are pointers, never gates | **a row can never be claimed** and the scan says `gate-cancelled:#<id>`; a dependent is stuck on a container row that was cancelled; you are about to `cancel_work` an umbrella whose children are all registered | no |
++| [stale-held-backlog.md](stale-held-backlog.md) §Resume is a claim, so it reads the same gate | a `deferred` row comes back `claimed` from `resume_work` and then cannot be claimed (`gate-cancelled`); `resume_work` refuses with "its gate names #<id>, which is CANCELLED" | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) §If it fails | the parked-row audit refuses the store — `cannot open …: Durable SQLite schema version 2 is newer than supported version 1` — or the read times out, and you must separate a dependency/pin gap from a wedged broker before touching anything | no |
+ | [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
+ | [attach-a-gate.md](attach-a-gate.md) | you know a row must wait on another row, but you are neither its sender nor its recipient, and every way of writing that gate is refused or silently dropped (`revise_work` with `blockedBy` drops the whole call, including the body edit riding in it) | no |
+--- docs/runbooks/stale-held-backlog.md (30 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/stale-held-backlog.md b/docs/runbooks/stale-held-backlog.md
+index 26834e52..a34c72ce 100644
+--- a/docs/runbooks/stale-held-backlog.md
++++ b/docs/runbooks/stale-held-backlog.md
+@@ -4,8 +4,8 @@ symptom: "an effort has stopped progressing with nothing broken: held rows sit u
+ writes: false                 # read-only audit + an intent spool to pm (never opens a writing Harness)
+ precondition: "read-only"     # safe with the broker up: `queue` reads are broker-served (D111); `intent.mjs` spools
+ last_verified: 2026-11-11        # the tool below was run against the live store; see Evidence
+-verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry)
+-evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Re-run 2026-11-11 by scribe (#6315) in the `item-6315` worktree with UNLINKED deps (pi-durable **1.3.0** from the lockfile): live store exit **0** `rows=6502 held=434`, `git landing commits read: 153`; a worktree-local copy exit **0** `rows=6501 held=434`, same 153. The schema-version refusal did NOT fire in that tree — see If it fails. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"
++verified_by: devtools (2026-11-10 audit); scribe (2026-11-11 re-run of Diagnose step 2 and the schema-message entry); impl (2026-11-11, the resume-as-a-claim section, scoped to that section)
++evidence: "#6071 (the classifier and the tool); live audit 2026-11-10: 6,082 rows, 459 held -> 27 release-candidates, 7 cancel-candidates, 198 standing rules, 106 gate-open, 121 unattributed. Re-run 2026-11-11 by scribe (#6315) in the `item-6315` worktree with UNLINKED deps (pi-durable **1.3.0** from the lockfile): live store exit **0** `rows=6502 held=434`, `git landing commits read: 153`; a worktree-local copy exit **0** `rows=6501 held=434`, same 153. The schema-version refusal did NOT fire in that tree — see If it fails. Umbrella section (#6216): re-verified 2026-11-10 by scribe - `node demo/workable-claim.test.mjs` exit 0, and the store read of #2465/#6123/#6122 below. Release-authority section (#6112, 2026-11-10, impl): `node demo/pm-release-authority.test.mjs` exit 0 in an item worktree with dependencySet built-pin; the same file against `git archive HEAD src` exits 1 with "only the sender or recipient may release it" and the row left held"; resume-as-a-claim section (#6556, impl, 2026-11-11, SCOPED to that section): `node demo/resume-gate.test.mjs` exit 0 (18 checks) in worktree `item-6556` forked from `e01e9256`, linked tree, pi-durable 1.5.1; the behaviour probe run in a detached worktree at that base returned {deferredRowWithCancelledGate_afterResume: "claimed", queuedRowWithCancelledGate_afterByIdClaim: "claimed"} and on the branch {"deferred", "queued"}
+ check_rule: demo/held-gate-audit.test.mjs
+ ---
+ 
+@@ -188,6 +188,27 @@ ref is gone: measured 2026-11-11 in the `item-6315` worktree, `git rev-parse ite
+ so the predicate cannot detect this; the audit's **standing-rule** class is what names the real condition
+ (`docs/WORK-ITEM-LIFECYCLE.md`), and Diagnose step 5 is the git check that proves it.
+ 
++## Resume is a claim, so it reads the same gate (#6556)
++
++**Symptom you are searching for:** a deferred row whose prerequisite was cancelled comes back as `claimed`,
++the seat's next claim or the scan says `gate-cancelled:#<id>`, and the turn is burned for nothing. qa sweep
++#6447 found **9** such rows on the live store.
++
++**What was wrong:** `release_work` refused to un-park a row whose gate named a cancelled item and the
++oldest-workable selection refused to claim one, but `resume_work` checked only `status === "deferred"`
++before writing `claimed`, and `claim_work` with an explicit `itemId` checked only `to === me && status ===
++"queued"`. Two transitions admitted a row the predicate rejects - the rule lived in three places.
++
++**What it is now:** ONE predicate, `gateViolation(item, items)` in `src/rig.mjs`, returns
++`{kind:"gate-cancelled", id}` (prerequisite DROPPED, the gate can never clear), `{kind:"gate-open", id,
++status}` (prerequisite not DONE yet) or `null` (every gate DONE, or the id names nothing). Release, resume,
++claim-by-id and the selection all read it; `deadGateId` and `workable()` are views on it, so the reason
++strings a seat sees (`gate-cancelled:#<id>`, `gate-open:#<id>(<status>)`) do not change.
++
++**The exits, stated in the refusal itself:** a dead gate means the row is orphaned by its own gate -
++`cancel_work` it, or have the sender re-record the prerequisite. An open gate is not a problem: close the
++prerequisite and the same resume succeeds. The demo asserts both, so the refusal is a gate and not a wedge.
++
+ **Unverified, stated as a gap:** there is **no `check` rule** that detects this shape today. The rule was
+ registered as #3747 ("check rule for a NON-TERMINAL item whose `blockedBy` names a CANCELLED/SUPERSEDED
+ id") - that row is still `held` (created `held`, never transitioned), and `src/checkup.mjs` contains no
+@@ -236,6 +257,18 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore
+ 
+   Its assertion reads `a gate on a CANCELLED item is NOT workable (terminal != done)` and
+   `...reason is gate-cancelled` (`demo/workable-claim.test.mjs:74-75`).
++- **Resume-as-a-claim is pinned by a demo** (run 2026-11-11 in the `item-6556` worktree, linked tree, pi-durable
++  1.5.1, exit 0):
++
++  ```bash
++  node demo/resume-gate.test.mjs; echo "exit=$?"           # exit 0, 18 checks
++  ```
++
++  It asserts the refusal (dead gate: the row stays `deferred` and the message names the id and says CANCELLED),
++  the by-id claim refusal, and the three pairings that stop it being a wedge: a DONE gate resumes, an id that
++  names nothing resumes, an OPEN gate refuses until the prerequisite closes - and then the same resume works.
++  Falsifier, run like the release-authority one: the behaviour probe in a detached worktree at base `e01e9256`
++  answers `{afterResume: "claimed", afterByIdClaim: "claimed"}`; on the branch `{"deferred", "queued"}`.
+ - **The release authority is pinned by a demo** (run 2026-11-10, exit 0, #6112):
+ 
+   ```bash
+@@ -258,6 +291,10 @@ such rule (grep `blockedBy` in it returns nothing). The convention is therefore
+ 
+ ## If it fails
+ 
++- **`resume_work` is refused** ("its gate names #<id>, which is CANCELLED") → the prerequisite was cancelled,
++  not merely unfinished. Resuming cannot make the row claimable: cancel it, or have the sender re-record the
++  gate (#6556). If the message says "still queued/claimed/held", the prerequisite is LIVE - finish it, and the
++  same resume succeeds.
+ - **`release_work` is refused** ("not held", "not yours", "must carry a reason") → the row was already moved,
+   the wrong party is acting, or a coordinator released without saying why; re-read its `status` and `to`/`from`.
+   If it refuses with "its gate names #<id>, which is cancelled", the row is not stale-held - it is the
+--- src/rig.mjs (60 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/rig.mjs b/src/rig.mjs
+index cdf154b4..24953b44 100644
+--- a/src/rig.mjs
++++ b/src/rig.mjs
+@@ -310,9 +310,32 @@ export function isTerminalItem(item) {
+  * that drifts (#6112).
+  */
+ export function deadGateId(item, items = []) {
++	const v = gateViolation(item, items);
++	return v?.kind === "gate-cancelled" ? v.id : null;
++}
++
++/**
++ * THE GATE RULE, ONCE (#6556). Which recorded prerequisite makes this row NOT startable right now?
++ *   `{kind: "gate-cancelled", id}` — the prerequisite was DROPPED: it can never clear, so the row is
++ *     orphaned by its own gate;
++ *   `{kind: "gate-open", id, status}` — the prerequisite exists but is not DONE yet;
++ *   `null` — every gate resolves DONE, or names nothing in the queue (the conservative default of
++ *     #2677: an ambiguous id is passed over, because a false refusal starves work invisibly while a
++ *     false allowance is at worst legible).
++ *
++ * WHY THIS EXISTS: `deadGateId` was consulted by `release_work` and by the oldest-workable selection,
++ * but NOT by `resume_work` or by claim-by-id — so a deferred row whose prerequisite had been cancelled
++ * could be resumed straight into `claimed`, and a queued one could be claimed by id past its dead gate
++ * (9 such rows on the live rig, qa sweep #6447). Every transition that makes a row startable now goes
++ * through this predicate; a gate rule kept in three places is a rule that drifts.
++ */
++export function gateViolation(item, items = []) {
+ 	for (const id of item?.blockedBy ?? []) {
+ 		const target = items.find((it) => it.id === id);
+-		if (target && target.status === "cancelled") return id;
++		if (!target) continue; // ambiguous: workable, per the conservative default
++		if (target.status === "done") continue;
++		if (target.status === "cancelled") return { kind: "gate-cancelled", id };
++		return { kind: "gate-open", id, status: target.status };
+ 	}
+ 	return null;
+ }
+@@ -324,13 +347,13 @@ export function workable(item, seat, { items = [], capabilities = [] } = {}) {
+ 	if (required !== "" && !capabilities.includes(required)) {
+ 		return { workable: false, reason: `requires:${required}` };
+ 	}
+-	for (const id of item.blockedBy ?? []) {
+-		const target = items.find((it) => it.id === id);
+-		// Ambiguous (no such item in the queue): the conservative default says workable.
+-		if (!target) continue;
+-		if (target.status === "done") continue;
+-		if (target.status === "cancelled") return { workable: false, reason: `gate-cancelled:#${id}` };
+-		return { workable: false, reason: `gate-open:#${id}(${target.status})` };
++	// The gate clause is the SAME predicate the release and resume refusals use (#6556), so the
++	// reason strings a seat sees on a refusal match the codes the driver records in `skipped`.
++	const gate = gateViolation(item, items);
++	if (gate) {
++		return gate.kind === "gate-cancelled"
++			? { workable: false, reason: `gate-cancelled:#${gate.id}` }
++			: { workable: false, reason: `gate-open:#${gate.id}(${gate.status})` };
+ 	}
+ 	return { workable: true, reason: null };
+ }
+@@ -828,7 +851,7 @@ const Router = defineExtension({
+ 		defineTool({
+ 			name: "claim_work",
+ 			description:
+-				"Claim a work item addressed to you. With no `itemId`, claims the oldest QUEUED item; pass `itemId` to claim that specific item (must be queued and addressed to you). Returns its subject and body.",
++				"Claim a work item addressed to you. With no `itemId`, claims the oldest QUEUED item; pass `itemId` to claim that specific item (must be queued and addressed to you, and its gates must be satisfied - a cancelled or still-open prerequisite is refused, not silently claimed, #6556). Returns its subject and body.",
+ 			parameters: obj({ itemId: opt(num()) }),
+ 			replay: "safe",
+ 			execute: async (args, api, context) => {
+@@ -856,6 +879,21 @@ const Router = defineExtension({
+ 							(it) => it.id === args.itemId && it.to === me && it.status === "queued",
+ 						);
+ 						if (!named) return null;
++						// #6556: by-id claim is a claim. It checked only `to === me && status === "queued"`, so a row
++						// whose gate names a cancelled or still-open prerequisite could be claimed straight past it
++						// while the oldest-workable selection refused the same row for the same reason.
++						const gate = gateViolation(named, queue.items);
++						if (gate) {
++							return {
++								kind: "gate-refused",
++								id: named.id,
++								from: named.from,
++								subject: named.subject,
++								reason: gate.kind === "gate-cancelled"
++									? `gate-cancelled:#${gate.id}`
++									: `gate-open:#${gate.id}(${gate.status})`,
++							};
++						}
+ 						named.status = "claimed";
+ 						named.transitions.push({
+ 							at: new Date().toISOString(),
+@@ -963,6 +1001,14 @@ const Router = defineExtension({
+ 										: `It is not claimable in its current state; check \`status\` for who holds it.`)
+ 						);
+ 					}
++				if (found?.kind === "gate-refused") {
++					return toolText(
++						`NOT CLAIMED - item #${found.id} (${found.subject}) is gated on ${found.reason}. ` +
++							(found.reason.startsWith("gate-cancelled")
++								? "The prerequisite was cancelled, so this gate can never clear: cancel the row or have the sender re-record it."
++								: "The prerequisite is not done yet; the row becomes claimable when that row closes."),
++					);
++				}
+ 				if (!found) {
+ 					return toolText("NO_QUEUED_WORK");
+ 				}
+@@ -1223,7 +1269,7 @@ const Router = defineExtension({
+ 		defineTool({
+ 			name: "resume_work",
+ 			description:
+-				"Take back one of your deferred items once the answer has arrived, so complete_work can finish it.",
++				"Take back one of your deferred items once the answer has arrived, so complete_work can finish it. Refused when the row's gate names a CANCELLED or still-open prerequisite (#6556): resuming it would put it into `claimed` with a gate the claim predicate rejects.",
+ 			parameters: obj({ itemId: num() }),
+ 			replay: "safe",
+ 			execute: async (args, api, context) => {
+@@ -1236,6 +1282,21 @@ const Router = defineExtension({
+ 						return `item #${args.itemId} is addressed to ${item.to}, not you`;
+ 					if (item.status !== "deferred")
+ 						return `item #${args.itemId} is not deferred (status=${item.status})`;
++					// #6556: resume is a CLAIM in disguise — it puts the row straight into `claimed` — so it has to
++					// pass the same gate the claim predicate passes. `release_work` refused a row whose gate named
++					// a cancelled item; `resume_work` did not, and 9 deferred rows on the live rig (qa sweep #6447)
++					// were resumed into a status the claim predicate rejects.
++					const gate = gateViolation(item, queue.items);
++					if (gate) {
++						return gate.kind === "gate-cancelled"
++							? `item #${item.id} not resumed: its gate names #${gate.id}, which is CANCELLED - the `
++							+ `prerequisite was DROPPED, so this row can never satisfy its gate. Cancel it (cancel_work) `
++							+ `or have the sender re-record the prerequisite; resuming it would hand you a row the claim `
++							+ `predicate refuses (#6556).`
++							: `item #${item.id} not resumed: its gate names #${gate.id}, which is still ${gate.status} - `
++							+ `the prerequisite is not DONE yet. Close #${gate.id} first, or cancel this row if the `
++							+ `prerequisite is no longer the reason it waits (#6556).`;
++					}
+ 					item.status = "claimed";
+ 					item.transitions.push({
+ 						at: new Date().toISOString(),

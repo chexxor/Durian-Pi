@@ -1,0 +1,205 @@
+Ref refs/heads/item-7232 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 99e74c7e19a50445e3ce3ba8b0c706fdc9bc13b0. Lost lines: 2 across 2 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-7232 && node tools/recut-resolve.mjs --worktree .spike/recut-item-7232
+
+--- demo/by-id-claim-gate.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/by-id-claim-gate.test.mjs b/demo/by-id-claim-gate.test.mjs
+new file mode 100644
+index 00000000..4d401056
+--- /dev/null
++++ b/demo/by-id-claim-gate.test.mjs
+@@ -0,0 +1,180 @@
++// demo/by-id-claim-gate.test.mjs — A BY-ID CLAIM MUST CONSULT THE SAME GATE RULE THE OLDEST
++// CLAIM USES (#6579, built by #7184).
++//
++// THE DEFECT, NAMED BEFORE IT IS FIXED. `claim_work` has two doors. The door with no `itemId` runs
++// `selectNextWork` -> `workable(item, seat, {items, capabilities})` (#2673/#2677) and reports every
++// row it passed over. The door WITH `itemId` (src/rig.mjs, the `args.itemId !== undefined` branch)
++// asks only `it.id === args.itemId && it.to === me && it.status === "queued"`. A row gated on an
++// unclosed gate, on a CANCELLED prerequisite, or on a parked one walks straight through that door:
++// the seat claims work the rig has decided it may not start, and nothing says so. `grep -n itemId
++// demo/workable-claim.test.mjs` returns nothing — this path has no golden.
++//
++// THE CONTRACT asserted here, in the vocabulary the predicate already uses (do not invent a second
++// one; two homes for a gate rule is a rule that drifts, #6112):
++//   1. a by-id claim whose every gate is `done` succeeds;
++//   2. a by-id claim whose gate is open, cancelled or stranded is REFUSED, and the refusal NAMES
++//      the hop (`gate-open:#<id>` / `gate-cancelled:#<id>`), not `ok`;
++//   3. a refusal claims NOTHING ELSE: the row stays `queued` and no other row for that seat
++//      becomes claimed (naming one item and claiming another is a lie, and it is the failure mode
++//      a gate check would introduce);
++//   4. an unknown id is refused legibly — it names the id — and is not silently accepted as
++//      "nothing to do";
++//   5. the gate walk is BOUNDED: two rows gating each other terminate with a refusal rather than
++//      looping.
++//
++// ANTI-VACUITY: every refusal assertion is paired with a read of the store that proves the row is
++// really there, really `queued`, and really addressed to this seat. A refusal test that passes
++// because the row does not exist is the same test as no test.
++//
++// FAILING-FIRST: on main the by-id branch never calls `workable`, so assertions 2 and 4 fail.
++//
++// Run: node demo/by-id-claim-gate.test.mjs  (exit 0 = pass)
++import { mkdtempSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
++import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
++
++import { RigQueue, Router, Seats, enqueueItem, registerSeat } from "../src/rig.mjs";
++import { fillRoster, makeSeatEnv } from "../src/seattools.mjs";
++
++const ctx = BACKGROUND_CONTEXT;
++const dir = mkdtempSync(join(tmpdir(), "durig-byid-claim-"));
++const cwd = join(dir, "seat-workspace");
++
++let failures = 0;
++function check(label, condition, detail = "") {
++	if (condition) console.log(`  ok   ${label}`);
++	else {
++		failures += 1;
++		console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`);
++	}
++}
++
++const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
++const models = createModels();
++models.setProvider(faux.provider);
++const registry = createRegistry();
++registry.install(Router);
++const roster = new Map();
++const harness = await Harness.open(new MemoryStorage(), { models, registry, env: makeSeatEnv(roster) }, ctx);
++
++let workerConv = null;
++await harness.commit(async (tx) => {
++	const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
++	await configure(tx, conv.id, { model: { provider: "faux", modelId: "faux-seat" }, cwd });
++	await registerSeat(tx, "pm", conv.id, "program manager");
++	const w = await tx.createConversation({ ownership: { kind: "ownerless" } });
++	await configure(tx, w.id, { model: { provider: "faux", modelId: "faux-seat" }, cwd });
++	await registerSeat(tx, "worker", w.id, "implementation engineer");
++	workerConv = w.id;
++}, ctx);
++
++// Gate rows belong to pm so they are live work someone else owns; the worker only waits on them.
++// Enqueued in this order, the ids are 1..5 for gates and 6..9 for the targets.
++const ids = {};
++await harness.commit(async (tx) => {
++	ids.doneGate = await enqueueItem(tx, "pm", "pm", "gate that closes", "body");
++	ids.openGate = await enqueueItem(tx, "pm", "pm", "gate still open", "body");
++	ids.cancelledGate = await enqueueItem(tx, "pm", "pm", "gate that was cancelled", "body");
++	ids.strandedGate = await enqueueItem(tx, "pm", "pm", "gate that is parked", "body");
++	ids.closedTarget = await enqueueItem(tx, "pm", "worker", "work whose gate closed", "body", null, false, null, false, [ids.doneGate]);
++	ids.openTarget = await enqueueItem(tx, "pm", "worker", "work waiting on an open gate", "body", null, false, null, false, [ids.openGate]);
++	ids.deadTarget = await enqueueItem(tx, "pm", "worker", "work waiting on a cancelled gate", "body", null, false, null, false, [ids.cancelledGate]);
++	ids.parkedTarget = await enqueueItem(tx, "pm", "worker", "work waiting on a parked gate", "body", null, false, null, false, [ids.strandedGate]);
++	const q = await tx.doc(RigQueue);
++	const setStatus = (id, status) => {
++		const it = q.items.find((i) => i.id === id);
++		it.status = status;
++		it.transitions.push({ at: new Date().toISOString(), event: status, by: "operator" });
++	};
++	setStatus(ids.doneGate, "done");
++	setStatus(ids.cancelledGate, "cancelled");
++	setStatus(ids.strandedGate, "held");
++}, ctx);
++
++await harness.commit(async (tx) => fillRoster(roster, await tx.doc(Seats)), ctx);
++
++async function item(id) {
++	return (await harness.snapshot(RigQueue, undefined, ctx)).items.find((it) => it.id === id);
++}
++
++async function claim(itemId) {
++	const conv = await harness.conversation(workerConv, ctx);
++	const pending = await conv.submit({ type: "input", content: "go" }, ctx);
++	faux.setResponses([
++		fauxAssistantMessage([fauxToolCall("claim_work", itemId === undefined ? {} : { itemId })], { stopReason: "toolUse" }),
++		fauxAssistantMessage(fauxText("handled")),
++	]);
++	await pending.wait(ctx);
++	const page = await conv.entries({}, 50, undefined, ctx);
++	const result = page.items.find(
++		(e) => e.kind === "pi.tool-result" && String(e.model?.[0]?.toolName) === "claim_work",
++	);
++	return result?.model?.[0]?.content?.[0]?.text ?? "";
++}
++
++try {
++	console.log("\n=== 1. the door that works: every gate closed ===");
++	const closedText = await claim(ids.closedTarget);
++	check("a by-id claim whose gate is done succeeds", /status=claimed/.test(closedText), closedText.slice(0, 120));
++	check("...and the row really is claimed", (await item(ids.closedTarget)).status === "claimed");
++
++	console.log("\n=== 2. the door that does not: an open gate ===");
++	check("the row exists and is queued (anti-vacuity)", (await item(ids.openTarget)).status === "queued");
++	const openText = await claim(ids.openTarget);
++	check("a by-id claim on an OPEN gate is refused", !/status=claimed/.test(openText), openText.slice(0, 160));
++	check("...and the refusal names the hop", /gate-open:#(\d+)/.test(openText), openText.slice(0, 160));
++	check("...and names THIS hop", openText.includes(`#${ids.openGate}`), `expected #${ids.openGate}, got ${openText.slice(0, 160)}`);
++	check("...and the row is still queued, not claimed", (await item(ids.openTarget)).status === "queued");
++
++	console.log("\n=== 3. a gate that can never close ===");
++	const deadText = await claim(ids.deadTarget);
++	check("a by-id claim on a CANCELLED gate is refused", !/status=claimed/.test(deadText), deadText.slice(0, 160));
++	check("...and the refusal names it as cancelled", /gate-cancelled:#(\d+)/.test(deadText), deadText.slice(0, 160));
++
++	console.log("\n=== 4. a gate that is parked ===");
++	const parkedText = await claim(ids.parkedTarget);
++	check("a by-id claim on a HELD gate is refused", !/status=claimed/.test(parkedText), parkedText.slice(0, 160));
++	check("...and the refusal names the hop", parkedText.includes(`#${ids.strandedGate}`), parkedText.slice(0, 160));
++
++	console.log("\n=== 5. refusing must not claim something else ===");
++	const claimedElsewhere = (await harness.snapshot(RigQueue, undefined, ctx)).items.filter(
++		(it) => it.to === "worker" && it.status === "claimed",
++	);
++	check(
++		"the only claimed worker row is the one whose gate closed",
++		claimedElsewhere.length === 1 && claimedElsewhere[0].id === ids.closedTarget,
++		JSON.stringify(claimedElsewhere.map((it) => ({ id: it.id, status: it.status }))),
++	);
++
++	console.log("\n=== 6. an id that names nothing ===");
++	const unknownText = await claim(9999);
++	check("an unknown id is refused", !/status=claimed/.test(unknownText), unknownText.slice(0, 160));
++	check(
++		"...and the refusal names the id it was given, rather than reading as an empty queue",
++		unknownText.includes("9999"),
++		unknownText.slice(0, 160),
++	);
++
++	console.log("\n=== 7. the walk is bounded: two rows gate each other ===");
++	const boundedIds = await harness.commit(async (tx) => {
++		const a = await enqueueItem(tx, "pm", "pm", "cycle gate A", "body");
++		const b = await enqueueItem(tx, "pm", "worker", "work gated on a cycle", "body", null, false, null, false, [a]);
++		const q = await tx.doc(RigQueue);
++		q.items.find((i) => i.id === a).blockedBy = [b];
++		return { a, b };
++	}, ctx);
++	const cycleText = await claim(boundedIds.b);
++	check("a cyclic gate terminates in a refusal, not a hang", typeof cycleText === "string" && cycleText.length > 0, cycleText.slice(0, 160));
++	check("...and it still names a hop", /gate-open:#(\d+)/.test(cycleText), cycleText.slice(0, 160));
++	check("...and the row is still queued", (await item(boundedIds.b)).status === "queued");
++} finally {
++	rmSync(dir, { recursive: true, force: true });
++}
++
++console.log(`\n${failures === 0 ? "PASS" : "FAIL"}: ${failures} failed check(s) — demo/by-id-claim-gate.test.mjs`);
++process.exit(failures === 0 ? 0 : 1);
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 6e564c9f..770a3981 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -19,6 +19,7 @@
+       "demo/admission-deadline.test.mjs",
+       "demo/blocked.test.mjs",
+       "demo/blockedby-field.test.mjs",
++    "demo/by-id-claim-gate.test.mjs",
+       "demo/cancel-notifies-sender.test.mjs",
+       "demo/cli-broker-refuse.test.mjs",
+       "demo/cli-help.test.mjs",

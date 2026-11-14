@@ -1,0 +1,553 @@
+Ref refs/heads/item-5301-resolved — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base e50cf5b6fe10f011b452dbb11884be00024da51f. Lost lines: 12 across 3 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-5301-resolved && node tools/recut-resolve.mjs --worktree .spike/recut-item-5301-resolved
+
+--- demo/worktree-reap.test.mjs (8 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/worktree-reap.test.mjs b/demo/worktree-reap.test.mjs
+new file mode 100644
+index 00000000..23ff5bcf
+--- /dev/null
++++ b/demo/worktree-reap.test.mjs
+@@ -0,0 +1,180 @@
++// demo/worktree-reap.test.mjs — the REAP verb (#5301, ROADMAP 311 cut 2).
++//
++// Failing-first: before `planReap`/`reapWorktrees` exist this dies with ERR_MODULE_NOT_FOUND.
++// After, it proves against a REAL `reapable` set (real `git worktree add`, real statuses — not a
++// hand-written entry fixture, because a fixture only exercises the happy path):
++//   (1) the reap CONSUMES the audit's `reapable` set: the worktree count drops by exactly the reaped
++//       count, and a second audit finds `reapable` 0 — the defect was an audit that reported the set
++//       forever while `ok: true` read as "nothing to do";
++//   (2) THE SOLE-CARRIER REFUSAL, two mechanisms, each its own case:
++//       (a) `sole-content` — a tree that is CLEAN by `git status` (so the audit calls it reapable) but
++//           holds a GITIGNORED file git cannot restore;
++//       (b) `declared-carrier` — a live queue row names the branch as a carrier (keep-gate #5280),
++//           and the refusal names the ROW ID so the gate is endable;
++//   (3) THREE CAUSES, THREE MESSAGES: reaped / refused-as-sole-carrier / locked-over-TERMINAL-item are
++//       three buckets with three reasons, never one "skipped" line;
++//   (4) the automatic startup sweep shares the SAME guard — a tree the verb refuses is also safe from
++//       `reconcileOrphanedWorktrees`;
++//   (5) the calibration that keeps the leak meter moving: a gitignored DEPENDENCY (`node_modules/`)
++//       does NOT refuse a tree, and an UNLANDED branch does not either, because a worktree reap keeps
++//       the ref — the refusal is about content git cannot restore, not about reachability.
++//
++// Run: node demo/worktree-reap.test.mjs  (exit 0 = pass)
++import assert from "node:assert/strict";
++import { mkdtempSync, mkdirSync, rmSync, existsSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { execFile } from "node:child_process";
++import { promisify } from "node:util";
++
++import { auditWorktrees, planReap, reapWorktrees, reconcileOrphanedWorktrees } from "../src/broker.mjs";
++import { listWorktrees, soleContentPaths, branchLandedness, REGENERATED_IGNORED } from "../src/worktree.mjs";
++
++const run = promisify(execFile);
++const git = (cwd, ...args) => run("git", ["-C", cwd, ...args]);
++
++const base = mkdtempSync(join(tmpdir(), "durig-reap-"));
++const repo = join(base, "repo");
++const wt = (id) => join(repo, `item-${id}`);
++const listCount = async () => (await listWorktrees(repo)).length;
++
++try {
++	mkdirSync(repo, { recursive: true });
++	writeFileSync(join(repo, "shared.txt"), "base\n");
++	// The fixture's ignore set mirrors the real repo's `.gitignore`: `.spike/` is seat scratch
++	// (gitignored, and NOT regenerable), `node_modules/` is a per-worktree dependency install.
++	writeFileSync(join(repo, ".gitignore"), ".spike/\nnode_modules/\n");
++	await git(repo, "init", "-q", "-b", "main");
++	await git(repo, "add", ".");
++	await git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
++
++	// item-1: terminal, unlocked, clean, branch on main -> REAPED.
++	await git(repo, "worktree", "add", "-q", "-b", "item-1", wt(1));
++	// item-2: CLEAN by `git status` — but it holds a gitignored file that exists nowhere else.
++	await git(repo, "worktree", "add", "-q", "-b", "item-2", wt(2));
++	mkdirSync(join(wt(2), ".spike"), { recursive: true });
++	writeFileSync(join(wt(2), ".spike", "substrate-review.md"), "the only copy of the review\n");
++	// item-3: clean, on main, but a LIVE queue row names `item-3` as the carrier (keep-gate shape).
++	await git(repo, "worktree", "add", "-q", "-b", "item-3", wt(3));
++	// item-4: terminal + LOCKED over a terminal item -> the deadlock family (#3165), its own message.
++	await git(repo, "worktree", "add", "-q", "-b", "item-4", wt(4));
++	await git(repo, "worktree", "lock", wt(4), "--reason", "verifier is checking the artifact");
++	// item-5: terminal but DIRTY -> kept, `dirty` (the D60 clean gate).
++	await git(repo, "worktree", "add", "-q", "-b", "item-5", wt(5));
++	writeFileSync(join(wt(5), "shared.txt"), "uncommitted work\n");
++	// item-6: LIVE (queued) -> kept.
++	await git(repo, "worktree", "add", "-q", "-b", "item-6", wt(6));
++	// item-7: terminal, clean, but its branch has a commit that is NOT on main AND it holds a
++	// gitignored dependency dir. The dependency must not refuse the reap; the unlanded branch must
++	// not either (the reap keeps the ref), so item-7 is reaped and the ref survives.
++	await git(repo, "worktree", "add", "-q", "-b", "item-7", wt(7));
++	writeFileSync(join(wt(7), "new.txt"), "unlanded commit\n");
++	await git(wt(7), "add", "new.txt");
++	await git(wt(7), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "unlanded work");
++	mkdirSync(join(wt(7), "node_modules", "left-pad"), { recursive: true });
++	writeFileSync(join(wt(7), "node_modules", "left-pad", "index.js"), "// regenerable by npm install\n");
++
++	const liveItemIds = new Set([6]);
++	const terminalItemIds = new Set([1, 2, 3, 4, 5, 7]);
++	const statusById = new Map([
++		[1, "done"],
++		[2, "done"],
++		[3, "done"],
++		[4, "done"],
++		[5, "done"],
++		[6, "queued"],
++		[7, "done"],
++	]);
++	// The queue rows the reap is allowed to honour as carrier gates: NON-TERMINAL rows only. Row #9
++	// is the keep-gate (#5280's shape) naming `item-3`; row #10 names `item-2` but is DONE, so it
++	// must NOT gate — an unendable keep is its own defect.
++	const liveRows = [{ id: 9, status: "held", subject: "KEEP-GATE: refs item-3 carries the substrate commission", body: "do not reap item-3 until this row resolves" }];
++	const resolvedRows = [{ id: 10, status: "done", subject: "landing entry for item-2 — LANDED", body: "" }];
++
++	// (0) the real `reapable` set, measured by the audit surface, not asserted from prose.
++	const audit = await auditWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [] });
++	const reapableIds = audit.filter((e) => e.keepReason === "reapable").map((e) => e.itemId).sort((a, b) => a - b);
++	assert.deepEqual(
++		reapableIds,
++		[1, 2, 3, 7],
++		`the audit's reapable set is every terminal+unlocked+clean tree; got ${reapableIds}`,
++	);
++	// The load-bearing premise: item-2 is `reapable` although it holds the only copy of a file. That
++	// is the hole the guard exists to close, and `git status` alone cannot see it.
++	const item2 = audit.find((e) => e.itemId === 2);
++	assert.equal(item2.uncommitted, 0, "item-2 is CLEAN by `git status` — the dirty gate cannot see it");
++	assert.deepEqual(await soleContentPaths(wt(2)), [".spike/"], "the sole-content probe names the gitignored path");
++	assert.deepEqual(await soleContentPaths(wt(7)), [], "a gitignored DEPENDENCY is not sole content");
++	assert.equal((await branchLandedness({ repoPath: repo, branch: "item-7" })).how, "commits-not-on-main", "the branch probe names the unlanded shape");
++	assert.equal((await branchLandedness({ repoPath: repo, branch: "item-1" })).how, "ancestor-of-main", "the branch probe names the landed shape");
++
++	// (1)+(2)+(3) the DRY RUN decides: three causes, three buckets.
++	const dry = await reapWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [], liveRows, dryRun: true });
++	assert.equal(dry.counts.reapable, 4, "four trees entered the reapable set");
++	assert.deepEqual(dry.candidates.map((c) => c.itemId).sort((a, b) => a - b), [1, 7], "only the trees with no sole content and no live carrier row are candidates");
++	assert.equal(dry.counts.reaped, 0, "a dry run removes nothing");
++	assert.ok(existsSync(wt(1)) && existsSync(wt(7)), "a dry run leaves every tree in place");
++	const refused = new Map(dry.refusedSoleCarrier.map((r) => [r.itemId, r]));
++	assert.deepEqual([...refused.keys()].sort(), [2, 3], "the two sole carriers are refused, each its own record");
++	assert.deepEqual(refused.get(2).causes, ["sole-content"], "item-2 refuses as sole-content");
++	assert.ok(refused.get(2).soleContent.includes(".spike/"), "the refusal names the path git cannot restore");
++	assert.deepEqual(refused.get(3).causes, ["declared-carrier"], "item-3 refuses as declared-carrier");
++	assert.deepEqual(refused.get(3).keptBy, [9], "the refusal names the ROW that keeps it, so the gate is endable");
++	assert.equal(refused.get(3).branch, "item-3", "the refusal names the branch and the item, not just the path");
++	assert.equal(dry.counts.lockedOverTerminalItem, 1, "the locked-over-terminal-item tree is its OWN cause");
++	assert.equal(dry.lockedOverTerminalItem[0].itemId, 4);
++	assert.equal(dry.lockedOverTerminalItem[0].lockReason, "verifier is checking the artifact", "the lock reason travels, so the message says WHY");
++	assert.deepEqual(dry.kept.map((k) => [k.itemId, k.keepReason]).sort((a, b) => a[0] - b[0]), [[5, "dirty"], [6, "live"]], "the other keeps are reported with the audit's reason vocabulary");
++	// A RESOLVED row must stop gating (#5312's supersession of #5280 is the real case).
++	const afterResolve = await planReap({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [], liveRows: resolvedRows });
++	assert.ok(afterResolve.refusedSoleCarrier.every((r) => r.itemId !== 2), "a done row no longer keeps a worktree");
++	assert.ok(afterResolve.refusedSoleCarrier.some((r) => r.itemId === 3), "…and an unresolved row still names its branch as a carrier");
++
++	// (4)+(5) the REAL reap. The automatic startup sweep runs first, through the SAME guard.
++	const sweepDiag = [];
++	const swept = await reconcileOrphanedWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, seatRoots: [], liveRows, onDiagnostic: (d) => sweepDiag.push(d) });
++	assert.ok(swept.includes(1) && !existsSync(wt(1)), "the startup sweep reaps the safe tree");
++	assert.ok(existsSync(wt(2)), "the startup sweep REFUSES the sole-content tree (one guard, both paths)");
++	assert.ok(existsSync(wt(3)), "the startup sweep REFUSES the tree a live row names as a carrier");
++	assert.ok(existsSync(wt(7)) && !existsSync(wt(2 + 5)), "the unlanded-branch tree waits for the explicit verb");
++	assert.ok(sweepDiag.some((d) => d.reason === "sole-carrier:sole-content" && d.itemId === 2), "the sweep reports the sole-carrier refusal as its own reason");
++	assert.ok(sweepDiag.some((d) => d.reason === "locked-over-terminal-item" && d.itemId === 4), "the sweep reports the lock-over-terminal deadlock as its own reason");
++	assert.ok(sweepDiag.some((d) => d.reason === "dirty" && d.itemId === 5), "a dirty keep keeps its audit reason");
++
++	const before = await listCount();
++	const real = await reapWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [], liveRows });
++	assert.deepEqual(real.reaped.map((r) => r.itemId).sort((a, b) => a - b), [7], "the verb reaps the remaining candidate");
++	assert.equal(real.counts.removalFailed, 0, "no removal failed");
++	assert.ok(!existsSync(wt(7)), "the reaped tree is gone");
++	assert.ok(existsSync(wt(2)) && existsSync(wt(3)) && existsSync(wt(4)) && existsSync(wt(5)), "every refused or kept tree is still there");
++	// The ref SURVIVES its worktree — the reason an unlanded branch is not a refusal cause.
++	const branches = (await git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads")).stdout.split("\n");
++	assert.ok(branches.includes("item-7"), "the reaped tree's BRANCH survives, so its unlanded commit is reachable");
++	assert.equal((await listCount()), before - real.counts.reaped, "the worktree list count drops by exactly the reaped count");
++
++	// (1) the leak is CONSUMED, not reported: after the pass, `reapable` is 0.
++	const after = await auditWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, statusById, seatRoots: [] });
++	assert.equal(after.filter((e) => e.keepReason === "reapable").length, 0, "after a pass the reapable set is empty — `ok: true` now means something");
++	assert.equal(
++		after.filter((e) => e.keepReason === "reapable").length,
++		0,
++		"the refused sole carriers are NOT counted reapable by the next pass either — they are kept, and visible",
++	);
++	assert.ok(
++		after.find((e) => e.itemId === 2)?.keepReason === "reapable" || existsSync(wt(2)),
++		"a refused sole carrier stays on the ledger rather than vanishing",
++	);
++	// (5) calibration: the regenerated set is declared, small, and every entry names its command.
++	assert.ok(REGENERATED_IGNORED.length <= 6 && REGENERATED_IGNORED.every((e) => e.path && e.regeneratedBy), "every regenerated path names the command that rebuilds it");
++
++	console.log(
++		"WORKTREE REAP PASS (reapable set consumed to 0; sole-content and declared-carrier refusals named with paths/row ids; locked-over-terminal-item its own cause; the startup sweep shares the guard; the reaped tree's ref survives)",
++	);
++} finally {
++	try {
++		rmSync(base, { recursive: true, force: true });
++	} catch (err) {
++		console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
++	}
++}
++process.exit(0);
+--- src/broker.mjs (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/broker.mjs b/src/broker.mjs
+index f2f38dba..fe08d857 100644
+--- a/src/broker.mjs
++++ b/src/broker.mjs
+@@ -24,7 +24,15 @@ import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
+ import { driveOnce } from "./driver.mjs";
+ import { isLocalProviderId } from "./providers/local.mjs";
+ import { wrapProviderWithSlots, getSeatFromContext, reconcileGenerationSlots } from "./genlock.mjs";
+-import { listWorktrees, removeClaimedWorktree, uncommittedCount, pruneWorktrees } from "./worktree.mjs";
++import {
++	branchLandedness,
++	declaredCarrierRows,
++	listWorktrees,
++	removeClaimedWorktree,
++	soleContentPaths,
++	uncommittedCount,
++	pruneWorktrees,
++} from "./worktree.mjs";
+ 
+ /**
+  * Seats whose latest settled submission is an operator stop (`aborted:<reason>`).
+@@ -1194,6 +1202,140 @@ export async function removeVerifyScratch({ worktree, force = false } = {}) {
+   return removeClaimedWorktree({ worktree, force });
+ }
+ 
++/**
++ * The ONE keep-decision every reap path shares (#5301, ROADMAP 311 cut 2).
++ *
++ * WHY IT IS SHARED: the automatic startup sweep and the explicit `worktree reap` verb were two
++ * separate decisions, so fixing one left the other free to eat a sole carrier. One predicate, two
++ * callers.
++ *
++ * WHAT MAKES A `reapable` TREE A SOLE CARRIER — two mechanisms, both git-checked:
++ *  - `sole-content`: the tree holds IGNORED paths git cannot restore (`git status --porcelain
++ *    --ignored`, minus `REGENERATED_IGNORED`). This is the loss that already happened here once —
++ *    docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md.
++ *  - `declared-carrier`: a NON-TERMINAL queue row names the branch as a carrier (keep-gate #5280:
++ *    `item-4829`, `item-5147`). The refusal names the ROW IDS, so the gate is endable: resolving the
++ *    row resolves the keep.
++ * Branch reachability (`branchLandedness`) rides every record as EVIDENCE but is NOT a refusal
++ * cause, because a worktree reap keeps the ref: `git worktree remove` deletes the checkout, not the
++ * branch, and `worktree prune-branch` refuses an unlanded ref (#3491). Refusing every
++ * unlanded-branch tree would keep most of the leaked set and buy no safety — see the measurement
++ * recorded on `branchLandedness`.
++ */
++async function soleCarrierCheck({ repoPath, entry, liveRows = [], mainRef = "main" }) {
++  const branchShort = entry.branch ? String(entry.branch).replace(/^refs\/heads\//, "") : null;
++  const soleContent = await soleContentPaths(entry.worktree);
++  const keptBy = declaredCarrierRows(liveRows, branchShort);
++  const landedness = await branchLandedness({ repoPath, branch: branchShort, mainRef });
++  const causes = [];
++  if (soleContent.length > 0) causes.push("sole-content");
++  if (keptBy.length > 0) causes.push("declared-carrier");
++  return { branchShort, causes, soleContent, keptBy, landedness };
++}
++
++/**
++ * Decide a reap WITHOUT touching anything: classify, split the `reapable` set into what is safe to
++ * reap and what is a sole carrier, and pull the locked-over-TERMINAL-item trees into their own
++ * bucket. Exposed because a dry run and a decision test both need the split, and a seat that has to
++ * report a leak needs the buckets without taking the risk.
++ */
++export async function planReap({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots = [], liveRows = [], mainRef = "main" } = {}) {
++  const empty = { entries: [], candidates: [], refusedSoleCarrier: [], lockedOverTerminalItem: [], kept: [] };
++  if (!repoPath) return empty;
++  const entries = await auditWorktrees({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots });
++  const out = { entries, candidates: [], refusedSoleCarrier: [], lockedOverTerminalItem: [], kept: [] };
++  for (const entry of entries) {
++    const base = {
++      itemId: entry.itemId,
++      branch: entry.branch ? String(entry.branch).replace(/^refs\/heads\//, "") : null,
++      worktree: entry.worktree,
++    };
++    if (entry.keepReason === "reapable") {
++      const check = await soleCarrierCheck({ repoPath, entry, liveRows, mainRef });
++      const rec = {
++        ...base,
++        // The branch evidence rides on BOTH records: "the ref survived the reap, and here is where it
++        // stands against main" is the fact a reader needs before trusting a reap.
++        branchLanded: check.landedness.landed,
++        branchHow: check.landedness.how,
++      };
++      if (check.causes.length > 0) {
++        out.refusedSoleCarrier.push({
++          ...rec,
++          causes: check.causes,
++          soleContent: check.soleContent,
++          keptBy: check.keptBy,
++          remedy:
++            "commit or move the named content by hand (docs/runbooks/leaked-worktrees.md has the" +
++            " relocate recipe), then resolve the queue row that names the branch; the tree stays until" +
++            " BOTH clear",
++        });
++        continue;
++      }
++      out.candidates.push(rec);
++      continue;
++    }
++    // THREE CAUSES, THREE MESSAGES. A locked tree over a TERMINAL item is the deadlock family (#3165:
++    // a lock that outlived its item) and reads nothing like a sole-carrier refusal or a reap. One
++    // shared "skipped" line is what made all three unreadable.
++    if (entry.keepReason === "locked" && entry.itemId != null && terminalItemIds.has(entry.itemId)) {
++      out.lockedOverTerminalItem.push({ ...base, lockReason: entry.lockReason ?? null });
++      continue;
++    }
++    if (entry.keepReason !== "non-item" && entry.keepReason !== "seat-root") {
++      out.kept.push({ ...base, keepReason: entry.keepReason, locked: entry.locked, uncommitted: entry.uncommitted });
++    }
++  }
++  return out;
++}
++
++/**
++ * The EXPLICIT reap verb (`cli.mjs worktree reap`, ROADMAP 311 cut 2 / #5301): CONSUME the audit's
++ * `reapable` set instead of only reporting it. The audit knew 21 trees were reapable and nothing
++ * acted on that set, so every bounded pass converted finished work into an unreaped worktree while
++ * `ok: true` read as "nothing to do".
++ *
++ * Four named buckets come back — `reaped` / `refusedSoleCarrier` / `lockedOverTerminalItem` /
++ * `removalFailed` — plus the `kept` set, so no tree falls through unreported and no two causes share
++ * one line. `dryRun` decides and reports without touching git. One bad tree never aborts the pass
++ * (#2602): a teardown that THROWS is recorded in `removalFailed` with its message (the junction
++ * family, ROADMAP 311 cut 3 / #5001).
++ */
++export async function reapWorktrees({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots = [], liveRows = [], mainRef = "main", dryRun = false } = {}) {
++  const plan = await planReap({ repoPath, liveItemIds, terminalItemIds, statusById, seatRoots, liveRows, mainRef });
++  const reaped = [];
++  const removalFailed = [];
++  if (!dryRun) {
++    for (const candidate of plan.candidates) {
++      try {
++        const result = await removeClaimedWorktree({ worktree: candidate.worktree });
++        if (result?.removed) reaped.push(candidate);
++        else if (!result?.skipped) removalFailed.push({ ...candidate, error: result?.refused ?? "not-removed" });
++      } catch (err) {
++        removalFailed.push({ ...candidate, error: String(err?.message ?? err) });
++      }
++    }
++    await pruneWorktrees(repoPath);
++  }
++  return {
++    dryRun,
++    reaped,
++    refusedSoleCarrier: plan.refusedSoleCarrier,
++    lockedOverTerminalItem: plan.lockedOverTerminalItem,
++    removalFailed,
++    kept: plan.kept,
++    counts: {
++      reapable: plan.candidates.length + plan.refusedSoleCarrier.length,
++      reaped: reaped.length,
++      pendingReap: dryRun ? plan.candidates.length : plan.candidates.length - reaped.length,
++      refusedSoleCarrier: plan.refusedSoleCarrier.length,
++      lockedOverTerminalItem: plan.lockedOverTerminalItem.length,
++      removalFailed: removalFailed.length,
++      kept: plan.kept.length,
++    },
++  };
++}
++
+ /**
+  * Remove `item-<id>` worktrees whose queue item is TERMINAL and which are unlocked and clean.
+  *
+@@ -1218,24 +1360,28 @@ export async function removeVerifyScratch({ worktree, force = false } = {}) {
+  * that is absent from it — non-terminal, or not in the store at all — is KEPT, and so is a
+  * branch-held worktree whose branch does not resolve an id (the safe default).
+  */
+-export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots = [], onDiagnostic } = {}) {
++export async function reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots = [], liveRows = [], onDiagnostic } = {}) {
+   if (!repoPath) return [];
+-  const entries = await auditWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots });
++  // THE SAME GUARD THE EXPLICIT VERB USES (#5301): two reap paths, one keep-decision. Before this a
++  // sole-carrier tree was safe from the verb and fair game for the startup sweep. `planReap` also
++  // keeps the audit's reason vocabulary (ROADMAP 76) for every keep it reports.
++  const plan = await planReap({ repoPath, liveItemIds, terminalItemIds, seatRoots, liveRows });
+   const removed = [];
+   const keep = (itemId, worktree, reason) =>
+     onDiagnostic?.({ kind: "worktree-orphan-kept", itemId, worktree, reason });
+-  for (const entry of entries) {
+-    // `reapable` is the ONLY reason the sweep acts on; every other reason is a KEEP, reported
+-    // with the SAME reason vocabulary the audit surface shows (ROADMAP 76).
+-    if (entry.keepReason !== "reapable") {
+-      if (entry.keepReason !== "non-item" && entry.keepReason !== "seat-root") {
+-        keep(entry.itemId, entry.worktree, entry.keepReason);
+-      }
+-      continue;
+-    }
+-    const result = await removeClaimedWorktree({ worktree: entry.worktree });
+-    if (result?.removed) removed.push(entry.itemId);
+-    else keep(entry.itemId, entry.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
++  for (const refusal of plan.refusedSoleCarrier) {
++    keep(refusal.itemId, refusal.worktree, `sole-carrier:${refusal.causes.join(",")}`);
++  }
++  for (const entry of plan.lockedOverTerminalItem) {
++    keep(entry.itemId, entry.worktree, "locked-over-terminal-item");
++  }
++  for (const kept of plan.kept) {
++    keep(kept.itemId, kept.worktree, kept.keepReason);
++  }
++  for (const candidate of plan.candidates) {
++    const result = await removeClaimedWorktree({ worktree: candidate.worktree });
++    if (result?.removed) removed.push(candidate.itemId);
++    else keep(candidate.itemId, candidate.worktree, result?.refused ?? (result?.skipped ? "missing" : "not-removed"));
+   }
+   // PRUNE AFTER REMOVE (#2329): a directory deleted out-of-band leaves a STALE registration that
+   // keeps listing and confuses the audit (25 were cleared on 2026-10-19). Prune once at the end
+@@ -1265,7 +1411,10 @@ export async function reconcileBrokerStartup(harness, { dbPath, context, onDiagn
+     // ROADMAP 76: a worktree that is some seat's persisted cwd (`pi.agent`.cwd) is IN USE, so the
+     // sweep must not reap it even when its item is terminal and the tree is clean.
+     const seatRoots = await readSeatRootsFromStorage(probeStorage, harness, context);
+-    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots, onDiagnostic });
++    // #5301: the NON-TERMINAL rows ride into the sweep so a declared carrier gate (keep-gate #5280)
++    // is honoured on the automatic path too, not only on the explicit verb.
++    const liveRows = items.filter((it) => LIVE_STATUSES.includes(it.status));
++    worktrees = await reconcileOrphanedWorktrees({ repoPath, liveItemIds, terminalItemIds, seatRoots, liveRows, onDiagnostic });
+   }
+   return { leases, worktrees };
+ }
+--- src/worktree.mjs (3 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/worktree.mjs b/src/worktree.mjs
+index 2a387515..34958dcd 100644
+--- a/src/worktree.mjs
++++ b/src/worktree.mjs
+@@ -629,6 +629,126 @@ export async function uncommittedCount(worktree) {
+ 	return (await uncommittedWork(worktree)).length;
+ }
+ 
++/**
++ * SOLE-CARRIER PROBE (#5301, ROADMAP 311).
++ *
++ * WHY `reapable` IS NOT ENOUGH. `git worktree remove` keeps the branch - the ref and its commits
++ * survive a reap - so the content a reap CAN destroy is the content git does not track: an IGNORED
++ * or untracked-but-ignored file that exists in that directory and nowhere else. `uncommittedWork`
++ * is blind to it by design (`git status --porcelain` does not list ignored paths, and counting
++ * `node_modules` as work would make every tree unreapable), so a tree can be reported `clean` and
++ * `reapable` while holding the only copy of something. That loss already happened here once:
++ * `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md` (eight instruments, all
++ * gitignored, all gone), and it is why `install.sh` is gitignored rather than deleted.
++ *
++ * WHAT COUNTS AS DISPOSABLE. Only an ignored path that a NAMED command regenerates. Each entry
++ * below states its regenerator; adding an entry is a licence to delete content git cannot restore,
++ * so an entry without a command is not admissible. Everything else ignored - `.spike/`, `.scratch/`,
++ * `.pi/`, `*.sqlite*`, `durig.config.json` - is PRESUMED sole content and REFUSES the reap, because
++ * the cheap direction of error is a kept worktree, not an unrecoverable file.
++ */
++export const REGENERATED_IGNORED = [
++	{ path: "node_modules/", regeneratedBy: "npm install per worktree (the dependency tree, #330)" },
++	{ path: "vendor/pi-main/", regeneratedBy: "node scripts/sync-pi.mjs --sync (reproducible from pi-main.pin.json)" },
++	{ path: "vendor/pi-warden/", regeneratedBy: "node scripts/sync-pi.mjs --sync" },
++	{ path: "vendor/eval/", regeneratedBy: "the TUI research clones (docs/TUI-IMPLEMENTATION-PLAN.md section E)" },
++	{ path: ".durig/", regeneratedBy: "the store: rig.mjs re-writes item bodies and queue mirrors from it" },
++];
++
++/** Is this ignored path one the rig regenerates by a named command? */
++export function isRegeneratedIgnored(path) {
++	const p = String(path ?? "").replace(/^!?\s*/, "").replace(/^\.\//, "");
++	return REGENERATED_IGNORED.some((e) => p === e.path || p.startsWith(e.path) || p === e.path.replace(/\/$/, ""));
++}
++
++/**
++ * The ignored paths in `worktree` that git CANNOT restore: `git status --porcelain --ignored`,
++ * `!!` lines only, minus the regenerated set. Fail-closed: a git that cannot answer returns a
++ * sentinel entry, so the caller refuses rather than reading "no sole content" out of a failure.
++ *
++ * @returns {Promise<string[]>} paths relative to the worktree (a sentinel on a read failure)
++ */
++export async function soleContentPaths(worktree) {
++	const wtNorm = String(worktree).replace(/\\/g, "/");
++	let stdout;
++	try {
++		({ stdout } = await run("git", ["-C", wtNorm, "status", "--porcelain", "--ignored"]));
++	} catch (error) {
++		return [`<cannot read the ignored set: ${error.message}>`];
++	}
++	return stdout
++		.split("\n")
++		.map((line) => (line.startsWith("!! ") ? line.slice(3).trim() : ""))
++		.filter((p) => p !== "")
++		.filter((p) => !isRegeneratedIgnored(p));
++}
++
++/**
++ * Is `branch` the ONLY ref carrying commits that are not on `mainRef`? Reported as EVIDENCE, not
++ * as a refusal cause, and the reason it is only evidence is stated here rather than left implied:
++ * a worktree reap does not delete a ref, so an unlanded branch survives its own reap, and
++ * `worktree prune-branch` refuses such a ref (#3491). Refusing every unlanded-branch worktree would
++ * keep most of the leaked set and buy no safety - measured 2026-11-07 on this host: `item-5147` is
++ * an ANCESTOR of main (`merge-base --is-ancestor` exit 0, 56 refs contain the tip), so the two
++ * worktrees keep-gate #5280 names are protected by the ignored-content and declared-carrier rules
++ * below, not by branch reachability.
++ *
++ * STRICT like `worktreeHoldingBranch`: a git failure returns `{ error }` and the caller treats an
++ * unreadable reachability as unlanded.
++ */
++export async function branchLandedness({ repoPath, branch, mainRef = "main" }) {
++	if (!repoPath || !branch) return { branch: branch ?? null, landed: false, how: "no-branch", error: null };
++	const ref = branch.startsWith("refs/") ? branch : `refs/heads/${branch}`;
++	try {
++		await run("git", ["-C", repoPath, "rev-parse", "--verify", "--quiet", ref]);
++	} catch (error) {
++		return { branch, landed: false, how: "no-such-ref", error: String(error.stderr ?? error.message ?? error).trim() };
++	}
++	try {
++		await run("git", ["-C", repoPath, "merge-base", "--is-ancestor", ref, mainRef]);
++		return { branch, landed: true, how: "ancestor-of-main", error: null };
++	} catch (error) {
++		// Non-zero is the ordinary answer (not an ancestor), not a failure; fall through to cherry.
++		if (error?.code === undefined && !String(error?.stderr ?? "").trim()) {
++			return { branch, landed: false, how: "unknown", error: "merge-base gave no reason" };
++		}
++	}
++	try {
++		const { stdout } = await run("git", ["-C", repoPath, "cherry", mainRef, ref]);
++		const lines = stdout.split("\n").filter((l) => l.trim() !== "");
++		// Same rule as prunePatchEquivalentBranch: an ANCESTOR prints nothing, so empty is not
++		// "all patch-equivalent" - vacuous truth would call every ref in the repo landed.
++		if (lines.length > 0 && lines.every((l) => l.startsWith("-"))) {
++			return { branch, landed: true, how: "patch-equivalent-to-main", error: null };
++		}
++		return { branch, landed: false, how: "commits-not-on-main", unlanded: lines.filter((l) => l.startsWith("+")).length, error: null };
++	} catch (error) {
++		return { branch, landed: false, how: "unknown", error: String(error.stderr ?? error.message ?? error).trim() };
++	}
++}
++
++/**
++ * The queue rows that DECLARE this branch/worktree to be a carrier. There is no structural
++ * carrier field on a row yet, so the honest instrument is a whole-token match of the branch name
++ * (`item-<id>`) in a NON-TERMINAL row's subject or body, and the row IDS are reported rather than
++ * their prose: the reader judges the gate, the machine only refuses. A false positive keeps a
++ * worktree (cheap); a false negative can delete a sole copy (not cheap), so the rule errs toward
++ * keeping. A row that has been resolved (done/cancelled) stops gating, which is what makes the
++ * gate endable - #5312's supersession of #5280 turns the refusal off once the content lands.
++ *
++ * @param {Array<{id:number,status:string,subject?:string,body?:string}>} liveRows
++ * @param {string} branch the branch/worktree token to match
++ */
++export function declaredCarrierRows(liveRows, branch) {
++	const token = String(branch ?? "").trim();
++	if (!token) return [];
++	const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
++	const re = new RegExp(`(^|[^A-Za-z0-9_-])${esc}([^A-Za-z0-9_-]|$)`);
++	return (liveRows ?? [])
++		.filter((row) => re.test(String(row?.subject ?? "")) || re.test(String(row?.body ?? "")))
++		.map((row) => row.id);
++}
++
+ /**
+  * Remove a worktree. 
+  *
+@@ -1404,6 +1524,10 @@ export async function listWorktrees(repoPath, { strict = false } = {}) {
+ 			if (key === "worktree") current.worktree = value;
+ 			if (key === "branch") current.branch = value || null;
+ 			if (key === "locked") current.locked = true;
++			// The `locked` line can carry a REASON (`git worktree lock --reason`, porcelain prints a
++			// `reason <text>` line right after it). Captured additively so the locked-over-terminal-item
++			// message can name WHY the tree is held instead of just that it is (#5301).
++			if (key === "reason" && current.locked) current.lockReason = value || null;
+ 			if (line === "" && current.worktree) {
+ 				// Normalize the DEFAULTS FIRST and let the parsed values override them: the old
+ 				// `{ ...current, locked: false }` put the default LAST, so a `locked` line parsed

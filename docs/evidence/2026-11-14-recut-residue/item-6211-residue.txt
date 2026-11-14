@@ -1,0 +1,81 @@
+Ref refs/heads/item-6211 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base ed84f0b4295ff8e467fa8f8b6cb562b470d5cb61. Lost lines: 3 across 2 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6211 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6211
+
+--- cli.mjs (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/cli.mjs b/cli.mjs
+index ed8c14cb..34b55fa8 100644
+--- a/cli.mjs
++++ b/cli.mjs
+@@ -62,7 +62,7 @@ import {
+   compilePersona,
+   registerSeat,
+ } from "./src/rig.mjs";
+-import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
++import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, progressSettings, streamSettings } from "./src/config.mjs";
+ // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
+ // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
+ import { contextConsumption } from "./src/context.mjs";
+@@ -527,14 +527,18 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
+       models,
+       registry,
+       env: makeSeatEnv(seatRoster),
+-      // `stream` AND `compaction` are configurable here; everything else keeps pi-durable's
++      // `stream`, `compaction` and `progress` are configurable here; everything else keeps pi-durable's
+       // built-in defaults, which were chosen deliberately and which nothing in durian-pi's use argues
+       // against. Compaction was added because the ABSENCE of a policy was a measured defect (#4898):
+       // the defaults (reserve 16384 / keepRecent 20000 / background 32768) sit above the whole
+       // verifier-class window of 24,576, so the policy fired too late to leave room to answer. ONE
+       // call site, and no second mechanism - pi-durable's `modelOverrides` layering does the per-model
+       // work. See `streamSettings` and `compactionSettings` for why each one matters.
+-      settings: { ...streamSettings(CFG), ...compactionSettings(CFG) },
++      // `progress` is here because 1.5.x defers partial answers and running tool output to storage within
++      // `persistWithinMs` (upstream default 1,000 ms), and a `subscribeCommits` listener only sees those
++      // commits once stored. The rig PINS that value rather than inheriting it — see `progressSettings`
++      // (#6211, lead ruling from #6172) for why 1,000 ms and why not 0.
++      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...progressSettings(CFG) },
+     },
+     BACKGROUND_CONTEXT,
+   );
+--- demo/config.test.mjs (2 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/config.test.mjs b/demo/config.test.mjs
+index 5b77fbf0..2d402c55 100644
+--- a/demo/config.test.mjs
++++ b/demo/config.test.mjs
+@@ -15,6 +15,8 @@ import {
+ 	loadConfig,
+ 	loadShippedDefaults,
+ 	mergeConfig,
++	PROGRESS_PERSIST_WITHIN_MS,
++	progressSettings,
+ 	streamSettings,
+ } from "../src/config.mjs";
+ 
+@@ -247,9 +249,24 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
+ 	const cliSource = readFileSync(join(durigDir, "cli.mjs"), "utf8");
+ 	assert.match(
+ 		cliSource,
+-		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\)\s*\}/,
+-		"openHarness must pass BOTH streamSettings(CFG) and compactionSettings(CFG) as the harness settings (#4898)",
++		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\),\s*\.\.\.progressSettings\(CFG\)\s*\}/,
++		"openHarness must pass streamSettings(CFG), compactionSettings(CFG) and progressSettings(CFG) as the harness settings (#4898, #6211)",
+ 	);
++	// #6211: the progress cadence is PINNED, not inherited. One seam, and the pin lives in
++	// src/config.mjs rather than a literal in the cli.
++	assert.deepEqual(progressSettings({}), { progress: { persistWithinMs: PROGRESS_PERSIST_WITHIN_MS } }, "the rig states the cadence explicitly instead of leaving it to upstream");
++	assert.equal(PROGRESS_PERSIST_WITHIN_MS, 1000, "the pinned cadence is 1,000 ms (#6211 lead ruling from #6172)");
++	assert.equal(progressSettings({ DURIG_PROGRESS_PERSIST_WITHIN_MS: 250 }).progress.persistWithinMs, 250, "the tuning rule allows a smaller EXPLICIT value");
++	for (const bad of [0, -1, "abc"]) {
++		assert.throws(
++			() => progressSettings({ DURIG_PROGRESS_PERSIST_WITHIN_MS: bad }),
++			/0 is refused|positive number/,
++			`${JSON.stringify(bad)} must be rejected, not silently defaulted`,
++			);
++	}
++	assert.ok(CONFIG_KEYS.includes("DURIG_PROGRESS_PERSIST_WITHIN_MS"), "an unregistered key in a config file is an inert key (#5125 rule)");
++	assert.equal((cliSource.match(/settings: \{/g) ?? []).length, 1, "there is exactly one harness settings seam (#6211: no second mechanism)");
++	assert.ok(!/persistWithinMs:\s*\d/.test(cliSource), "the numeric pin lives in src/config.mjs, not in cli.mjs");
+ 	// #491 C6: the shipped defaults must be in the REAL load path (wiring, not just
+ 	// exports): the cli anchors the shipped file to its own install directory.
+ 	assert.match(

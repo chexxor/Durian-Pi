@@ -1,0 +1,868 @@
+Ref refs/heads/item-6924 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base ddcc0a23c786bf26e44b9a1419858e453e8ca619. Lost lines: 81 across 11 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6924 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6924
+
+--- cli.mjs (22 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/cli.mjs b/cli.mjs
+index f5e09b1b..233c3d70 100644
+--- a/cli.mjs
++++ b/cli.mjs
+@@ -64,6 +64,7 @@ import {
+ } from "./src/rig.mjs";
+ import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings } from "./src/config.mjs";
+ import { DEFAULT_STRATEGY, assertWorkStrategy, strategyNames } from "./src/workstrategy.mjs";
++import { leaseReport, renderLeaseLine } from "./src/leasemonitor.mjs";
+ // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
+ // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
+ import { contextConsumption } from "./src/context.mjs";
+@@ -1358,6 +1359,12 @@ async function cmdQueue(args = []) {
+     rows: census.rows,
+     counts: census.counts,
+     attention: census.attention,
++    // #7114: the priority-lease monitor (#2643: monitored, not merely logged). It lives in the same derived
++    // block as the counts, so every bounded queue read answers "how many leases are live / lapsed / malformed".
++    // A RESIDENT broker outlives the code on disk, so a broker older than this CLI serves a census WITHOUT this
++    // block; the branches below fill it from the rows they already hold rather than reporting nothing — the
++    // same skew fallback `cmdStatus` uses for `workStrategy`.
++    leases: census.leases ?? null,
+     // Mechanism honesty (#5016): filters and `--no-body` narrow the PAYLOAD, never the storage read — the queue is
+     // one document (`RigQueue.value.items`), so it is read whole every time. Saying which half moved is what stops
+     // a small answer from being mistaken for a small read.
+@@ -1378,7 +1385,7 @@ async function cmdQueue(args = []) {
+     }
+     // `ok:false` when an id matched nothing (#4986, unchanged): a caller that checks the flag must see the miss,
+     // not just a reader who notices `missing`.
+-    out({ ...doc, ok: missing.length === 0, items: noBody ? items.map(stripBody) : items, ...(missing.length ? { missing } : {}) });
++    out({ ...doc, leases: doc.leases ?? leaseReport(items), ok: missing.length === 0, items: noBody ? items.map(stripBody) : items, ...(missing.length ? { missing } : {}) });
+     if (missing.length) {
+       process.stderr.write(`queue: no such id(s): ${missing.join(", ")} — the store has ${census.rows} rows\n`);
+       process.exit(1);
+@@ -1390,6 +1397,18 @@ async function cmdQueue(args = []) {
+   // printed. `rows`/`counts`/`attention` above are still the whole store's.
+   const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+   const items = filterQueueItems(all, { statuses, to });
++  // Skew fill (#7114): a resident broker older than this CLI serves a census without the lease block, so derive
++  // it here from the rows this read already holds, against the strategy the rig resolves (the generic `document`
++  // view is served by every broker version — the same trick cmdStatus uses for `workStrategy`).
++  if (!doc.leases) {
++    const seatsDoc = await readData(
++      DB_PATH,
++      "document",
++      { kind: Seats.definition.kind, scope: { kind: "session" } },
++      (storage) => readSeatsDocument(storage),
++    );
++    doc.leases = leaseReport(all, { strategyView: workStrategyView(seatsDoc?.value ?? {}) });
++  }
+   if (gates) {
+     // THE BOUNDED CENSUS (#5770). Bodies are gone before projection, so this view cannot become the 25 MB
+     // dump; the count is capped and the cap is REPORTED, so a caller who sees 200 rows knows 438 matched.
+@@ -1405,6 +1424,7 @@ async function cmdQueue(args = []) {
+       counts: census.counts,
+       // The number the census was asked for: held rows with NOTHING recorded about why they are parked.
+       gatelessHeld: view.filter((v) => v.status === "held" && v.gate === "none").length,
++      leases: doc.leases,
+       items: view.slice(0, limit),
+       ...(gateless.length ? { gatelessIds: gateless.map((v) => v.id) } : {}),
+       narrowed: "payload",
+@@ -3106,6 +3126,13 @@ async function cmdStatus(args = []) {
+   const outOfBand = health.metrics.measures.filter((m) => m.state === "warn").length;
+   const notes =
+     outOfBand > 0 ? [`${outOfBand} measure(s) out of band - see: node cli.mjs metrics`] : [];
++  // #7114: the priority-lease monitor, IN the notes array rather than on stderr (#4403: a diagnostic written
++  // to stderr breaks a consumer that merges the streams, and it breaks it only when the mechanism drifts).
++  // Printed only when there is something to count, so a rig that has never leased a row reads unchanged. A
++  // resident broker older than this CLI serves a health payload without the block, so it is derived from the
++  // rows this read already holds — the same skew fallback as `workStrategy` above.
++  const leases = health.leases ?? leaseReport(health.queueItems, { strategyView: workStrategy });
++  if (leases.leased + leases.lapsed + leases.invalid > 0) notes.push(renderLeaseLine(leases));
+ 
+   // BOUND THE PAYLOAD (ROADMAP 331, the read-surface leg). Measured on this rig 2026-11-09:
+   // `cli.mjs status --json` printed 28,543,835 bytes, of which `queueItems` was 24,746,566 — 88% of it rows in
+@@ -3141,6 +3168,7 @@ async function cmdStatus(args = []) {
+     ...health,
+     // Overrides the spread above when the fallback ran (a broker that predates the field).
+     workStrategy,
++    leases,
+     queueItems: view.rows,
+     queueCensus: queueCensusOf(health.queueItems),
+     queueDeferred: deferredBacklogRows(health.queueItems),
+--- demo/lease-monitor.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/lease-monitor.test.mjs b/demo/lease-monitor.test.mjs
+new file mode 100644
+index 00000000..c797dbe6
+--- /dev/null
++++ b/demo/lease-monitor.test.mjs
+@@ -0,0 +1,259 @@
++// demo/lease-monitor.test.mjs — the priority lease is MONITORED, not just logged (#7114, N35 / D266).
++//
++// THE DEFECT this closes: `set_priority` writes a lease, `effectivePriority` honours it, `queueItemLine`
++// prints it on the row — and NOTHING counts it. A reordering mechanism with no counter drifts silently:
++// leases that never expire, rows whose lease lapsed but whose stored value still reads urgent to any reader
++// that reads the raw field, and rows carrying a level the vocabulary does not contain. #2643's rule is that
++// a mechanism must be monitored, not merely logged; D266 registered this as the read-surface gap.
++//
++// THE CONTRACT this pins:
++//   1. Every read reports THREE numbers: live leases, lapsed-but-stored leases, invalid leases.
++//   2. The numbers CHANGE at the instant a lease crosses its `expiresAt` — that is the falsifier. A count
++//      that cannot move is a description, not a monitor.
++//   3. A lapsed lease is INERT in ordering. "Stored and inert" is correct; "stored and acting" is the bug,
++//      and the row's `acting` field is what makes the two distinguishable.
++//   4. A malformed lease (unknown level, missing/unparseable expiry, no reason) is counted and named by
++//      reason, never silently coerced to neutral.
++//   5. The readout names, per seat, the RESOLVED claim strategy and its SOURCE (seat | team | default),
++//      because a lease is inert on a seat that claims `oldest_first` — a fleet cannot monitor a mechanism it
++//      cannot tell which seats have enabled.
++//   6. A rig with no leases renders the queue header EXACTLY as before: the monitor adds no noise to a rig
++//      that has never used the mechanism (the same convention as the strategy footer in src/watchview.mjs).
++//
++// Run: node demo/lease-monitor.test.mjs  (exit 0 = pass)
++
++import assert from "node:assert/strict";
++import { mkdtempSync, readFileSync, rmSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { dirname, join } from "node:path";
++
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import { fauxAssistantMessage, fauxProvider, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
++import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
++import { RigQueue, Router, Seats, enqueueItem, registerSeat } from "../src/rig.mjs";
++import { fillRoster, makeSeatEnv } from "../src/seattools.mjs";
++import {
++	LEASE_INVALID_REASONS,
++	classifyLease,
++	leaseReport,
++	monitorLeases,
++	renderLeaseLine,
++} from "../src/leasemonitor.mjs";
++import { orderCandidates } from "../src/workstrategy.mjs";
++import { queueCensusOf, workStrategyView } from "../src/readapi.mjs";
++
++let failures = 0;
++function check(label, ok, detail = "") {
++	if (ok) console.log(`  ok   ${label}`);
++	else {
++		failures += 1;
++		console.log(`  FAIL ${label}${detail ? ` -- ${detail}` : ""}`);
++	}
++}
++
++const row = (id, over = {}) => ({
++	id,
++	from: "pm",
++	to: "impl",
++	status: "queued",
++	subject: `work ${id}`,
++	transitions: [],
++	...over,
++});
++
++const T0 = Date.parse("2026-11-12T12:00:00Z");
++const iso = (ms) => new Date(ms).toISOString();
++
++// ---------------------------------------------------------------- pure: the three numbers, and their movement
++console.log("\n=== the three numbers move when a lease crosses its instant ===");
++{
++	const leased = row(100, {
++		priority: "now",
++		prioritySet: { at: iso(T0 - 1000), by: "pm", reason: "MVP tranche first", expiresAt: iso(T0 + 3600000) },
++	});
++	const plain = row(50);
++
++	const before = leaseReport([leased, plain], { now: T0, strategyView: { team: { strategy: "priority_first", source: "team" }, seats: {} } });
++	const after = leaseReport([leased, plain], { now: T0 + 3600001, strategyView: { team: { strategy: "priority_first", source: "team" }, seats: {} } });
++
++	check("before expiry: 1 live, 0 lapsed, 0 invalid", before.leased === 1 && before.lapsed === 0 && before.invalid === 0, JSON.stringify({ leased: before.leased, lapsed: before.lapsed, invalid: before.invalid }));
++	check("after expiry: 0 live, 1 lapsed-but-stored, 0 invalid", after.leased === 0 && after.lapsed === 1 && after.invalid === 0, JSON.stringify({ leased: after.leased, lapsed: after.lapsed, invalid: after.invalid }));
++	check("the counts changed, which is what a monitor must do", before.leased !== after.leased && before.lapsed !== after.lapsed);
++	check("the lapsed row is still stored (raw is still `now`)", after.detail[0].raw === "now", JSON.stringify(after.detail[0]));
++	check("...but it is INERT: the selector sees no priority on it", after.detail[0].acting === null, JSON.stringify(after.detail[0]));
++	check("the lapsed row is listed by id so a reader can find it", after.lapsedIds.join(",") === "100", JSON.stringify(after.lapsedIds));
++
++	// The order proves the inertness, not just the label.
++	const orderBefore = orderCandidates([leased, plain], { strategy: "priority_first", now: T0 }).map((r) => r.id);
++	const orderAfter = orderCandidates([leased, plain], { strategy: "priority_first", now: T0 + 3600001 }).map((r) => r.id);
++	check("a live lease reorders: the leased row is looked at first", orderBefore.join(",") === "100,50", orderBefore.join(","));
++	check("the same row, lapsed, falls back to id order", orderAfter.join(",") === "50,100", orderAfter.join(","));
++	check("oldest_first is unaffected by a live lease", orderCandidates([leased, plain], { strategy: "oldest_first", now: T0 }).map((r) => r.id).join(",") === "50,100");
++	check("the report says the lease ACTS only under a seat that claims priority_first", before.orderedLive.join(",") === "100" && before.unorderedLive === 0, JSON.stringify({ orderedLive: before.orderedLive, unorderedLive: before.unorderedLive }));
++	check("the same lease on a seat that claims the default is RECORDED but inert", leaseReport([leased], { now: T0, strategyView: { team: { strategy: "oldest_first", source: "default" }, seats: {} } }).unorderedLive === 1);
++}
++
++console.log("\n=== invalid leases are counted and named, not coerced ===");
++{
++	const badLevel = row(200, { priority: "urgent", prioritySet: { by: "pm", reason: "typo", expiresAt: iso(T0 + 3600000) } });
++	const noExpiry = row(201, { priority: "now", prioritySet: { by: "pm", reason: "no expiry written" } });
++	const unreadable = row(202, { priority: "now", prioritySet: { by: "pm", reason: "hand-edited", expiresAt: "next week" } });
++	const noReason = row(203, { priority: "now", prioritySet: { by: "pm", expiresAt: iso(T0 + 3600000) } });
++	const clean = row(204, { priority: "later", prioritySet: { by: "pm", reason: "deprioritised", expiresAt: iso(T0 + 7200000) } });
++
++	const report = leaseReport([badLevel, noExpiry, unreadable, noReason, clean], { now: T0 });
++	check("exactly one row is live in this set", report.leased === 1, JSON.stringify({ leased: report.leased }));
++	check("exactly four rows are invalid", report.invalid === 4, JSON.stringify({ invalid: report.invalid }));
++	check("none of the invalid rows is counted as live or lapsed", report.leased + report.lapsed === 1 && report.invalidIds.sort((a, b) => a - b).join(",") === "200,201,202,203", JSON.stringify(report.invalidIds));
++	check("unknown level is flagged by name", classifyLease(badLevel, T0).reasons.join(",") === "unknown-level", JSON.stringify(classifyLease(badLevel, T0)));
++	check("a lease with no expiry is flagged", classifyLease(noExpiry, T0).reasons.join(",") === "missing-expiresAt", JSON.stringify(classifyLease(noExpiry, T0)));
++	check("an unparseable expiry is flagged", classifyLease(unreadable, T0).reasons.join(",") === "unparseable-expiresAt", JSON.stringify(classifyLease(unreadable, T0)));
++	check("a lease nobody can explain is flagged", classifyLease(noReason, T0).reasons.join(",") === "missing-reason", JSON.stringify(classifyLease(noReason, T0)));
++	// What a malformed row DOES to ordering is the finding, not an assumption: an unknown LEVEL ranks neutral
++	// (it cannot jump the queue), while a priority with no expiry ACTS forever — the unbounded park the lease
++	// was invented to prevent. The monitor reports both, and names the reason.
++	check("a row with no expiry is flagged AND reported as acting: the unbounded case, visible not hidden", classifyLease(noExpiry, T0).kind === "invalid" && classifyLease(noExpiry, T0).acting === "now", JSON.stringify(classifyLease(noExpiry, T0)));
++	check("a row with an unknown level does not act", classifyLease(badLevel, T0).acting === null, JSON.stringify(classifyLease(badLevel, T0)));
++	check("a lapsed row does not act", classifyLease(row(205, { priority: "now", prioritySet: { by: "pm", reason: "expired", expiresAt: iso(T0 - 1000) } }), T0).acting === null);
++	check("the reason taxonomy names every kind the report can flag", LEASE_INVALID_REASONS.length === 4 && report.reasonCounts["unknown-level"] === 1 && report.reasonCounts["missing-expiresAt"] === 1 && report.reasonCounts["unparseable-expiresAt"] === 1 && report.reasonCounts["missing-reason"] === 1, JSON.stringify(report.reasonCounts));
++	// A poisoned row must show up in ORDER too: `urgent` is not a level, so it cannot jump the queue.
++	check("a poisoned level does not reorder", orderCandidates([badLevel, clean], { strategy: "priority_first", now: T0 }).map((r) => r.id).join(",") === "200,204");
++}
++
++console.log("\n=== the strategy is reported with its source, seat by seat ===");
++{
++	const seatsValue = {
++		workStrategy: "priority_first",
++		seats: {
++			impl: { workStrategy: "priority_first" },
++			qa: {},
++			oldstyle: { workStrategy: "oldest_first" },
++		},
++	};
++	const live = row(300, { to: "qa", priority: "now", prioritySet: { by: "pm", reason: "gate", expiresAt: iso(T0 + 3600000) } });
++	const report = monitorLeases([live], seatsValue, T0);
++
++	check("the team value is reported with its source", report.strategy.team.strategy === "priority_first" && report.strategy.team.source === "team", JSON.stringify(report.strategy.team));
++	check("impl's strategy comes from the SEAT", report.strategy.seats.impl.source === "seat" && report.strategy.seats.impl.strategy === "priority_first", JSON.stringify(report.strategy.seats.impl));
++	check("qa inherits the TEAM value, and says so", report.strategy.seats.qa.source === "team" && report.strategy.seats.qa.strategy === "priority_first", JSON.stringify(report.strategy.seats.qa));
++	check("a seat pinned to the default reports it as a seat choice, not a mystery", report.strategy.seats.oldstyle.strategy === "oldest_first" && report.strategy.seats.oldstyle.source === "seat");
++	check("the live lease is counted as ORDERED because qa claims priority_first", report.orderedLive.join(",") === "300" && report.unorderedLive === 0, JSON.stringify({ orderedLive: report.orderedLive, unorderedLive: report.unorderedLive }));
++
++	// Same row, a team that does not honour priority: the lease is recorded, and INERT — the monitor must say so.
++	const inert = monitorLeases([live], { workStrategy: undefined, seats: { qa: {} } }, T0);
++	check("under the default strategy the live lease is recorded but inert", inert.leased === 1 && inert.unorderedLive === 1 && inert.orderedLive.length === 0, JSON.stringify({ leased: inert.leased, unorderedLive: inert.unorderedLive }));
++	check("the rendered line says the lease is inert rather than hiding it", renderLeaseLine(inert).includes("recorded, inert"), renderLeaseLine(inert));
++
++	// What THIS rig actually declares — the reconciliation the item asks for. Read the file, not the note.
++	const spec = JSON.parse(readFileSync(join(dirname(new URL(import.meta.url).pathname), "..", "rig.selfdev.json"), "utf8"));
++	const named = { workStrategy: spec.workStrategy, seats: Object.fromEntries(Object.values(spec.seats ?? {}).map((s) => [s.name, s])) };
++	const view = workStrategyView(named);
++	check("the rig file's TEAM workStrategy is priority_first (the file, not the note)", spec.workStrategy === "priority_first", JSON.stringify(spec.workStrategy));
++	check("so qa's `priority_first (from team)` is consistent with the file", view.seats.qa.strategy === "priority_first" && view.seats.qa.source === "team", JSON.stringify(view.seats.qa));
++	check("impl and devtools carry a SEAT-level override", view.seats.impl.source === "seat" && view.seats.devtools.source === "seat", JSON.stringify({ impl: view.seats.impl, devtools: view.seats.devtools }));
++	check("every seat of this rig resolves a strategy and a source", Object.values(view.seats).every((s) => s.strategy && s.source), JSON.stringify(view.seats));
++}
++
++console.log("\n=== the monitor is on the READ, not a side script ===");
++{
++	const census = queueCensusOf([row(400, { priority: "now", prioritySet: { by: "pm", reason: "r", expiresAt: iso(T0 + 3600000) } }), row(401)]);
++	check("the census carries the lease block", census.leases && typeof census.leases.leased === "number", JSON.stringify(census.leases));
++	check("the census counts match the rows it was given", census.leases.leased === 1 && census.leases.rows === 2, JSON.stringify(census.leases));
++	// Determinism is not a nicety here: demo/queue-compat-args.test.mjs pins that two reads of the same store
++	// produce identical bytes. A stamp of the reading instant would make that impossible for a reason that has
++	// nothing to do with the queue, so the report carries the STORED expiry instants instead.
++	const again = queueCensusOf([row(400, { priority: "now", prioritySet: { by: "pm", reason: "r", expiresAt: iso(T0 + 3600000) } }), row(401)]);
++	check("the report is deterministic — no read-instant stamp, byte-identical across reads", JSON.stringify(census.leases) === JSON.stringify(again.leases) && !Object.hasOwn(census.leases, "at"), JSON.stringify(census.leases));
++	check("the lapse instant is knowable from the stored data, not from when it was read", census.leases.detail[0].expiresAt === iso(T0 + 3600000), JSON.stringify(census.leases.detail[0]));
++}
++
++// ---------------------------------------------------------------- end-to-end: the seat's own read
++console.log("\n=== the seat's peek_queue header: the numbers move in real time ===");
++const ctx = BACKGROUND_CONTEXT;
++const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
++const models = createModels();
++models.setProvider(faux.provider);
++const registry = createRegistry();
++registry.install(Router);
++
++const dir = mkdtempSync(join(tmpdir(), "durig-lease-monitor-"));
++let harness;
++try {
++	const roster = new Map();
++	harness = await Harness.open(new MemoryStorage(), { models, registry, env: makeSeatEnv(roster) }, ctx);
++
++	let workerId;
++	await harness.commit(async (tx) => {
++		const mk = async (name, role, workStrategy) => {
++			const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
++			await configure(tx, conv.id, { model: { provider: "faux", modelId: "faux-seat" }, cwd: dir });
++			await registerSeat(tx, name, conv.id, role);
++			if (workStrategy) (await tx.doc(Seats)).seats[name].workStrategy = workStrategy;
++			return conv.id;
++		};
++		workerId = await mk("worker", "implementation", "priority_first");
++		await mk("quiet", "implementation"); // no strategy: claims oldest_first
++		await mk("coordinator", "program manager");
++		(await tx.doc(Seats)).seats.worker.capabilities = ["implement"];
++	}, ctx);
++
++	const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
++	fillRoster(roster, seats);
++	const conv = await harness.conversation(workerId, ctx);
++
++	const drivePeek = async () => {
++		const before = await conv.submit({ type: "input", content: "peek" }, ctx);
++		faux.setResponses([
++			fauxAssistantMessage([fauxToolCall("peek_queue", {})], { stopReason: "toolUse" }),
++			fauxAssistantMessage(fauxText("peeked")),
++		]);
++		await before.wait(ctx);
++		const page = await conv.entries({}, 100, undefined, ctx);
++		const result = page.items.find(
++			(e) => e.kind === "pi.tool-result" && String(e.model?.[0]?.toolName) === "peek_queue",
++		);
++		return result?.model?.[0]?.content?.[0]?.text ?? "";
++	};
++
++	// A rig that has never used the mechanism renders the header exactly as before.
++	await harness.commit(async (tx) => {
++		await enqueueItem(tx, "coordinator", "worker", "plain work", "body");
++	}, ctx);
++	const cleanHeader = await drivePeek();
++	check("no leases: the header is unchanged", !cleanHeader.includes("leases:") && cleanHeader.startsWith("QUEUE (worker): 1 non-terminal"), cleanHeader.split("\n")[0]);
++
++	// Lease it, live for 2 seconds, and read the header twice around the instant.
++	const expiry = new Date(Date.now() + 2000).toISOString();
++	const [leasedId, poisonedId] = await harness.commit(async (tx) => {
++		const queue = await tx.doc(RigQueue);
++		const a = queue.items[0];
++		a.priority = "now";
++		a.prioritySet = { at: new Date().toISOString(), by: "pm", reason: "MVP tranche", expiresAt: expiry, authority: "coordinator" };
++		const bId = await enqueueItem(tx, "coordinator", "worker", "poisoned row", "a level the writer would have refused");
++		const b = queue.items.find((it) => it.id === bId); // enqueueItem returns the ID, not the row
++		b.priority = "urgent";
++		b.prioritySet = { by: "pm", expiresAt: new Date(Date.now() + 60000).toISOString() };
++		return [a.id, bId];
++	}, ctx);
++
++	const liveHeader = await drivePeek();
++	check("the header now counts the live lease and the poisoned row", liveHeader.includes("leases: 1 live, 0 lapsed-but-stored, 1 invalid"), liveHeader.split("\n")[0]);
++	check("the header names the seat's strategy AND its source", liveHeader.includes("worker claims by priority_first (from seat)"), liveHeader.split("\n")[0]);
++	check("the invalid reason is named in the report", renderLeaseLine(monitorLeases([{ id: poisonedId, to: "worker", status: "queued", priority: "urgent", prioritySet: { by: "pm", expiresAt: expiry } }], seats)).includes("unknown-level=1"), renderLeaseLine(monitorLeases([{ id: poisonedId, to: "worker", status: "queued", priority: "urgent", prioritySet: { by: "pm", expiresAt: expiry } }], seats)));
++
++	await new Promise((resolve) => setTimeout(resolve, 2200));
++	const lapsedHeader = await drivePeek();
++	check("after the instant, the SAME read reports the lease as lapsed, not live", lapsedHeader.includes("leases: 0 live, 1 lapsed-but-stored, 1 invalid"), lapsedHeader.split("\n")[0]);
++	check("the lapsed row says so on its own line", lapsedHeader.includes(`#${leasedId}`) && lapsedHeader.includes("~lapsed@"), lapsedHeader.split("\n").find((l) => l.includes(`#${leasedId}`)));
++	check("the poisoned row is still visible and still invalid", lapsedHeader.includes("!invalid"), lapsedHeader.split("\n").find((l) => l.includes(`#${poisonedId}`)));
++} catch (error) {
++	failures += 1;
++	check("the end-to-end run completed", false, String(error?.message ?? error));
++} finally {
++	rmSync(dir, { recursive: true, force: true });
++	if (harness?.close) await harness.close(ctx).catch(() => {});
++}
++
++console.log(`\n${failures === 0 ? "LEASE MONITOR PASS" : `LEASE MONITOR: ${failures} failure(s)`}`);
++process.exit(failures === 0 ? 0 : 1);
+--- demo/offline.mjs (7 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/offline.mjs b/demo/offline.mjs
+index cce58fb1..d229868a 100644
+--- a/demo/offline.mjs
++++ b/demo/offline.mjs
+@@ -171,6 +171,13 @@ assert(noteText.includes("Implement login fix"), "the note did not survive the b
+ assert(freshText.includes("CONTINUITY NOTE"), "the fresh context did not carry the note");
+ assert(!freshText.includes("Ship the login fix."), "the pre-boundary turn was still in the fresh context");
+ assert(freshContext.length <= 4, `the fresh context should be short, got ${freshContext.length} messages`);
++// The construction the count above can only imply, stated outright (#6924): the boundary ENDS the run, so
++// the fresh context is the note and nothing else. Before this, pi-durable 1.5.1 handed the run to a new
++// generation inside the handoff's context and continued it, so the "fresh" context carried the
++// continuation's own assistant/tool turns (measured: 7 messages). An assistant turn in the fresh context
++// means the seat never actually crossed the boundary - that is the failure the count alone cannot name.
++const postBoundaryTurns = freshContext.filter((m) => m.role !== "user");
++assert(postBoundaryTurns.length === 0, `the run continued past the boundary: ${postBoundaryTurns.length} turn(s) (${postBoundaryTurns.map((m) => m.role).join(", ")}) after the note in the fresh context`);
+ 
+ // The boundary is a real store event, not a prompt trick. `control.handoff` and `conversation.reset(handoff)`
+ // both append a `pi.reset` entry with `head: "self"` (dist/harness/generation.js:557-558 and
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 34d03f83..3afe850b 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -54,6 +54,7 @@
+       "demo/features-drift.test.mjs",
+       "demo/held-gate-audit.test.mjs",
+       "demo/hold-queued-row.test.mjs",
++      "demo/lease-monitor.test.mjs",
+       "demo/init.test.mjs",
+       "demo/instruction-files.test.mjs",
+       "demo/notices.test.mjs",
+--- docs/runbooks/README.md (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/README.md b/docs/runbooks/README.md
+index ef839e5b..509159a1 100644
+--- a/docs/runbooks/README.md
++++ b/docs/runbooks/README.md
+@@ -192,6 +192,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
+ | [stale-held-backlog.md](stale-held-backlog.md) | an effort has stalled with nothing broken; `held` rows are never released after their gates finish and no attention fires | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) §Umbrella rows are pointers, never gates | **a row can never be claimed** and the scan says `gate-cancelled:#<id>`; a dependent is stuck on a container row that was cancelled; you are about to `cancel_work` an umbrella whose children are all registered | no |
+ | [stale-held-backlog.md](stale-held-backlog.md) §If it fails | the parked-row audit refuses the store — `cannot open …: Durable SQLite schema version 2 is newer than supported version 1` — or the read times out, and you must separate a dependency/pin gap from a wedged broker before touching anything | no |
++| [priority-lease-not-moving.md](priority-lease-not-moving.md) | you `set_priority` and the seat's claim order did not change; or you need the fleet number for the mechanism — how many leases are live, how many lapsed but still stored, how many malformed | no |
+ | [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
+ | [attach-a-gate.md](attach-a-gate.md) | you know a row must wait on another row, but you are neither its sender nor its recipient, and every way of writing that gate is refused or silently dropped (`revise_work` with `blockedBy` drops the whole call, including the body edit riding in it) | no |
+ | [intent-stuck-in-inbox.md](intent-stuck-in-inbox.md) | a spooled intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; a command vanishes with no verdict and no diagnostic | no |
+--- docs/runbooks/continuation-notes.md (3 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/continuation-notes.md b/docs/runbooks/continuation-notes.md
+index d8afd0f8..b675fc95 100644
+--- a/docs/runbooks/continuation-notes.md
++++ b/docs/runbooks/continuation-notes.md
+@@ -234,7 +234,8 @@ node demo/continuity-note.test.mjs          # expect "CONTINUITY PASS", exit 0,
+ node demo/note-census.test.mjs              # expect "PASS: 0 failed check(s)", exit 0, ~0.46 s: the exercised seat
+                                             # reads note=written / read_note 1x / compaction via note; the control
+                                             # seat with no extension reads summariser - the census distinguishes them
+-node demo/offline.mjs                        # pm -> worker -> done with a mid-item handoff, ~0.29 s
++node demo/offline.mjs                        # pm -> worker -> done with a mid-item handoff, ~0.29 s;
++                                            # expect `FRESH CONTEXT: 1 message(s)` and `DEMO PASS`, exit 0
+ node demo/status-view-bound.test.mjs        # expect "STATUS VIEW BOUND OK ...", exit 0, ~1.8 s
+ node scripts/test.mjs --area rig            # the continuity demo is in the rig area
+ node scripts/test.mjs --area readapi        # the bounded-view demo is in the readapi area
+@@ -265,6 +266,7 @@ Expected: every listed seat prints `goal=yes next=yes verified=1`, and the befor
+ | `status --json` is 1.4 s slower than you expect | the note census scans `entries` in one pass | pass `--no-notes` for a fast read |
+ | a seat woken by `reset` knows nothing | the extension is not armed — an unlisted extension is an absent one (§Do 2), and a plain reset carries no handoff | arm it; `beforeRequest` then supplies the note in the system message |
+ | the gate prints `pi.system entries carrying the durig-continuity section: 0` and `requests offering the note tools: 0` | the extension was armed and **no seat has run a request since** — the transcript only shows what ran. Compare the newest entry timestamp with the config write (`ls -l durig.config.json`); on this rig they were 07:54:09Z and 20:59:08Z on the same day | run the mechanism's own proof, `node demo/continuity-note.test.mjs` (0.43 s, no key/network/broker): `CONTINUITY PASS` means the code is sound and the fleet simply has not exercised it. Getting a number on a live fleet needs a provider that registers a model (pitfall 219) |
++| `demo/offline.mjs` exits 1 with `the fresh context should be short, got 7 messages` | the handoff did not END the run. pi-durable 1.5.1 hands the run to a NEW GENERATION inside the handoff's context and ends it only when every call of the round asks to terminate (`dist/harness/generation.js:845-886`); 1.3.0 ended it on a handoff alone (`generation.js:515`). Measured 2026-11-12 in a linked (1.5.1) tree at HEAD: 7 messages, roles `user(note), assistant, toolResult, assistant, toolResult, assistant` | `continue_from_note` must return `control: { handoff, terminate: true }` — both keys are in the shipped `ToolControl` (`dist/harness/types.d.ts:92-95`), so one verb works on both dependencies. `demo/offline.mjs` now asserts the boundary directly: zero turns after the note in the fresh context (#6924) |
+ | a seat has a note but a compaction still paid for a summariser | the note was written after that boundary, or the seat's conversation has no `durig.notes` document yet | the gate's before/after block is anchored on the first real `write_note` tool call; anything before it is history, not the mechanism |
+ 
+ ## Escalate to
+--- docs/runbooks/priority-lease-not-moving.md (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/priority-lease-not-moving.md b/docs/runbooks/priority-lease-not-moving.md
+new file mode 100644
+index 00000000..2603f6e6
+--- /dev/null
++++ b/docs/runbooks/priority-lease-not-moving.md
+@@ -0,0 +1,89 @@
++---
++runbook: priority-lease-not-moving
++symptom: "I set a priority and nothing moved; or: how many leases are live, and how many are dead but still stored?"
++writes: false
++precondition: "read-only"
++last_verified: 2026-11-12
++verified_by: impl
++evidence: "#7114, demo/lease-monitor.test.mjs (exit 0), live read `cli.mjs status` on selfdev.sqlite"
++check_rule: "demo/lease-monitor.test.mjs"
++---
++
++# The priority lease: counted, not assumed
++
++## When to use
++A `set_priority` was issued and the seat's claim order did not change; or you need the fleet number for the
++mechanism — how many leases are LIVE, how many have LAPSED but are still stored, how many are INVALID. A
++reordering mechanism that is only logged drifts silently (#2643): 50 live leases on a rig where no seat
++honours priority is a pile of stored fields, not a policy.
++
++## Impact
++Two distinct failures get confused. (1) The lease is REAL but the recipient claims `oldest_first`, so the
++lease is recorded and inert — the seat never looks at priority. (2) The lease has passed its `expiresAt`, so
++it is stored history, not policy; if some reader still acts on the stored value, that is the
++"stored-and-acting" bug. Neither is visible without a count, and both read as "the queue order is random".
++
++## Preconditions
++Read-only. No broker stop, no write. A resident broker answers reads with the code it started with, so an
++older broker serves a census without the `leases` block; the CLI then derives it locally from the rows it
++already holds (the same skew fallback as `workStrategy`).
++
++## Diagnose (read-only)
++```bash
++DURIG_DB=./selfdev.sqlite node cli.mjs status
++DURIG_DB=./selfdev.sqlite node cli.mjs queue --status queued --no-body
++```
++Read `leases` in the payload:
++
++```
++leases: 50 live, 0 lapsed-but-stored, 0 invalid | (7213 rows read) |
++claim order: team priority_first(team); impl=priority_first(seat), qa=priority_first(team), ...
++```
++Measured on this rig 2026-11-12 with those exact commands: 7,213 rows read, 50 live leases, 0 lapsed, 0
++invalid, 0 live leases sitting on a seat that ignores them. The per-seat strategy is reported with its
++SOURCE (`seat` | `team` | `default`) — that is what reconciles "the operator said the team stays
++`oldest_first`" with what the rig file actually declares: `rig.selfdev.json` line 4 says
++`"workStrategy": "priority_first"`, so a seat reporting `priority_first (from team)` is correct and the note
++is stale. Check the file, not the note.
++
++A seat sees the same numbers on its own read: `peek_queue`'s header carries
++`| leases: N live, M lapsed-but-stored, K invalid; <seat> claims by <strategy> (from <source>)` — printed only
++when there is something to count, so a rig that never used the mechanism renders unchanged.
++
++## Do
++1. If `unorderedLive > 0`: the leases are on seats that claim `oldest_first`. Either set the seat (or the
++   team) to `priority_first` with `up <rigfile> --refresh` (broker stopped — `up` refuses while it drives),
++   or accept that the leases are inert and let them lapse.
++2. If `lapsed` keeps growing and nothing is re-leased: the mechanism is being used once and never renewed.
++   `set_priority` requires an expiry at most 30 days out, so a lapsed lease is the system working as
++   designed — it is the count telling you nobody is paying attention.
++3. If `invalid > 0`: a row carries a level outside `now|next|later`, a missing/unparseable `expiresAt`, or no
++   reason. `set_priority` refuses all of those, so an invalid row means it was hand-edited into the store or
++   predates the writer. Find it by id in `leases.invalidIds` and fix the row or cancel it.
++
++## Verify
++```bash
++node demo/lease-monitor.test.mjs
++```
++Expect `LEASE MONITOR PASS`, exit 0. The demo asserts TRANSITIONS, not existence: a lease crossing its
++`expiresAt` moves from live to lapsed and the claim order falls back to id order, and a poisoned row
++(`priority: "urgent"`) appears in the invalid count with `unknown-level` named.
++
++## If it fails
++If `leases` is absent from the payload entirely, the serving broker predates the monitor — re-read with
++`--local` or restart the broker from this tree (docs/runbooks/broker-safe-change.md). The monitor never
++throws: a malformed row is counted, never coerced.
++
++## Escalate to
++`pm` for queue ordering policy; `lead` if a live lease is being ignored by a seat that claims
++`priority_first`.
++
++## Related runbooks
++- stale-held-backlog.md — the parked-row analogue: an unbounded park with no counter.
++- fleet-health-census.md — the store-wide census this monitor is modelled on.
++
++## Evidence
++- `src/leasemonitor.mjs` — the classifier and the report; `src/workstrategy.mjs` `effectivePriority` is the
++  single place that decides what a stored priority means right now, and the monitor reads that same function
++  rather than the raw field.
++- Live read, 2026-11-12: `cli.mjs status` notes line quoted above.
+--- extensions/continuity.mjs (9 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/extensions/continuity.mjs b/extensions/continuity.mjs
+index d903f00d..13a407f1 100644
+--- a/extensions/continuity.mjs
++++ b/extensions/continuity.mjs
+@@ -382,7 +382,15 @@ export const continuityExtension = defineExtension({
+ 				return {
+ 					content: [{ type: "text", text: "Handing off to a fresh context seeded with this note." }],
+ 					output: [{ type: "text", text: "Handing off to a fresh context seeded with this note." }],
+-					control: { handoff: text },
++					// #6924: the boundary must END the run, not merely move its head. pi-durable 1.3.0 ended the run
++					// on a handoff alone (dist/harness/generation.js:515, `if (terminate || handoff !== undefined)`);
++					// 1.5.1 hands the run to a NEW GENERATION inside the handoff's context and ends it only when every
++					// call of the round asked to terminate (generation.js:845-886). Without `terminate: true` the seat
++					// keeps running turns in the fresh context, so "the run ends at the note" is true only in the
++					// version the lockfile resolves, and the fresh context is the boundary PLUS the continuation's own
++					// turns. Both keys are in the shipped control shape (`ToolControl`, dist/harness/types.d.ts:92-95),
++					// so this is the same verb on both dependencies, not a version branch.
++					control: { handoff: text, terminate: true },
+ 				};
+ 			},
+ 		}),
+--- src/leasemonitor.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/leasemonitor.mjs b/src/leasemonitor.mjs
+new file mode 100644
+index 00000000..dee29628
+--- /dev/null
++++ b/src/leasemonitor.mjs
+@@ -0,0 +1,207 @@
++// src/leasemonitor.mjs — the MONITORED artifact for the priority lease (#7114, ROADMAP N35 / D266).
++//
++// WHY THIS EXISTS. `set_priority` writes a lease, `effectivePriority` honours it at read time, and
++// `queueItemLine` prints it on a row the seat is looking at. None of that is a MEASURE. #2643's rule is
++// that a mechanism must be MONITORED, not merely logged: without a count, a rig can accumulate leases that
++// never expire, rows whose lease lapsed but whose stored value still reads urgent to some other reader, and
++// hand-edited rows carrying a level the vocabulary does not contain — and every read still says "ok". A
++// reordering mechanism with no counter drifts silently, and the drift is invisible precisely because the row
++// looks normal (the same pathology `hold` measured: 197 parked rows, median 564.9 h).
++//
++// WHY THREE NUMBERS AND NOT ONE. "Leased" and "lapsed" are different failures. A LIVE lease is intended
++// behaviour. A LAPSED lease is stored-and-inert — correct, and worth counting only so a reader can tell
++// "the mechanism is working" from "the mechanism is accumulating dead weight". An INVALID row is the bug:
++// a level outside `now|next|later`, an unparseable or missing `expiresAt`, or a lease with no reason. Those
++// are rows the writer refused to create, so their presence means something bypassed the writer.
++//
++// THE ONE THISS MONITORS THAT A COUNT ALONE CANNOT: a lapsed lease is only inert if the ordering code reads
++// the EFFECTIVE value. `effectivePriority` is the single place that decides what a row's priority means
++// right now, and no ordering path reads `item.priority` raw (checked across src/, cli.mjs). This module
++// therefore reports, per row, both the stored value and the value the selector actually uses, so a reader
++// can see the two agree rather than trust that they do.
++//
++// Pure functions over plain row objects, no I/O and no clock captured at import — `now` is injected, so the
++// transition "a lease crosses its expiresAt" is assertable in a demo without waiting for time to pass.
++
++import {
++	DEFAULT_STRATEGY,
++	NEUTRAL_PRIORITY,
++	PRIORITY_RANK,
++	effectivePriority,
++	resolveStrategy,
++} from "./workstrategy.mjs";
++
++/** Every reason a row can be counted INVALID, in the order a readout lists them. */
++export const LEASE_INVALID_REASONS = Object.freeze([
++	"unknown-level", // priority not in `now|next|later`
++	"missing-expiresAt", // a priority with no lease at all — `set_priority` always writes one
++	"unparseable-expiresAt", // a lease whose instant cannot be read
++	"missing-reason", // a lease nobody can explain (#6112's argument, applied to ordering)
++]);
++
++/**
++ * Classify ONE row's lease. Returns a small structured record rather than a boolean, because the readout has
++ * to say WHICH row and WHY, not just how many.
++ *
++ * `kind` is one of:
++ *   none    - the row carries no priority at all (the overwhelming majority; nothing to monitor)
++ *   live    - a valid level with a lease that has not yet passed
++ *   lapsed  - a valid level whose stored lease has passed: stored, inert
++ *   invalid - malformed in one of the LEASE_INVALID_REASONS ways
++ *
++ * `acting` is the load-bearing field: the priority the SELECTOR sees right now. A lapsed lease or an
++ * unknown level ranks neutral, so `acting` is null. A priority with NO lease (which `set_priority` cannot
++ * produce, so it means a hand-edited or pre-lease row) ACTS forever — the unbounded park the lease was
++ * invented to prevent — and it is counted INVALID precisely so that acting-forever is visible rather than
++ * assumed. If a LAPSED row ever shows a non-neutral `acting`, the ordering path is reading the stored value:
++ * that is the "stored-and-acting" bug this monitor exists to catch.
++ *
++ * @param {object} item a queue row
++ * @param {number} [now] epoch ms
++ */
++export function classifyLease(item, now = Date.now()) {
++	const raw = item?.priority ?? null;
++	if (raw === null || raw === undefined) return { kind: "none", id: item?.id, raw: null };
++
++	const eff = effectivePriority(item, now);
++	const expiresAt = item?.prioritySet?.expiresAt ?? null;
++	const knownLevel = typeof raw === "string" && Object.hasOwn(PRIORITY_RANK, raw);
++
++	const reasons = [];
++	if (!knownLevel) reasons.push("unknown-level");
++	if (expiresAt === null || expiresAt === undefined) reasons.push("missing-expiresAt");
++	else if (!Number.isFinite(Date.parse(String(expiresAt)))) reasons.push("unparseable-expiresAt");
++	const reason = item?.prioritySet?.reason;
++	if (!(typeof reason === "string" && reason.trim() !== "")) reasons.push("missing-reason");
++
++	const level = knownLevel ? raw : null;
++	// What the selector ACTUALLY uses, taken from the same function the selector calls. Reporting an ideal
++	// instead of the real value would make the monitor a claim rather than a measurement.
++	const acting = eff.priority === NEUTRAL_PRIORITY ? null : eff.priority;
++	const kind = reasons.length > 0 ? "invalid" : eff.lapsed ? "lapsed" : "live";
++
++	return {
++		id: item?.id,
++		to: item?.to ?? null,
++		status: item?.status ?? null,
++		kind,
++		raw,
++		level,
++		acting,
++		expiresAt,
++		lapsed: eff.lapsed,
++		lapsedAt: kind === "lapsed" ? expiresAt : null,
++		reasons,
++		by: item?.prioritySet?.by ?? null,
++		authority: item?.prioritySet?.authority ?? null,
++	};
++}
++
++/**
++ * THE THREE NUMBERS, per read. `leased`, `lapsed` and `invalid` are counts over the rows handed in; `rows`
++ * is how many rows were looked at, so a count of 12 leased out of 12 read is not confused with 12 out of
++ * 6,000. `detail` carries only rows that carry a priority — a full row list for 7,000 rows would be a payload,
++ * not a monitor.
++ *
++ * `actingUnder` names the strategy the counts were computed against: a lease is inert on a seat whose
++ * resolved strategy is not `priority_first`, so the same store can legitimately show 0 reordered rows and
++ * 12 live leases. Reporting the two together is what makes the number interpretable instead of alarming.
++ *
++ * @param {Array<object>} items queue rows
++ * @param {{now?: number, strategyView?: {team: {strategy: string, source: string}, seats: Record<string, {strategy: string, source: string}>}}|null} [opts]
++ *
++ * NOTE ON DETERMINISM: the report carries NO wall-clock stamp of its own. `demo/queue-compat-args.test.mjs`
++ * pins that two reads of the same store produce identical bytes, and a `readAt: <now>` field would break that
++ * pin for a reason that has nothing to do with the queue. What is knowable is stored: every lease's own
++ * `expiresAt` is in the row, so "when did it lapse" is answerable from the data, not from the moment of reading.
++ */
++export function leaseReport(items, { now = Date.now(), strategyView = null } = {}) {
++	const rows = items ?? [];
++	const detail = [];
++	for (const item of rows) {
++	 const c = classifyLease(item, now);
++		if (c.kind !== "none") detail.push(c);
++	}
++	const live = detail.filter((c) => c.kind === "live");
++	const lapsed = detail.filter((c) => c.kind === "lapsed");
++	const invalid = detail.filter((c) => c.kind === "invalid");
++
++	const seatOrders = strategyView?.seats ?? {};
++	const team = strategyView?.team ?? { strategy: DEFAULT_STRATEGY, source: "default" };
++
++	// A row is only ORDERED by its lease if the seat it is addressed to honours priority. Counting a live
++	// lease as "moving the queue" when the recipient claims oldest-first is the false green this avoids.
++	const ordered = live.filter((c) => {
++		const resolved = seatOrders[c.to] ?? team;
++		return resolved.strategy === "priority_first";
++	});
++
++	return {
++		rows: rows.length,
++		leased: live.length,
++		lapsed: lapsed.length,
++		invalid: invalid.length,
++		unorderedLive: live.length - ordered.length,
++		earliestExpiry: live.reduce((acc, c) => (acc && Date.parse(c.expiresAt) < Date.parse(acc) ? c.expiresAt : acc), null),
++		reasonCounts: invalid.reduce((acc, c) => {
++			for (const r of c.reasons) acc[r] = (acc[r] ?? 0) + 1;
++			return acc;
++		}, {}),
++		// The rows a priority-first seat will actually look at first, so a reader can check the count against
++		// the order rather than take it on faith.
++		orderedLive: ordered.map((c) => c.id),
++		lapsedIds: lapsed.map((c) => c.id),
++		invalidIds: invalid.map((c) => c.id),
++		// Bounded on purpose: 7,000 rows can hold a lot of bad leases, and a monitor that dumps them all is a
++		// payload. The counts above are the full set; this is the first page of evidence.
++		detail: detail.slice(0, 40),
++		detailTruncated: detail.length > 40,
++		strategy: strategyView ? { team, seats: seatOrders } : null,
++	};
++}
++
++/**
++ * Render the monitor for a human, one line: the three numbers, then who is actually honouring them.
++ * `strategyView` comes from `workStrategyView` (src/readapi.mjs) — the same derivation `status` and `ps`
++ * print — so the line cannot disagree with the strategy readout the operator already trusts.
++ */
++export function renderLeaseLine(report) {
++	if (!report) return "leases: no report";
++	const parts = [
++		`leases: ${report.leased} live, ${report.lapsed} lapsed-but-stored, ${report.invalid} invalid`,
++		`(${report.rows} rows read)`,
++	];
++	if (report.unorderedLive > 0)
++		parts.push(`${report.unorderedLive} live lease(s) on seats that claim ${DEFAULT_STRATEGY} — recorded, inert`);
++	if (report.invalid > 0) {
++		const why = Object.entries(report.reasonCounts).map(([r, n]) => `${r}=${n}`).join(", ");
++		parts.push(`invalid: ${why}`);
++	}
++	if (report.earliestExpiry) parts.push(`next expiry ${report.earliestExpiry}`);
++	if (report.strategy) {
++	 const seatLines = Object.entries(report.strategy.seats).map(
++			([seat, s]) => `${seat}=${s.strategy}(${s.source})`,
++		);
++		parts.push(`claim order: team ${report.strategy.team.strategy}(${report.strategy.team.source}); ${seatLines.join(", ")}`);
++	}
++	return parts.join(" | ");
++}
++
++/**
++ * Resolve the claim strategy for every seat in a rig, then report the leases against it. The convenience of
++ * one call is the point: the two halves of the readout (counts and strategy) are only meaningful together,
++ * and a reader who has to combine two reads will combine them wrongly.
++ */
++export function monitorLeases(items, seatsValue, now = Date.now()) {
++	const team = resolveStrategy({ teamStrategy: seatsValue?.workStrategy });
++	const seats = Object.fromEntries(
++		Object.entries(seatsValue?.seats ?? {}).map(([name, s]) => [
++			name,
++			resolveStrategy({ seatStrategy: s?.workStrategy, teamStrategy: seatsValue?.workStrategy }),
++		]),
++	);
++	return leaseReport(items, { now, strategyView: { team, seats } });
++}
++
++/** The neutral value a lease never becomes — exported so a demo can assert inertness by name. */
++export const INERT_PRIORITY = NEUTRAL_PRIORITY;
+--- src/readapi.mjs (23 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/readapi.mjs b/src/readapi.mjs
+index ac646951..63738f15 100644
+--- a/src/readapi.mjs
++++ b/src/readapi.mjs
+@@ -19,6 +19,7 @@ import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
+ import { failureStreak } from "./supervisor.mjs";
+ import { strandedMsSetting, declaredContextWindow, compactionSettings } from "./config.mjs";
+ import { DEFAULT_STRATEGY, resolveStrategy } from "./workstrategy.mjs";
++import { leaseReport, monitorLeases, renderLeaseLine } from "./leasemonitor.mjs";
+ import { contextConsumption } from "./context.mjs";
+ import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
+ import { readGenerationSlots } from "./genlock.mjs";
+@@ -316,7 +317,15 @@ export function projectQueueView(items, { cap = QUEUE_VIEW_ROW_CAP, dropTerminal
+  * Counts over a row set, without touching the store. Same derivation as `readQueueCensus`, but pure, so a view
+  * that already has the rows in memory (status, a broker pass) can report the census without a second read.
+  */
+-export function queueCensusOf(items) {
++/**
++ * The census over a row set: status counts, terminal/active split, and — #7114 — the PRIORITY-LEASE monitor.
++ *
++ * The lease block rides here rather than in its own read because the census is already the derivation every
++ * bounded `queue`/`status` view carries, and a monitor that needs its own read is a monitor nobody runs. It is
++ * additive: existing readers ignore `leases`, and the unfiltered `queue` dump (the byte-pinned default) does
++ * not go through this function at all.
++ */
++export function queueCensusOf(items, { now = Date.now() } = {}) {
+ 	const rows = items ?? [];
+ 	const counts = {};
+ 	for (const it of rows) counts[it.status] = (counts[it.status] || 0) + 1;
+@@ -325,6 +334,7 @@ export function queueCensusOf(items) {
+ 		counts,
+ 		terminal: rows.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
+ 		active: rows.filter((it) => !TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
++		leases: leaseReport(rows, { now }),
+ 	};
+ }
+ 
+@@ -377,7 +387,16 @@ export function refuseOversizedQueueRead(items, { capRows = QUEUE_VIEW_ROW_CAP }
+ export async function readQueueCensus(storage, context = BACKGROUND_CONTEXT) {
+ 	const items = await readQueueItems(storage, context);
+ 	const seats = await readSeatList(storage, context);
+-	return { rows: items.length, counts: queueCounts(items), attention: queueAttention(items, seats) };
++	// #7114: the lease monitor is counted against the STRATEGY the rig actually resolves, because a live lease
++	// on a seat that claims `oldest_first` is recorded but inert — a count without the strategy is a number that
++	// cannot be read. One extra document read on a read that is already open.
++	const seatsValue = await readSeatsValue(storage, context);
++	return {
++		rows: items.length,
++		counts: queueCounts(items),
++		attention: queueAttention(items, seats),
++		leases: monitorLeases(items, seatsValue),
++	};
+ }
+ 
+ /**
+@@ -463,6 +482,9 @@ export async function readRigHealth(
+ 	const seatsValue = await readSeatsValue(storage);
+ 	const seats = seatRowsFrom(seatsValue);
+ 	const queueItems = await readQueueItems(storage);
++	// #7114: the claim order and the lease counts are derived from the SAME two reads, so `status` cannot
++	// report a strategy from one snapshot and lease counts from another.
++	const strategy = workStrategyView(seatsValue);
+ 	// #2231: the roster carries no model, but each conversation's `pi.agent` does. Resolve the
+ 	// seats the caller did NOT already supply a model for, so a LOCAL seat's declared window is
+ 	// visible to the context denominator even when no rig spec was passed (the `status` path).
+@@ -599,7 +621,11 @@ export async function readRigHealth(
+ 		seats,
+ 		// The order each seat will claim in, and where that choice came from (seat > team > default).
+ 		// Additive to the JSON contract; `status` gets it via `...health`, `ps` via the same view.
+-		workStrategy: workStrategyView(seatsValue),
++		workStrategy: strategy,
++		// #7114 (N35/D266): the MONITORED half of the mechanism — live leases, lapsed-but-stored leases, and
++		// rows whose lease is malformed, counted on every read. A lease that is never counted is a mechanism
++		// that drifts silently, which is the failure #2643 is against.
++		leases: leaseReport(queueItems, { strategyView: strategy }),
+ 		queueItems,
+ 		// ROADMAP 131: the rig-level paused state, so `status`/`watch` report it and the
+ 		// operator KNOWS whether new work is being taken.
+--- src/rig.mjs (12 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/rig.mjs b/src/rig.mjs
+index 61c71d27..73c5ae8f 100644
+--- a/src/rig.mjs
++++ b/src/rig.mjs
+@@ -25,6 +25,7 @@ import {
+ 	resolveStrategy,
+ 	validatePriorityRequest,
+ } from "./workstrategy.mjs";
++import { monitorLeases } from "./leasemonitor.mjs";
+ 
+ /** Seat roster: name -> conversation id + role text. Session singleton. */
+ export const Seats = defineDoc({
+@@ -1627,7 +1628,19 @@ const Router = defineExtension({
+ 					const countSuffix = countParts.length
+ 						? ` — ${countParts.join(", ")}`
+ 						: "";
+-					const head = `QUEUE (${scope}): ${filtered.length} non-terminal${countSuffix}`;
++					// #7114: the lease monitor rides the header, so every queue read answers "how many leases are live,
++					// how many lapsed but still stored, how many are malformed" without a second query, and names the
++					// strategy that makes those leases act or not. Printed only when there is something to count — the
++					// same convention as the strategy footer in src/watchview.mjs: a rig that has never used the
++					// mechanism renders byte-identical to before.
++					const seatsDoc = await tx.doc(Seats);
++					const report = monitorLeases(filtered, seatsDoc);
++					const mine = report.strategy?.seats?.[me] ?? { strategy: DEFAULT_STRATEGY, source: "default" };
++					const leaseClause =
++						report.leased + report.lapsed + report.invalid > 0
++							? ` | leases: ${report.leased} live, ${report.lapsed} lapsed-but-stored, ${report.invalid} invalid; ${me} claims by ${mine.strategy} (from ${mine.source})`
++							: "";
++					const head = `QUEUE (${scope}): ${filtered.length} non-terminal${countSuffix}${leaseClause}`;
+ 					// Render to plain strings INSIDE the commit: the commit releases its overlay, and a
+ 					// proxy read (including an array field like `blockedBy`) after settlement throws
+ 					// "Cannot use a settled overlay".

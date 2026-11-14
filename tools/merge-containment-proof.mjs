@@ -29,6 +29,10 @@ const repo = argv.includes("--repo") ? argv[argv.indexOf("--repo") + 1] : proces
 const branch = argv.includes("--branch") ? argv[argv.indexOf("--branch") + 1] : null;
 const refs = (argv.includes("--refs") ? argv[argv.indexOf("--refs") + 1] : "").split(",").filter(Boolean);
 const baseBranch = argv.includes("--base") ? argv[argv.indexOf("--base") + 1] : "refs/heads/main";
+// Addendum 2026-11-14 (delegate): the default sample is 3 lines, which is enough to see that a path lost
+// lines but not enough to WRITE a disposition row (docs/DISPOSITIONS.md requires the verbatim hunk).
+// `--all-lost` prints every missing line instead. Same rules, same proof, more output.
+const allLost = argv.includes("--all-lost");
 
 const git = (a) => { const r = spawnSync("git", a, { cwd: repo, encoding: "utf8", maxBuffer: 128 * 1024 * 1024 }); return { ok: r.status === 0, status: r.status, out: (r.stdout || "").trim() }; };
 const HEAD_RE = /^## (?:STUB OF )?D(\d+|MINT|###)/;
@@ -88,7 +92,7 @@ for (const ref of refs) {
 			}
 			return true;
 		});
-		if (miss.length) lost.push({ path: p, count: miss.length, sample: miss.slice(0, 3) });
+		if (miss.length) lost.push({ path: p, count: miss.length, sample: allLost ? miss : miss.slice(0, 3) });
 	}
 	if (lost.length) bad++;
 	rows.push({ ref, paths: paths.length, addedLines: added, lost });

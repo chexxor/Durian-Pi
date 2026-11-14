@@ -1,0 +1,933 @@
+Ref refs/heads/item-6392 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 99a8bc75ca7241c3a2517028f13391f6146cb649. Lost lines: 126 across 11 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6392 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6392
+
+--- cli.mjs (6 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/cli.mjs b/cli.mjs
+index f5e09b1b..84e5b285 100644
+--- a/cli.mjs
++++ b/cli.mjs
+@@ -89,6 +89,7 @@ import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs"
+ import { readCommitMessages } from "./src/commitmsg.mjs";
+ import { readCitations } from "./src/citation.mjs";
+ import { readDocCountClaims } from "./src/doccounts.mjs";
++import { readInboxCensus } from "./src/inboxcensus.mjs";
+ import { activeSet, formatProvenance, gitProvenance } from "./src/provenance.mjs";
+ import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
+ import { formatChat, formatPartial } from "./src/chatview.mjs";
+@@ -3495,6 +3496,10 @@ async function cmdCheck(rigFile, human, rest = []) {
+   // claims only - not the file bodies), and null when docs/ cannot be read, which the rule reports
+   // as UNKNOWN rather than as a pass.
+   const docCounts = readDocCountClaims({ root: process.cwd() });
++  // #6392 (ROADMAP 329): the broker's intent spool, counted from the FILES beside the store. No store
++  // is opened on purpose: the wedge this rule looks for is a broker that is not completing passes, and
++  // a census that opens the store is the first thing such a broker makes time out.
++  const inboxCensus = readInboxCensus(DB_PATH);
+   const result = auditRig({
+     rig: rigFile,
+     spec,
+@@ -3510,6 +3515,7 @@ async function cmdCheck(rigFile, human, rest = []) {
+     sharedTreeLinked,
+     contextBySeat,
+     docCounts,
++    inboxCensus,
+   });
+   const seatCount = (spec.seats ?? []).length;
+   if (human) {
+--- demo/check.test.mjs (4 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/check.test.mjs b/demo/check.test.mjs
+index dc13fbef..2a6e9c43 100644
+--- a/demo/check.test.mjs
++++ b/demo/check.test.mjs
+@@ -115,6 +115,10 @@ try {
+     // the doc-count rule RUNS and passes here. Omitting it reports UNKNOWN (nothing was judged) - the
+     // distinction is pinned in demo/doc-count-drift.test.mjs.
+     docCounts: [],
++    // #6392: `null` means the census RAN and found no broker surface beside this fixture store - a
++    // population of zero, which is an answer, so the rule runs and passes here. Omitting it entirely
++    // reports UNKNOWN (nothing was judged), which is pinned in demo/stranded-inbox-rule.test.mjs.
++    inboxCensus: null,
+   });
+   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
+   assert.equal(hardened.exitCode, 0);
+--- demo/runbook-frontmatter.test.mjs (2 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/runbook-frontmatter.test.mjs b/demo/runbook-frontmatter.test.mjs
+index 2fa075e0..3e98e011 100644
+--- a/demo/runbook-frontmatter.test.mjs
++++ b/demo/runbook-frontmatter.test.mjs
+@@ -160,8 +160,8 @@ const noneCheck = none.checks.find((c) => c.id === "runbook-front-matter");
+ assert.equal(noneCheck.status, "unknown", "without runbook data the rule is UNKNOWN, never a pass and never a plain skip (#5767)");
+ assert.ok(noneCheck.why, "the unknown says why");
+ assert.ok(
+-	none.checks.filter((c) => c.status === "unknown").length === 4,
+-	"four rules report unknown together: the three runbook rules plus doc-count-drift (#6155) — one absent input each, nothing judged",
++	none.checks.filter((c) => c.status === "unknown").length === 5,
++	"five rules report unknown together: the three runbook rules, doc-count-drift (#6155) and inbox-stranded (#6392) - one absent input each, nothing judged",
+ );
+ assert.ok(
+ 	none.checks.find((c) => c.id === "doc-count-drift")?.status === "unknown",
+--- demo/starter.test.mjs (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/starter.test.mjs b/demo/starter.test.mjs
+index c4c5adc9..3a9e668c 100644
+--- a/demo/starter.test.mjs
++++ b/demo/starter.test.mjs
+@@ -245,6 +245,7 @@ try {
+ 		"commit-message-encoding": "demo/commit-message-encoding.test.mjs",
+ 		"context-over-window": "demo/context-over-window.test.mjs",
+ 		"doc-count-drift": "demo/doc-count-drift.test.mjs",
++	"inbox-stranded": "demo/stranded-inbox-rule.test.mjs",
+ 	};
+ 	for (const rule of RULES) {
+ 		assert.ok(
+--- demo/stranded-inbox-rule.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/stranded-inbox-rule.test.mjs b/demo/stranded-inbox-rule.test.mjs
+new file mode 100644
+index 00000000..d50edbfa
+--- /dev/null
++++ b/demo/stranded-inbox-rule.test.mjs
+@@ -0,0 +1,292 @@
++// demo/stranded-inbox-rule.test.mjs — #6392 (ROADMAP 329): `check` counts the stranded inbox, and
++// the count is the thing that is asserted.
++//
++// FAILING-FIRST. Before this rule existed `tools/stranded-inbox.mjs` classified the spool correctly
++// and NOTHING called it: measured on 2026-11-10 the live rig sat with `inbox=9 drainStranded=9
++// progressAgeS=22731` and neither a seat nor the operator could see it, because the census ran only
++// when someone thought to run it. A demo that only checks the tool file exists proves the tool exists;
++// it does not prove anyone runs it. Every assertion below is about a COUNT, and the CLI leg asserts the
++// rule is actually wired into `check`.
++//
++// The closed set of outcomes pinned here:
++//   (a) entries that outlived the run that received them  -> shutdown-stranded finding;
++//   (b) entries waiting while the drain clock runs past the bound -> drain-stranded finding, and the
++//       detail names WHICH clock it measured;
++//   (c) a live broker with in-flight intents -> no finding, but the pending count is reported;
++//   (d) a brand-new broker with no PASS ever (#5698) -> no finding, because there is no drain clock;
++//   (e) no spool at all -> SKIPPED with a reason, never a silent pass;
++//   (f) spool files but no START/PASS anywhere -> UNKNOWN, never a pass;
++//   (g) the read bound -> the census says it truncated, so the count is a floor, not a population;
++//   (h) severity is fix-now, so a wedged spool can never fail a script (D24).
++//
++// Run: node demo/stranded-inbox-rule.test.mjs  (exit 0 = pass)
++import assert from "node:assert/strict";
++import { spawn } from "node:child_process";
++import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { tmpdir } from "node:os";
++
++import { auditRig, RULES } from "../src/checkup.mjs";
++import { readInboxCensus, censusLines, DRAIN_STRAND_MS } from "../src/inboxcensus.mjs";
++
++const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
++const dir = mkdtempSync(join(tmpdir(), "durig-stranded-inbox-"));
++const iso = (ms) => new Date(ms).toISOString();
++
++let failures = 0;
++function check(label, ok, detail = "") {
++  if (ok) console.log(`  ok   ${label}`);
++  else {
++    failures += 1;
++    console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`);
++  }
++}
++
++/** Build a spool beside a (never-opened) db path. Nothing here touches a store. */
++function spool(name, { now, log = null, state = null, inbox = [], raw = [] } = {}) {
++  const db = join(dir, name);
++  const inboxDir = join(dir, `${name}.broker.inbox`);
++  if (log !== null) writeFileSync(join(dir, `${name}.broker.log`), log.join("\n") + "\n", "utf8");
++  if (state !== null) writeFileSync(join(dir, `${name}.broker.json`), JSON.stringify(state), "utf8");
++  mkdirSync(inboxDir, { recursive: true });
++  inbox.forEach((rec, i) => {
++    writeFileSync(join(inboxDir, `${String(i).padStart(16, "0")}.json`), JSON.stringify(rec), "utf8");
++  });
++  raw.forEach((text, i) => {
++    writeFileSync(join(dir, `${name}.broker.inbox`, `9${String(i).padStart(15, "0")}.json`), text, "utf8");
++  });
++  return db;
++}
++
++const statusOf = (audit, id) => audit.checks.find((c) => c.id === id);
++const findingsOf = (audit, id) => audit.findings.filter((f) => f.id === id);
++
++function runProcess(cmd, args, env = {}) {
++  return new Promise((resolve) => {
++    const child = spawn(cmd, args, {
++      cwd: dir,
++      env: { ...process.env, ...env },
++      stdio: ["ignore", "pipe", "pipe"],
++    });
++    let stdout = "";
++    let stderr = "";
++    child.stdout.on("data", (c) => (stdout += c));
++    child.stderr.on("data", (c) => (stderr += c));
++    child.once("exit", (code) => resolve({ code, stdout, stderr }));
++  });
++}
++
++try {
++  console.log("STRANDED-INBOX RULE (#6392) — the census is a check rule, and it COUNTS");
++
++  const runCli = (args, env = {}) => runProcess(process.execPath, [join(ROOT, "cli.mjs"), ...args], { DURIG_PROVIDER: "faux", ...env });
++
++  // 0. The rule is declared, with the severity that keeps it from failing a script.
++  const declared = RULES.find((r) => r.id === "inbox-stranded");
++  check("the rule is declared in RULES", Boolean(declared), "no inbox-stranded entry");
++  check("severity is fix-now (a wedged spool must not fail a script, D24)", declared?.severity === "fix-now", `severity=${declared?.severity}`);
++
++  // 1. THE WEDGE: entries that outlived the run that received them, and entries waiting behind a
++  //    drain that has not run. Mirrors the measured live shape (inbox=9, progressAge 22731 s).
++  const now = 1_760_000_000_000;
++  const wedged = spool("wedged.sqlite", {
++    now,
++    log: [
++      `${iso(now - 3_600_000)} START pid=1 runToken=alpha`,
++      `${iso(now - 1_000_000)} EXIT pid=1 passes=3`,
++    ],
++    state: { pid: 1, since: iso(now - 3_600_000), heartbeatAt: now - 5_000, lastPassAt: null },
++    inbox: [
++      { op: "read", view: "queue", createdAt: iso(now - 500_000) }, // after EXIT, no START since
++      { op: "pause", seat: "impl", createdAt: iso(now - 1_500_000) }, // waiting behind a dead clock
++      { op: "read", view: "status", createdAt: iso(now - 4_000_000) }, // older than the clock: not classifiable
++    ],
++  });
++  const census = readInboxCensus(wedged, { now });
++  check("census reads 3 spool files", census.inboxCount === 3, `inboxCount=${census.inboxCount}`);
++  check("1 shutdown-stranded (written after the last EXIT with no START since)", census.shutdownStranded === 1, `got ${census.shutdownStranded}`);
++  check("1 drain-stranded (waiting while the clock is 3600 s old)", census.drainStranded === 1, `got ${census.drainStranded}`);
++  check("1 entry predates the drain clock and is not counted as stranded", census.shutdownStranded + census.drainStranded + census.pending === 2, `classes sum to ${census.shutdownStranded + census.drainStranded + census.pending}`);
++  check("the classes are mutually exclusive: every read file gets exactly one", census.shutdownStranded + census.drainStranded + census.pending + census.predatesClock + census.unreadable === census.read, `sum=${census.shutdownStranded + census.drainStranded + census.pending + census.predatesClock + census.unreadable} read=${census.read}`);
++
++  const audit = auditRig({ rig: "wedged.rig.json", spec: { seats: [{ name: "alpha", capabilities: ["implement"] }] }, inboxCensus: census });
++  const found = findingsOf(audit, "inbox-stranded");
++  check("check emits an inbox-stranded finding", found.length >= 2, `found ${found.length}`);
++  check(
++    "the finding names the CLASS, not just a number",
++    found.some((f) => /shutdown-stranded/i.test(f.detail)) && found.some((f) => /drain/i.test(f.detail)),
++    found.map((f) => f.detail).join(" | "),
++  );
++  check(
++    "the drain finding names which clock it measured and how stale it is",
++    found.some((f) => /START at /.test(f.detail) && /3600 s/.test(f.detail)),
++    found.map((f) => f.detail).join(" | "),
++  );
++  check("the rule reports a fail status while the overall check still passes (fix-now never fails a run)", statusOf(audit, "inbox-stranded")?.status === "fail" && audit.exitCode === 0, `status=${statusOf(audit, "inbox-stranded")?.status} exit=${audit.exitCode}`);
++
++  // 2. THE BOUNDARY: the same spool is not stranded while the drain clock is inside the bound.
++  const inside = readInboxCensus(
++    spool("healthy.sqlite", {
++      now,
++      log: [
++        `${iso(now - 600_000)} START pid=2 runToken=beta`,
++        `${iso(now - (DRAIN_STRAND_MS - 1000))} PASS 1 ms=120 woke=alpha`,
++      ],
++      state: { pid: 2, since: iso(now - 600_000), heartbeatAt: now - 2_000, lastPassAt: now - (DRAIN_STRAND_MS - 1000) },
++      inbox: [{ op: "read", view: "queue", createdAt: iso(now - 30_000) }],
++    }),
++    { now },
++  );
++  check("clock 119 s old: 0 stranded, 1 pending (in-flight, not a finding)", inside.drainStranded === 0 && inside.pending === 1, `drainStranded=${inside.drainStranded} pending=${inside.pending}`);
++  const outside = readInboxCensus(
++    spool("stale.sqlite", {
++      now,
++      log: [
++        `${iso(now - 600_000)} START pid=3 runToken=gamma`,
++        `${iso(now - (DRAIN_STRAND_MS + 1000))} PASS 1 ms=120 woke=alpha`,
++      ],
++      state: { pid: 3, since: iso(now - 600_000), heartbeatAt: now - 2_000, lastPassAt: now - (DRAIN_STRAND_MS + 1000) },
++      inbox: [{ op: "read", view: "queue", createdAt: iso(now - 30_000) }],
++    }),
++    { now },
++  );
++  check("clock 121 s old: 1 stranded", outside.drainStranded === 1, `drainStranded=${outside.drainStranded}`);
++
++  // 3. #5698: a brand-new broker has no PASS and lastPassAt null. That is not a finding.
++  const fresh = readInboxCensus(
++    spool("fresh.sqlite", {
++      now,
++      log: [`${iso(now - 20_000)} START pid=4 runToken=fresh`],
++      state: { pid: 4, since: iso(now - 20_000), heartbeatAt: now - 5_000, lastPassAt: null },
++      inbox: [
++        { op: "read", view: "queue", createdAt: iso(now - 15_000) },
++        { op: "read", view: "status", createdAt: iso(now - 12_000) },
++      ],
++    }),
++    { now },
++  );
++  check("fresh broker: nothing stranded", fresh.drainStranded === 0 && fresh.shutdownStranded === 0, `drainStranded=${fresh.drainStranded} shutdownStranded=${fresh.shutdownStranded}`);
++  const freshAudit = auditRig({ rig: "fresh.rig.json", spec: { seats: [{ name: "alpha", capabilities: ["implement"] }] }, inboxCensus: fresh });
++  check("fresh broker does not fire the rule", findingsOf(freshAudit, "inbox-stranded").length === 0, findingsOf(freshAudit, "inbox-stranded").map((f) => f.detail).join(" | "));
++
++  // 4. The same broker, an hour later, still never having completed a pass IS a finding — and the
++  //    detail says the clock is the START, not an invented PASS.
++  const oneHourLater = readInboxCensus(join(dir, "fresh.sqlite"), { now: now + 3_600_000 });
++  check("wedged-before-first-pass: 2 stranded, clock kind START", oneHourLater.drainStranded === 2 && oneHourLater.clockKind === "START", `drainStranded=${oneHourLater.drainStranded} clockKind=${oneHourLater.clockKind}`);
++
++  // 5. No broker surface at all: the census RAN and the population is zero. That is a pass, not a
++  //    bail-out. What is NOT allowed is a pass when the caller supplied no census at all (D25) - the
++  //    rule must report UNKNOWN in that case.
++  const bare = auditRig({ rig: "bare.rig.json", spec: { seats: [{ name: "alpha", capabilities: ["implement"] }] }, inboxCensus: readInboxCensus(join(dir, "never-run.sqlite"), { now }) });
++  const bareStatus = statusOf(bare, "inbox-stranded");
++  check("no broker surface: the census ran and reports zero, so the rule passes", bareStatus?.status === "pass" && findingsOf(bare, "inbox-stranded").length === 0, `status=${bareStatus?.status}`);
++  const unSupplied = auditRig({ rig: "none.rig.json", spec: { seats: [{ name: "alpha", capabilities: ["implement"] }] } });
++  const unSuppliedStatus = statusOf(unSupplied, "inbox-stranded");
++  check("no census supplied -> UNKNOWN with a reason, never a silent pass (D25)", unSuppliedStatus?.status === "unknown" && /no spool census/i.test(unSuppliedStatus?.why ?? ""), `status=${unSuppliedStatus?.status} why=${unSuppliedStatus?.why}`);
++
++  // 5b. The spool path exists but cannot be listed (it is a FILE, the fixture bug the runbook
++  //     describes): a zero here would be a guess, so the rule says UNKNOWN (#6372).
++  const asFile = join(dir, "filespool.sqlite");
++  writeFileSync(join(dir, "filespool.sqlite.broker.inbox"), "this is not a directory", "utf8");
++  const fileSpool = readInboxCensus(asFile, { now });
++  check("a spool that cannot be listed is flagged, not counted as empty", fileSpool.inboxReadError === true && fileSpool.inboxCount === 0, `inboxReadError=${fileSpool.inboxReadError} inboxCount=${fileSpool.inboxCount}`);
++  const fileSpoolStatus = statusOf(auditRig({ rig: "f.rig.json", spec: { seats: [{ name: "a", capabilities: ["implement"] }] }, inboxCensus: fileSpool }), "inbox-stranded");
++  check("...and the rule reports UNKNOWN rather than a clean zero", fileSpoolStatus?.status === "unknown", `status=${fileSpoolStatus?.status}`);
++
++  // 6. Files exist but there is no clock anywhere -> UNKNOWN (judged nothing), not a pass and not a finding.
++  const noClock = auditRig({
++    rig: "noclock.rig.json",
++    spec: { seats: [{ name: "alpha", capabilities: ["implement"] }] },
++    inboxCensus: readInboxCensus(
++      spool("noclock.sqlite", {
++        now,
++        log: [],
++        state: { pid: 9, since: iso(now - 100_000), heartbeatAt: now - 1_000, lastPassAt: null },
++        inbox: [{ op: "read", view: "queue", createdAt: iso(now - 50_000) }],
++      }),
++      { now },
++    ),
++  });
++  const noClockStatus = statusOf(noClock, "inbox-stranded");
++  check("no drain clock -> UNKNOWN, with its reason", noClockStatus?.status === "unknown" && /no drain clock/i.test(noClockStatus?.why ?? ""), `status=${noClockStatus?.status} why=${noClockStatus?.why}`);
++
++  // 7. A malformed spool file is named, not swallowed.
++  const malformed = readInboxCensus(
++    spool("malformed.sqlite", {
++      now,
++      log: [`${iso(now - 400_000)} START pid=5 runToken=m`, `${iso(now - 300_000)} EXIT pid=5 passes=0`],
++      inbox: [{ op: "read", view: "queue", createdAt: iso(now - 200_000) }],
++      raw: ["{truncated", ""],
++    }),
++    { now },
++  );
++  check("2 unparseable spool files are counted", malformed.unreadable === 2, `unreadable=${malformed.unreadable}`);
++  check(
++    "the rule reports unparseable files as a finding",
++    findingsOf(auditRig({ rig: "m.rig.json", spec: { seats: [{ name: "a", capabilities: ["implement"] }] }, inboxCensus: malformed }), "inbox-stranded").some((f) => /cannot be parsed/i.test(f.detail)),
++    "no unreadable finding",
++  );
++
++  // 8. The read is bounded, and the census says so when it truncates.
++  const bounded = readInboxCensus(
++    spool("big.sqlite", {
++      now,
++      log: [`${iso(now - 600_000)} START pid=6 runToken=b`, `${iso(now - 400_000)} EXIT pid=6 passes=1`],
++      inbox: Array.from({ length: 5 }, (_, i) => ({ op: "read", view: "queue", createdAt: iso(now - 100_000 - i * 1000) })),
++    }),
++    { now, maxEntries: 2 },
++  );
++  check("bounded read: 2 read of 5, truncated true", bounded.read === 2 && bounded.inboxCount === 5 && bounded.truncated === true, `read=${bounded.read} inboxCount=${bounded.inboxCount} truncated=${bounded.truncated}`);
++  check(
++    "a truncated census reports itself as a floor",
++    findingsOf(auditRig({ rig: "b.rig.json", spec: { seats: [{ name: "a", capabilities: ["implement"] }] }, inboxCensus: bounded }), "inbox-stranded").some((f) => /bounded at 2/.test(f.detail)),
++    "no truncation disclosure",
++  );
++
++  // 9. THE WIRING: `cli.mjs check` runs the census off the FILES, with no store, and the rule shows up
++  //    in both the JSON contract and the human readout.
++  const rigPath = join(dir, "live.rig.json");
++  writeFileSync(
++    rigPath,
++    JSON.stringify({
++      version: 2,
++      seats: [
++        { name: "alpha", instructions: "do things", capabilities: ["implement"], model: "faux/model-a" },
++        { name: "verifier", instructions: "check things", capabilities: ["verify"], model: "faux/model-b" },
++      ],
++      edges: [{ from: "alpha", maySendTo: ["verifier"] }, { from: "verifier", maySendTo: ["alpha"] }],
++    }),
++    "utf8",
++  );
++  const json = await runCli(["check", rigPath, "--json"], { DURIG_DB: wedged });
++  let parsed = null;
++  try {
++    parsed = JSON.parse(json.stdout);
++  } catch {
++    /* reported below */
++  }
++  check("cli.mjs check exits 0 (fix-now never fails a script)", json.code === 0, `code=${json.code} stderr=${json.stderr.slice(0, 200)}`);
++  const wired = parsed?.checks?.find((c) => c.id === "inbox-stranded");
++  check("the rule appears in the check JSON", Boolean(wired), json.stdout.slice(0, 200));
++  check("and it reports the counts against the fixture spool", wired?.status === "fail" && wired?.found >= 2, `status=${wired?.status} found=${wired?.found}`);
++  const human = await runCli(["check", rigPath, "--human"], { DURIG_DB: wedged });
++  check("the rule appears in the human readout", /inbox-stranded/.test(human.stdout), human.stdout.slice(0, 200));
++  check("the store was never opened, yet the census still ran", parsed?.store !== "read" && wired?.status === "fail", `store=${parsed?.store}`);
++
++  // 10. The operator-facing tool and the rule are the SAME census — the tool prints the census's numbers.
++  const tool = await runProcess(process.execPath, [join(ROOT, "tools/stranded-inbox.mjs"), wedged], {});
++  const summary = (/SUMMARY (.*)/m.exec(tool.stdout) ?? [])[1] ?? "";
++  const kv = Object.fromEntries(summary.split(" ").map((pair) => pair.split("=")));
++  check(
++    "tools/stranded-inbox.mjs reports the same counts as the rule",
++    Number(kv.shutdownStranded) === census.shutdownStranded && Number(kv.drainStranded) === census.drainStranded && Number(kv.inbox) === census.inboxCount,
++    `tool: ${summary}`,
++  );
++  check("the tool's exit code still means shutdown-stranded", tool.code === 1, `code=${tool.code}`);
++  check("the census lines name the classes", censusLines(census).some((l) => /SHUTDOWN-STRANDED/.test(l)) && censusLines(census).some((l) => /DRAIN-STRANDED/.test(l)), censusLines(census).join(" | "));
++
++  console.log(failures === 0 ? "STRANDED-INBOX RULE TEST PASS: the rule is declared, wired into check, counts by class, respects the bound, says UNKNOWN when it cannot judge, stays quiet on a fresh broker, and the tool and the rule agree" : `STRANDED-INBOX RULE TEST FAIL: ${failures} assertion(s) failed`);
++  process.exit(failures === 0 ? 0 : 1);
++} finally {
++  rmSync(dir, { recursive: true, force: true });
++}
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 6e564c9f..c8b86f2a 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -112,6 +112,7 @@
+       "demo/broker-one-connection.test.mjs",
+       "demo/broker-pass-survival.test.mjs",
+       "demo/broker-progress-is-a-completed-pass.test.mjs",
++      "demo/stranded-inbox-rule.test.mjs",
+       "demo/broker-read-nopass.test.mjs",
+       "demo/broker-read.test.mjs",
+       "demo/broker-reconcile.test.mjs",
+--- docs/WORKFLOWS.md (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/WORKFLOWS.md b/docs/WORKFLOWS.md
+index c25132bf..d020d8a6 100644
+--- a/docs/WORKFLOWS.md
++++ b/docs/WORKFLOWS.md
+@@ -290,7 +290,7 @@ because an unattributable movement is not evidence.
+ **Done:** the operator can state the change, the measure, the direction predicted, and
+ whether it moved - or say `unknown`, which is a legitimate outcome.
+ 
+-**Capability:** `check` (23 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"` - the `doc-count-drift` rule (#6155) runs this line against that declaration and goes red on disagreement), `metrics` (six measures, as declared in `src/metrics.mjs` `MEASURES`), config provenance
++**Capability:** `check` (24 rules, declared in `src/checkup.mjs` `RULES`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"` - the `doc-count-drift` rule (#6155) runs this line against that declaration and goes red on disagreement), `metrics` (six measures, as declared in `src/metrics.mjs` `MEASURES`), config provenance
+ (`DURIAN_PI_STREAM_TIMEOUT_MS` and friends), and a drill - **which does not exist** (item 2's
+ other half). Without the drill a passive window is *confounded*: it cannot separate "the
+ rig got worse" from "the work changed". So today this loop is honest but only
+--- docs/runbooks/intent-stuck-in-inbox.md (27 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/intent-stuck-in-inbox.md b/docs/runbooks/intent-stuck-in-inbox.md
+index b77565b1..b0fe8ba5 100644
+--- a/docs/runbooks/intent-stuck-in-inbox.md
++++ b/docs/runbooks/intent-stuck-in-inbox.md
+@@ -3,10 +3,10 @@ runbook: intent-stuck-in-inbox
+ symptom: "a `cli.mjs send`/`watch` intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; or a command vanishes with no verdict and nothing in `status` explains it"
+ writes: false                    # this procedure only reads the spool; the probe writes only its own temp dirs
+ precondition: "none (the probe needs no broker and opens no store)"
+-last_verified: 2026-11-10
+-verified_by: architect
+-evidence: "item #6185; `node docs/evidence/2026-11-10-broker-receive-path/probe-drain.mjs` exit 0 in worktree item-6185 @ 20308665; `node demo/control-plane-gate.test.mjs` exit 0"
+-check_rule: null                 # nothing re-tests dead-letter reachability after the fact — see Evidence
++last_verified: 2026-11-12
++verified_by: devtools
++evidence: "item #6392; `node demo/stranded-inbox-rule.test.mjs` exit 0 (33 assertions, branch item-6392 @ 3c245dbf); the census itself reads no store: `node tools/stranded-inbox.mjs <db>` prints the same counts the rule reports"
++check_rule: "inbox-stranded"          # #6392: `cli.mjs check` now censuses the spool from the files, by class; pinned by demo/stranded-inbox-rule.test.mjs
+ ---
+ 
+ # An intent that is refused but never leaves the inbox
+@@ -51,6 +51,20 @@ Expected for a stuck payload: `ls -ld` says **file**, and the inbox count does n
+ Then check whether the refusal even produced a diagnostic: an unparseable payload is dead-lettered with
+ **no** `onDiagnostic` event at all, so an empty diagnostic stream is not evidence of a healthy path.
+ 
++Then ask the standing question the census answers, without opening the store (#6392):
++
++```bash
++node tools/stranded-inbox.mjs /home/chexxor/Git/Durian-Pi/selfdev.sqlite
++```
++
++Each pending file is printed with exactly one class — `SHUTDOWN-STRANDED` (written after the last EXIT
++with no START since: it outlived the run that received it), `DRAIN-STRANDED` (waiting while the drain
++clock has run past 120 s: the drain runs only at the start of a pass, so a broker that has not
++completed one for minutes is not draining), `pending` (in flight, not a finding), or `predates the
++drain clock` (older than the clock, so the census cannot tell). `cli.mjs check` reports the same
++census as the `inbox-stranded` rule (fix-now, so it can never fail a script); the two read one
++classifier, `src/inboxcensus.mjs`, so they cannot disagree.
++
+ ## Do
+ 
+ 1. **If `.error` is a file**, it is the fixture bug, not a broker bug: move it aside.
+@@ -88,6 +102,19 @@ DB=/home/chexxor/Git/Durian-Pi/selfdev.sqlite; ls -1 "$DB.broker.inbox" | wc -l
+ 
+ Expected: `0` after a pass. A non-zero count that survives two passes is the stuck case.
+ 
++And the rule that keeps this visible without anyone remembering to look (#6392):
++
++```bash
++node cli.mjs check --json | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const j=JSON.parse(s.slice(s.indexOf("{"),s.lastIndexOf("}")+1));console.log(j.checks.find(c=>c.id==="inbox-stranded"))})'
++```
++
++Expected: `{ id: "inbox-stranded", status: "pass", found: 0 }` on a clean rig, or `status: "fail"`
++with findings naming the class. `unknown` means the census could not judge — the spool path exists but
++cannot be listed, or spool files exist while nothing has ever STARTed or PASSed, so there is no drain
++clock to measure against. A rig whose broker has never run reports `pass`: the census ran and the
++population is genuinely zero. A rule that reports a clean zero it never counted is the failure this
++rule is meant to prevent (#6372).
++
+ ## If it fails
+ 
+ - `.error` is a directory and the inbox is still non-empty → that is not this failure; it is
+@@ -112,7 +139,9 @@ Expected: `0` after a pass. A non-zero count that survives two passes is the stu
+   residual".
+ - Code: `src/broker.mjs:172-190` (spool write), `:288-307` (`deadLetterIntent`, swallows failure),
+   `:761-861` (`drainIntentInbox`, `deadLettered++` on every branch), `:262` (`INTENT_RETRY_LIMIT`).
+-- **Why there is no `check_rule`:** nothing currently re-tests whether a dead-letter target is a
+-  directory, and no rule compares the reported `dead` count with the inbox contents. That comparison
+-  is exactly what the missing rule would do — registered in
+-  `docs/reviews/architecture-receive-path-6185.md` §6 as the build.
++- **What the `check_rule` does and does not cover:** `inbox-stranded` (#6392) censuses the spool
++  population from the FILES beside the store and names each pending file's class, so a stranded
++  population reaches the operator without anyone thinking to run the probe. It does NOT test whether a
++  dead-letter target is a directory, nor compare the reported `dead` count with the inbox contents —
++  that comparison is still the registered build in
++  `docs/reviews/architecture-receive-path-6185.md` §6.
+--- src/checkup.mjs (50 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/checkup.mjs b/src/checkup.mjs
+index 23a46a7c..c6854556 100644
+--- a/src/checkup.mjs
++++ b/src/checkup.mjs
+@@ -157,6 +157,11 @@ export const RULES = [
+     severity: "fix-now",
+     what: "a doc states a count of a set the code declares, and the declaration does not match it (#6155)",
+   },
++  {
++    id: "inbox-stranded",
++    severity: "fix-now",
++    what: "the broker's intent spool holds entries no drain has swept, named by class: shutdown-stranded (written after the run's EXIT, with no START since) or drain-stranded (waiting while the drain clock runs past the bound) (#6392, ROADMAP 329)",
++  },
+ ];
+ 
+ /** #6155: the sets whose SIZE is declared in code, so a doc may cite a number a machine can re-check.
+@@ -447,7 +452,7 @@ export function runbookFrontMatterProblems(runbook) {
+  *   rule reports UNKNOWN, never a false pass (#6155).
+  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
+  */
+-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null }) {
++export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, inboxCensus = undefined }) {
+   const findings = [];
+   const skipped = [];
+   const add = (id, subject, detail, fix) =>
+@@ -1050,6 +1055,77 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
+     }
+   }
+ 
++  // 16. #6392 (ROADMAP 329): the STRANDED INBOX census. The input is the spool read from the FILES
++  //    beside the store (src/inboxcensus.mjs), never the store itself: the condition this rule looks
++  //    for is a broker that is not completing passes, and a census that opens the store is the first
++  //    thing such a broker makes time out — a diagnostic starved by the fault it diagnoses is not a
++  //    diagnostic. `tools/stranded-inbox.mjs` prints this same census, so classification lives in one
++  //    place. Absent input is SKIPPED/UNKNOWN with its reason, never a silent pass (D25).
++  //    Severity is fix-now: a wedged spool is a real gap the operator can close, but it does not stop
++  //    the rig from working, so it must not fail a script (D24).
++  if (inboxCensus === undefined) {
++    skipped.push({
++      id: "inbox-stranded",
++      why: "no spool census was supplied to this audit, so the inbox population cannot be judged",
++      unknown: true,
++    });
++  } else if (inboxCensus === null) {
++    // The census ran and found no broker surface at all beside the store: nothing has ever been
++    // spooled, so nothing can be stranded. That is an answer, not a bail-out - the rule ran and the
++    // population is zero.
++  } else if (inboxCensus.inboxReadError) {
++    // The spool directory exists but cannot be listed: a zero here is not a census (#6372).
++    skipped.push({
++      id: "inbox-stranded",
++      why: "the spool directory exists but could not be listed, so a zero would be a guess, not a count",
++      unknown: true,
++    });
++  } else if (!inboxCensus.hasClock) {
++    // Files exist but nothing has ever STARTed or PASSed: there is no drain clock, so a pending
++    // entry cannot be told from a stranded one. Report it as un-judged, not as a finding and not
++    // as a pass.
++    skipped.push({
++      id: "inbox-stranded",
++      why: `${inboxCensus.inboxCount} spool file(s) exist but the broker log and state record no START or PASS, so there is no drain clock to measure against`,
++      unknown: true,
++    });
++  } else {
++    if (inboxCensus.shutdownStranded > 0) {
++      add(
++        "inbox-stranded",
++        inboxCensus.dbPath,
++        `shutdown-stranded: ${inboxCensus.shutdownStranded} intent file(s) written AFTER the last EXIT with no START since — they outlived the run that received them, and no drain will ever sweep them (last EXIT ${inboxCensus.lastExitAt ? new Date(inboxCensus.lastExitAt).toISOString() : "?"})`,
++        "the drain runs only at the start of a pass: drive one (`node cli.mjs serve`) so the spool is swept, or re-spool the intents with the same requestId; see docs/runbooks/intent-stuck-in-inbox.md",
++      );
++    }
++    if (inboxCensus.drainStranded > 0) {
++      const stranded = inboxCensus.entries.filter((e) => e.class === "drain");
++      const oldest = Math.max(...stranded.map((e) => e.ageS ?? 0));
++      add(
++        "inbox-stranded",
++        inboxCensus.dbPath,
++        `drain-stranded: ${inboxCensus.drainStranded} intent file(s) waiting since the last ${inboxCensus.clockKind} at ${new Date(inboxCensus.clockAt).toISOString()} (${inboxCensus.clockAgeS.toFixed(0)} s ago), oldest waiting ${oldest.toFixed(0)} s — the drain runs only at the start of a PASS, so a broker that has not completed one for ${inboxCensus.clockAgeS.toFixed(0)} s is not draining`,
++        "check the broker's PROGRESS leg, not its heartbeat: `node cli.mjs status` and docs/runbooks/broker-down-or-stalled.md — a fresh heartbeat with a frozen PASS is this exact signature; the census needs no store: `node tools/stranded-inbox.mjs <db>`",
++      );
++    }
++    if (inboxCensus.unreadable > 0) {
++      add(
++        "inbox-stranded",
++        inboxCensus.dbPath,
++        `${inboxCensus.unreadable} spool file(s) cannot be parsed — the census cannot classify them, and a drain that cannot parse a payload dead-letters it or re-reads it every pass`,
++        "read the offending files (`cat <db>.broker.inbox/<name>.json`); a truncated file means the atomic write was interrupted, not that the intent is valid",
++      );
++    }
++    if (inboxCensus.truncated) {
++      add(
++        "inbox-stranded",
++        inboxCensus.dbPath,
++        `the census read only the first ${inboxCensus.read} of ${inboxCensus.inboxCount} spool files (the read is bounded at ${inboxCensus.maxEntries}), so the counts above are a floor, not the population`,
++        "a spool that large is itself the finding: sweep it with `node tools/stranded-inbox.mjs <db>` and clear it before the next pass",
++      );
++    }
++  }
++
+   const summary = { error: 0, "fix-now": 0, total: findings.length };
+   for (const f of findings) summary[f.severity] += 1;
+   const checks = RULES.map((r) => {
+--- src/inboxcensus.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/inboxcensus.mjs b/src/inboxcensus.mjs
+new file mode 100644
+index 00000000..2ae251b0
+--- /dev/null
++++ b/src/inboxcensus.mjs
+@@ -0,0 +1,216 @@
++// src/inboxcensus.mjs — count the STRANDED INBOX population from the spool FILES (#5275 / ROADMAP 329).
++//
++// ONE OWNER: `check`'s `inbox-stranded` rule (#6392) and `tools/stranded-inbox.mjs` both call
++// `readInboxCensus` here. Two implementations of one classification is the drift the
++// `doc-count-drift` rule exists to catch, so the tool became a printer over this function rather
++// than a second census.
++//
++// WHY FILES AND NOT THE STORE (the contract #6392 set): a diagnostic that opens the store can be
++// starved by exactly the condition it is meant to diagnose — the wedge this census looks for is a
++// broker that is not completing passes, and a store-open census is the first thing such a broker
++// makes time out. `sharedTreeBranch` and `citations` read off-store input for the same reason. A
++// census that depends on the thing being wedged is not a census.
++//
++// WHY BOUNDED: the census reads files, so the only way it hangs is a huge spool or a huge log.
++// Both are capped: the log is read from its tail (only the last lines can matter to "when did the
++// last EXIT/PASS/START happen"), and the spool is read up to `maxEntries`. A census that truncates
++// says so in `truncated`, because a count that quietly omits entries is a false green (#6372).
++//
++// WHAT THE CLASSES MEAN — they need different clocks, which is why one number is not enough:
++//   shutdown-stranded  written AFTER the last EXIT line of the run that received it, with no START
++//                      since: it outlived the broker that took it, and no future drain will see it.
++//   drain-stranded     written AFTER the last completed PASS, and the drain clock is older than
++//                      DRAIN_STRAND_MS: the drain runs only at the start of a pass (src/broker.mjs
++//                      "only a PASS drains it"), so a broker that has not completed one for minutes
++//                      is not draining, and intents pile up behind it. A live heartbeat does NOT
++//                      clear this — liveness and progress are different facts (F7).
++//   pending            written after the baseline but the clock has not yet crossed the bound: a
++//                      normal in-flight intent, not a finding. Reporting this count is what stops
++//                      the rule from crying on a healthy broker.
++//
++// A brand-new broker has no PASS line and `lastPassAt: null` (#5698): there is no drain clock yet,
++// so nothing can be stranded. That is judged from START — a broker that started seconds ago is
++// pending; one that started an hour ago and has never completed a pass while intents wait is a
++// finding, and the detail says "no PASS has ever completed" rather than inventing a stale baseline.
++
++import { existsSync, readdirSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++
++/** How stale the drain clock must be before un-swept intents count as stranded. Two minutes: the
++ * wake loop treats a non-empty inbox as wake-relevant (src/broker.mjs:1895-1899), so a healthy
++ * broker drains within a pass or two — seconds. The observed wedge was 22731 s. */
++export const DRAIN_STRAND_MS = 120_000;
++/** Cap on spool files read, so a wedged drain cannot make the census unbounded. */
++export const MAX_SPOOL_ENTRIES = 2000;
++/** Cap on the bytes of the broker log read: only the tail can answer "when was the last PASS". */
++export const LOG_TAIL_BYTES = 262_144;
++
++export function spoolPaths(dbPath) {
++  return {
++    inbox: `${dbPath}.broker.inbox`,
++    error: `${dbPath}.broker.inbox.error`,
++    out: `${dbPath}.broker.inbox.out`,
++    log: `${dbPath}.broker.log`,
++    state: `${dbPath}.broker.json`,
++  };
++}
++
++/** Read the last `cap` bytes of a file; a missing/unreadable file reads as "". */
++function readTail(path, cap) {
++  let text = "";
++  try {
++    text = readFileSync(path, "utf8");
++  } catch {
++    return "";
++  }
++  return text.length > cap ? text.slice(-cap) : text;
++}
++
++// Broker log lines are `<ISO ts> <WORD> ...` (logBrokerLine, src/broker.mjs:2312).
++function lineTime(line) {
++  if (!line) return null;
++  const space = line.indexOf(" ");
++  if (space <= 0) return null;
++  const at = Date.parse(line.slice(0, space));
++  return Number.isNaN(at) ? null : at;
++}
++
++function lastLineMatching(lines, pattern) {
++  for (let i = lines.length - 1; i >= 0; i -= 1) {
++    if (pattern.test(lines[i])) return lines[i];
++  }
++  return null;
++}
++
++/**
++ * Read the spool beside `dbPath`. Returns null when there is no broker surface at all beside the
++ * store (no spool dir, no log, no state file) — that is "nothing to census", which the rule reports
++ * as SKIPPED with a reason rather than as a pass (D25).
++ */
++export function readInboxCensus(dbPath, { now = Date.now(), maxEntries = MAX_SPOOL_ENTRIES, logTailBytes = LOG_TAIL_BYTES } = {}) {
++  const paths = spoolPaths(dbPath);
++  const inboxExists = existsSync(paths.inbox);
++  const logExists = existsSync(paths.log);
++  const stateExists = existsSync(paths.state);
++  if (!inboxExists && !logExists && !stateExists) return null;
++
++  const lines = readTail(paths.log, logTailBytes).trim().split("\n").filter((l) => l.trim() !== "");  const lastExitLine = lastLineMatching(lines, / EXIT /);
++  const lastPassLine = lastLineMatching(lines, / PASS[ -]/);
++  const lastStartLine = lastLineMatching(lines, / START /);
++  const lastExitAt = lineTime(lastExitLine);
++  const lastStartAt = lineTime(lastStartLine);
++  const logLastPassAt = lineTime(lastPassLine);
++
++  let state = null;
++  try {
++    state = stateExists ? JSON.parse(readFileSync(paths.state, "utf8")) : null;
++  } catch {
++    state = null;
++  }
++  const stateLastPassAt = typeof state?.lastPassAt === "number" ? state.lastPassAt : null;
++  // The drain baseline is the most recent evidence a drain has run, whichever source has it.
++  const baselineAt = logLastPassAt !== null && stateLastPassAt !== null
++    ? Math.max(logLastPassAt, stateLastPassAt)
++    : logLastPassAt ?? stateLastPassAt;
++
++  // A run that STARTED after the last EXIT owns whatever it spooled after that START, so entries
++  // written after the EXIT are live, not stranded (the mislabel the first version of this probe hit).
++  const runSinceExit = lastStartAt !== null && (lastExitAt === null || lastStartAt > lastExitAt);
++  // The clock the drain is judged against: the last completed PASS if there is one, otherwise the
++  // START of the current run — with no PASS ever, the drain has never run, and that is stated rather
++  // than hidden behind an absent baseline.
++  const clockAt = baselineAt ?? lastStartAt;
++  const clockKind = baselineAt !== null ? "PASS" : lastStartAt !== null ? "START" : null;
++  const clockAgeS = clockAt === null ? null : (now - clockAt) / 1000;
++  const drainClockStale = clockAgeS !== null && clockAgeS * 1000 >= DRAIN_STRAND_MS;
++
++  let names = [];
++  let inboxReadError = false;
++  if (inboxExists) {
++    try {
++      names = readdirSync(paths.inbox).filter((n) => n.endsWith(".json")).sort();
++    } catch {
++      // The directory is there but cannot be listed: that is not "nothing spooled", it is "we could
++      // not look", and a rule that reports a clean zero here is a false green (#6372).
++      inboxReadError = true;
++    }
++  }
++  const entries = [];
++  let unreadable = 0;
++  for (const name of names.slice(0, maxEntries)) {
++    let rec = null;
++    try {
++      rec = JSON.parse(readFileSync(join(paths.inbox, name), "utf8"));
++    } catch {
++      unreadable += 1;
++    }
++    const at = rec && typeof rec.createdAt === "string" ? Date.parse(rec.createdAt) : null;
++    const valid = rec !== null && at !== null && !Number.isNaN(at);
++    const ageS = valid ? (now - at) / 1000 : null;
++    const shutdownStranded = valid && lastExitAt !== null && !runSinceExit && at > lastExitAt;
++    // An entry the drain has not seen yet: written after the drain clock.
++    const pending = valid && clockAt !== null && at > clockAt;
++    const drainStranded = pending && drainClockStale;
++    // ONE CLASS PER ENTRY. The classes overlap in time (an intent written after the last EXIT is also
++    // later than the last PASS), and reporting the same file under both headings double-counts the
++    // population the operator has to clear. Precedence is by CAUSE: it outlived the run that received
++    // it (nothing will ever drain it) outranks the drain clock being stale, which outranks in-flight.
++    const entryClass = !valid ? "unreadable" : shutdownStranded ? "shutdown" : drainStranded ? "drain" : pending ? "pending" : "predatesClock";
++    entries.push({
++      name,
++      op: rec?.op ?? "?",
++      view: rec?.view ?? null,
++      ageS,
++      createdAt: valid ? at : null,
++      shutdownStranded,
++      drainStranded,
++      pending,
++      class: entryClass,
++    });
++  }
++
++  const count = (cls) => entries.filter((e) => e.class === cls).length;
++
++  const errorFiles = existsSync(paths.error) ? readdirSync(paths.error).filter((n) => n.endsWith(".json")).length : 0;
++  const resultFiles = existsSync(paths.out) ? readdirSync(paths.out).filter((n) => n.endsWith(".json")).length : 0;
++  const hbAgeS = typeof state?.heartbeatAt === "number" ? (now - state.heartbeatAt) / 1000 : null;
++
++  return {
++    dbPath,
++    inboxCount: names.length,
++    read: entries.length,
++    truncated: names.length > maxEntries,
++    maxEntries,
++    unreadable,
++    shutdownStranded: count("shutdown"),
++    drainStranded: count("drain"),
++    pending: count("pending"),
++    predatesClock: count("predatesClock"),
++    entries,
++    lastExitAt,
++    lastPassAt: logLastPassAt,
++    lastStartAt,
++    runSinceExit,
++    clockAt,
++    clockKind,
++    clockAgeS,
++    drainClockStale,
++    drainStrandMs: DRAIN_STRAND_MS,
++    hbAgeS,
++    errorFiles,
++    resultFiles,
++    // There is a broker surface, but no clock: nothing has started or passed, so the drain cannot be
++    // judged. Reported as UNKNOWN by the rule, never as a pass.
++    hasClock: clockAt !== null,
++    inboxReadError,
++  };
++}
++
++/** Human-readable per-entry lines, oldest first — the shape `tools/stranded-inbox.mjs` prints. */
++export function censusLines(census) {
++  return census.entries.map(
++    (e) =>
++      `${e.name} op=${e.op} view=${e.view ?? "?"} ageS=${e.ageS === null ? "?" : e.ageS.toFixed(0)} ` +
++      ({ shutdown: "SHUTDOWN-STRANDED", drain: "DRAIN-STRANDED", pending: "pending", predatesClock: "predates the drain clock", unreadable: "UNREADABLE" }[e.class] ?? e.class),
++  );
++}
+--- tools/stranded-inbox.mjs (32 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/tools/stranded-inbox.mjs b/tools/stranded-inbox.mjs
+index e4d6c391..84f47a0b 100644
+--- a/tools/stranded-inbox.mjs
++++ b/tools/stranded-inbox.mjs
+@@ -1,83 +1,49 @@
+ // tools/stranded-inbox.mjs — measure the STRANDED POPULATION (#5275 / ROADMAP 329).
+ //
+-// READ-ONLY. It opens no store: the spool is files. An inbox entry is a request that a
+-// caller wrote and that no broker has answered or dead-lettered. Today NO check counts it,
+-// so "the caller never learned anything" leaves no artifact.
++// READ-ONLY. It opens no store: the spool is files, and a census that opens the store can be starved
++// by the very wedge it is meant to diagnose (#6392).
+ //
+-// Three classes, and the whole point is that they need different clocks:
+-//   shutdown-stranded : createdAt later than the last EXIT line of the SAME run's exit —
+-//                       written while the broker was leaving, never replayed.
+-//   drain-stranded    : older than the last PASS line, i.e. no pass/drain has swept the
+-//                       inbox since it was written. A live heartbeat does NOT clear this.
+-//   result-orphan     : a result recorded in `.inbox.out` for a requestId whose caller has
+-//                       already timed out (an answer to nobody).
++// ONE OWNER: the classification is `readInboxCensus` in src/inboxcensus.mjs, which is also what
++// `cli.mjs check`'s `inbox-stranded` rule runs. This file is the operator-facing printer over that
++// census; it does not re-implement the classes, because two spellings of one rule is how they drift.
+ //
+-// Usage: node tools/stranded-inbox.mjs <path-to-db>   (exit 0 = population is zero)
+-import { readdirSync, readFileSync, existsSync } from "node:fs";
+-import { join } from "node:path";
++//   shutdown-stranded : createdAt later than the last EXIT line of the SAME run's exit — written while
++//                       the broker was leaving, never replayed.
++//   drain-stranded    : written after the last completed PASS while the drain clock has run past the
++//                       bound, i.e. no pass has swept the inbox since it was written. A live heartbeat
++//                       does NOT clear this.
++//   pending           : written after the clock but inside the bound — normal in-flight intent, not a
++//                       finding. Counted so a healthy broker is not shouted at.
++//   result files      : `<db>.broker.inbox.out/` — answers recorded for callers; counted as context.
++//
++// Usage: node tools/stranded-inbox.mjs <path-to-db>
++// Exit 0 = nothing outlived the run that received it; 1 = shutdown-stranded entries exist; 2 = bad args.
++import { readInboxCensus, censusLines } from "../src/inboxcensus.mjs";
+ 
+ const db = process.argv[2];
+ if (!db) {
+   console.error("usage: node tools/stranded-inbox.mjs <path-to-db>");
+   process.exit(2);
+ }
+-const inboxDir = `${db}.broker.inbox`;
+-const outDir = `${db}.broker.inbox.out`;
+-const logPath = `${db}.broker.log`;
+-const statePath = `${db}.broker.json`;
+-
+-const now = Date.now();
+-const lines = existsSync(logPath) ? readFileSync(logPath, "utf8").trim().split("\n") : [];
+-// Log lines are `<ISO ts> <WORD> ...` (src/broker.mjs logBrokerLine).
+-const last = (pred) => {
+-  for (let i = lines.length - 1; i >= 0; i -= 1) if (pred(lines[i])) return lines[i];
+-  return null;
+-};
+-const lastExitLine = last((l) => / EXIT /.test(l));
+-const lastPassLine = last((l) => / PASS /.test(l));
+-const lastStartLine = last((l) => / START /.test(l));
+-const ts = (line) => (line ? Date.parse(line.slice(0, line.indexOf(" "))) : null);
+-const lastExitAt = ts(lastExitLine);
+-const lastPassAt = ts(lastPassLine);
+-const lastStartAt = ts(lastStartLine);
+-// A run that STARTED after the last EXIT is the owner of anything spooled after it, so a
+-// pending entry younger than that START is NOT shutdown-stranded - it is live-stranded.
+-// Comparing to the last EXIT alone would mislabel a live broker's backlog.
+-const noRunSinceExit = lastStartAt === null || lastExitAt === null || lastStartAt < lastExitAt;
+ 
+-const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : null;
+-const hbAgeS = state && typeof state.heartbeatAt === "number" ? (now - state.heartbeatAt) / 1000 : null;
+-const progressAgeS = lastPassAt ? (now - lastPassAt) / 1000 : null;
+-
+-const files = existsSync(inboxDir) ? readdirSync(inboxDir).filter((n) => n.endsWith(".json")).sort() : [];
+-let shutdownStranded = 0;
+-let drainStranded = 0;
+-for (const name of files) {
+-  let rec;
+-  try {
+-    rec = JSON.parse(readFileSync(join(inboxDir, name), "utf8"));
+-  } catch {
+-    continue; // an unreadable file is the drain's problem, not this probe's
+-  }
+-  const at = Date.parse(rec.createdAt ?? "");
+-  const ageS = Number.isNaN(at) ? null : (now - at) / 1000;
+-  const isShutdownStranded =
+-    noRunSinceExit && lastExitAt !== null && !Number.isNaN(at) && at > lastExitAt;
+-  const isDrainStranded = lastPassAt !== null && !Number.isNaN(at) && at > lastPassAt;
+-  if (isShutdownStranded) shutdownStranded += 1;
+-  if (isDrainStranded) drainStranded += 1;
+-  console.log(
+-    `${name} op=${rec.op ?? "?"} view=${rec.view ?? "?"} ageS=${ageS === null ? "?" : ageS.toFixed(0)} ` +
+-      `${isShutdownStranded ? "SHUTDOWN-STRANDED " : ""}${isDrainStranded ? "DRAIN-STRANDED" : ""}`.trimEnd(),
+-  );
++const census = readInboxCensus(db);
++if (census === null) {
++  console.log(`SUMMARY no spool beside ${db}: no <db>.broker.inbox, no <db>.broker.log, no <db>.broker.json — nothing has ever been spooled here`);
++  process.exit(0);
+ }
+ 
+-const outCount = existsSync(outDir) ? readdirSync(outDir).filter((n) => n.endsWith(".json")).length : 0;
++for (const line of censusLines(census)) console.log(line);
++if (census.truncated) {
++  console.log(`NOTE census bounded at ${census.maxEntries} files; ${census.inboxCount - census.read} more spool files were not read`);
++}
+ console.log(
+-  `SUMMARY inbox=${files.length} shutdownStranded=${shutdownStranded} drainStranded=${drainStranded} ` +
+-    `resultFiles=${outCount} hbAgeS=${hbAgeS === null ? "?" : hbAgeS.toFixed(0)} progressAgeS=${progressAgeS === null ? "?" : progressAgeS.toFixed(0)} ` +
+-    `runSinceExit=${noRunSinceExit ? "no" : "yes"} ` +
+-    `lastExit=${lastExitLine ?? "-"} lastPass=${lastPassLine ?? "-"}`,
++  `SUMMARY inbox=${census.inboxCount} shutdownStranded=${census.shutdownStranded} drainStranded=${census.drainStranded} ` +
++    `pending=${census.pending} unreadable=${census.unreadable} resultFiles=${census.resultFiles} errorFiles=${census.errorFiles} ` +
++    `hbAgeS=${census.hbAgeS === null ? "?" : census.hbAgeS.toFixed(0)} ` +
++    `drainClockAgeS=${census.clockAgeS === null ? "?" : census.clockAgeS.toFixed(0)} clock=${census.clockKind ?? "none"} ` +
++    `drainStrandBoundS=${(census.drainStrandMs / 1000).toFixed(0)} ` +
++    `runSinceExit=${census.runSinceExit ? "yes" : "no"} ` +
++    `lastExit=${census.lastExitAt ? new Date(census.lastExitAt).toISOString() : "-"} ` +
++    `lastPass=${census.lastPassAt ? new Date(census.lastPassAt).toISOString() : "-"}`,
+ );
+-// The verdict the fix must clear: a pending entry that outlived the run that received it.
+-process.exit(shutdownStranded === 0 ? 0 : 1);
++process.exit(census.shutdownStranded === 0 ? 0 : 1);

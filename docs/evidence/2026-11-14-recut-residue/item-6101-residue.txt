@@ -1,0 +1,687 @@
+Ref refs/heads/item-6101 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base e8822782d60b2cf7c952997ee2b2d849b04ca0bb. Lost lines: 133 across 8 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6101 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6101
+
+--- cli.mjs (40 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/cli.mjs b/cli.mjs
+index 262fe9bc..beb89bfd 100644
+--- a/cli.mjs
++++ b/cli.mjs
+@@ -72,7 +72,7 @@ import {
+ } from "./src/genlock.mjs";
+ import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
+ import { followCommits } from "./src/commitstream.mjs";
+-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
++import { applyPauseOp, applyQueueStateOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentResultDir, logBrokerLine, pidAlive, readBrokerState, readIntentError, readIntentResult, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+ import { optimizeInstruction } from "./src/optimizer.mjs";
+ import { withStoreWriteRetry } from "./src/storewrite.mjs";
+ import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
+@@ -2003,6 +2003,66 @@ async function awaitIntentResult(dbPath, requestId, { timeoutMs = 15 * 60_000, p
+   }
+ }
+ 
++/**
++ * `release <item-id>` / `hold <item-id> [reason]` (#6102) — the operator's queue-state verbs.
++ *
++ * Why they exist: a parked row could only be un-parked by a SEAT, so the operator clearing a backlog
++ * had no verb for it and no in-process way to show the resident broker saw the change. With a resident
++ * broker these ride the SAME spool path as pause/unpause — producer writes a request, the broker applies
++ * it with its own harness, and the commit that lands is the one the scheduler is subscribed to, which is
++ * what makes "release wakes the seat" observable in the broker log rather than inferred. With no
++ * resident broker this process is the only writer and applies the identical transition directly
++ * (src/broker.mjs applyQueueStateOp), so the two paths cannot drift.
++ */
++async function cmdQueueState(op, rest) {
++  const itemId = Number(rest[0]);
++  if (!Number.isInteger(itemId) || itemId <= 0) fail(`${op} needs an item id: node cli.mjs ${op} <item-id>`);
++  const reason = rest.slice(1).filter((a) => !a.startsWith("--")).join(" ") || undefined;
++  const broker = readBrokerState(DB_PATH);
++  if (brokerAlive(broker)) {
++    const requestId = randomUUID();
++    writeIntent(DB_PATH, {
++      op,
++      itemId,
++      from: "operator",
++      ...(reason ? { reason } : {}),
++      requestId,
++      createdAt: new Date().toISOString(),
++    });
++    const outcome = await awaitIntentOutcome(DB_PATH, requestId);
++    if (outcome.kind === "refused") fail(`${op} #${itemId}: ${outcome.reason}`);
++    if (outcome.kind === "timeout")
++      fail(`${op} #${itemId}: timed out waiting for the resident broker (pid ${broker.pid}) to apply the request`);
++    out({ ok: true, command: op, db: DB_PATH, appliedBy: "broker", requestId, itemId, result: outcome.result });
++    return;
++  }
++  // No resident broker: this process is the only writer, so it may apply the change itself.
++  const { harness } = await openHarness({ enforceSeatRoot: true });
++  try {
++    const result = await applyQueueStateOp(harness, { op, itemId, reason, by: "operator" }, BACKGROUND_CONTEXT);
++    if (!result.ok) fail(`${op} #${itemId}: ${result.detail}`);
++    out({ ok: true, command: op, db: DB_PATH, appliedBy: "this-process", itemId, result });
++  } finally {
++    await harness.close(BACKGROUND_CONTEXT);
++  }
++}
++
++/**
++ * Poll for EITHER outcome of an intent: the applied result, or the dead-letter reason. A refusal is an
++ * outcome the operator must see, so waiting only on the result file would hang on a gate refusal.
++ */
++async function awaitIntentOutcome(dbPath, requestId, { timeoutMs = 30_000, pollMs = 100 } = {}) {
++  const deadline = Date.now() + timeoutMs;
++  for (;;) {
++    const result = readIntentResult(dbPath, requestId);
++    if (result) return { kind: "applied", result };
++    const error = readIntentError(dbPath, requestId);
++    if (error) return { kind: "refused", reason: error.reason || "dead-lettered", refusal: error.refusal ?? null };
++    if (Date.now() >= deadline) return { kind: "timeout" };
++    await new Promise((r) => setTimeout(r, pollMs));
++  }
++}
++
+ /**
+  * How long `serve --stop` waits for the broker PROCESS to exit before giving up without a
+  * forced kill. Env-overridable (`DURIG_STOP_WAIT_MS`) so a demo can prove the decision fast.
+@@ -3428,6 +3488,8 @@ usages:
+   node cli.mjs queue --no-body               VIEWER form: bodies omitted, loudly headed, notices still derived over full rows (#5016)
+   node cli.mjs queue --held --with-gates     bounded park census (#5770): per row id/from/to/status/stage/blockedBy/reason/resolver/reviewBy, NO bodies, capped at 200 rows, and it reports how many held rows have no recorded gate
+   node cli.mjs show <id>       the same row-scoped read, as a verb
++  node cli.mjs release <id>    un-park a row: held -> queued, so the resident broker can wake for it again (#6102)
++  node cli.mjs hold <id> [reason]  park a row: it stops being wake-able until released (#6102)
+   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
+   node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing
+   node cli.mjs compact <seat> [instructions]   summarize a seat's older context into a summary entry (keeps the transcript)
+@@ -3454,7 +3516,7 @@ const [, , cmd, ...rest] = process.argv;
+ // seat must be able to DIAGNOSE a stuck merge, not be locked out of its own rig.
+ const WRITE_VERBS = new Set([
+   "up", "init", "send", "run", "serve", "stop", "reset", "clean", "compact",
+-  "resume", "doctor", "format", "worktree",
++  "resume", "doctor", "format", "worktree", "release", "hold",
+ ]);
+ 
+ try {
+@@ -3538,6 +3600,8 @@ try {
+     if (!text.trim()) fail("send needs <seat> <text>, or --body-file <path>");
+     await cmdSend(args[0], text, { stream, requestId });
+   } else if (cmd === "queue") await cmdQueue(rest);
++  else if (cmd === "release") await cmdQueueState("release", rest);
++  else if (cmd === "hold") await cmdQueueState("hold", rest);
+   else if (cmd === "show") {
+     // The ergonomic form for an audit (#4986): `show 4986` or `show 4986 4977`, bodies included, and nothing
+     // else printed. Same code path as `queue --id`, so the two views can never drift.
+--- demo/command-spool.test.mjs (5 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/command-spool.test.mjs b/demo/command-spool.test.mjs
+index 2d8d51e9..1bb7db0b 100644
+--- a/demo/command-spool.test.mjs
++++ b/demo/command-spool.test.mjs
+@@ -66,11 +66,13 @@ try {
+   // 0. The vocabulary is a CLOSED list: an absent `op` defaults to "message" so producers
+   //    written before the spool keep working, and a mutating verb EXTENDS this array rather
+   //    than opening a second writer. The additions so far are `pause`/`unpause` (ROADMAP 131,
+-  //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads) and
+-  //    `configure` (D105/D106 seat-doc-write, #2182; operator-only since #1966).
++  //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads),
++  //    `configure` (D105/D106 seat-doc-write, #2182; operator-only since #1966), and
++  //    `release`/`hold` (#6102, the operator's queue-state verbs - also operator-only, gated
++  //    and audited like the control-plane ops; demo/release-wakes-seat.test.mjs proves the wake).
+   assert.deepEqual(
+     SPOOL_OPS,
+-    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure"],
++    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "release", "hold"],
+     "the spool's op vocabulary",
+   );
+   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");
+--- demo/release-wakes-seat.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/release-wakes-seat.test.mjs b/demo/release-wakes-seat.test.mjs
+new file mode 100644
+index 00000000..356d32d1
+--- /dev/null
++++ b/demo/release-wakes-seat.test.mjs
+@@ -0,0 +1,277 @@
++// demo/release-wakes-seat.test.mjs — the operator's `release` reaches the resident broker, and the
++// release is WHAT wakes the seat (#6102; the half of #5745 that qa could not prove in-process).
++//
++// WHY THIS FILE EXISTS. `pause` has a spool verb, so `cli.mjs pause` is applied by the resident broker
++// and the commit it makes is the commit the wake scheduler is subscribed to. `release` had no verb: a
++// parked row could only be un-parked through a SEAT tool, so nobody could show, in one process, that an
++// operator release reaches the scheduler and produces a wake. The wake-on-release half of the parked-row
++// contract was asserted only by the pure selector demo (#5745), never by the loop that actually runs.
++//
++// The chain asserted here, in ONE process against a real store and the real loop:
++//   intent file -> drainIntentInbox -> harness.commit -> followCommits -> isWakeRelevantCommit
++//   -> WakeScheduler dirty -> drivePass -> conv.submit -> `WAKE impl` / `PASS n woke=impl` in the log.
++//
++// BOTH DIRECTIONS ARE ASSERTED, because a release-only test is vacuous: while the row is HELD the next
++// pass does nothing (parked set unchanged, suppression reported); after the release the same pass acts.
++//
++// Run: node demo/release-wakes-seat.test.mjs   (exit 0 = pass)
++import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
++import { spawn } from "node:child_process";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
++import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
++
++import { enqueueItem, parkItem, registerSeat, releaseItem, RigQueue, Router, Seats } from "../src/rig.mjs";
++import {
++  authorizeSpoolRequest,
++  drainIntentInbox,
++  readIntentError,
++  readIntentResult,
++  runWakeLoop,
++  SPOOL_OPS,
++  writeIntent,
++} from "../src/broker.mjs";
++import { createWakeSignal, isWakeRelevantCommit, WakeScheduler } from "../src/scheduler.mjs";
++import { followCommits } from "../src/commitstream.mjs";
++
++const ctx = BACKGROUND_CONTEXT;
++let failures = 0;
++function check(label, condition, detail = "") {
++  if (condition) console.log(`  ok   ${label}`);
++  else {
++    failures += 1;
++    console.log(`  FAIL ${label}${detail ? ` -- ${detail}` : ""}`);
++  }
++}
++
++/* ------------------------------------------------------------------ Leg 1: the gate, pure.
++ * A refusal must be a CODE the producer can branch on, not prose an auditor has to read. */
++console.log("\n=== 1. the gate ===");
++const refused = authorizeSpoolRequest({ op: "release", from: "impl", itemId: 1 });
++check("a seat cannot release through the spool", refused.allowed === false, JSON.stringify(refused));
++check("the refusal is coded not-operator", refused.code === "not-operator", refused.code);
++check("a seat cannot park through the spool either", authorizeSpoolRequest({ op: "hold", from: "impl", itemId: 1 }).allowed === false);
++check("the operator may release", authorizeSpoolRequest({ op: "release", from: "operator", itemId: 1 }).allowed === true);
++check("release/hold are declared spool ops", SPOOL_OPS.includes("release") && SPOOL_OPS.includes("hold"), SPOOL_OPS.join(","));
++
++/* ------------------------------------------------------------------ Leg 2: one transition, both paths.
++ * parkItem/releaseItem are what the seat tools call, so the operator path cannot disagree with them. */
++console.log("\n=== 2. the shared transition ===");
++const terminal = { id: 9, status: "done", transitions: [] };
++check(
++  "releasing a terminal row is refused as TERMINAL, not as not-held",
++  releaseItem(terminal, "operator").ok === false && /terminal/.test(releaseItem(terminal, "operator").detail),
++  releaseItem(terminal, "operator").detail,
++);
++check("parking a terminal row is refused too", parkItem(terminal, "operator", "backlog").ok === false);
++const live = { id: 10, status: "queued", transitions: [] };
++check("parking a queued row takes it out of the wake set in one step", parkItem(live, "operator", "gated").ok === true && live.status === "held");
++check("releasing it returns it to queued", releaseItem(live, "operator").ok === true && live.status === "queued");
++
++/* ------------------------------------------------------------------ Leg 3-5: the real store and the real loop. */
++console.log("\n=== 3. the spool, applied by the broker ===");
++const dir = mkdtempSync(join(tmpdir(), "durig-release-wake-"));
++const dbPath = join(dir, "release.db");
++const logPath = `${dbPath}.broker.log`;
++
++const faux = fauxProvider({ models: [{ id: "worker-model", contextWindow: 100000 }] });
++faux.setResponses(Array.from({ length: 24 }, () => fauxAssistantMessage("acknowledged")));
++const models = createModels();
++models.setProvider(faux.provider);
++const registry = createRegistry();
++registry.install(Router);
++const storage = new MemoryStorage();
++const harness = await Harness.open(storage, { models, registry }, ctx);
++
++let itemId = null;
++let convId = null;
++await harness.commit(
++  async (tx) => {
++    const conv = await tx.createConversation({ ownership: { kind: "ownerless" } });
++    convId = conv.id ?? conv;
++    await configure(tx, convId, {
++      model: { provider: "faux", modelId: "worker-model" },
++      instructions: "you are a worker seat; acknowledge briefly",
++    });
++    await registerSeat(tx, "impl", convId, "impl");
++    itemId = await enqueueItem(tx, "operator", "impl", "parked then released", "the row the operator parks and releases");
++  },
++  ctx,
++);
++
++async function queueRow(id) {
++  const q = await harness.snapshot(RigQueue, undefined, ctx);
++  return q.items.find((it) => it.id === id);
++}
++function logLines() {
++  return existsSync(logPath) ? readFileSync(logPath, "utf8").split("\n").filter(Boolean) : [];
++}
++async function waitForLine(pattern, timeoutMs = 6000) {
++  const deadline = Date.now() + timeoutMs;
++  while (Date.now() < deadline) {
++    const lines = logLines();
++    const hit = lines.findIndex((l) => pattern.test(l));
++    if (hit >= 0) return { line: lines[hit], index: hit, lines };
++    await new Promise((r) => setTimeout(r, 50));
++  }
++  return { line: null, index: -1, lines: logLines() };
++}
++async function waitForLineIn(linesFn, pattern, timeoutMs = 6000) {
++  const deadline = Date.now() + timeoutMs;
++  while (Date.now() < deadline) {
++    const hit = linesFn().find((l) => pattern.test(l));
++    if (hit) return hit;
++    await new Promise((r) => setTimeout(r, 50));
++  }
++  return null;
++}
++async function waitForResult(requestId, timeoutMs = 8000) {
++  const deadline = Date.now() + timeoutMs;
++  while (Date.now() < deadline) {
++    const r = readIntentResult(dbPath, requestId);
++    if (r) return r;
++    await new Promise((res) => setTimeout(res, 50));
++  }
++  return null;
++}
++
++/* 3a. refusals are dead-lettered with a reason - an operator command is never a silent no-op.
++ *     Run before the loop so the drain is deterministic; it is the SAME function the loop calls. */
++const seatIntent = { op: "release", from: "impl", itemId, requestId: "seat-spirited-release", createdAt: new Date().toISOString() };
++writeIntent(dbPath, seatIntent);
++const dead = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
++check("a seat-spirited release is dead-lettered", dead.deadLettered === 1, JSON.stringify(dead));
++const refusal = readIntentError(dbPath, "seat-spirited-release");
++check("the dead-letter carries the coded reason", /not-operator/.test(refusal ?? ""), refusal);
++check("the refused release changed nothing", (await queueRow(itemId)).status === "queued", `status=${(await queueRow(itemId)).status}`);
++const missing = { op: "release", from: "operator", itemId: 99999, requestId: "missing-row-release", createdAt: new Date().toISOString() };
++writeIntent(dbPath, missing);
++const dead2 = await drainIntentInbox(harness, storage, { dbPath, context: ctx });
++check("releasing an unknown row dead-letters rather than silently no-opping", dead2.deadLettered === 1, JSON.stringify(dead2));
++check("the reason names the row", /unknown item #99999/.test(readIntentError(dbPath, "missing-row-release") ?? ""), readIntentError(dbPath, "missing-row-release"));
++
++/* 3b. now run the resident loop and drive hold -> release through its own drain. */
++console.log("\n=== 4. the resident broker: hold parks, release wakes ===");
++const scheduler = new WakeScheduler({ minIntervalMs: 300, seatCooldownMs: 300 });
++const signal = createWakeSignal();
++const relevantCommits = [];
++const unsubscribe = followCommits(harness, (publication) => {
++  relevantCommits.push({
++    relevant: isWakeRelevantCommit(publication),
++    kinds: (publication?.changes ?? []).map((c) => c?.record?.kind ?? c?.type),
++  });
++  scheduler.notify(publication);
++  if (scheduler.dirty) signal.raise();
++});
++let stopping = false;
++const loop = runWakeLoop({
++  harness,
++  probeStorage: storage,
++  scheduler,
++  signal,
++  context: ctx,
++  dbPath,
++  maxDurationMs: 20000,
++  isStopping: () => stopping,
++});
++
++await waitForLine(/PASS 1 /, 8000);
++
++writeIntent(dbPath, { op: "hold", from: "operator", itemId, reason: "waiting on the base", requestId: "hold-1", createdAt: new Date().toISOString() });
++const holdLine = await waitForLine(/INTENT delivered=1/, 8000);
++check("the hold intent was delivered by the loop", holdLine.line !== null, logLines().slice(-6).join(" | "));
++const held = await queueRow(itemId);
++check("the row is held", held.status === "held", `status=${held.status}`);
++check("the hold transition records the actor", held.transitions.at(-1)?.event === "held" && held.transitions.at(-1)?.by === "operator", JSON.stringify(held.transitions.at(-1)));
++
++const parkedOnce = await waitForLine(/PARKED-WAKE seat=impl reason=set-changed/, 8000);
++check("the parked row wakes the seat once, and says so", parkedOnce.line !== null, logLines().slice(-8).join(" | "));
++const parkedDedup = await waitForLine(/PARKED-WAKE seat=impl reason=deduped/, 8000);
++check("an unchanged parked set is deduped", parkedDedup.line !== null, logLines().slice(-8).join(" | "));
++const dedupSkip = await waitForLine(/SKIP impl reason=parked-deduped/, 8000);
++check("the dedup suppression is legible in the log", dedupSkip.line !== null, logLines().slice(-8).join(" | "));
++
++/* THE RELEASE. */
++const beforeRelease = logLines().length;
++// While the row is parked, a pass that finds nothing to do reports itself as such - this is the
++// control half of the test: the wake is caused by the release, not by the pass cadence.
++const idlePass = await waitForLine(/PASS \d+ ms=\d+ woke=-/, 8000);
++check("while the row is parked, a pass reports woke=-", idlePass.line !== null, logLines().slice(-8).join(" | "));
++writeIntent(dbPath, { op: "release", from: "operator", itemId, requestId: "release-1", createdAt: new Date().toISOString() });
++const applied = await waitForResult("release-1", 8000);
++check("the release intent was applied by the loop", applied !== null, JSON.stringify(applied));
++const released = await queueRow(itemId);
++check("the row is queued again", released.status === "queued", `status=${released.status}`);
++check(
++  "the release transition records the actor",
++  released.transitions.at(-1)?.event === "released" && released.transitions.at(-1)?.by === "operator",
++  JSON.stringify(released.transitions.at(-1)),
++);
++check(
++  "the release commit is a durig.queue change the scheduler counts as wake-relevant",
++  relevantCommits.some((c) => c.relevant && c.kinds.includes("durig.queue")),
++  JSON.stringify(relevantCommits.slice(-6)),
++);
++
++const after = () => logLines().slice(beforeRelease);
++const wakeAfterRelease = await waitForLineIn(after, /WAKE impl/, 8000);
++check("the release produced a wake in the resident loop", wakeAfterRelease !== null, after().slice(-8).join(" | "));
++check(
++  "the loop recorded it in a PASS line",
++  after().some((l) => /PASS \d+ ms=\d+ woke=impl/.test(l)),
++  after().slice(-6).join(" | "),
++);
++check(
++  "the wake is ordered after the release in the log",
++  after().some((l) => /INTENT delivered=1/.test(l)),
++  "no INTENT line precedes the wake",
++);
++check(
++  "after the release the wake is NOT a parked-set wake: the row left the parked set",
++  !after().some((l) => /PARKED-WAKE seat=impl/.test(l)),
++  after().slice(-8).join(" | "),
++);
++
++stopping = true;
++signal.raise();
++await loop;
++unsubscribe();
++
++/* Leg 6: discoverability — the verbs are in usage, and unknown args fail loudly. */
++console.log("\n=== 5. the CLI surface ===");
++const help = await runCli(["--help"]);
++check("cli.mjs --help exits 0", help.code === 0, String(help.code));
++check("--help lists release", /cli\.mjs release <id>/.test(help.stderr), help.stderr.slice(0, 200));
++check("--help lists hold", /cli\.mjs hold <id>/.test(help.stderr), help.stderr.slice(0, 200));
++const badArgs = await runCli(["release"]);
++check("release with no id fails with a usage message", badArgs.code !== 0 && /needs an item id/.test(badArgs.stderr + badArgs.stdout), (badArgs.stderr || badArgs.stdout).slice(0, 200));
++
++function runCli(args) {
++  return new Promise((resolve, reject) => {
++    const p = spawn(process.execPath, ["cli.mjs", ...args], { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] });
++    let stdout = "";
++    let stderr = "";
++    p.stdout.on("data", (d) => (stdout += d));
++    p.stderr.on("data", (d) => (stderr += d));
++    p.on("close", (code) => resolve({ code, stdout, stderr }));
++    p.on("error", reject);
++  });
++}
++
++await harness.close(ctx);
++try {
++  rmSync(dir, { recursive: true, force: true });
++} catch (err) {
++  console.error(`CLEANUP WARNING (temp dir kept): ${err?.message ?? err}`);
++}
++
++console.log(
++  failures === 0
++    ? "\nRELEASE-WAKES-SEAT PASS — hold parks (wake once, then dedupe, suppression logged); release lands through the spool, marks the scheduler, and the resident loop wakes the seat"
++    : `\nFAIL — ${failures} check(s) failed`,
++);
++process.exit(failures === 0 ? 0 : 1);
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index b76d232c..b2308db3 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -128,6 +128,7 @@
+       "demo/parked-wake-dedup.test.mjs",
+       "demo/pause-wait-bound.test.mjs",
+       "demo/pause.test.mjs",
++      "demo/release-wakes-seat.test.mjs",
+       "demo/readboundary-corrupt-live.test.mjs",
+       "demo/scheduler.test.mjs",
+       "demo/spool-gc.test.mjs",
+--- docs/COMMANDS-AND-THE-BROKER.md (4 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/COMMANDS-AND-THE-BROKER.md b/docs/COMMANDS-AND-THE-BROKER.md
+index 3b0a79d3..7d1cc88d 100644
+--- a/docs/COMMANDS-AND-THE-BROKER.md
++++ b/docs/COMMANDS-AND-THE-BROKER.md
+@@ -267,13 +267,14 @@ old context LIVE — pi-durable's `conversation.compact()` runs alongside the co
+ broker applies it with its own harness and the seat's run is not aborted; #1904), `pause`/`unpause`
+ (ROADMAP 131), `configure` (set a seat's model), and `read` (D111: serve a viewer read from the
+ broker's OWN `Storage` so no second process opens the database — the client half is
+-`src/readclient.mjs`, the view set is `src/brokerread.mjs`). An unknown `op` is dead-lettered, never
++`src/readclient.mjs`, the view set is `src/brokerread.mjs`), and `release`/`hold` (#6102: the operator's queue-state verbs — `held -> queued` and `queued|claimed -> held`). The queue-state ops are operator-only like the control-plane ones, gated by `authorizeSpoolRequest` and written to the gate audit; the TRANSITION is the same function the seat tools call (`src/rig.mjs` `parkItem`/`releaseItem`), so the two paths cannot disagree about what a parked row is. An unknown `op` is dead-lettered, never
+ applied. Each applied request records its outcome at `<db>.broker.inbox.out/<requestId>.json` (the
+ **result channel**), and that file is also the **idempotency ledger**: a duplicate `requestId` is
+ recognised on re-drain and applies ONCE. `intent.mjs` is the producer (`--op`, `--reason`, `--handoff`,
+-`--instructions`); it mints and prints the `requestId`. Remaining for full delivery: queue edits as ops
++`--instructions`); it mints and prints the `requestId`. Remaining for full delivery: the rest of the queue edits as ops
+ (they need the queue/Router writers lifted out of `cli.mjs`). Acceptance demos:
+-`demo/command-spool.test.mjs`, `demo/compact-spool.test.mjs`.
++`demo/command-spool.test.mjs`, `demo/compact-spool.test.mjs`, `demo/release-wakes-seat.test.mjs`
++(the release reaching the scheduler and waking the seat, end to end in one process).
+ 
+ ---
+--- docs/runbooks/stale-held-backlog.md (6 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/stale-held-backlog.md b/docs/runbooks/stale-held-backlog.md
+index d49579aa..9e3c42ef 100644
+--- a/docs/runbooks/stale-held-backlog.md
++++ b/docs/runbooks/stale-held-backlog.md
+@@ -95,6 +95,10 @@ to `pm`; `pm` issues the transition. For each candidate:
+    cites a terminal item.
+ 2. **Decide the correct action:**
+    - gate cleared, still right to do → `release_work(<id>)` (sender or recipient);
++
++   The OPERATOR has a verb for the same transition, applied by the resident broker through the
++   spool and audited like a control-plane op: `node cli.mjs release <id>` (and `hold <id> <reason>` to
++   park one) — #6102. A delegate still routes the transition to `pm`; it does not run these verbs.
+    - no longer worth doing → `cancel_work(<id>, reason)`;
+    - genuinely still blocked → leave it, but ask `pm` to record `blockedBy` so it is queryable
+      ([`WORK-ITEM-SCHEMA.md`](../WORK-ITEM-SCHEMA.md) R5) rather than prose.
+@@ -125,6 +129,9 @@ to `pm`; `pm` issues the transition. For each candidate:
+   file-exists-but-content-missing row are each classified differently. A classifier that flagged all of
+   them the same way would pass nothing here.
+ - The intent result file has `"delivered":true`.
++- The operator verbs exist and behave: `node cli.mjs --help` lists `release`/`hold`, and
++  `node demo/release-wakes-seat.test.mjs` exits 0 (it drives hold -> release through the real spool and
++  shows the release waking the seat).
+ - After `pm` acts, the targeted rows are no longer `held` (re-run Diagnose step 2 and watch the candidate
+   count fall), and the dependent work is `queued`/`claimed`.
+ - If a doc was "delivered but unlanded", it appears on `main` after the landing window:
+--- src/broker.mjs (40 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/broker.mjs b/src/broker.mjs
+index 970699bd..667dbf1b 100644
+--- a/src/broker.mjs
++++ b/src/broker.mjs
+@@ -18,7 +18,7 @@ import { join, basename, dirname, resolve } from "node:path";
+ import { randomUUID } from "node:crypto";
+ import { CompactionEntry, configure } from "@earendil-works/pi-durable";
+ 
+-import { RigControl, RigQueue, Seats } from "./rig.mjs";
++import { parkItem, releaseItem, RigControl, RigQueue, Seats } from "./rig.mjs";
+ import { dispatchRead } from "./brokerread.mjs";
+ import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
+ import { driveOnce } from "./driver.mjs";
+@@ -490,6 +490,16 @@ export const CONTROL_PLANE_OPS = new Set(["pause", "unpause", "configure"]);
+  */
+ export const CROSS_SEAT_OPS = new Set(["stop", "reset", "compact"]);
+ 
++/**
++ * Queue-state spool ops (`release`, `hold`) - the missing verb qa named (#6102). They change what a
++ * seat can be WOKEN for, so they are operator-only, gated and audited exactly like the control-plane
++ * ops. Seats park and release their own rows through `hold_work`/`release_work`, which carry their own
++ * sender/recipient authority; the spool path is the operator's, and the TRANSITION is shared with the
++ * seat tools (src/rig.mjs parkItem/releaseItem) so the two paths cannot disagree about what a parked
++ * row is.
++ */
++export const QUEUE_STATE_OPS = new Set(["release", "hold"]);
++
+ /**
+  * The authorization decision for one spool request. PURE, so the rule is testable with
+  * no broker and no store.
+@@ -524,6 +534,16 @@ export function authorizeSpoolRequest(request, { op = requestOp(request) } = {})
+     }
+     return { allowed: true, code: "operator-control-plane" };
+   }
++  if (QUEUE_STATE_OPS.has(op)) {
++    if (from !== OPERATOR) {
++      return {
++        allowed: false,
++        code: "not-operator",
++        detail: `${op} changes what a seat can be woken for; only from="${OPERATOR}" may park or release a row (from=${JSON.stringify(from)})`,
++      };
++    }
++    return { allowed: true, code: "operator-queue-state" };
++  }
+   if (CROSS_SEAT_OPS.has(op)) {
+     const to = request?.to ?? request?.seat ?? null;
+     const crossSeat = to !== null && to !== undefined && to !== from;
+@@ -594,7 +614,7 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason =
+  * harness — rather than opening a second writer. `pause`/`unpause` (ROADMAP 131) are
+  * rig-level: they carry no seat target.
+  */
+-export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure"];
++export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "release", "hold"];
+ 
+ /** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
+ const QUIESCE_POLL_MS = 100;
+@@ -740,6 +760,16 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
+     }
+     return { op, seat: seatName, taskId, instructions: instructions ?? null, summaryEntryId: summary.id };
+   }
++  if (op === "release" || op === "hold") {
++    // #6102: the operator's park/release, applied by the RESIDENT broker with its own harness - never
++    // by a second writer - and through the SAME transition the seat tools use. A refusal throws, so the
++    // drain dead-letters it with the reason: a release the operator asked for is never a silent no-op.
++    const itemId = Number(request.itemId ?? request.id);
++    if (!Number.isInteger(itemId) || itemId <= 0) throw new Error(`${op}: missing or invalid itemId`);
++    const outcome = await applyQueueStateOp(harness, { op, itemId, reason: request.reason, by: request.from ?? OPERATOR }, context);
++    if (!outcome.ok) throw new Error(`${op}: ${outcome.detail}`);
++    return outcome;
++  }
+   if (op === "pause" || op === "unpause") {
+     return await applyPauseOp(
+       harness,
+@@ -797,7 +827,7 @@ export async function drainIntentInbox(harness, probeStorage, { dbPath, context,
+     // AUDITED for every gated op (allowed and refused), then a refusal is dead-lettered
+     // with a STRUCTURED code so the producer reports "refused" rather than "pending".
+     const decision = authorizeSpoolRequest(request, { op });
+-    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op)) {
++    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op) || QUEUE_STATE_OPS.has(op)) {
+       appendGateAudit(dbPath, {
+         requestId,
+         op,
+@@ -2194,6 +2224,35 @@ export function wakeSkipLine({ seat, reason, conversationId, ageMs, remainingMs
+   return `SKIP ${seat} reason=${reason}${conv}${age}${remaining}`;
+ }
+ 
++/**
++ * THE SINGLE WRITE PATH FOR A PARKED ROW (#6102).
++ *
++ * The resident broker (through the spool drain) and `cli.mjs hold`/`cli.mjs release` with no resident
++ * broker both call this, so there is exactly one way a row becomes `held` or returns to `queued` from
++ * the operator side, and it is the same transition the seat tools run. Returns
++ * `{op, itemId, ok, status, message, detail}` - never throws on a refusal, so the caller reports the
++ * reason rather than guessing.
++ */
++export async function applyQueueStateOp(harness, { op, itemId, reason, by = OPERATOR }, context) {
++  const outcome = await harness.commit(
++    async (tx) => {
++      const queue = await tx.doc(RigQueue);
++      const item = queue.items.find((it) => it.id === itemId);
++      if (!item) return { ok: false, detail: `unknown item #${itemId}` };
++      return op === "release" ? releaseItem(item, by) : parkItem(item, by, reason);
++    },
++    context,
++  );
++  return {
++    op,
++    itemId,
++    ok: outcome.ok,
++    status: outcome.ok ? (op === "release" ? "queued" : "held") : null,
++    message: outcome.message ?? null,
++    detail: outcome.detail ?? null,
++  };
++}
++
+ /** Append one line to `<db>.broker.log`. */
+ export function logBrokerLine(dbPath, line) {
+   const path = brokerLogPath(dbPath);
+--- src/rig.mjs (36 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/rig.mjs b/src/rig.mjs
+index 77bbba42..91cc07e1 100644
+--- a/src/rig.mjs
++++ b/src/rig.mjs
+@@ -235,6 +235,40 @@ export async function cancelItem(tx, { item, me, reason }) {
+ 	return { noticeId, other, message };
+ }
+ 
++/**
++ * THE ONE PARK/RELEASE TRANSITION (#6102).
++ *
++ * `hold_work`/`release_work` (the seat tools) and `cli.mjs hold`/`cli.mjs release` (the operator
++ * spool ops) both call these, so the two paths cannot disagree about what a parked row IS.
++ * Authority is deliberately NOT here: the seat tool checks sender/recipient, the spool gate checks
++ * operator - authority is a per-path question, the transition is not. Every caller therefore reports
++ * the same words for the same state.
++ *
++ * INVARIANT the driver depends on: a PARKED row is never wake-able (`selectWakes` keys on
++ * `status === "queued"`), so `queued -> held` takes it out of wake selection in one step (#5724),
++ * and `held -> queued` puts it back - the release half of the wake-on-release contract.
++ */
++export function parkItem(item, by, reason) {
++	if (isTerminalItem(item))
++		return { ok: false, detail: `item #${item.id} is already ${item.status} (terminal); there is nothing to hold` };
++	if (item.status !== "claimed" && item.status !== "queued")
++		return { ok: false, detail: `item #${item.id} is ${item.status}; hold parks a row you hold (claimed) or a queued row` };
++	item.status = "held";
++	if (reason) item.heldReason = reason;
++	item.transitions.push({ at: new Date().toISOString(), event: "held", by });
++	return { ok: true, message: `item #${item.id} held${reason ? ` (${reason})` : ""}; release with release_work(${item.id}) (or \`cli.mjs release ${item.id}\`) to restore it to queued.` };
++}
++
++/** Restore a held row to queued. Terminal FIRST, then the status check: the refusal must speak about a LIVE row (#5778). */
++export function releaseItem(item, by) {
++	if (isTerminalItem(item))
++		return { ok: false, detail: `item #${item.id} is already ${item.status} (terminal); there is nothing to release` };
++	if (item.status !== "held")
++		return { ok: false, detail: `item #${item.id} is not held (status=${item.status})` };
++	item.status = "queued";
++	item.transitions.push({ at: new Date().toISOString(), event: "released", by });
++	return { ok: true, message: `item #${item.id} released back to queued.` };
++}
+ export function isDoneNotice(item) {
+ 	if (typeof item?.notice === "boolean") return item.notice;
+ 	return /^DONE #\d+: /.test(String(item?.subject ?? ""));
+@@ -1220,16 +1254,11 @@ const Router = defineExtension({
+ 					// the driver's selector is `status === "queued"` (src/broker.mjs:127), so going straight
+ 					// from queued to held removes it from wake selection in one step. Deferred and terminal
+ 					// rows still refuse — the seam is widened only for the recipient's own queued row.
+-					if (item.status !== "claimed" && item.status !== "queued")
+-						return `item #${item.id} is ${item.status}; hold_work parks a row you hold (claimed) or a queued row addressed to you`;
+-					item.status = "held";
+-					if (args.reason) item.heldReason = args.reason;
+-					item.transitions.push({
+-						at: new Date().toISOString(),
+-						event: "held",
+-						by: me,
+-					});
+-					return `item #${item.id} held${args.reason ? ` (${args.reason})` : ""}; release with release_work(${item.id}) to restore it to queued.`;
++					// The transition itself is parkItem, shared with the operator verb `cli.mjs hold` (#6102);
++					// only the authority check above is path-specific.
++					const parked = parkItem(item, me, args.reason);
++					if (!parked.ok) return parked.detail;
++					return parked.message;
+ 				}, context);
+ 				return toolText(out);
+ 			},
+@@ -1256,15 +1285,10 @@ const Router = defineExtension({
+ 						return `item #${args.itemId} is already ${item.status} (terminal); there is nothing to release`;
+ 					if (item.to !== me && item.from !== me)
+ 						return `item #${args.itemId} is addressed to ${item.to} (from ${item.from}); only the sender or recipient may release it`;
+-					if (item.status !== "held")
+-						return `item #${args.itemId} is not held (status=${item.status})`;
+-					item.status = "queued";
+-					item.transitions.push({
+-						at: new Date().toISOString(),
+-						event: "released",
+-						by: me,
+-					});
+-					return `item #${item.id} released back to queued.`;
++					// Shared with `cli.mjs release` (#6102): terminal-first, then the status check.
++					const released = releaseItem(item, me);
++					if (!released.ok) return released.detail;
++					return released.message;
+ 				}, context);
+ 				return toolText(out);
+ 			},

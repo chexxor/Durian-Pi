@@ -1,0 +1,350 @@
+Ref refs/heads/item-6344 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 35001c3af32aee1d644abc38ec8132f463c8eddd. Lost lines: 101 across 4 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-6344 && node tools/recut-resolve.mjs --worktree .spike/recut-item-6344
+
+--- demo/doc-integrity-ledger.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/doc-integrity-ledger.test.mjs b/demo/doc-integrity-ledger.test.mjs
+new file mode 100644
+index 00000000..a104a374
+--- /dev/null
++++ b/demo/doc-integrity-ledger.test.mjs
+@@ -0,0 +1,147 @@
++// demo/doc-integrity-ledger.test.mjs — #6344: docs/DECISIONS.md is citable only if a D-number names ONE entry.
++//
++// FAILING-FIRST. Before this row the guard judged nothing about the ledger. On this tree (HEAD `35001c3a`):
++//   git show HEAD:tools/doc-integrity-guard.mjs | node -   ->  "VERDICT: 0 hard, 0 soft  ->  exit 0"
++// while the same file had `## D91` heading THREE entries, D111-D120 and D258/D259 heading TWO each, six headings
++// with no number at all (`## D###`, `## D-<mint>`) and 118 sentences of 80+ characters byte-identical in two
++// different entries. Delete check 5 from tools/doc-integrity-guard.mjs and assertion 1 below throws.
++//
++// Three detections, one tool, per the row: (1) a D-number used by more than one entry -> HARD, naming every line;
++// (2) an unnumbered heading -> HARD, because an uncitable entry in the ledger is not a style problem;
++// (3) byte-identical body text in two entries -> SOFT, because a legitimate cross-reference repeats text and only
++// the ledger owner can tell a duplicate ruling from a pointer to one. "Same text, SAME entry" is deliberately not
++// a finding (case 4) — that is the distinction the row asked for.
++//
++// Run: node demo/doc-integrity-ledger.test.mjs   (exit 0 = pass)
++
++import { spawnSync } from "node:child_process";
++import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++
++const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
++const GUARD = join(ROOT, "tools", "doc-integrity-guard.mjs");
++const LONG = "The cap is enforced at the provider seam because that is the only place the cost is known."; // 80 chars
++
++let failures = 0;
++const scratchDirs = [];
++function check(label, ok, detail = "") {
++	if (ok) console.log(`  ok   ${label}`);
++	else {
++		failures += 1;
++		console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`);
++	}
++}
++
++/** A tree that satisfies every OTHER guard rule, so a non-zero exit can only come from the ledger rule. */
++function scratch(ledgerLines) {
++	const dir = mkdtempSync(join(tmpdir(), "ledger-guard-"));
++	mkdirSync(join(dir, "docs", "runbooks"), { recursive: true });
++	writeFileSync(join(dir, "docs", "NEXT.md"), "## NEXT SESSION\nnothing cited here\n");
++	writeFileSync(join(dir, "docs", "ROADMAP.md"), "**1. a stub item**\n");
++	writeFileSync(join(dir, "docs", "runbooks", "README.md"), "# Runbooks\nno rows yet\n");
++	writeFileSync(join(dir, "docs", "DECISIONS.md"), ledgerLines.join("\n") + "\n");
++	scratchDirs.push(dir);
++	return dir;
++}
++
++function run(dir) {
++	return spawnSync("node", [GUARD, "--soft"], { cwd: dir, encoding: "utf8", timeout: 20000 });
++}
++
++// Line numbers are derived here, never hardcoded, so the assertions test the tool and not my typing.
++const lineOf = (lines, pattern) => lines.findIndex((l) => pattern.test(l)) + 1;
++
++console.log("doc-integrity-guard ledger rule (#6344)");
++
++// 1. RED: one number on three entries, a heading with no number, a body duplicated across two entries.
++const bad = [
++	"# DECISIONS",
++	"",
++	"## D91 — the first ruling",
++	`${LONG}`,
++	"",
++	"## D91 — a different ruling that happens to share the number",
++	`${LONG} A different ending, so the bodies are not identical overall.`,
++	"",
++	"## D### — a draft that never got minted",
++	"Nothing citable here.",
++	"",
++	"## D92 — a third entry",
++	"Some other text entirely, long enough to count as body text for the record.",
++];
++const d91Lines = bad.map((l, i) => (/^## D91/.test(l) ? i + 1 : 0)).filter(Boolean);
++const placeholderLine = lineOf(bad, /^## D###/);
++const badRun = run(scratch(bad));
++check("a collided D-number exits 1", badRun.status === 1, `exit ${badRun.status}: ${badRun.stdout.trim()}`);
++check(
++	"the collision names every line that shares the number",
++	badRun.stdout.includes(`numbers D91 at lines ${d91Lines.join(", ")}`),
++	badRun.stdout,
++);
++check(
++	"the unnumbered heading is a hard finding with its line number",
++	badRun.stdout.includes(`HARD LEDGER  docs/DECISIONS.md:${placeholderLine}`) && badRun.stdout.includes("carries no D-number (###)"),
++	badRun.stdout,
++);
++check("the duplicated body is reported as SOFT, not hard", badRun.stdout.includes("SOFT LEDGER") && badRun.stdout.includes(`entries at ${d91Lines[0]} and ${d91Lines[1]}`), badRun.stdout);
++check("the header line counts what it found", badRun.stdout.includes("4 headings, 1 D-number collision(s), 1 unnumbered heading(s), 1 duplicate-body pair(s)"), badRun.stdout);
++
++// 2. GREEN: distinct numbers, every heading numbered, nothing repeated between entries.
++const good = [
++	"# DECISIONS",
++	"",
++	"## D91 — the first ruling",
++	"Body text about the store, phrased once.",
++	"",
++	"## D92 — the second ruling",
++	"Body text about the broker, phrased once.",
++	"",
++	"## D-93 — numbered by the item that minted it",
++	"Body text about worktrees, phrased once.",
++];
++const goodRun = run(scratch(good));
++check("a clean ledger stays green", goodRun.status === 0, `exit ${goodRun.status}: ${goodRun.stdout.trim()}`);
++check("the D-<number> form counts as a number, not a placeholder", goodRun.stdout.includes("3 headings, 0 D-number collision(s), 0 unnumbered heading(s), 0 duplicate-body pair(s)"), goodRun.stdout);
++
++// 3. Same text, SAME entry: repetition inside one entry is not a duplicated ruling.
++const within = ["# DECISIONS", "", "## D91 — one ruling that repeats itself", LONG, LONG];
++const withinRun = run(scratch(within));
++check("repetition inside a single entry is not a finding", withinRun.status === 0 && withinRun.stdout.includes("0 duplicate-body pair(s)"), `exit ${withinRun.status}: ${withinRun.stdout.trim()}`);
++
++// 4. Below the length threshold: boilerplate repeats by design and must not be reported.
++const boiler = [
++	"# DECISIONS",
++	"",
++	"## D91 — first",
++	"Verify (ran; exit codes named). Nothing else.",
++	"",
++	"## D92 — second",
++	"Verify (ran; exit codes named). Something else entirely.",
++];
++const boilerRun = run(scratch(boiler));
++check("short repeated boilerplate is not a duplicate ruling", boilerRun.status === 0 && boilerRun.stdout.includes("0 duplicate-body pair(s)"), `exit ${boilerRun.status}: ${boilerRun.stdout.trim()}`);
++
++// 5. The real ledger: the tool's report must agree with a plain scan of the same file.
++const realRun = run(ROOT);
++const realLines = readFileSync(join(ROOT, "docs", "DECISIONS.md"), "utf8").split(/\r?\n/);
++const headings = realLines.map((l, i) => [l.match(/^##\s*D-?([0-9]+|###|<mint>)/), i + 1]).filter(([m]) => m);
++const nums = headings.filter(([m]) => /^\d+$/.test(m[1])).map(([m]) => m[1]);
++const collided = [...new Set(nums.filter((n) => nums.filter((x) => x === n).length > 1))];
++const placeholders = headings.filter(([m]) => !/^\d+$/.test(m[1])).length;
++check(
++	"every collision a plain scan finds is reported by the tool",
++	collided.every((n) => realRun.stdout.includes(`numbers D${n} at lines`)),
++	`scan found: ${collided.join(", ")}; tool said: ${realRun.stdout.split("\n").filter((l) => l.startsWith("HARD LEDGER")).length} ledger findings`,
++);
++check(
++	"the tool's placeholder count equals the scan's",
++	placeholders === Number((realRun.stdout.match(/(\d+) unnumbered heading\(s\)/) || [0, 0])[1]),
++	`scan: ${placeholders}`,
++);
++check("the guard is RED on this tree until the ledger cleanup (#6352) lands", realRun.status === 1, `exit ${realRun.status}`);
++
++for (const d of scratchDirs) rmSync(d, { recursive: true, force: true });
++
++console.log(`VERDICT: ${failures === 0 ? "PASS" : `${failures} FAILURES`}  →  exit ${failures === 0 ? 0 : 1}`);
++process.exit(failures === 0 ? 0 : 1);
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 18fe6c49..7d97dfc2 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -290,6 +290,7 @@
+       "demo/commit-message-encoding.test.mjs",
+       "demo/duplicate-item.test.mjs",
+       "demo/doc-count-drift.test.mjs",
++      "demo/doc-integrity-ledger.test.mjs",
+       "demo/metrics.test.mjs",
+       "demo/ownership.test.mjs",
+       "demo/provenance.test.mjs",
+--- docs/runbooks/delegate-doc-hygiene.md (22 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/delegate-doc-hygiene.md b/docs/runbooks/delegate-doc-hygiene.md
+index 275f474b..628b3b80 100644
+--- a/docs/runbooks/delegate-doc-hygiene.md
++++ b/docs/runbooks/delegate-doc-hygiene.md
+@@ -1,11 +1,11 @@
+ ---
+ runbook: delegate-doc-hygiene
+-symptom: "an edit reported success but the text is not in the file; the NEXT pointer went red on its line cap; a citation check flags findings you did not make; a commit sha you quoted turns out not to exist; a `cat >> file <<'EOF'` executed part of its own body as shell; you added a runbook and nothing noticed; a doc states a count (`check` runs eight rules) that nobody can re-check"
++symptom: "an edit reported success but the text is not in the file; the NEXT pointer went red on its line cap; a citation check flags findings you did not make; a commit sha you quoted turns out not to exist; a `cat >> file <<'EOF'` executed part of its own body as shell; you added a runbook and nothing noticed; a doc states a count (`check` runs eight rules) that nobody can re-check; a `see D115` citation resolves to more than one entry"
+ writes: false
+ precondition: "read-only"
+ last_verified: 2026-11-10
+ verified_by: scribe
+-evidence: "PARTIAL re-run 2026-11-09 by scribe (item #6080): the INTENDED-vs-RESOLVED section added under #6077/#6080 was checked with `node tools/doc-integrity-guard.mjs`, `node demo/next-pointer.test.mjs` and `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md` in the item-6080 worktree at main `503ff096` (each exit code recorded in the completion); the corpus scan `awk '/^\| *[0-9]+ *\|/ {rows++; if (/[0-9]{3}/ && !/INTENDED|RESOLVED/) bad++} END{print rows, bad}' docs/ROADMAP.md` → `49 48`, exit 0. **Re-measured 2026-11-10 by devtools (item #6110) on `main f192f543`: the same awk → `54 52`, exit 0; `node tools/doc-integrity-guard.mjs` → exit 0 (`0 hard, 0 soft`, 357 registered items, 54 runbooks); `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md docs/runbooks/README.md` → exit 0 (0 failing of 41 findings). SCOPED: those three legs plus the README index row were re-run; the older sha-citation and heredoc legs were not. Also measured on the same tree: `node scripts/test.mjs --all --jobs 6` → 282/282, exit 0, in a worktree whose `sync-pi --link` succeeded (`dependencySet: built-pin`, pi-durable 1.5.1)." Re-measured 2026-11-10 by devtools (item #6155) in the item-6155 worktree: `node cli.mjs check rig.selfdev.json --json` → exit 0, `doc-count-drift: pass` (23 rules declared, 2 doc claims read, all consistent); the same command with `docs/WORKFLOWS.md` deliberately set to "eight rules" → exit 0, `summary.fix-now: 1`, finding `docs/WORKFLOWS.md:293 claims check has 8 rules; the code declares 23`; `node demo/doc-count-drift.test.mjs` → exit 1 with the wrong count, exit 0 with the right one. Earlier legs (2026-11-06, delegate): `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes"
++evidence: "PARTIAL re-run 2026-11-09 by scribe (item #6080): the INTENDED-vs-RESOLVED section added under #6077/#6080 was checked with `node tools/doc-integrity-guard.mjs`, `node demo/next-pointer.test.mjs` and `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md` in the item-6080 worktree at main `503ff096` (each exit code recorded in the completion); the corpus scan `awk '/^\| *[0-9]+ *\|/ {rows++; if (/[0-9]{3}/ && !/INTENDED|RESOLVED/) bad++} END{print rows, bad}' docs/ROADMAP.md` → `49 48`, exit 0. **Re-measured 2026-11-10 by devtools (item #6110) on `main f192f543`: the same awk → `54 52`, exit 0; `node tools/doc-integrity-guard.mjs` → exit 0 (`0 hard, 0 soft`, 357 registered items, 54 runbooks); `node tools/review-cite-check.mjs docs/runbooks/delegate-doc-hygiene.md docs/runbooks/README.md` → exit 0 (0 failing of 41 findings). SCOPED: those three legs plus the README index row were re-run; the older sha-citation and heredoc legs were not. Also measured on the same tree: `node scripts/test.mjs --all --jobs 6` → 282/282, exit 0, in a worktree whose `sync-pi --link` succeeded (`dependencySet: built-pin`, pi-durable 1.5.1)." Re-measured 2026-11-10 by devtools (item #6155) in the item-6155 worktree: `node cli.mjs check rig.selfdev.json --json` → exit 0, `doc-count-drift: pass` (23 rules declared, 2 doc claims read, all consistent); the same command with `docs/WORKFLOWS.md` deliberately set to "eight rules" → exit 0, `summary.fix-now: 1`, finding `docs/WORKFLOWS.md:293 claims check has 8 rules; the code declares 23`; `node demo/doc-count-drift.test.mjs` → exit 1 with the wrong count, exit 0 with the right one. Earlier legs (2026-11-06, delegate): `node tools/doc-integrity-guard.mjs` → **exit 0** (`0 hard, 1 soft`) after the figure-carrying-its-measurement section was added, and the port probes in that section were run that hour; `last_verified` is NOT raised because the older sha-citation and heredoc legs were not re-run. docs/ROADMAP.md **262**; commit c34bb232 of this session (HEAD at the time of writing; verified with `git cat-file -e`); every command below was run 2026-10-29 on Linux (Fedora, box label-withheld-per-D205, node v24.22.1); the failure counts are from this session's own mistakes. Re-measured 2026-11-11 by devtools (item #6344) in the item-6344 worktree off `main 35001c3a`: `node tools/doc-integrity-guard.mjs` → **exit 1** (19 hard, 14 soft) — the ledger rule is new and the ledger is not yet clean; `node demo/doc-integrity-ledger.test.mjs` → exit 0; `node tools/review-cite-check.mjs docs/DECISIONS.md` → exit 1 (23 failing of 174 findings). `last_verified` NOT raised: the older sha-citation and heredoc legs were not re-run"
+ check_rule: "doc-count-drift (#6155) for the declared-set counts section below; `runbook-front-matter` still reports UNKNOWN from `cli.mjs check` — see docs/ROADMAP.md **262**"
+ ---
+ 
+@@ -34,7 +34,7 @@ explicit paths only (never `-A`) because `.spike/` and `.scratch/` hold cited in
+ ## Diagnose (read-only)
+ 
+ ```bash
+-node tools/doc-integrity-guard.mjs          # one verb: pointer cap, roadmap refs, runbook links, runbook headers
++node tools/doc-integrity-guard.mjs          # one verb: pointer cap, roadmap refs, runbook links, runbook headers, ledger D-numbers
+ ```
+ 
+ That instrument is what this runbook's advice turned into, because advice had already failed. Its four checks, and the
+@@ -212,6 +212,33 @@ Write the count with its source, not as a bare assertion:
+ 
+ Or drop the number entirely and name the declaring export. Either is honest; a number without a source is not.
+ 
++## A D-number in the ledger must name exactly one entry (#6344)
++
++`docs/DECISIONS.md` is the citable record, and the guard now judges three things about it. The severity follows the
++remedy, not the size of the finding:
++
++- **D-number collisions — HARD.** One number heading several entries means "see D91" names nothing.
++- **Unnumbered headings — HARD.** `## D###` and `## D-<mint>` are pre-merge drafts that reached the record; an entry
++  nobody can cite is not a style problem.
++- **Byte-identical body sentences (>=80 chars) in two different entries — SOFT.** A cross-reference legitimately
++  repeats a sentence, and repetition *inside* one entry is not reported at all: that is the distinction between
++  "same text, different entry" and "same text, same entry".
++
++Check the raw evidence before believing the tool (measured 2026-11-11 in the item-6344 worktree off `main 35001c3a`):
++
++```bash
++grep -oE "^## D[0-9]+" docs/DECISIONS.md | sort | uniq -c | sort -rn | head   # 3 x D91; D111-D120, D258, D259 x2 each
++node tools/doc-integrity-guard.mjs                                            # VERDICT: 19 hard, 14 soft -> exit 1
++node demo/doc-integrity-ledger.test.mjs                                      # exit 0: fixtures prove each leg fires
++```
++
++**This red is pre-existing, not yours.** The rule landed (2026-11-11, #6344) before the ledger was cleaned; the cleanup
++is row #6352, and this row was explicitly told not to edit `docs/DECISIONS.md`. Do not "fix" a collision by renumbering
++a neighbour — mint the missing number or fold the duplicate into the entry it repeats. The citation debt is separate and
++also pre-existing: `node tools/review-cite-check.mjs docs/DECISIONS.md` -> `23 failing, 151 not failing (of 174 findings)`,
++exit 1, on the untouched copy (the row quoted 23/142 of 165 on `main f192f543` — the corpus grows, the count does not
++stay true, which is itself the point of citing a tree).
++
+ ## If it fails
+ 
+ Nothing here writes, so there is nothing to roll back except your own edits: `git checkout -- <path>` restores a doc you
+--- tools/doc-integrity-guard.mjs (77 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/tools/doc-integrity-guard.mjs b/tools/doc-integrity-guard.mjs
+index 328a32ce..e4b42380 100644
+--- a/tools/doc-integrity-guard.mjs
++++ b/tools/doc-integrity-guard.mjs
+@@ -13,6 +13,10 @@
+ //
+ // Read-only: it never writes, never opens the store, never contacts a model server.
+ //
++// Checks, all deterministic: the docs/NEXT.md pointer cap; a ROADMAP item cited in no live doc; a runbook
++// header the index cannot reach; runbook front matter; and the ledger (#6344) - D-number collisions,
++// unnumbered headings and byte-identical ruling bodies in docs/DECISIONS.md.
++//
+ // Usage:  node tools/doc-integrity-guard.mjs [--soft] [--quiet]
+ // Exit:   0 = no hard findings; 1 = hard findings (fix them before you report or commit).
+ 
+@@ -133,8 +137,98 @@ for (const f of files) {
+     soft.push(`SOFT HEADER   docs/runbooks/${f} front-matter runbook: key does not mirror the file stem`);
+ }
+ 
++/* 5. The ledger itself (#6344). docs/DECISIONS.md is citable only if a D-number names exactly one entry.
++ *    Measured on this tree (HEAD 35001c3a, before the rule existed): `node tools/doc-integrity-guard.mjs`
++ *    said "0 hard, 0 soft, exit 0" while the file had D91 heading three entries, D111-D120 and D258/D259
++ *    heading two each, six headings with no number at all (`## D###` and `## D-<mint>`), and 118 sentences of
++ *    80+ characters byte-identical in two different entries. Collisions and unnumbered headings are HARD:
++ *    "see D115" resolving to nothing is the same class of failure as a docs/NEXT.md pointer to a ROADMAP item
++ *    that was never registered. Repeated body text is SOFT, because a cross-reference legitimately repeats a
++ *    sentence and only the ledger owner can tell a duplicate ruling from a pointer to one. Consequence, stated so
++ *    nobody is surprised: the guard now exits 1 on this tree (19 hard) until the ledger cleanup row (#6352) mints
++ *    the numbers. */
++const LEDGER = "docs/DECISIONS.md";
++const MIN_DUP_CHARS = 80; // below this, boilerplate ("Verify (ran; exit codes named).") repeats by design
++const ledger = read(LEDGER);
++const ledgerStats = { headings: 0, collisions: 0, placeholders: 0, dupPairs: 0 };
++if (ledger) {
++  const lines = ledger.split(/\r?\n/);
++  // Forms seen in the file: `## D91 — ...`, `## D-5015 — ...` (numbered by the item that minted it), and the
++  // un-minted drafts `## D###` / `## D-<mint>` / `## D<mint>`.
++  const headings = [];
++  for (let i = 0; i < lines.length; i++) {
++    const m = lines[i].match(/^##\s*D-?([0-9]+|###|<mint>)/);
++    if (m) headings.push({ raw: lines[i], line: i + 1, token: m[1] });
++  }
++  ledgerStats.headings = headings.length;
++  const bodyOf = new Map(); // heading line -> the entry's body text, up to the next heading
++  headings.forEach((h, i) => {
++    const end = i + 1 < headings.length ? headings[i + 1].line - 1 : lines.length;
++    bodyOf.set(h.line, lines.slice(h.line, end).join(" ").replace(/\s+/g, " ").trim());
++  });
++  const byNumber = new Map();
++  for (const h of headings) {
++    if (!/^\d+$/.test(h.token)) {
++      ledgerStats.placeholders++;
++      hard.push(
++        `HARD LEDGER  ${LEDGER}:${h.line} heading "${h.raw.trim().slice(0, 72)}" carries no D-number (${h.token}) — ` +
++          `the entry cannot be cited, and an uncitable ruling in the ledger is not a style problem. Mint a number or fold it into the entry it duplicates.`,
++      );
++      continue;
++    }
++    const n = Number(h.token);
++    if (!byNumber.has(n)) byNumber.set(n, []);
++    byNumber.get(n).push(h);
++  }
++  for (const [n, list] of [...byNumber].sort((a, b) => a[0] - b[0])) {
++    if (list.length < 2) continue;
++    ledgerStats.collisions++;
++    hard.push(
++      `HARD LEDGER  ${LEDGER} numbers D${n} at lines ${list.map((h) => h.line).join(", ")} — ` +
++        `${list.length} different entries share one number, so "see D${n}" names nothing: ` +
++        list.map((h) => h.raw.trim().slice(0, 60)).join("  |  "),
++    );
++  }
++  const seenIn = new Map(); // sentence -> set of entry heading lines it appears in
++  for (const h of headings) {
++    const body = bodyOf.get(h.line) || "";
++    const inThisEntry = new Set(); // a sentence repeated INSIDE one entry is not a duplicated ruling
++    for (const s of body.split(/(?<=[.!?])\s+/)) {
++      const t = s.trim();
++      if (t.length < MIN_DUP_CHARS) continue;
++      inThisEntry.add(t);
++    }
++    for (const t of inThisEntry) {
++      if (!seenIn.has(t)) seenIn.set(t, new Set());
++      seenIn.get(t).add(h.line);
++    }
++  }
++  const pairs = new Map();
++  for (const [sentence, entryLines] of seenIn) {
++    if (entryLines.size < 2) continue;
++    const arr = [...entryLines].sort((a, b) => a - b);
++    for (let i = 0; i < arr.length; i++) {
++      for (let j = i + 1; j < arr.length; j++) {
++        const key = `${arr[i]}|${arr[j]}`;
++        if (!pairs.has(key)) pairs.set(key, { a: arr[i], b: arr[j], samples: [] });
++        if (pairs.get(key).samples.length < 2) pairs.get(key).samples.push(sentence.slice(0, 60));
++      }
++    }
++  }
++  ledgerStats.dupPairs = pairs.size;
++  for (const p of [...pairs.values()].sort((a, b) => a.a - b.a)) {
++    soft.push(
++      `SOFT LEDGER  ${LEDGER} entries at ${p.a} and ${p.b} carry byte-identical body text (>=${MIN_DUP_CHARS} chars): ` +
++        `"${p.samples.join("  ...  ")}" — same text, different entry. Either merge the two rulings or make the second one a pointer`,
++    );
++  }
++}
++
+ if (!quiet) {
+-  console.log(`DOC INTEGRITY GUARD  (docs/ROADMAP.md registers ${items.size} items; ${files.length} runbooks)`);
++  console.log(
++    `DOC INTEGRITY GUARD  (docs/ROADMAP.md registers ${items.size} items; ${files.length} runbooks; ` +
++      `ledger: ${ledgerStats.headings} headings, ${ledgerStats.collisions} D-number collision(s), ${ledgerStats.placeholders} unnumbered heading(s), ${ledgerStats.dupPairs} duplicate-body pair(s))`,
++  );
+   for (const h of hard) console.log("  " + h);
+   if (showSoft) for (const s of soft) console.log("  " + s);
+   else if (soft.length) console.log(`  (${soft.length} soft finding(s) hidden — re-run with --soft)`);

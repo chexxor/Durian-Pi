@@ -1,0 +1,249 @@
+Ref refs/heads/item-7103 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 2e2f1797f884deb4a67170cee502773f981fcab1. Lost lines: 74 across 1 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-7103 && node tools/recut-resolve.mjs --worktree .spike/recut-item-7103
+
+--- demo/restart-limit-behaviour.test.mjs (74 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/restart-limit-behaviour.test.mjs b/demo/restart-limit-behaviour.test.mjs
+new file mode 100644
+index 00000000..87701c2c
+--- /dev/null
++++ b/demo/restart-limit-behaviour.test.mjs
+@@ -0,0 +1,237 @@
++// demo/restart-limit-behaviour.test.mjs — #7006 (ROADMAP 355 item 3), reworked for determinism (#7103).
++//
++// `settings.restartLimit = 3` has been PROVEN as a number that reaches the library (#6173: the
++// seam's settings object carries it and `resolveSettings` returns it). That is not the ruled
++// claim. The claim is that a seat cut off three times in a row STOPS, and that it stops because
++// of the 3 and not because of the fixture. Nothing in this repo had driven a run three times and
++// watched it end.
++//
++// This demo drives the crash-loop guard itself. A harness is opened, a run is started, and the
++// host "dies": every later storage call hangs, so nothing is written - not even the `pending`
++// records a clean close would write. Reopening the store charges one restart for every task left
++// committed `running` (pi-durable scheduler.open), and the generation phase ends the run once the
++// streak reaches the limit.
++//
++// WHAT THE REWORK CHANGED (#7103, from qa's #7009 verification). The first version counted
++// CRASHES and assumed each one charged. It did not: scheduler.open charges +1 only when the
++// record's state is `running`, and a crash landing while the task is in retry backoff (`sleeping`)
++// charges nothing. `until()` also returns false on its 120-poll timeout, and the fixture ignored
++// that return value and set `flag.dead = true` regardless. So "3 crashes" sometimes meant 3
++// charges and sometimes 1 - 2 of 7 runs exited 1 while 5 passed. A gate whose assertion counts the
++// fixture instead of the charge is not measuring the guard.
++// Now: every crash is asserted to have landed on a committed-running task, and the loop is driven
++// by the CHARGED restart count the guard actually acted on, not by how many times we crashed.
++//
++// Checks:
++//   1. charged 3 with restartLimit 3  -> the submission settles `unanswered` with reason
++//      `restart_limit`, and `pi.live` carries the runFailure.
++//   2. charged 3 with restartLimit UNSET (library default 5) -> NOT ended by the limit, charged
++//      the SAME 3 cut-offs. Same charge, different outcome: the difference is the setting, not
++//      the fixture.
++//   3. charged 5 with restartLimit 5 -> ends `restart_limit` charged 5. The boundary moves with
++//      the NUMBER, not the fixture, so check 1 is not "three crashes always kill a run".
++//   4. charged 2 with restartLimit 3 -> not ended by the limit. One short.
++//   5. The vacuity control: the limited and the unlimited fixture both finish WITHOUT throwing.
++//      An assertion shaped "the run did not explode" passes for BOTH, so it proves nothing; the
++//      reason string is the load-bearing assertion, and this check shows that.
++//
++// Run: node demo/restart-limit-behaviour.test.mjs   (exit 0 = pass)
++
++import assert from "node:assert/strict";
++import { mkdtempSync, readFileSync, rmSync } from "node:fs";
++import { join } from "node:path";
++import { tmpdir } from "node:os";
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
++import * as piDurable from "@earendil-works/pi-durable";
++const { createRegistry, Harness, LiveDoc, ROOT_CONVERSATION_ID, DEFAULT_RESTART_LIMIT } = piDurable; // namespace import: on the lockfile plane the symbol is absent, and a named import throws before the plane guard below can report it
++import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
++
++const ctx = BACKGROUND_CONTEXT;
++const RULED = 3;
++const ANSWER = "z".repeat(400); // ~1 s of streaming at 400 tokens/s: enough time to crash mid-request
++/** Crash attempts beyond the charge we are aiming for. If the charge never reaches the target
++ * this is a FAIL, not a hang: an unbounded crash loop is its own flake machine. */
++const MAX_CRASHES = 12;
++
++/* Which dependency plane is answering? Report it with every verdict (#6773). */
++function plane() {
++	const pkg = JSON.parse(readFileSync(new URL("../node_modules/@earendil-works/pi-durable/package.json", import.meta.url), "utf8"));
++	const pin = JSON.parse(readFileSync(new URL("../pi-main.pin.json", import.meta.url), "utf8"));
++	return pkg.version === "1.5.1" ? "built pin pi-durable " + pkg.version + " (vendor/pi-main @ " + pin.ref + ")" : "lockfile pi-durable " + pkg.version;
++}
++
++/* What the rig's own seam writes today. An observation printed with the verdict, not an assertion. */
++function seamValue() {
++	const src = readFileSync(new URL("../cli.mjs", import.meta.url), "utf8");
++	const body = (src.match(/async function openHarness\([\s\S]*?\n\}/) || [""])[0];
++	const expr = (body.match(/settings:\s*(\{[^}]*\})/) || [])[1] ?? "{}";
++	try {
++		const obj = new Function("streamSettings", "compactionSettings", "runControlSettings", "CFG", "return " + expr + ";")(
++			() => ({}),
++			() => ({}),
++			() => ({}),
++			{},
++		);
++		return { written: obj.restartLimit ?? null, effective: obj.restartLimit ?? DEFAULT_RESTART_LIMIT };
++	} catch (err) {
++		return { written: null, effective: null, error: err.message };
++	}
++}
++
++/** A Storage whose every call hangs from `dead` on: a host that stops writing, not one that closes. */
++function hangingStorage(inner, flag) {
++	return new Proxy(inner, {
++		get(target, prop) {
++			const value = Reflect.get(target, prop);
++			if (typeof value !== "function") return value;
++			return (...args) => (flag.dead ? new Promise(() => {}) : value.apply(target, args));
++		},
++	});
++}
++
++const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
++
++/** Wait until `predicate` is true, up to `tries` polls of 50 ms. The RETURN VALUE is load-bearing:
++ * false means it timed out, which is a different fact from "true". */
++async function until(predicate, tries = 120) {
++	for (let i = 0; i < tries; i += 1) {
++		if (await predicate()) return true;
++		await sleep(50);
++	}
++	return false;
++}
++
++/**
++ * ONE fixture. It crashes until the store reports `target` CHARGED restarts, then leaves the last
++ * harness open and reads what the guard did. Returns the settled outcome, the charged count, the
++ * crash count it took, and any thrown error.
++ */
++async function crashUntilCharged({ restartLimit, target }) {
++	const dir = mkdtempSync(join(tmpdir(), "durig-restart-limit-"));
++	const inner = await openNodeSqliteStorage(join(dir, "rig.sqlite"));
++	const models = createModels();
++	const faux = fauxProvider({ models: [{ id: "faux-seat" }], tokensPerSecond: 400, tokenSize: { min: 1, max: 1 } });
++	models.setProvider(faux.provider);
++	const registry = createRegistry();
++	const settings = { retry: { enabled: true, maxRetries: 20, baseDelayMs: 1 }, progress: { persistWithinMs: 0 } };
++	if (restartLimit !== undefined) settings.restartLimit = restartLimit;
++
++	let submissionId = null;
++	let taskId = null;
++	let charged = 0;
++	let crashes = 0;
++	let threw = null;
++
++	try {
++	 while (charged < target) {
++			if (crashes >= MAX_CRASHES) throw new Error(`charged restarts never reached ${target}: ${crashes} crashes, charged ${charged}`);
++			const flag = { dead: false };
++			const harness = await Harness.open(hangingStorage(inner, flag), { models, registry, settings }, ctx);
++			harness.resume();
++			const root = await harness.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-seat" } } });
++			if (submissionId === null) submissionId = (await root.submit({ type: "input", content: "hi" }, ctx)).id;
++
++			// Did this open leave a task committed `running` with a partial in storage? Only such a
++			// task can be charged by the next reopen.
++			const landed = await until(async () => {
++				const live = (await harness.snapshot(LiveDoc, ROOT_CONVERSATION_ID, ctx)) ?? {};
++				if (live.run?.taskId === undefined) return false;
++				taskId = live.run.taskId;
++				const rec = await harness.getTask(taskId, ctx);
++				return live.generation?.message !== undefined && rec?.state?.status === "running";
++			});
++			if (!landed) {
++				const rec = taskId === null ? null : await harness.getTask(taskId, ctx);
++				if (rec?.state?.status === "terminal") break; // the guard already ended the run: nothing more to charge
++			 throw new Error(`crash ${crashes} did not land on a committed-running task (status ${rec?.state?.status ?? "none"}); a reopen here would charge nothing`);
++			}
++
++			const rec = await harness.getTask(taskId, ctx);
++			const now = rec?.restarts ?? 0;
++		 if (crashes > 0 && now !== charged + 1) throw new Error(`crash ${crashes} charged ${now - charged}: restarts went ${charged} -> ${now}`);
++		 charged = now;
++		 crashes += 1;
++
++			if (charged >= target) break; // this harness is the deciding open; leave it alive
++			flag.dead = true; // the host dies: no clean close, nothing more written
++		}
++
++		// The deciding open is live: read what the run settled as, and the streak the guard acted on.
++		const liveHarness = await Harness.open(hangingStorage(inner, { dead: false }), { models, registry, settings }, ctx);
++		liveHarness.resume();
++		await liveHarness.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-seat" } } });
++		// `restarts` is dropped from the record once an outcome is decided, so read it while the
++		// task is still live; that is the streak the guard acted on.
++		if (taskId !== null) charged = (await liveHarness.getTask(taskId, ctx))?.restarts ?? charged;
++		await until(async () => {
++			const rec = taskId === null ? null : await liveHarness.getTask(taskId, ctx);
++			return rec?.state?.status === "terminal";
++		});
++		const live = (await liveHarness.snapshot(LiveDoc, ROOT_CONVERSATION_ID, ctx)) ?? {};
++		const submission = submissionId === null ? null : await liveHarness.submission(submissionId, ctx);
++		const settled = submission ? await submission.wait(ctx) : null;
++		await inner.close(ctx);
++		return { settled, charged, crashes, runFailure: live.runFailure ?? null, threw };
++	} catch (err) {
++		return { settled: null, charged, crashes, runFailure: null, threw: err };
++	} finally {
++		rmSync(dir, { recursive: true, force: true });
++	}
++}
++
++const endedByLimit = (run) => run.settled?.reason === "restart_limit";
++
++let failures = 0;
++const check = (label, cond, detail = "") => {
++	if (cond) console.log("  ok   " + label);
++	else {
++		failures += 1;
++		console.log("  FAIL " + label + (detail ? " -- " + detail : ""));
++	}
++}
++
++console.log("restart-limit behaviour on " + plane());
++const seam = seamValue();
++console.log("rig seam: cli.mjs openHarness writes restartLimit=" + (seam.written ?? "nothing") + " -> effective " + (seam.effective ?? "unknown") + " (the ruled 3 bites only where the seam writes it)");
++
++if (DEFAULT_RESTART_LIMIT === undefined) {
++	console.log("RESTART-LIMIT BEHAVIOUR FAIL - this plane has no settings.restartLimit at all, so the guard cannot be exercised here; run against the built pin (node scripts/sync-pi.mjs --sync && node scripts/sync-pi.mjs --link)");
++	process.exit(1);
++}
++
++assert.equal(DEFAULT_RESTART_LIMIT, 5, "the library default this demo measures against is 5");
++
++const atRuled = await crashUntilCharged({ restartLimit: RULED, target: RULED });
++const atDefault = await crashUntilCharged({ restartLimit: undefined, target: RULED });
++const atFiveFive = await crashUntilCharged({ restartLimit: 5, target: 5 });
++const shortOfLimit = await crashUntilCharged({ restartLimit: RULED, target: 2 });
++
++/* 1. the limit bites, and bites at the number */
++check("restartLimit 3, charged 3: the run ENDS with reason restart_limit", endedByLimit(atRuled), JSON.stringify(atRuled.settled));
++check("restartLimit 3, charged 3: the store reports exactly 3 charged restarts", atRuled.charged === 3, "charged=" + atRuled.charged);
++check("pi.live records the failure with the same reason", atRuled.runFailure?.reason === "restart_limit", JSON.stringify(atRuled.runFailure));
++
++/* 2. the value the rig runs on today (no restartLimit at the seam) does not stop it */
++check("restartLimit unset (default 5), charged 3: NOT ended by the limit", !endedByLimit(atDefault), "settled=" + JSON.stringify(atDefault.settled) + " charged=" + atDefault.charged);
++check("the limited and unlimited arms charged the SAME 3, so the difference is the setting, not the fixture", atDefault.charged === atRuled.charged, "charged " + atDefault.charged + " vs " + atRuled.charged);
++
++/* 3. the boundary is the number, not the fixture */
++check("restartLimit 5, charged 5: ENDS with restart_limit", endedByLimit(atFiveFive), JSON.stringify(atFiveFive.settled));
++check("charged 5 restarts - the assertion is on the charge, not on a crash count", atFiveFive.charged === 5, "charged=" + atFiveFive.charged);
++
++/* 4. one short of the limit still runs */
++check("restartLimit 3, charged 2: not ended by the limit", !endedByLimit(shortOfLimit), "settled=" + JSON.stringify(shortOfLimit.settled) + " charged=" + shortOfLimit.charged);
++check("and it really was charged 2, not less", shortOfLimit.charged === 2, "charged=" + shortOfLimit.charged);
++
++/* 5. the vacuity control */
++check("vacuity control: the limited and the unlimited fixture both pass a no-throw assertion", atRuled.threw === null && atDefault.threw === null, "threw: " + (atRuled.threw?.message ?? "none") + " / " + (atDefault.threw?.message ?? "none"));
++check("only the reason assertion separates them", endedByLimit(atRuled) && !endedByLimit(atDefault), atRuled.settled?.reason + " vs " + atDefault.settled?.reason);
++
++/* 6. determinism is part of the claim: every arm reached its target charge, so the crash count
++ *    never had to be trusted. */
++check("every arm reached its target charge (no silent non-charging crash)", [atRuled, atDefault, atFiveFive, shortOfLimit].every((r) => r.threw === null), [atRuled, atDefault, atFiveFive, shortOfLimit].map((r) => r.threw?.message ?? "ok").join(" | "));
++
++console.log("\n" + (failures === 0 ? "RESTART-LIMIT BEHAVIOUR PASS - 3 ends the run, 5 does not, and the fixture alone proves nothing" : "RESTART-LIMIT BEHAVIOUR FAIL (" + failures + " check(s))"));
++process.exit(failures === 0 ? 0 : 1);

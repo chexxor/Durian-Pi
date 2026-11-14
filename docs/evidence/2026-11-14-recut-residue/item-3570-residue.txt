@@ -1,0 +1,590 @@
+Ref refs/heads/item-3570 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base e3685a8f9bd003515565f6850978a63bf7a49f8e. Lost lines: 102 across 7 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-3570 && node tools/recut-resolve.mjs --worktree .spike/recut-item-3570
+
+--- demo/curate.test.mjs (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/curate.test.mjs b/demo/curate.test.mjs
+index 5a691762..198cb25a 100644
+--- a/demo/curate.test.mjs
++++ b/demo/curate.test.mjs
+@@ -124,7 +124,7 @@ assert.equal((await item(1)).body, "new details", "and the item is unchanged by
+ await call("worker", "claim_work", {});
+ assert.equal((await item(1)).status, "claimed", "worker claimed the oldest item (#1)");
+ await call("pm", "revise_work", { itemId: 1, subject: "too late" });
+-assert.match(await transcript("pm"), /not queued \(status=claimed\)/, "a claimed item refuses revision");
++assert.match(await transcript("pm"), /not unclaimed work \(status=claimed\)/, "a claimed item refuses revision");
+ assert.equal((await item(1)).subject, "Build the widget v2", "and keeps its subject");
+ 
+ // 4. Either party may cancel. The holder cancels #2; the sender cancels #3.
+--- demo/revise-gate-write.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/revise-gate-write.test.mjs b/demo/revise-gate-write.test.mjs
+new file mode 100644
+index 00000000..bab9a3f6
+--- /dev/null
++++ b/demo/revise-gate-write.test.mjs
+@@ -0,0 +1,297 @@
++// demo/revise-gate-write.test.mjs — #3570: the GATE WRITE PATH on an item that already exists.
++//
++// WHY THIS FILE EXISTS. `send_work` is the ONLY place `blockedBy` can be written, and it writes it
++// once, at creation. `revise_work` touches `subject` and `body` only. So a gate that is wrong,
++// missing, or stale can never be corrected: the fleet census found 446 held rows, 118 of them with
++// no gate, no block and no reason (docs/WORK-ITEM-SCHEMA.md §4/R5). The fix for those rows is not
++// releasing them — it is writing the gate INTO them. Without a write path, every gate stays prose,
++// and prose is the unqueryable form the field was introduced to replace.
++//
++// THREE OUTCOMES the write path must distinguish, because collapsing them is the defect:
++//   SET     — a gate that was not there is now there;
++//   REPLACE — a gate that was there is now a different one (the old ids are GONE, not appended to);
++//   CLEAR   — `blockedBy: []` means UNGATED, and the field is absent, never `[]`;
++// and four writes must be REFUSED rather than stored: prose ("GATED on #1"), an id that names no
++// item, a gate on the item ITSELF, and a gate that closes a CYCLE. Each of those stores a row that
++// can never become workable, silently.
++//
++// FAILING-FIRST: before #3570 `revise_work` has no `blockedBy` parameter and there is no
++// `validateGate` export, so every assertion below fails: the gate never lands, and the refusals
++// cannot be written at all. Run this file against the pre-fix tree to see the red.
++//
++// Run: node demo/revise-gate-write.test.mjs  (exit 0 = pass)
++
++import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
++import { createModels } from "@earendil-works/pi-ai/models";
++import {
++	fauxAssistantMessage,
++	fauxProvider,
++	fauxText,
++	fauxToolCall,
++} from "@earendil-works/pi-ai/providers/faux";
++import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
++
++import * as rig from "../src/rig.mjs";
++const { enqueueItem, registerSeat, Router, RigQueue, Seats, workable } = rig;
++
++const ctx = BACKGROUND_CONTEXT;
++let failures = 0;
++function check(label, condition, detail = "") {
++	if (condition) {
++		console.log(`  ok   ${label}`);
++	} else {
++		failures += 1;
++		console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`);
++	}
++}
++const throws = (fn) => {
++	try {
++		fn();
++		return false;
++	} catch {
++		return true;
++	}
++};
++
++/* ─── 1. PURE: the outcome layer reports a gate write, it does not swallow it ─── */
++console.log("\napplyRevise — a gate write is reported like any other field");
++if (typeof rig.applyRevise === "function") {
++	const set = { id: 4, subject: "s", body: "b" };
++	const out = rig.applyRevise(set, { blockedBy: [1, 2] }, []);
++	check("setting a gate reports the field as written", out.status === "revised" && out.fields.includes("blockedBy"), JSON.stringify(out));
++	check("the gate is on the item it was applied to", JSON.stringify(set.blockedBy ?? null) === "[1,2]", JSON.stringify(set));
++	check("the outcome carries the gate it wrote", JSON.stringify(out.gate ?? null) === "[1,2]", JSON.stringify(out));
++	const replace = { id: 4, subject: "s", body: "b", blockedBy: [1, 2] };
++	const rep = rig.applyRevise(replace, { blockedBy: [3] }, []);
++	check("replacing a gate reports blockedBy", rep.status === "revised" && rep.fields.includes("blockedBy"), JSON.stringify(rep));
++	check("the OLD gate ids are gone, not appended to", JSON.stringify(replace.blockedBy ?? null) === "[3]", JSON.stringify(replace));
++	const clear = { id: 4, subject: "s", body: "b", blockedBy: [1] };
++	const cleared = rig.applyRevise(clear, { blockedBy: [] }, []);
++	check("an empty gate CLEARS it (field absent, never [])", clear.blockedBy === undefined && cleared.status === "revised" && cleared.gate === null, JSON.stringify(clear));
++	const same = { id: 4, subject: "s", body: "b", blockedBy: [1, 2] };
++	check("a gate that already matches reports no-change", rig.applyRevise(same, { blockedBy: [1, 2] }, []).status === "no-change", JSON.stringify(same));
++}
++
++/* ─── 2. PURE: the four refusals ─── */
++console.log("\nvalidateGate — what the write path refuses to store");
++check(
++	"the write path exports a validator (validateGate)",
++	typeof rig.validateGate === "function",
++	"src/rig.mjs has no validateGate export",
++);
++if (typeof rig.validateGate === "function") {
++	const items = [{ id: 1, status: "done" }, { id: 2, status: "queued" }, { id: 3, status: "queued", blockedBy: [4] }];
++	check("a plain gate on existing ids is accepted", rig.validateGate({ id: 5 }, [1, 2], items).ok === true, JSON.stringify(rig.validateGate({ id: 5 }, [1, 2], items)));
++	check("no gate is accepted (clearing a gate is legal)", rig.validateGate({ id: 5 }, [], items).ok === true, JSON.stringify(rig.validateGate({ id: 5 }, [], items)));
++	check("prose is refused, not parsed", rig.validateGate({ id: 5 }, ["GATED on #1"], items).ok === false, JSON.stringify(rig.validateGate({ id: 5 }, ["GATED on #1"], items)));
++	check("an id that names no item is refused", rig.validateGate({ id: 5 }, [99], items).ok === false, JSON.stringify(rig.validateGate({ id: 5 }, [99], items)));
++	check("a self-gate is refused (it can never close)", rig.validateGate({ id: 5 }, [5], items).ok === false, JSON.stringify(rig.validateGate({ id: 5 }, [5], items)));
++	check("a gate that closes a cycle is refused", rig.validateGate({ id: 4 }, [3], [{ id: 3, status: "queued", blockedBy: [4] }, { id: 4, status: "queued" }]).ok === false, "5 gates 3, 3 gates 4: neither can ever be workable");
++	check("a longer cycle is refused", rig.validateGate({ id: 5 }, [1], [{ id: 1, blockedBy: [2] }, { id: 2, blockedBy: [5] }, { id: 5 }]).ok === false, "5->1->2->5");
++	check("a DAG is NOT mistaken for a cycle", rig.validateGate({ id: 5 }, [1, 2], [{ id: 1, blockedBy: [3] }, { id: 2, blockedBy: [3] }, { id: 3, status: "done" }, { id: 5 }]).ok === true, "diamond gate");
++}
++
++/* ─── 3. THE ROUND-TRIP THROUGH THE REAL TOOL ─── */
++const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
++const models = createModels();
++models.setProvider(faux.provider);
++const registry = createRegistry();
++registry.install(Router);
++const harness = await Harness.open(new MemoryStorage(), { models, registry }, ctx);
++
++await harness.commit(async (tx) => {
++	const mk = async (name, role) => {
++		const c = await tx.createConversation({ ownership: { kind: "ownerless" } });
++		await configure(tx, c.id, { model: { provider: "faux", modelId: "faux-seat" } });
++		await registerSeat(tx, name, c.id, role);
++	};
++	await mk("pm", "program manager");
++	await mk("worker", "implementation engineer");
++	await mk("intruder", "implementation engineer");
++}, ctx);
++
++const roster = (await harness.documentState(Seats, undefined, ctx)).value.seats;
++const items = async () => (await harness.documentState(RigQueue, undefined, ctx)).value.items;
++const item = async (id) => (await items()).find((it) => it.id === id);
++const idOf = async (subject) => (await items()).find((it) => it.subject === subject)?.id;
++let first = true;
++const call = async (seat, toolName, toolArgs) => {
++	const batch = [
++		fauxAssistantMessage([fauxToolCall(toolName, toolArgs)], { stopReason: "toolUse" }),
++		fauxAssistantMessage(fauxText("ok")),
++	];
++	if (first) {
++		faux.setResponses(batch);
++		first = false;
++	} else faux.appendResponses(batch);
++	const c = await harness.conversation(roster[seat].conversationId, ctx);
++	await (await c.submit({ type: "input", content: "go" }, ctx)).wait(ctx);
++};
++const transcript = async (seat) => {
++	const c = await harness.conversation(roster[seat].conversationId, ctx);
++	const pg = await c.entries({}, 200, undefined, ctx);
++	return pg.items.map((e) => JSON.stringify(e)).join("\n");
++};
++
++console.log("\nthe gate write path, through the tool a seat actually calls");
++
++// ids: 1 = prerequisite, 2 = a HELD parked row, 3 = a second prerequisite, 4 = the row whose
++// gate gets written, replaced and cleared, 5 = a child of 4 used to test the cycle guard.
++await call("pm", "send_work", { to: "worker", subject: "Prerequisite work", body: "do it first" });
++await call("pm", "send_work", { to: "worker", subject: "Parked backlog row", body: "hold", held: true });
++await call("pm", "send_work", { to: "worker", subject: "Second prerequisite", body: "also needed" });
++await call("pm", "send_work", { to: "worker", subject: "Ungated row that needs a gate", body: "context" });
++
++await call("pm", "revise_work", { itemId: 4, blockedBy: [1] });
++check(
++	"the gate LANDS on the stored item",
++	JSON.stringify((await item(4)).blockedBy ?? null) === "[1]",
++	JSON.stringify(await item(4)),
++);
++check(
++	"the write is audited (a transition names the field)",
++	(await item(4)).transitions.some((t) => t.event === "revised" && (t.fields ?? []).includes("blockedBy")),
++	JSON.stringify((await item(4)).transitions),
++);
++check(
++	"the response SAYS the gate landed, with the ids",
++	/blockedBy=1\b/.test(await transcript("pm")),
++	(await transcript("pm")).slice(-400),
++);
++
++// ─── the workable predicate honours a gate written after creation ───
++check(
++	"a gate written after creation makes the row NOT workable while the gate is open",
++	workable(await item(4), "worker", { items: await items(), capabilities: ["implement"] }).workable === false,
++	JSON.stringify(await item(4)),
++);
++await call("worker", "claim_work", { itemId: 1 });
++await call("worker", "complete_work", { itemId: 1, resultSummary: "prerequisite done" });
++check(
++	"once the gate closes, the same row is workable",
++	workable(await item(4), "worker", { items: await items(), capabilities: ["implement"] }).workable === true,
++	JSON.stringify(await item(4)),
++);
++
++// ─── REPLACE: the old gate is replaced, not appended to ───
++await call("pm", "revise_work", { itemId: 4, blockedBy: [3] });
++check(
++	"a replacement gate is [3], not [1,3] — the old id is GONE",
++	JSON.stringify((await item(4)).blockedBy ?? null) === "[3]",
++	JSON.stringify(await item(4)),
++);
++check(
++	"the predicate reads the NEW gate (1 is done, so the row would be workable if 1 were still listed)",
++	workable(await item(4), "worker", { items: await items(), capabilities: ["implement"] }).workable === false,
++	JSON.stringify(await item(4)),
++);
++
++// ─── CLEAR ───
++await call("pm", "revise_work", { itemId: 4, blockedBy: [] });
++check(
++	"clearing a gate leaves the field ABSENT (never [])",
++	(await item(4)).blockedBy === undefined,
++	JSON.stringify(await item(4)),
++);
++check(
++	"a cleared gate is workable",
++	workable(await item(4), "worker", { items: await items(), capabilities: ["implement"] }).workable === true,
++	JSON.stringify(await item(4)),
++);
++
++// ─── the refusals, through the tool ───
++await call("pm", "revise_work", { itemId: 4, blockedBy: ["GATED on #3"] });
++check(
++	"prose in a gate is REFUSED at the schema boundary and the row is unchanged",
++	(await item(4)).blockedBy === undefined && /blockedBy\.0: must be integer/.test(await transcript("pm")),
++	(await transcript("pm")).slice(-300),
++);
++await call("pm", "revise_work", { itemId: 4, blockedBy: [999] });
++check(
++	"a gate naming a non-existent item is REFUSED (a dangling id reads as 'unblocked' forever)",
++	(await item(4)).blockedBy === undefined && /GATE_REFUSED: gate #999 names no queue item/.test(await transcript("pm")),
++	(await transcript("pm")).slice(-300),
++);
++await call("pm", "revise_work", { itemId: 4, blockedBy: [4] });
++check(
++	"a self-gate is REFUSED (a row cannot wait on itself)",
++	(await item(4)).blockedBy === undefined && /GATE_REFUSED: item #4 cannot gate itself/.test(await transcript("pm")),
++	(await transcript("pm")).slice(-300),
++);
++await call("pm", "send_work", { to: "worker", subject: "Child of 4", body: "gated on 4", blockedBy: [4] });
++const child = await idOf("Child of 4");
++await call("pm", "revise_work", { itemId: 4, blockedBy: [child] });
++check(
++	`a gate that closes a CYCLE is REFUSED before it is stored (4->${child}->4)`,
++	(await item(4)).blockedBy === undefined && new RegExp(`GATE_REFUSED: the gate on item #4 closes a CYCLE through #${child}`).test(await transcript("pm")),
++	(await transcript("pm")).slice(-400),
++);
++check(
++	"the child's own gate survived the refused write (only the row being edited was touched)",
++	JSON.stringify((await item(child)).blockedBy ?? null) === "[4]",
++	JSON.stringify(await item(child)),
++);
++
++// ─── a HELD row: the gateless parked rows this defect is about ───
++await call("pm", "revise_work", { itemId: 2, blockedBy: [3], subject: "Parked backlog row (gated)" });
++check(
++	"a gate can be written into a HELD row (the census found 118 rows with nothing written)",
++	JSON.stringify((await item(2)).blockedBy ?? null) === "[3]" && (await item(2)).status === "held",
++	JSON.stringify(await item(2)),
++);
++check(
++	"the subject change landed in the same call",
++	(await item(2)).subject === "Parked backlog row (gated)",
++	JSON.stringify(await item(2)),
++);
++await call("worker", "peek_queue", {});
++check(
++	"the gate is legible where a seat reads its own queue",
++	/Parked backlog row \(gated\) blockedBy=3\b/.test(await transcript("worker")),
++	(await transcript("worker")).slice(-600),
++);
++
++// The written gate SURVIVES the release and gates claim selection (#2673/#2712).
++await call("pm", "release_work", { itemId: 2 });
++check(
++	"the released row is queued and still carries the gate",
++	(await item(2)).status === "queued" && JSON.stringify((await item(2)).blockedBy ?? null) === "[3]",
++	JSON.stringify(await item(2)),
++);
++await call("worker", "claim_work", {});
++check(
++	"the oldest-workable claim SKIPS the gated row and NAMES why",
++	/SKIPPED \(addressed to you, not workable yet\): #2 \(gate-open:#3\(queued\)\)/.test(await transcript("worker")),
++	(await transcript("worker")).slice(-600),
++);
++
++// ─── a CLAIMED item is being acted on: its gate is not editable ───
++await call("pm", "revise_work", { itemId: 3, blockedBy: [1] });
++check(
++	"a claimed item refuses a gate write",
++	(await item(3)).blockedBy === undefined && /not unclaimed work \(status=claimed\)/.test(await transcript("pm")),
++	(await transcript("pm")).slice(-300),
++);
++
++// ─── a non-party cannot write a gate on someone else's row ───
++await call("intruder", "revise_work", { itemId: 2, blockedBy: [1] });
++check(
++	"a stranger cannot write a gate on a row it is not party to",
++	JSON.stringify((await item(2)).blockedBy ?? null) === "[3]" && /not yours to revise/.test(await transcript("intruder")),
++	(await transcript("intruder")).slice(-300),
++);
++
++// ─── the store-wide invariant ───
++const final = await items();
++check(
++	"no stored item anywhere carries an empty `[]` gate",
++	final.every((it) => !Array.isArray(it.blockedBy) || it.blockedBy.length > 0),
++	JSON.stringify(final.map((it) => [it.id, it.blockedBy])),
++);
++
++console.log(
++	failures === 0
++		? "\nGATE WRITE PATH PASS (set / replace / clear on an existing row; prose, dangling ids, self-gates and cycles refused; the workable predicate and claim selection honour the written gate)"
++		: `\nGATE WRITE PATH: ${failures} failing assertion(s)`,
++);
++process.exit(failures === 0 ? 0 : 1);
+--- docs/COMMANDS-AND-THE-BROKER.md (3 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/COMMANDS-AND-THE-BROKER.md b/docs/COMMANDS-AND-THE-BROKER.md
+index 3b0a79d3..530326fe 100644
+--- a/docs/COMMANDS-AND-THE-BROKER.md
++++ b/docs/COMMANDS-AND-THE-BROKER.md
+@@ -171,8 +171,9 @@ success: that is the fail-open ROADMAP 228 names, and it is also how a wrong `DU
+ store (see §4 and `docs/runbooks/session-start-cost.md`).
+ 
+ **Why `--held --with-gates` exists (#5770).** A census of parked rows was previously un runnable: `claim_work` on
+-a held row returns `NO_QUEUED_WORK` with no status/owner/gate, `revise_work` refuses a held row so the gate cannot
+-be written into it, and `release_work` refuses a row the caller neither sent nor received. The live store at the
++a held row returns `NO_QUEUED_WORK` with no status/owner/gate, `revise_work` refused a held row so the gate could
++not be written into it (#3570 fixed that: `revise_work` now takes `blockedBy` on any unclaimed row, `queued` or
++`held`), and `release_work` refuses a row the caller neither sent nor received. The live store at the
+ time of writing holds 438 held + 384 deferred rows, and `queue --status held` prints them with bodies. Measured in
+ the demo: the gate view is 17 KB where the full dump of the same fixture is 541 KB (31.8x), and it is bounded by
+ construction — bodies are dropped before projection, the row count is capped, and an unbounded request is refused
+--- docs/FEATURES.md (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/FEATURES.md b/docs/FEATURES.md
+index 4930603d..3f68d97a 100644
+--- a/docs/FEATURES.md
++++ b/docs/FEATURES.md
+@@ -26,7 +26,7 @@ Section 11 is planned, section 12 is deliberately absent.
+ | **Deferral** | A seat parks a claimed item on a question instead of guessing or going quiet: to the human operator (visible in `status`/`watch`, nothing enqueued) or to a seat (edge-gated, enqueued as real work), then `resume_work` takes it back. Not terminal â€” an item parked with no way back would be worse than the prose it replaces. `deferred_awaiting_answer` splits human- vs seat-parked and names the newest human-parked item | `src/rig.mjs` `defer_work`/`resume_work`, `src/attention.mjs` `deferred_awaiting_answer` | `demo/defer.test.mjs`, `demo/watchview.test.mjs` | `cli` |
+ | **Structured gate field (`blockedBy`)** | A queue row can carry a MACHINE-READABLE dependency, `blockedBy: [itemId…]`, persisted through the **existing** enqueue path (`send_work`) rather than a new write path or a parallel store (D24) — so "why is this parked?" stops being prose a reader has to interpret. It is the field the queue-lifecycle redesign derives `waiting`/`workable` from; until that mapping lands, the field is recorded and read but not yet acted on (#2951) | `src/rig.mjs` (accepts + persists `blockedBy` on `send_work`) | `demo/blockedby-field.test.mjs` | cli |
+ | **Deferral** | A seat parks a claimed item on a question instead of guessing or going quiet: to the human operator (visible in `status`/`watch`, nothing enqueued) or to a seat (edge-gated, enqueued as real work), then `resume_work` takes it back. Not terminal — an item parked with no way back would be worse than the prose it replaces. `deferred_awaiting_answer` splits human- vs seat-parked and names the newest human-parked item | `src/rig.mjs` `defer_work`/`resume_work`, `src/attention.mjs` `deferred_awaiting_answer` | `demo/defer.test.mjs`, `demo/watchview.test.mjs` | `cli` |
+-| **Queue curation** | A stale/superseded item can be cancelled (`cancel_work`, by its sender or holder) and an unclaimed item's subject/body revised (`revise_work`); `cancelled` is terminal alongside `done`, so the driver never wakes for it and it is not counted as non-terminal work | `src/rig.mjs` `isTerminalItem`/`revise_work`/`cancel_work` | `demo/curate.test.mjs` | `cli` |
++| **Queue curation** | A stale/superseded item can be cancelled (`cancel_work`, by its sender or holder) and an unclaimed item's subject/body revised (`revise_work`); the structured `blockedBy` gate can also be **set, replaced or cleared** on an unclaimed row — `queued` or `held` — with prose, dangling ids, self-gates and cycles refused before they are stored (#3570); `cancelled` is terminal alongside `done`, so the driver never wakes for it and it is not counted as non-terminal work | `src/rig.mjs` `isTerminalItem`/`revise_work`/`cancel_work`/`validateGate` | `demo/curate.test.mjs`, `demo/revise-gate-write.test.mjs` | `cli` |
+ | **Protocol primer** | A short protocol section appended to every seat prompt, so a migrated persona knows the tools exist | `cli.mjs` `buildSeatPrompt` | `demo/refresh.test.mjs` | `cli` |
+ 
+ The rig defines **four pi-durable documents** â€” `durig.seats`, `durig.edges`,
+--- docs/WORK-ITEM-SCHEMA.md (6 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/WORK-ITEM-SCHEMA.md b/docs/WORK-ITEM-SCHEMA.md
+index 1e987c85..55c765c8 100644
+--- a/docs/WORK-ITEM-SCHEMA.md
++++ b/docs/WORK-ITEM-SCHEMA.md
+@@ -115,6 +115,13 @@ by the named party.
+ 325 items already prove it decays. This is the field `lead` ruled onto the item record for `#2673`;
+ `blockedBy` plus optional `verifyOf` / `supersedes` / `re` / `landingOf` replace every prose gate.
+ 
++**The gate is editable, not write-once (#3570).** `send_work` sets it at creation; `revise_work` can SET,
++REPLACE or CLEAR it afterwards on any UNCLAIMED row — `queued` or `held` — and a replacement is a
++replacement, not an append (`[1,2]` → `[3]` leaves `[3]`; `[]` clears the field entirely). Four writes are
++refused before they can be stored, because each one produces a row that can never run while looking
++correctly gated: prose (`"GATED on #1"`), an id that names no queue item, a self-gate, and a gate that
++closes a cycle. A `claimed` or `deferred` row is not editable — someone is acting on it.
++
+ ### R6 — The notice form (the only title carrying another id)
+ A notice sets `notice: true` **and** titles itself `DONE #<id>: <the original item's title>`. Nothing else
+ may begin with a verb signalling another item. A notice must never be responded to with another notice.
+--- docs/runbooks/stale-held-backlog.md (4 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/runbooks/stale-held-backlog.md b/docs/runbooks/stale-held-backlog.md
+index d49579aa..d2bc1809 100644
+--- a/docs/runbooks/stale-held-backlog.md
++++ b/docs/runbooks/stale-held-backlog.md
+@@ -96,8 +96,7 @@ to `pm`; `pm` issues the transition. For each candidate:
+ 2. **Decide the correct action:**
+    - gate cleared, still right to do → `release_work(<id>)` (sender or recipient);
+    - no longer worth doing → `cancel_work(<id>, reason)`;
+-   - genuinely still blocked → leave it, but ask `pm` to record `blockedBy` so it is queryable
+-     ([`WORK-ITEM-SCHEMA.md`](../WORK-ITEM-SCHEMA.md) R5) rather than prose.
++   - genuinely still blocked → leave it parked, but **write the gate into the row**: `revise_work(<id>, blockedBy: [<ids>])` now works on a `held` row (#3570), so the hold is queryable instead of prose. A gate is a fact about what the row waits on; a park is a fact about why it is not in the claim slot — record the gate, and `block` if the reason is something else.
+ 3. **Spool the finding to `pm`** as an operator-authorized intent (never inline; never `send` while the
+    broker drives):
+ 
+@@ -136,6 +135,9 @@ to `pm`; `pm` issues the transition. For each candidate:
+   is acting; re-read its `status` and `to`/`from`.
+ - **The gate id does not resolve** → the row's gate is prose referring to an item that never existed under
+   that number; treat it as `manual` and hand it to `pm`.
++- **`GATE_REFUSED: ...`** (from `revise_work`, #3570) → the write path rejected the gate before storing it:
++  prose in the list, an id that names no queue item, a self-gate, or a gate that closes a cycle. Fix the ids;
++  a refused gate means the row is unchanged, so re-read it rather than assuming the write landed.
+ - **The intent is dead-lettered** (`<db>.broker.inbox.error/`) → the broker rejected the body; read the
+   `.reason` file, fix the body, re-spool with the same `--request-id` is **not** safe after a dead-letter
+   (the broker may have partially applied it) — use a fresh id and note the original.
+--- src/rig.mjs (86 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/rig.mjs b/src/rig.mjs
+index 77bbba42..46ea6d77 100644
+--- a/src/rig.mjs
++++ b/src/rig.mjs
+@@ -384,6 +384,64 @@ export function normalizeBlockedBy(list) {
+ 	return out.length ? out : null;
+ }
+ 
++/**
++ * Validate a gate BEFORE it is written to an EXISTING item (#3570).
++ *
++ * `send_work` can only gate an item at creation, and ids are assigned in increasing order, so a
++ * creation-time gate is trivially safe: it can only name an item that already exists and cannot
++ * name itself. A gate written AFTER the fact has none of those guarantees, so the write path has
++ * to check four things or it stores a row that can never become workable, silently:
++ *   prose     — "GATED on #1" is not a gate (R5 rejects it at the field boundary);
++ *   dangling  — an id that names no queue item is a typo that reads as "unblocked" forever,
++ *               because `workable()`'s conservative default passes unknown ids over;
++ *   self      — an item gated on itself never closes: it is a permanent starvation of its own slot;
++ *   cycle     — A gated on B, B gated on A: neither can ever be workable, and the queue LOOKS
++ *               correctly gated while nothing can run.
++ * Returns `{ ok, gate, error }`; `gate` is the normalized list (null = ungated) so the caller
++ * stores exactly what was validated. `error` is the legible refusal, never a stack.
++ */
++export function validateGate(item, gate, items = []) {
++	let normalized;
++	try {
++		normalized = normalizeBlockedBy(gate);
++	} catch (err) {
++		return { ok: false, gate: null, error: err.message };
++	}
++	if (normalized === null) return { ok: true, gate: null, error: null };
++	const byId = new Map((items ?? []).map((it) => [it.id, it]));
++	for (const id of normalized) {
++		if (id === item.id) {
++			return { ok: false, gate: normalized, error: `item #${item.id} cannot gate itself — a self-gate never closes` };
++		}
++		if (!byId.has(id)) {
++			return {
++				ok: false,
++				gate: normalized,
++				error: `gate #${id} names no queue item — every blockedBy id must point at an item that exists`,
++			};
++		}
++	}
++	// Walk the gate graph FROM the proposed gate. If we can get back to the item being edited, the
++	// gate closes a cycle. This is a plain DFS over a graph whose only edges are `blockedBy` lists.
++	const stack = [...normalized];
++	const seen = new Set();
++	while (stack.length) {
++		const id = stack.pop();
++		if (id === item.id) {
++			return {
++				ok: false,
++				gate: normalized,
++				error: `the gate on item #${item.id} closes a CYCLE through #${[...seen].join(", ")} — every row in a cycle waits on another row in it, so none of them can ever run`,
++			};
++		}
++		if (seen.has(id)) continue;
++		seen.add(id);
++		const target = byId.get(id);
++		for (const next of target?.blockedBy ?? []) if (!seen.has(next)) stack.push(next);
++	}
++	return { ok: true, gate: normalized, error: null };
++}
++
+ /**
+  * Enqueue work. Called inside a transaction; returns the assigned item id.
+  * `transitions` records who did what and when for the audit trail.
+@@ -480,7 +538,7 @@ export function bodyDigest(body) {
+  * Pure apart from the `item` mutation it is asked to perform; no I/O, so a demo can drive
+  * all three outcomes without a store.
+  */
+-export function applyRevise(item, { subject, body } = {}) {
++export function applyRevise(item, { subject, body, blockedBy } = {}) {
+ 	const submitted = [];
+ 	const changed = [];
+ 	if (subject !== undefined) {
+@@ -497,15 +555,36 @@ export function applyRevise(item, { subject, body } = {}) {
+ 			changed.push("body");
+ 		}
+ 	}
++	// #3570: the gate is a FIELD like any other, so it goes through the same comparison. A submitted
++	// gate REPLACES the stored one (it is not appended to), and an empty gate means UNGATED — the
++	// field is removed rather than stored as `[]`, because absence and empty both mean unblocked (§7)
++	// and an empty array would be a second, ambiguous spelling of the same fact.
++	if (blockedBy !== undefined) {
++		submitted.push("blockedBy");
++		const next = normalizeBlockedBy(blockedBy);
++		const prev = normalizeBlockedBy(item.blockedBy);
++		if (JSON.stringify(next) !== JSON.stringify(prev)) {
++			if (next) item.blockedBy = next;
++			else delete item.blockedBy;
++			changed.push("blockedBy");
++		}
++	}
+ 	// Verify inside the same call: a submitted field that did not land is a MISMATCH.
+ 	const failed = [];
+ 	if (subject !== undefined && item.subject !== subject) failed.push("subject");
+ 	if (body !== undefined && item.body !== body) failed.push("body");
++	if (blockedBy !== undefined) {
++		const next = normalizeBlockedBy(blockedBy);
++		if (JSON.stringify(next) !== JSON.stringify(normalizeBlockedBy(item.blockedBy))) failed.push("blockedBy");
++	}
+ 	const status = failed.length > 0 ? "mismatch" : changed.length > 0 ? "revised" : "no-change";
+ 	return {
+ 		status,
+ 		fields: status === "mismatch" ? failed : changed,
+ 		submitted,
++		// The gate as it now stands, normalized (null = ungated). A caller that wrote a gate can
++		// read back exactly what the row carries without re-querying the queue.
++		gate: normalizeBlockedBy(item.blockedBy),
+ 		digest: bodyDigest(item.body),
+ 		bodyBytes: Buffer.byteLength(String(item.body ?? ""), "utf8"),
+ 	};
+@@ -522,13 +601,17 @@ export function applyRevise(item, { subject, body } = {}) {
+  *  - `mismatch`  → an ERROR-shaped line (`REVISE_WORK_ERROR:`), never a success.
+  */
+ export function reviseMessage(item, outcome) {
++	// Only mention the gate if a gate was submitted — a subject-only revise says nothing about gates.
++	const gateText = outcome.submitted.includes("blockedBy")
++		? ` gate now ${outcome.gate ? `blockedBy=${outcome.gate.join(",")}` : "none (ungated)"}`
++		: "";
+ 	if (outcome.status === "mismatch") {
+ 		return `REVISE_WORK_ERROR: item #${item.id} did not take the submitted ${outcome.fields.join(", ")} (stored body sha256=${outcome.digest}); nothing was changed`;
+ 	}
+ 	if (outcome.status === "no-change") {
+-		return `item #${item.id} no change — the submitted ${outcome.submitted.join(" and ")} already matches the stored text (body sha256=${outcome.digest}); nothing was written`;
++		return `item #${item.id} no change — the submitted ${outcome.submitted.join(" and ")} already matches what is stored (${gateText ? gateText.trim() + "; " : ""}body sha256=${outcome.digest}); nothing was written`;
+ 	}
+-	return `item #${item.id} revised (${outcome.fields.join(", ")}); it stays queued for ${item.to}. Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
++	return `item #${item.id} revised (${outcome.fields.join(", ")});${gateText} it stays ${item.status} for ${item.to}. Stored body sha256=${outcome.digest} (${outcome.bodyBytes} bytes) — compare it with what you sent to verify the write landed.`;
+ }
+ 
+ // Ratcheting task tier (RANK 2 borrow; source vendor/eval/agent-fleet @ 7c34dde
+@@ -1272,11 +1355,15 @@ const Router = defineExtension({
+ 		defineTool({
+ 			name: "revise_work",
+ 			description:
+-				"Update the subject and/or body of a QUEUED item you sent or were sent, before it is claimed. A claimed item is being acted on and is not revised.",
++				"Update the subject and/or body of an UNCLAIMED item you sent or were sent, and set/replace/clear its structured `blockedBy` gate. A held (parked) row can have its gate written into it — that is the point (#3570). A claimed item is being acted on and is not revised.",
+ 			parameters: obj({
+ 				itemId: num(),
+ 				subject: opt(str()),
+ 				body: opt(str()),
++				blockedBy: opt(arr(int({ minimum: 1 }), {
++					description:
++						"structured gate to WRITE on an existing item: the queue-item ids it waits on. REPLACES any gate already there (ids are not appended to); `[]` clears the gate. Gates are ids, never prose. Omit to leave the gate alone.",
++				})),
+ 			}),
+ 			replay: "safe",
+ 			execute: async (args, api, context) => {
+@@ -1291,18 +1378,32 @@ const Router = defineExtension({
+ 					if (item.to !== me && item.from !== me)
+ 						return `item #${args.itemId} is not yours to revise (from=${item.from} to=${item.to})`;
+ 					// Only UNCLAIMED work: once claimed the recipient is acting on the
+-					// item, so changing its body under them would diverge from the run.
+-					if (item.status !== "queued")
+-						return `item #${args.itemId} is not queued (status=${item.status}); only unclaimed work can be revised`;
+-					if (args.subject === undefined && args.body === undefined)
+-						return "revise_work needs a subject and/or a body";
++					// item, so changing its body under them would diverge from the run. A HELD
++					// row is ALSO unclaimed — nobody has started it — and it is exactly the row
++					// the park census found gateless, so the gate has to be writable there (#3570).
++					if (item.status !== "queued" && item.status !== "held")
++						return `item #${args.itemId} is not unclaimed work (status=${item.status}); a claimed or deferred item cannot be revised`;
++					if (args.subject === undefined && args.body === undefined && args.blockedBy === undefined)
++						return "revise_work needs a subject, a body and/or a blockedBy gate";
++					// #3570: validate the gate BEFORE it is stored. `send_work` gets this for free
++					// (ids ascend, so a creation-time gate cannot be dangling or self-referential);
++					// a gate written later must be checked or the queue fills with rows that can
++					// never run and look correctly gated while doing so.
++					if (args.blockedBy !== undefined) {
++						const verdict = validateGate(item, args.blockedBy, queue.items);
++						if (!verdict.ok) return `GATE_REFUSED: ${verdict.error}`;
++					}
+ 					// #3435: the OUTCOME must be legible and checkable. A revise that produces no
+ 					// change used to be indistinguishable from a revise that was DROPPED — both
+ 					// came back as a success-shaped sentence — so the only way to notice a lost
+ 					// amendment was to re-read the item, which nobody does on a success path.
+ 					// `applyRevise` returns a status, the fields it actually wrote, and a digest of
+ 					// the STORED body so the caller can verify the write without re-reading.
+-					const outcome = applyRevise(item, { subject: args.subject, body: args.body });
++					const outcome = applyRevise(item, {
++						subject: args.subject,
++						body: args.body,
++						blockedBy: args.blockedBy,
++					});
+ 					if (outcome.status === "mismatch") {
+ 						// A change was submitted and did NOT land. Never report that as success.
+ 						return reviseMessage(item, outcome);

@@ -1,0 +1,638 @@
+Ref refs/heads/item-7018 — residue not in refs/heads/main (a9b0d007) at 2026-11-14.
+Merge base 1bbe8f34dea04614c0beb289dd653dde9357f9c2. Lost lines: 138 across 6 path(s).
+The verbatim hunk of every path that lost lines follows. Re-cut with:
+  node tools/ref-recut.mjs --ref refs/heads/item-7018 && node tools/recut-resolve.mjs --worktree .spike/recut-item-7018
+
+--- demo/commit-secrets.test.mjs (4 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/commit-secrets.test.mjs b/demo/commit-secrets.test.mjs
+index f5df47b1..15549964 100644
+--- a/demo/commit-secrets.test.mjs
++++ b/demo/commit-secrets.test.mjs
+@@ -99,7 +99,7 @@ try {
+ 	console.log("\na clean staged change commits");
+ 	writeFileSync(join(root, "clean.txt"), "nothing secret here\n");
+ 	git("add", "clean.txt");
+-	check("a clean staged file is allowed", (await commitCall("1", "git commit -m x")) === undefined);
++	check("a clean staged file is allowed", (await commitCall("1", "git commit -m x"))?.allowed === true);
+ 	git("commit", "-q", "-m", "clean", "--", "clean.txt");
+ 
+ 	console.log("\na secret-shaped value in the staged content is refused, without the value");
+@@ -148,14 +148,14 @@ try {
+ 		rmSync(notRepo, { recursive: true, force: true });
+ 	}
+ 	const warned = errLines.join("\n");
+-	check("the commit is ALLOWED (fail-open is ratified at this point)", warnVerdict === undefined, JSON.stringify(warnVerdict));
++	check("the commit is ALLOWED (fail-open is ratified at this point)", warnVerdict?.allowed === true, JSON.stringify(warnVerdict));
+ 	check("a SEATGUARD WARNING is printed", /SEATGUARD WARNING/.test(warned), warned);
+ 	check("the warning names the failure kind, never diff content", !/diff --git|\+\+\+ b\/|@@ /.test(warned), warned);
+ 	check("G-D: the warning path echoes NO secret value", !warned.includes(FAKE_KEY) && !warned.includes(AWS_KEY), warned);
+ 
+ 	console.log("\nnon-commit commands are untouched");
+-	check("git status is allowed", (await commitCall("4", "git status")) === undefined);
+-	check("a git commit with no staged secret is allowed", (await commitCall("5", "git commit --amend -m x")) === undefined);
++	check("git status is allowed", (await commitCall("4", "git status"))?.allowed === true);
++	check("a git commit with no staged secret is allowed", (await commitCall("5", "git commit --amend -m x"))?.allowed === true);
+ } finally {
+ 	rmSync(root, { recursive: true, force: true });
+ }
+--- demo/guard-verdict-coverage.test.mjs (undefined line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/guard-verdict-coverage.test.mjs b/demo/guard-verdict-coverage.test.mjs
+new file mode 100644
+index 00000000..72f390e8
+--- /dev/null
++++ b/demo/guard-verdict-coverage.test.mjs
+@@ -0,0 +1,141 @@
++// guard-verdict-coverage.test.mjs — #6184 (ROADMAP 133 acceptance; security position F-5 / gate G3).
++//
++// The claim tested here is NOT "the guard refuses the right things" — demo/seatguard.test.mjs already
++// holds that. This is narrower and harder to fake: a decision the guard makes must say WHICH rules
++// evaluated, and a rule that could not evaluate must be NAMED as not-evaluated. Before this row,
++// `beforeTool` answered with a block or with nothing, and "nothing" was indistinguishable from "checked
++// and clean". That is the audit hole the position doc calls F-5: a guard whose silence reads as a check
++// cannot be audited, and the refusal sink (ROADMAP 134) has nothing trustworthy to record.
++//
++// Failing-first: run this file in a detached worktree at the fork base. Group 1 fails because an ALLOW
++// is `undefined`, and every group that looks for a named gap fails because there is no record at all.
++
++import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
++import { execFileSync } from "node:child_process";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { beforeTool } from "../src/seatguard.mjs";
++import { offeredShellNames } from "../src/shellregistry.mjs";
++
++let failures = 0;
++function check(label, ok, detail = "") {
++	if (ok) {
++		console.log(`  ok   ${label}`);
++	} else {
++		failures += 1;
++		console.log(`  FAIL ${label}${detail ? ` — ${detail}` : ""}`);
++	}
++}
++
++const root = mkdtempSync(join(tmpdir(), "durig-guard-coverage-"));
++let notRepo = null; // declared outside the try so the finally block can still see it
++const priorRoot = process.env.DURIG_SEAT_ROOT;
++process.env.DURIG_SEAT_ROOT = root;
++const shell = offeredShellNames()[0];
++const context = {};
++const api = (cwd) => ({ conversationId: "c1", snapshot: async () => ({ cwd }) });
++
++const cmd = (id, command) => beforeTool({ type: "toolCall", id, name: shell, arguments: { command } }, api(root), context);
++const write = (id, path, content) => beforeTool({ type: "toolCall", id, name: "write", arguments: { path, content } }, api(root), context);
++const rulesOf = (v) => (Array.isArray(v?.rules) ? v.rules : []);
++const gapOf = (v, rule) => (v?.notEvaluated ?? []).find((e) => e?.rule === rule);
++
++// A payload shaped like the #623 incident: one line, long, code-shaped.
++const ONE_LINE = "const handler = (x) => { return x.map((y) => y.value); }; ".repeat(20);
++
++try {
++	console.log("\n1. an ALLOW is a verdict, not an absence");
++	const allowed = await cmd("1", "git status");
++	check("the seam returns a verdict object on an allowed call", allowed && typeof allowed === "object", JSON.stringify(allowed));
++	check("allowed is a boolean, not undefined", allowed?.allowed === true, JSON.stringify(allowed));
++	check("the verdict names the seam that decided", allowed?.seam === "beforeTool", JSON.stringify(allowed));
++	check("the verdict names the tool it decided on", allowed?.tool === shell, JSON.stringify(allowed));
++	check("COVERAGE IS NON-EMPTY on an ALLOW (F-5's assertion)", rulesOf(allowed).length > 0, JSON.stringify(allowed));
++	check("the rules that ran are named", rulesOf(allowed).includes("root-confinement") && rulesOf(allowed).includes("shell-write-targets") && rulesOf(allowed).includes("degraded-cwd"), JSON.stringify(rulesOf(allowed)));
++	check("nothing was skipped here, so notEvaluated is empty", Array.isArray(allowed?.notEvaluated) && allowed.notEvaluated.length === 0, JSON.stringify(allowed?.notEvaluated));
++
++	const readVerdict = await beforeTool({ type: "toolCall", id: "2", name: "read", arguments: { path: "src/x.mjs" } }, {}, context);
++	check("a call no write-rule can touch still carries coverage", readVerdict?.allowed === true && rulesOf(readVerdict).includes("withheld-shell"), JSON.stringify(readVerdict));
++
++	console.log("\n2. a heuristic that COULD NOT run is named, not passed silently (F-2)");
++	// A directory where a source file would be: the prior state EXISTS but cannot be read (EISDIR).
++	mkdirSync(join(root, "collapse", "victim.mjs"), { recursive: true });
++	const unreadable = await write("3", "collapse/victim.mjs", ONE_LINE);
++	const gap = gapOf(unreadable, "write-collapse");
++	check("the write is NOT refused — the collapse cannot be proven", unreadable?.allowed === true, JSON.stringify(unreadable));
++	check("the collapse heuristic reports that it did not run", gap !== undefined, JSON.stringify(unreadable?.notEvaluated));
++	check("the gap names the rule, its kind and the reason", gap?.kind === "heuristic" && /EISDIR/.test(gap?.why ?? ""), JSON.stringify(gap));
++	check("a rule that never reached a determination is not in `rules`", !rulesOf(unreadable).includes("write-collapse"), JSON.stringify(rulesOf(unreadable)));
++
++	// The contrast that makes the distinction meaningful: no prior file is a DETERMINATION, not a gap.
++	const brandNew = await write("4", "brand-new.mjs", ONE_LINE);
++	check("a write to a path with NO prior file is evaluated, not skipped", rulesOf(brandNew).includes("write-collapse") && gapOf(brandNew, "write-collapse") === undefined, JSON.stringify(brandNew));
++
++	// And a heuristic that ran and fired is recorded as having run.
++	writeFileSync(join(root, "prior.mjs"), Array.from({ length: 20 }, (_, i) => `const line${i} = ${i};`).join("\n") + "\n");
++	const collapsed = await write("5", "prior.mjs", ONE_LINE);
++	check("the collapse is still refused", collapsed?.allowed === false && /collapse/.test(collapsed?.block ?? ""), JSON.stringify(collapsed).slice(0, 200));
++	check("a rule that FIRED is listed as having run", rulesOf(collapsed).includes("write-collapse"), JSON.stringify(rulesOf(collapsed)));
++
++	console.log("\n3. a ratified fail-open reports itself (F-3: #1380's G-B ratification stays, the silence goes)");
++	notRepo = mkdtempSync(join(tmpdir(), "durig-guard-norepo-"));
++	const errLines = [];
++	const origErr = console.error;
++	console.error = (...a) => errLines.push(a.join(" "));
++	let unscanned;
++	process.env.DURIG_SEAT_ROOT = notRepo;
++	try {
++		unscanned = await beforeTool({ type: "toolCall", id: "6", name: shell, arguments: { command: "git commit -m x" } }, api(notRepo), context);
++	} finally {
++		console.error = origErr;
++		process.env.DURIG_SEAT_ROOT = root;
++	}
++	check("the commit is allowed (fail-open at THIS seam is ratified)", unscanned?.allowed === true, JSON.stringify(unscanned));
++	check("the verdict SAYS the scan did not run", gapOf(unscanned, "commit-secret-scan") !== undefined, JSON.stringify(unscanned?.notEvaluated));
++	check("the gap names git as the reason", /git could not produce/.test(gapOf(unscanned, "commit-secret-scan")?.why ?? ""), JSON.stringify(gapOf(unscanned, "commit-secret-scan")));
++	check("the SEATGUARD WARNING is still printed", /SEATGUARD WARNING/.test(errLines.join("\n")), errLines.join("\n").slice(0, 200));
++
++	console.log("\n4. a DENY carries coverage too");
++	const denied = await cmd("7", "wsl ls");
++	check("a refusal is a verdict with allowed: false", denied?.allowed === false, JSON.stringify(denied).slice(0, 200));
++	check("the refusal is still in the field the harness reads", typeof denied?.block === "string" && /refused by durig/.test(denied.block), denied?.block);
++	check("the DENY names the rule that fired", rulesOf(denied).includes("root-confinement"), JSON.stringify(denied?.rules));
++
++	console.log("\n5. partial coverage is recorded as partial");
++	const partial = await cmd("8", "Set-Content -Path $p -Value 'x'");
++	check("a computed path is not refused (that would be an outage)", partial?.allowed === true, JSON.stringify(partial));
++	check("the unresolvable target is named in notEvaluated", gapOf(partial, "shell-write-targets") !== undefined && /\$p/.test(gapOf(partial, "shell-write-targets")?.why ?? ""), JSON.stringify(partial?.notEvaluated));
++
++	console.log("\n6. the record is machine-readable and carries classes, never values");
++	execFileSync("git", ["-C", root, "init", "-q"]);
++	execFileSync("git", ["-C", root, "config", "user.email", "t@example.invalid"]);
++	const FAKE = "sk-deepinfra-" + "A".repeat(24);
++	writeFileSync(join(root, "leak.json"), JSON.stringify({ DEEPINFRA_API_KEY: FAKE }) + "\n");
++	execFileSync("git", ["-C", root, "add", "leak.json"]);
++	const secretDeny = await cmd("9", "git commit -m x");
++	check("the secret commit is refused", secretDeny?.allowed === false, JSON.stringify(secretDeny).slice(0, 200));
++	check("the whole verdict is JSON-serialisable", (() => { try { JSON.parse(JSON.stringify(secretDeny)); return true; } catch { return false; } })());
++	check("the verdict NEVER carries the value it refused", !JSON.stringify(secretDeny).includes(FAKE), JSON.stringify(secretDeny).slice(0, 200));
++	check("every notEvaluated entry has rule, kind and why", (secretDeny?.notEvaluated ?? []).every((e) => typeof e.rule === "string" && typeof e.kind === "string" && typeof e.why === "string"), JSON.stringify(secretDeny?.notEvaluated));
++	check("every kind is one of the two the position doc names", (secretDeny?.notEvaluated ?? []).every((e) => e.kind === "boundary" || e.kind === "heuristic"), JSON.stringify(secretDeny?.notEvaluated));
++
++	console.log("\n7. a rule that cannot evaluate is recorded, even where today it fails open");
++	const brokenApi = { conversationId: "c1", snapshot: () => { throw new Error("store read failed"); } };
++	const err2 = [];
++	const orig2 = console.error;
++	console.error = (...a) => err2.push(a.join(" "));
++	const blind = await beforeTool({ type: "toolCall", id: "10", name: "write", arguments: { path: "relative-write.mjs", content: "multi\nline\ncontent\n" } }, brokenApi, context);
++	console.error = orig2;
++	check("the degraded-cwd rule is recorded as NOT evaluated when the cwd snapshot fails", gapOf(blind, "degraded-cwd") !== undefined, JSON.stringify(blind?.notEvaluated));
++	check("the gap names the boundary kind and the failing read", gapOf(blind, "degraded-cwd")?.kind === "boundary" && /snapshot failed/.test(gapOf(blind, "degraded-cwd")?.why ?? ""), JSON.stringify(gapOf(blind, "degraded-cwd")));
++	check("the warning is still printed", /SEATGUARD WARNING/.test(err2.join("\n")), err2.join("\n").slice(0, 200));
++
++	console.log(failures === 0 ? "\nPASS — every decision names the rules that ran, and every rule that could not run is named" : `\nFAIL — ${failures} assertion(s) failed`);
++} finally {
++	process.env.DURIG_SEAT_ROOT = priorRoot;
++	rmSync(root, { recursive: true, force: true });
++	rmSync(notRepo, { recursive: true, force: true });
++}
++
++// Exiting inside the try would skip the cleanup above.
++process.exit(failures === 0 ? 0 : 1);
+--- demo/seatguard.test.mjs (12 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/seatguard.test.mjs b/demo/seatguard.test.mjs
+index 43b38ab1..bce60a91 100644
+--- a/demo/seatguard.test.mjs
++++ b/demo/seatguard.test.mjs
+@@ -64,12 +64,12 @@ try {
+ 	const hostShell = offeredShellNames()[0];
+ 	for (const command of ["node demo/cli.test.mjs", "git status", "git diff HEAD", "npm test", "rg wanted src"]) {
+ 		const verdict = await beforeTool({ type: "toolCall", id: "2", name: hostShell, arguments: { command } });
+-		check(`allowed: ${command} as a \`${hostShell}\` call`, verdict === undefined, JSON.stringify(verdict));
++		check(`allowed: ${command} as a \`${hostShell}\` call`, verdict?.allowed === true, JSON.stringify(verdict));
+ 	}
+ 
+ 	console.log("\nOnly shell tools are inspected, and nested calls are covered too");
+ 	const readCall = await beforeTool({ type: "toolCall", id: "3", name: "read", arguments: { path: "wsl ls" } });
+-	check("a non-shell tool is not inspected (its `path` is not a command)", readCall === undefined);
++	check("a non-shell tool is not inspected (its `path` is not a command)", readCall?.allowed === true);
+ 	const nested = await beforeTool({
+ 		type: "toolCall",
+ 		id: "4",
+@@ -79,7 +79,7 @@ try {
+ 	});
+ 	check("a nested call — how a codemode script reaches a tool — is blocked too", nested?.block?.includes("refused by durig"));
+ 	const missing = await beforeTool({ type: "toolCall", id: "5", name: "bash", arguments: {} });
+-	check("a shell call with no command string is left alone rather than guessed at", missing === undefined);
++	check("a shell call with no command string is left alone rather than guessed at", missing?.allowed === true);
+ 
+ 	// #5221 (RM-306): a shell tool this host is WITHHELD must be refused with the HOST reason, not as a
+ 	// generic not-found. pi settles an unresolvable name as `tool_unavailable: "Tool powershell is not
+@@ -140,7 +140,7 @@ try {
+ 	process.env.DURIG_ALLOW_PUSH = "1";
+ 	try {
+ 		const granted = await beforeTool(pushCall("git push origin main", "9"));
+-		check("the operator's grant, set in durig's environment, allows it", granted === undefined, JSON.stringify(granted));
++		check("the operator's grant, set in durig's environment, allows it", granted?.allowed === true, JSON.stringify(granted));
+ 		// Everything else stays refused whatever the grant says: it is a push exemption, not a
+ 		// general amnesty, and a grant that widened a different rule would be a silent hole.
+ 		const stillRefused = await beforeTool(pushCall("wsl ls", "10"));
+@@ -175,13 +175,13 @@ try {
+ 	);
+ 
+ 	const healthy = await beforeTool(as_tool({ path: target, content: multiline_payload }), {}, context);
+-	check("a healthy multi-line rewrite of the same file is allowed", healthy === undefined, JSON.stringify(healthy));
++	check("a healthy multi-line rewrite of the same file is allowed", healthy?.allowed === true, JSON.stringify(healthy));
+ 
+ 	const scratch = await beforeTool(as_tool({ path: join(root, "new-scratch.js"), content: code_payload }), {}, context);
+-	check("a one-line write to a file with no prior is allowed (new-file scratch)", scratch === undefined, JSON.stringify(scratch));
++	check("a one-line write to a file with no prior is allowed (new-file scratch)", scratch?.allowed === true, JSON.stringify(scratch));
+ 
+ 	const config1Liner = await beforeTool(as_tool({ path: join(root, "durig.config.json"), content: '{"note":"config","a":1}' }), {}, context);
+-	check("a one-line JSON config rewrite is allowed (not a source file)", config1Liner === undefined, JSON.stringify(config1Liner));
++	check("a one-line JSON config rewrite is allowed (not a source file)", config1Liner?.allowed === true, JSON.stringify(config1Liner));
+ 
+ 	const shellStill = await beforeTool(pushCall("git reset --hard HEAD~1", "12"));
+ 	check("the write branch does not change the shell verdicts", shellStill?.block?.includes("refused by durig"), JSON.stringify(shellStill));
+@@ -199,10 +199,10 @@ try {
+ 	);
+ 
+ 	const tabsAndNewlines = await beforeTool(as_tool({ path: join(root, "clean.md"), content: "# title\n\tindented\nplain\n" }), {}, context);
+-	check("tab, LF and CR stay legal (\u0009/\u000a/\u000d are ordinary text)", tabsAndNewlines === undefined, JSON.stringify(tabsAndNewlines));
++	check("tab, LF and CR stay legal (\u0009/\u000a/\u000d are ordinary text)", tabsAndNewlines?.allowed === true, JSON.stringify(tabsAndNewlines));
+ 
+ 	const nonAscii = await beforeTool(as_tool({ path: join(root, "unicode.md"), content: "caf\u00e9 \u2014 \u4e2d\u6587 \u{1f600}\n" }), {}, context);
+-	check("non-ASCII text is not mistaken for control bytes (UTF-8 multibyte never drops below 0x80)", nonAscii === undefined, JSON.stringify(nonAscii));
++	check("non-ASCII text is not mistaken for control bytes (UTF-8 multibyte never drops below 0x80)", nonAscii?.allowed === true, JSON.stringify(nonAscii));
+ 
+ 	console.log("\n#3961: a seat whose cwd DEGRADED to the shared checkout must not write or commit there");
+ 	// `complete_work` silently resets the persisted cwd to the broker's cwd (the shared tree), so the
+@@ -226,11 +226,11 @@ try {
+ 	);
+ 	// An ABSOLUTE path is a deliberate target — left to the existing guards, not this one.
+ 	const degradedAbsolute = await beforeTool(as_tool({ path: join(root, "abs.js"), content: "const z = 1;\n" }), degradedApi, context);
+-	check("an ABSOLUTE-path write from the degraded cwd is NOT refused by this guard", degradedAbsolute === undefined, JSON.stringify(degradedAbsolute));
++	check("an ABSOLUTE-path write from the degraded cwd is NOT refused by this guard", degradedAbsolute?.allowed === true, JSON.stringify(degradedAbsolute));
+ 	// A seat whose persisted cwd is its OWN worktree (not the shared tree) is NOT refused.
+ 	const ownApi = { conversationId: "conv-own", snapshot: async () => ({ cwd: root }) };
+ 	const ownWrite = await beforeTool(as_tool({ path: "scratch-own.js", content: "const z = 1;\n" }), ownApi, context);
+-	check("a seat with its OWN worktree cwd is NOT refused", ownWrite === undefined, JSON.stringify(ownWrite));
++	check("a seat with its OWN worktree cwd is NOT refused", ownWrite?.allowed === true, JSON.stringify(ownWrite));
+ 	// #3992: from the degraded cwd a SHELL command is refused OUTRIGHT (it can destroy the shared tree).
+ 	const degradedShell = await beforeTool(
+ 		{ type: "toolCall", id: "d2", name: "bash", arguments: { command: "git checkout -- ." } },
+@@ -255,7 +255,7 @@ try {
+ 		ownApi,
+ 		context,
+ 	);
+-	check("#3992: a shell command from a seat's OWN worktree is NOT refused", ownShell === undefined, JSON.stringify(ownShell));
++	check("#3992: a shell command from a seat's OWN worktree is NOT refused", ownShell?.allowed === true, JSON.stringify(ownShell));
+ 
+ 	console.log(failures === 0 ? "\nPASS — the guard holds" : `\nFAIL — ${failures} assertion(s) failed`);
+ } finally {
+--- demo/test-areas.json (1 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/demo/test-areas.json b/demo/test-areas.json
+index 18fe6c49..38616f0d 100644
+--- a/demo/test-areas.json
++++ b/demo/test-areas.json
+@@ -248,6 +248,7 @@
+       "demo/confine-rebase-property.test.mjs",
+       "demo/confine-token-awareness.test.mjs",
+       "demo/confine.test.mjs",
++      "demo/guard-verdict-coverage.test.mjs",
+       "demo/guard.test.mjs",
+       "demo/git-guard-census.test.mjs",
+       "demo/sanitize-terminal-control.test.mjs",
+--- docs/reviews/security-fail-closed-guard-decision-point.md (3 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/docs/reviews/security-fail-closed-guard-decision-point.md b/docs/reviews/security-fail-closed-guard-decision-point.md
+index 72b9937f..4d3e6c39 100644
+--- a/docs/reviews/security-fail-closed-guard-decision-point.md
++++ b/docs/reviews/security-fail-closed-guard-decision-point.md
+@@ -4,9 +4,9 @@ position: security-fail-closed-guard-decision-point
+ symptom: "a guard that cannot evaluate lets the action through, and nothing names that as a decision"
+ writes: false
+ precondition: "read-only probe of src/seatguard.mjs, src/confine.mjs, src/genlockreserve.mjs and the guard demos"
+-last_verified: 2026-11-09
++last_verified: 2026-11-11
+ verified_by: security
+-evidence: "item #1779, worktree item-1779 @HEAD: `node demo/seatguard.test.mjs` exit 0, `node demo/confine.test.mjs` exit 0, `node demo/commit-secrets.test.mjs` exit 0; fail-open sites at src/seatguard.mjs:42,50,282,355-374 and src/genlockreserve.mjs:78. Re-checked at main f192f543 (#6208): lines 42,50,362,78 hold verbatim; the collapse-detector catch moved 281 -> 282, which is why every citation here carries a re-check date; `git show --stat 5686be7` = 1 file, docs only; `grep -rn WORKTREE_ROOT --include=*.mjs src/` exit 1 (the #2425 seam does not exist yet)"
++evidence: "item #1779, worktree item-1779 @HEAD: `node demo/seatguard.test.mjs` exit 0, `node demo/confine.test.mjs` exit 0, `node demo/commit-secrets.test.mjs` exit 0; fail-open sites at src/seatguard.mjs:42,50,282,355-374 and src/genlockreserve.mjs:78. Re-checked at main f192f543 (#6208): lines 42,50,362,78 hold verbatim; the collapse-detector catch moved 281 -> 282, which is why every citation here carries a re-check date; `git show --stat 5686be7` = 1 file, docs only; `grep -rn WORKTREE_ROOT --include=*.mjs src/` exit 1 (the #2425 seam does not exist yet). F-5/G3 LANDED at 67b91e0a (#6184): `node demo/guard-verdict-coverage.test.mjs` exit 0 (7 groups), `node demo/seatguard.test.mjs` exit 0, `node demo/commit-secrets.test.mjs` exit 0; the :42/:50/:282/:355-374 citations above predate #6184 and have shifted - `grep -n "fail-open\|fail-closed" src/seatguard.mjs` on that tree reports :85, :93, :430, :443"
+ check_rule: null
+ ---
+ 
+@@ -72,6 +72,7 @@ The danger is not that a heuristic fails open. The danger is that a heuristic's
+ 
+ - **Severity:** medium (auditability, not direct compromise).
+ - **Fix:** the seam returns a verdict object on allow as well as deny: `{allowed: true, seam: "beforeTool", rules: ["git-census", "root-confinement", "spool-path", "commit-secret-scan"], notEvaluated: [...]}`. A demo asserts the list is non-empty and that a rule registered as `not-evaluated` is visible rather than silent.
++- **Landed (#6184, commit 67b91e0a).** Eight rules are named in `GUARD_RULES` at the top of `src/seatguard.mjs` — five boundaries (`withheld-shell`, `degraded-cwd`, `root-confinement`, `spool-path`, `shell-write-targets`) and three heuristics (`control-bytes`, `write-collapse`, `commit-secret-scan`) — and every return of `beforeTool` is `verdict(allowed[, block]`) carrying `rules` (determinations reached) and `notEvaluated` (`{rule, kind, why}`). Three things this row makes visible that were previously invisible: the commit scan's ratified fail-open says so; a prior file that exists but cannot be read is a gap, while a file that does not exist is a determination; and a shell command with an unresolvable write target reports the part it could not check. G2 (does a boundary DENY when it cannot evaluate?) is deliberately NOT touched here — that is the other half of #6180.
+ 
+ ## ROADMAP 134: the refusal shape, and the gate it opens
+ 
+@@ -114,6 +115,7 @@ Ran on this worktree (`item-1779`, pi-durable 1.3.0 from the lockfile; **not** v
+ node demo/seatguard.test.mjs        # exit 0 — "PASS — the guard holds"
+ node demo/confine.test.mjs          # exit 0 — "PASS — all confine canaries held"
+ node demo/commit-secrets.test.mjs   # exit 0 — includes the ratified fail-open assertion at :151
++node demo/guard-verdict-coverage.test.mjs   # exit 0 — F-5/G3: an ALLOW names its rules, a rule that could not run is named as a gap (#6184)
+ grep -n "fail-open\|fail-closed" src/seatguard.mjs src/confine.mjs src/genlockreserve.mjs src/worktree.mjs src/gitobject.mjs
+ ```
+--- src/seatguard.mjs (117 line(s) of the ref not present in refs/heads/main) ---
+diff --git a/src/seatguard.mjs b/src/seatguard.mjs
+index 851eef3f..10a42a5d 100644
+--- a/src/seatguard.mjs
++++ b/src/seatguard.mjs
+@@ -22,6 +22,49 @@ import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
+ import { seatShellSelection, shellToolNames, shellWithheldReason } from "./shellregistry.mjs";
+ import { afterTool as redactToolResult } from "./secretredact.mjs";
+ 
++/**
++ * #6184 (ROADMAP 133 acceptance; security position F-5 / gate G3, docs/reviews/security-fail-closed-guard-decision-point.md):
++ * the seam's decision carries its own coverage.
++ *
++ * `beforeTool` answered with a block or with nothing, and "nothing" was ambiguous: it could mean
++ * "every rule ran and found nothing" or "a rule could not run". A guard whose silence reads as a check
++ * is a guard nobody can audit — that is F-5, and it is the gate the audit sink (ROADMAP 134) needs
++ * before it can record anything trustworthy.
++ *
++ * Every decision now returns the same shape:
++ *   `{ allowed, seam, tool, rules: [<ids that evaluated>], notEvaluated: [{rule, kind, why}] }`
++ * plus `block` on a refusal. pi-durable reads only `block` and `arguments` from a hook result
++ * (`dist/harness/tool.js`), so the extra fields ride along without changing behaviour.
++ *
++ * `kind` is the position doc's classification: a BOUNDARY decides whether a seat may touch something it
++ * does not own; a HEURISTIC raises confidence about a known incident shape and MAY fail open — but it
++ * may not fail silently. Whether a boundary should DENY when it cannot evaluate (position gate G2) is
++ * the other half of #6180, not this row; what this row guarantees is only that a rule which did not run
++ * is NAMED rather than absent.
++ */
++const GUARD_RULES = {
++	"withheld-shell": { kind: "boundary", source: "src/shellregistry.mjs" },
++	"degraded-cwd": { kind: "boundary", source: "src/seatguard.mjs sharedTreeRefusal" },
++	"root-confinement": { kind: "boundary", source: "src/confine.mjs refusalFor" },
++	"spool-path": { kind: "boundary", source: "src/seatguard.mjs refusalForSpoolPath" },
++	"shell-write-targets": { kind: "boundary", source: "src/writetargets.mjs writeTargets" },
++	"control-bytes": { kind: "heuristic", source: "src/seatguard.mjs refusalForControlBytes" },
++	"write-collapse": { kind: "heuristic", source: "src/seatguard.mjs refusalForWrite" },
++	"commit-secret-scan": { kind: "heuristic", source: "src/seatguard.mjs secretOffendersInDiff" },
++};
++
++/** A fresh coverage record for one call. */
++function newCoverage() {
++	return { ran: [], notEvaluated: [] };
++}
++function ranRule(coverage, rule) {
++	if (coverage && !coverage.ran.includes(rule)) coverage.ran.push(rule);
++}
++function ruleCouldNotEvaluate(coverage, rule, why) {
++	if (!coverage) return;
++	coverage.notEvaluated.push({ rule, kind: GUARD_RULES[rule]?.kind ?? "unknown", why });
++}
++
+ /** pi-durable's own write-path normalization (tools/path-utils.js): unicode
+  * spaces collapse to a plain space and a leading "@" booking prefix is dropped,
+  * so the guard's peek resolves the SAME path the write tool will. */
+@@ -60,14 +103,20 @@ async function seatGraphRoot(api, context) {
+  * only when a persisted cwd is KNOWN and equals the shared tree, so an empty/unknown api is not
+  * treated as a degradation.
+  */
+-async function persistedSeatCwd(api, context) {
+-	if (api?.conversationId === undefined || typeof api?.snapshot !== "function") return null;
++async function persistedSeatCwd(api, context, coverage = null) {
++	// #6184: "I could not read the cwd" is a coverage fact, not a null. Returning bare null made the
++	// degraded-cwd rule look like it had checked and found nothing.
++	if (api?.conversationId === undefined || typeof api?.snapshot !== "function") {
++		ruleCouldNotEvaluate(coverage, "degraded-cwd", "this call carries no conversation, so the seat's persisted cwd cannot be read");
++		return { cwd: null, readable: false };
++	}
+ 	try {
+ 		const agent = await api.snapshot(AgentDoc, api.conversationId, context);
+-		return agent?.cwd ?? null;
++		return { cwd: agent?.cwd ?? null, readable: true };
+ 	} catch (err) {
+ 		console.error(`SEATGUARD WARNING: seat cwd snapshot failed: ${err?.message ?? err}`);
+-		return null;
++		ruleCouldNotEvaluate(coverage, "degraded-cwd", `the seat cwd snapshot failed (${err?.message ?? err})`);
++		return { cwd: null, readable: false };
+ 	}
+ }
+ 
+@@ -121,10 +170,14 @@ async function sharedTreeRefusal(
+ 	api,
+ 	context,
+ 	{ path = null, command = null, shell = false, verb = null } = {},
++	coverage = null,
+ ) {
+ 	// Only a KNOWN persisted cwd can be "degraded": with no persisted cwd the root is a fallback
+ 	// (DURIG_SEAT_ROOT / process cwd) and a seat that never prepared a workspace is not our case.
+-	const seatRoot = await persistedSeatCwd(api, context);
++	const persisted = await persistedSeatCwd(api, context, coverage);
++	if (!persisted.readable) return null; // already recorded as NOT-EVALUATED in the coverage record
++	ranRule(coverage, "degraded-cwd");
++	const seatRoot = persisted.cwd;
+ 	if (seatRoot === null || !sameRoot(seatRoot, process.cwd())) return null;
+ 	// #3992: from a degraded cwd a seat must not RUN anything. A shell command can destroy work in the
+ 	// tree that is not its own (`git checkout`, `git reset`, `git clean`, a raw write script), and that
+@@ -236,8 +289,12 @@ const SERIALIZATION_RE = /(?:^|[\s;{}])(?:const|let|var|import|export|function)\
+ const ALLOWED_CONTROL = new Set([0x09, 0x0a, 0x0d]);
+ const TEXT_EXT = /\.(mjs|cjs|js|jsx|ts|mts|cts|json|md|txt|yml|yaml|toml|css|html|sh|ps1)$/i;
+ 
+-export function refusalForControlBytes({ path, content }) {
+-	if (typeof path !== "string" || typeof content !== "string") return null;
++export function refusalForControlBytes({ path, content, coverage = null }) {
++	if (typeof path !== "string" || typeof content !== "string") {
++		ruleCouldNotEvaluate(coverage, "control-bytes", "the call carried no path/content string to inspect");
++		return null;
++	}
++	ranRule(coverage, "control-bytes");
+ 	if (!TEXT_EXT.test(path)) return null; // not a text file: bytes may be the point
+ 	const found = new Set();
+ 	for (let i = 0; i < content.length; i++) {
+@@ -265,21 +322,31 @@ export function refusalForControlBytes({ path, content }) {
+  * RECOVERY hint ("recover from git"), because the realistic emergency is not
+  * an error — it is the LACK of one.
+  */
+-export function refusalForWrite({ root, path, content }) {
+-	if (typeof path !== "string" || typeof content !== "string") return null;
+-	if (content.includes("\n")) return null; // multi-line content is not the incident
+-	if (content.length < MIN_SUSPICIOUS_LENGTH) return null;
++export function refusalForWrite({ root, path, content, coverage = null }) {
++	if (typeof path !== "string" || typeof content !== "string") {
++		ruleCouldNotEvaluate(coverage, "write-collapse", "the call carried no path/content string to inspect");
++		return null;
++	}
++	if (content.includes("\n")) { ranRule(coverage, "write-collapse"); return null; } // multi-line content is not the incident
++	if (content.length < MIN_SUSPICIOUS_LENGTH) { ranRule(coverage, "write-collapse"); return null; }
+ 	/* path: only .mjs/.ts/.js/.json source files bearing multi-line, rug form
+ 	   are prevented from a collapsed rewrite; one-liner config dumps sail through. */
+-	if (!/\.(mjs|cjs|js|jsx|ts|mts|cts)$/.test(path)) return null;
+-	if (!SERIALIZATION_RE.test(content)) return null; // not code-shaped, no refusal
++	if (!/\.(mjs|cjs|js|jsx|ts|mts|cts)$/.test(path)) { ranRule(coverage, "write-collapse"); return null; }
++	if (!SERIALIZATION_RE.test(content)) { ranRule(coverage, "write-collapse"); return null; } // not code-shaped, no refusal
+ 	// The file's PRIOR state decides: a pre-existing MULTI-LINE source that this
+ 	// call would collapse is the corruption incident.
+ 	let prior;
+ 	try {
+ 		prior = readFileSync(absoluteSeatPath(root, path), "utf8");
+-	} catch {
+-		return null; // unreadable/no prior: not provably a collapse, so not refused
++		ranRule(coverage, "write-collapse");
++	} catch (err) {
++		// #6184: two different things hide behind one `catch`. A file that does not EXIST has no prior
++		// state to collapse — that is a determination, so the rule ran. A file that EXISTS but cannot be
++		// READ (EISDIR, EACCES, ELOOP) has a prior state the rule could not look at, and that must not be
++		// reported as "checked and clean" (position F-2).
++		if (err?.code === "ENOENT") { ranRule(coverage, "write-collapse"); return null; }
++		ruleCouldNotEvaluate(coverage, "write-collapse", `the prior state of ${path} could not be read (${err?.code ?? err?.message ?? err})`);
++		return null;
+ 	}
+ 	const priorLines = prior.split(/[\r\n]+/).filter((l) => l.trim() !== "").length;
+ 	if (priorLines < MIN_SUSPICIOUS_LINES) return null;
+@@ -352,10 +419,11 @@ function stagedDiff(root, command) {
+ }
+ 
+ /** The block text for a commit whose staged content carries a secret, or null. */
+-function commitSecretRefusal(root, command) {
++function commitSecretRefusal(root, command, coverage = null) {
+ 	let diff;
+ 	try {
+ 		diff = stagedDiff(root, command);
++		ranRule(coverage, "commit-secret-scan");
+ 	} catch (err) {
+ 		// #1380 (G-B; security position @cf84825 C2): fail-OPEN is RATIFIED at THIS point — the
+ 		// commit needs the same git whose failure opened the gate, so an unscanned commit via
+@@ -372,6 +440,10 @@ function commitSecretRefusal(root, command) {
+ 		console.error(
+ 			`SEATGUARD WARNING: the commit-time secret scan could not run (${detail}) — the commit proceeds UNSCANNED`,
+ 		);
++		// #6184: the fail-open here is RATIFIED (#1380 G-B), but ratification is not silence: the verdict
++		// now says the scan did not run, so the audit trail can distinguish "scanned and clean" from
++		// "could not scan" instead of reading the absence of a block as a passed check.
++		ruleCouldNotEvaluate(coverage, "commit-secret-scan", `git could not produce the staged diff (${detail})`);
+ 		return null;
+ 	}
+ 	const offenders = secretOffendersInDiff(diff);
+@@ -397,8 +469,12 @@ function commitSecretRefusal(root, command) {
+  * demo/control-plane-gate.test.mjs, not hidden.
+  */
+ const SPOOL_PATH_RE = /(?:^|[\\/])[^\\/\s]*\.broker\.inbox(?:\.error)?(?:[\\/]|$)/;
+-export function refusalForSpoolPath(target) {
+-	if (typeof target !== "string" || target === "") return null;
++export function refusalForSpoolPath(target, coverage = null) {
++	if (typeof target !== "string" || target === "") {
++		ruleCouldNotEvaluate(coverage, "spool-path", "the call carried no target string to test");
++		return null;
++	}
++	ranRule(coverage, "spool-path");
+ 	if (!SPOOL_PATH_RE.test(target)) return null;
+ 	return (
+ 		"refused by durig: that path is the broker SPOOL directory (a control-plane surface) — " +
+@@ -438,19 +514,33 @@ export function withheldShellRefusal(name, host = {}) {
+  * `ToolHookCall.parent` is set for a nested call - one a running tool made through
+  * `executeTool()`, which is how a codemode script reaches any tool - so this covers those too,
+  * which a coding-agent `tool_call` event could not.
++ *
++ * #6184: every return is a verdict, ALLOW included. `{allowed, seam, tool, rules, notEvaluated}` —
++ * the rules that reached a determination, and the rules that could not be evaluated with the reason.
++ * A rule may appear in BOTH lists when it checked part of the surface and could not check the rest;
++ * the `why` names the part that was missed. pi-durable reads only `block`/`arguments` from this result,
++ * so the coverage fields do not change what the harness does — they change what the record can say.
+  */
+ export async function beforeTool(call, api, context) {
++	const coverage = newCoverage();
++	const verdict = (allowed, block) => {
++		const v = { allowed, seam: "beforeTool", tool: call?.name, rules: coverage.ran, notEvaluated: coverage.notEvaluated };
++		if (block !== undefined) v.block = block;
++		return v;
++	};
+ 	// RM-306 (#5221): a withheld shell name is refused with the host reason before anything else runs.
++	// The name check runs for EVERY call, so it is always in the coverage record.
++	ranRule(coverage, "withheld-shell");
+ 	if (SHELL_TOOLS.has(call?.name)) {
+ 		const withheld = withheldShellRefusal(call.name);
+-		if (withheld !== null) return { block: withheld };
++		if (withheld !== null) return verdict(false, withheld);
+ 	}
+ 	const command = SHELL_TOOLS.has(call?.name) ? call.arguments?.command : undefined;
+ 	if (typeof command !== "string") {
+ 		// #1966 layer (ii): a write/edit into the broker spool is refused before it lands.
+ 		if (call?.name === "write" || call?.name === "edit") {
+-			const spool = refusalForSpoolPath(call.arguments?.path);
+-			if (spool !== null) return { block: spool };
++			const spool = refusalForSpoolPath(call.arguments?.path, coverage);
++			if (spool !== null) return verdict(false, spool);
+ 		}
+ 		// #673: writes get the same refusal channel (`block`). Two corruption
+ 		// shapes are checked at call time: class 2 (stray control bytes) from the
+@@ -460,40 +550,42 @@ export async function beforeTool(call, api, context) {
+ 		// the seat's own tree, not the broker process's cwd.
+ 		if (call?.name === "write" || call?.name === "edit") {
+ 			// #3961: a degraded cwd (the shared checkout) must not take a RELATIVE-path write.
+-			const degraded = await sharedTreeRefusal(api, context, { path: call.arguments?.path });
+-			if (degraded !== null) return { block: degraded };
++			const degraded = await sharedTreeRefusal(api, context, { path: call.arguments?.path }, coverage);
++			if (degraded !== null) return verdict(false, degraded);
+ 		}
+ 		if (call?.name === "write") {
+-			const shape = { path: call.arguments?.path, content: call.arguments?.content };
++			const shape = { path: call.arguments?.path, content: call.arguments?.content, coverage };
+ 			const refusal =
+ 				refusalForControlBytes(shape) ??
+-				refusalForWrite({ root: await seatGraphRoot(api, context), path: shape.path, content: shape.content });
+-			return refusal === null ? undefined : { block: refusal };
++				refusalForWrite({ root: await seatGraphRoot(api, context), path: shape.path, content: shape.content, coverage });
++			return refusal === null ? verdict(true) : verdict(false, refusal);
+ 		}
+-		return undefined;
++		return verdict(true);
+ 	}
+ 	// #3961/#3992: a commit from the DEGRADED cwd (the shared checkout) lands ON main, bypassing the
+ 	// landing pass - refuse it with the precise diagnosis FIRST.
+ 	if (GIT_COMMIT_RE.test(command)) {
+-		const degraded = await sharedTreeRefusal(api, context, { command });
+-		if (degraded !== null) return { block: degraded };
++		const degraded = await sharedTreeRefusal(api, context, { command }, coverage);
++		if (degraded !== null) return verdict(false, degraded);
+ 	}
+ 	// #3992: any OTHER shell command from a degraded cwd is refused outright, before any command
+ 	// classification - `run` is what has actually destroyed work in this repo.
+-	const degradedShell = await sharedTreeRefusal(api, context, { shell: true, verb: call?.name });
+-	if (degradedShell !== null) return { block: degradedShell };
++	const degradedShell = await sharedTreeRefusal(api, context, { shell: true, verb: call?.name }, coverage);
++	if (degradedShell !== null) return verdict(false, degradedShell);
+ 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
+ 	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)
+ 	// can resolve its TARGET instead of pattern-matching the verb.
+ 	const guardRoot = await seatGraphRoot(api, context);
+-	const refusal = refusalFor(command, { root: guardRoot, cwd: guardRoot }) ?? refusalForSpoolPath(command);
+-	if (refusal !== null) return { block: refusal };
++	const refusal = refusalFor(command, { root: guardRoot, cwd: guardRoot }) ?? refusalForSpoolPath(command, coverage);
++	ranRule(coverage, "root-confinement");
++	if (refusal !== null) return verdict(false, refusal);
+ 	// #4367: a shell command string that WRITES outside the seat's worktree. The containment guard
+ 	// exists (confine.mjs `confinedEnv`), but only structured calls reach it; this is the resolver's
+ 	// wiring. `unresolved` is REPORTED rather than passed silently — a form nobody could read is a
+-	// form nobody checked, and its silence must not look like "nothing was wrong".
+-	const shellWrite = shellWriteRefusal({ command, root: await seatGraphRoot(api, context) });
+-	if (shellWrite.block !== null) return { block: shellWrite.block };
++	// form nobody checked, and its silence must not look like "nothing was wrong". #6184 puts the same
++	// fact in the verdict, so it survives into a record instead of only a stderr line.
++	const shellWrite = shellWriteRefusal({ command, root: await seatGraphRoot(api, context), coverage });
++	if (shellWrite.block !== null) return verdict(false, shellWrite.block);
+ 	if (shellWrite.unresolved.length > 0) {
+ 		console.error(
+ 			`durig guard: ${shellWrite.unresolved.length} write target(s) in this shell command could not be resolved (${shellWrite.unresolved
+@@ -503,10 +595,10 @@ export async function beforeTool(call, api, context) {
+ 	}
+ 	// #1317: a commit lands durable, portable history — gate its staged content.
+ 	if (GIT_COMMIT_RE.test(command)) {
+-		const block = commitSecretRefusal(await seatGraphRoot(api, context), command);
+-		if (block !== null) return { block };
++		const block = commitSecretRefusal(await seatGraphRoot(api, context), command, coverage);
++		if (block !== null) return verdict(false, block);
+ 	}
+-	return undefined;
++	return verdict(true);
+ }
+ 
+ /**
+@@ -526,8 +618,16 @@ export async function beforeTool(call, api, context) {
+  * tree" would be read as forbidding the GOAL, and the next seat routes AROUND the guard. So it says
+  * what to do instead: the edit tool, your own worktree, and a git operation for tracked paths.
+  */
+-export function shellWriteRefusal({ command, root, cwd = root }) {
++export function shellWriteRefusal({ command, root, cwd = root, coverage = null }) {
+ 	const { targets, unresolved } = writeTargets(command, { cwd });
++	ranRule(coverage, "shell-write-targets");
++	if (unresolved.length > 0) {
++		ruleCouldNotEvaluate(
++			coverage,
++			"shell-write-targets",
++			`${unresolved.length} write target(s) in the command could not be resolved (${unresolved.map((u) => u.raw).join(", ")})`,
++		);
++	}
+ 	const escapes = targets.filter((t) => !isInside(root, t.path));
+ 	if (escapes.length === 0) return { block: null, unresolved, targets };
+ 	const named = escapes.map((t) => t.path).join(", ");
