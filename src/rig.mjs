@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
 import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
-import { validateHumanDefer } from "./deferlease.mjs";
+import { validateHumanDefer } from "./deferlease.mjs"
 import { executionModeRecord } from "./executionmode.mjs";
 import { removeSeatWorkspace } from "./worktree.mjs";
 import {
