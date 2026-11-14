@@ -3,9 +3,9 @@ runbook: resolve-merge-conflict
 symptom: "a git merge or landing pass stopped with conflict markers; git status shows UU paths"
 writes: false
 precondition: "broker-stopped"
-last_verified: unverified
-verified_by: delegate
-evidence: "docs/reviews/llm-prompting-for-git-merging.md; 2026-10-17 landing-safety incident"
+last_verified: 2026-11-12
+verified_by: scribe
+evidence: "docs/reviews/llm-prompting-for-git-merging.md; 2026-10-17 landing-safety incident. Verify legs re-run 2026-11-12 in an item worktree forked from 792aa059, checks run against `main ddcc0a23`: `git status --short` showed no UU/AA paths; `git grep -n '^<<<<<<<'` printed nothing (exit 1); no .mjs was changed so `node --check` was not applicable; `node mt/demo/test-areas.test.mjs` and four of the candidate branch's own demos each exited 0 in the materialized merged tree (pitfall 259 leg)."
 check_rule: null
 ---
 
@@ -87,12 +87,24 @@ branches first, schedule conflicts for a quiesced window.
    item's demo before completing the merge — per-hunk correctness does not guarantee a consistent file.
 7. Complete the merge in the scratch worktree, then advance `main` only when clean (see `merge.md`).
 
+## A clean `merge-tree` is not a landing verdict (pitfall 259)
+
+`git merge-tree --write-tree main <ref>` exit 0 says the texts combine. It does **not** say the combined tree runs.
+Before a ref is accepted for landing: materialize the merged tree in a throwaway detached worktree (or a scratch
+copy) and run the **branch's own demo there**; report the evidence with the tree it ran in (sha, branch or `main`).
+Measured 2026-11-12 in this item's worktree against `main ddcc0a23`: `item-5301-resolved`'s `demo/worktree-reap.test.mjs`
+asserts `dry.candidates` at line 114 while `git show main:src/broker.mjs | grep -n candidates` returns **no hits
+(exit 1)** — main ships no such key, so a textual union that keeps main's `broker.mjs` lands a demo that cannot pass.
+That is a re-cut for the author: abstain and route, do not merge. And when you close a landing entry, `done` means
+**PROCESSED**, not landed: write `LANDED at <sha>`, or `ROUTED to <seat> as <id>, NOT YET LANDED` (#4073).
+
 ## Verify
 ```bash
 git status --short            # no UU/AA paths, no .git/MERGE_HEAD
 git grep -n '^<<<<<<<'        # no output
 node --check <changed>.mjs    # clean
-node <the item's demo>        # exit 0
+node <the item's demo>        # exit 0 - run against the MERGED tree, not the branch tip (pitfall 259)
+git merge-tree --write-tree main <ref> > mt-out.txt; echo "exit=$?"   # 0 = texts combine; that is not acceptance
 ```
 
 ## If it fails
