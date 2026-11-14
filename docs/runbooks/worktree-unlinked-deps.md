@@ -3,9 +3,9 @@ runbook: worktree-unlinked-deps
 symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-11
+last_verified: 2026-11-12
 verified_by: devtools
-evidence: "#6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
+evidence: "#5065 (2026-11-12, Linux, node v24.22.1): in one thin item worktree `node scripts/sync-pi.mjs --sync` exit 0 (10 packages built, `linked: []`), then `node scripts/sync-pi.mjs --link` exit 0 (`dependencySet: built-pin`, `test -L node_modules/@earendil-works/pi-durable` exit 0), `git status --porcelain` empty afterwards, and `node scripts/test.mjs --all` **326/326 passed in 97.0 s, exit 0** with the header `PROVENANCE tree=792445d5 branch=item-5065 pi-durable=1.5.1 dependencySet=built-pin pin=main@dd30101cfc5b` - the pin UNMOVED. The same tree at a fork base two commits behind main was 324/326 exit 1, and both reds were base-lag, not dependency graph: `demo/next-pointer.test.mjs` (docs/NEXT.md 216 lines at the base vs 195 on main) and `demo/clockin-digest.test.mjs` (digest 20265 B over its 20000 B budget). #6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
 check_rule: null
 ---
 
@@ -164,6 +164,24 @@ The missing build tree is the usual cause: `--link` has nothing to point at, so 
    root and 7 after a worktree-local `npm ci`. Two of those were REAL content defects, one was an
    environment guard and five were dependency-version artefacts. A pass that calls the whole delta
    "environmental" will also excuse the real ones.
+
+## A thin item worktree CAN run the FULL gate (#5065) - the concession is dead
+
+A standing line in several results reads "the delegate cannot measure here; run the suite in the operator checkout". That was **true of one dependency-set mismatch, not of a worktree**. The real condition is state A or B above: the tree resolves the lockfile's released package while the seat root resolves the pinned build, so a verdict from it is a verdict about a different graph. It is not an inability to run anything. Bring the pinned graph into the worktree and the FULL gate runs there:
+
+```bash
+node scripts/sync-pi.mjs --sync   # builds the pinned pi commit in THIS worktree (vendor/pi-main)
+node scripts/sync-pi.mjs --link   # points node_modules at it; dependencySet becomes built-pin
+node scripts/test.mjs --all       # the full gate, in the item worktree
+```
+
+Measured 2026-11-12 in `item-5065`: `--sync` exit 0, `--link` exit 0, then **326/326 passed in 97.0 s, exit 0**, header `pi-durable=1.5.1 dependencySet=built-pin pin=main@dd30101cfc5b`. Two rules travel with this, and both are checked, not assumed:
+
+- **The pin must stay unmoved.** `--sync` builds the commit `pi-main.pin.json` already names; it does not move it. If your result says `--update`, you changed what the rig is validated against, and that is a different item (#pi-pin-update).
+- **`package.json` must end clean.** `git status --porcelain` was empty after the two commands above. A linked tree that leaves package.json or the lockfile dirty has changed the declared set, and then the header's `DRIFT` line is your own doing rather than the pin's.
+- **Sync the base before you cite a red.** The same worktree at a fork base two commits behind main printed 324/326 exit 1, and every red was the base lagging main (`docs/NEXT.md` over its 200-line cap at the base, under it on main), not the dependency graph. A red is only attributable to your change if the tree you ran in is at the tip you are claiming to test.
+
+**`land.mjs --suite` is still banned regardless (#4997).** This section is about a seat's own worktree, which has `node_modules` and a built pin. The lander's scratch tree has neither, so a full-suite leg run there false-blocks every landing. Running the gate in your worktree does not rehabilitate that path - it is the reason `--changed-suite` plus a named gate flag is what the lander accepts.
 
 ## Verify
 
