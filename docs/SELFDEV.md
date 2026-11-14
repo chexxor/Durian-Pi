@@ -4443,3 +4443,31 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `fatal: cannot remove a locked working tree` (exit 128) — but a plan that names a live seat's branch is a plan you
     cannot trust. Fixed in place: the tool mirrors the broker's list and honours `keepReason === "live"`. The general
     rule: when a delegate tool and the base disagree about a state name, read the base, do not infer the set.
+
+## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-338, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+335. **`git diff` omits `,1` in a one-line hunk header.** `@@ -1 +1 @@`, not `@@ -1,1 +1,1 @@`. A hunk parser
+   written as `/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/` silently drops every single-line hunk, so a conflicted file
+   reads as "the ref changed nothing here" and the merge takes main's copy. Both `tools/chain-resolve.mjs` and
+   `tools/conflict-resolvability.mjs` now use `-(\d+)(?:,(\d+))?` with the count defaulting to 1. The check that
+   caught it: `git diff --no-color <base> <ref> -- docs/DECISIONS.md | head -1`.
+336. **An add/add conflict has NO stage `:1`.** `git merge` prints `CONFLICT (add/add)`; `git show :1:<path>` exits
+   nonzero. A resolver that reads the base blob, gets an empty string, and concludes "the ref changed nothing at
+   this path" writes MAIN's file and drops the ref's whole contribution — measured: **74 lines of `item-7103`'s
+   `demo/restart-limit-behaviour.test.mjs` disappeared** into the first chain branch. `tools/merge-containment-proof.mjs`
+   found it by asserting every `+` line of the ref-vs-base diff is present in the branch. Rule now: no base → docs
+   union, code REFUSE ("two independent versions of the same file - a seat must choose"). Pinned by
+   `demo/chain-resolve-rules.test.mjs` (0.5 s).
+337. **A clean merge can still be a red tree.** `scripts/land.mjs landing-20261114-c3 --changed-suite` exit **1**:
+   `STOPPED: demo/by-id-claim-gate.test.mjs failed in the scratch worktree (exit 1) — main was NOT advanced`. Each ref
+   merge-tree'd clean on its own; the merged tree is what broke. The cause is a **failing-first test landing without the
+   implementation it pins**: `item-7232` adds that demo, `main` src/rig.mjs:1260-1263 still has the by-id claim branch
+   checking only `it.id === args.itemId && it.to === me && it.status === "queued"`, and the fix lives in `item-6556`
+   src/rig.mjs — which is itself a semantic conflict. Test and implementation are one landing unit; the lander is the
+   one that can say so.
+338. **"Every shipped commit is a row" is impossible when one landing carries 43 commits.** After the chain landing the
+   pointer range `03bdbf4d..HEAD` was 243 commits and `docs/NEXT.md` has a 200-line cap
+   (`demo/next-pointer.test.mjs:84`). `tools/pointer-sha-coverage.mjs` now treats a landing-MERGE row as covering its
+   branch: for each row that is a merge, `git rev-list <merge>^1..<second-parent>` is credited to that row (measured
+   0.6 s on the 243-commit range). The invariant is unchanged — nothing ships unnamed — but the granularity is the
+   landing, not the commit.

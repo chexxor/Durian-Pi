@@ -102,14 +102,17 @@ commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts o
 | `94eddcdd` | docs(NEXT): condense the pointer to 197 lines (the 200-line cap) + the previous carrier row |
 | `3c6d01fc` | docs(NEXT): suite numbers at HEAD, the pm route, pointer within the cap |
 | `cf42a577` | docs(decisions): D265 addendum — a conflicted ref is an anchor collision, not a verdict |
-| *(this commit)* | the branch prune: 34 refs removed, the census `deferred` bug fixed — exempt: it carries this file |
+| `62dee2d1` | fix(tools)+docs: branch-census mirrors the broker's `LIVE_STATUSES`; the prune pass, pitfall 334 |
+| `43223085` | merge: land landing-20261114-docs onto main — 43 conflicted refs union-resolved by rule, 37 colliding `## D<n>` re-minted D275..D311 |
+| `06cd45ae` | merge: land landing-20261114-c4 onto main — `item-4821`, `item-7702`, `item-7272`, containment proven |
+| *(this commit)* | feat(tools): the conflict instruments — `tools/chain-resolve.mjs`, `tools/conflict-resolvability.mjs`, `tools/merge-containment-proof.mjs`, `demo/chain-resolve-rules.test.mjs`, the merge-row rule in `tools/pointer-sha-coverage.mjs`, 40 held-ref dispositions — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
-loop (`src/broker.mjs:2058`), so a pass in flight starves the deadline — six "commanded" 1,800–3,600 s windows ran
-**2,146–6,418 s**. Procedure: `nohup timeout --signal=TERM --kill-after=60 1800 node cli.mjs serve --max-duration 3600
-…`, then `node cli.mjs resume` before closing. Liveness is the last ` PASS ` line (pitfall 304), never the pid.
+loop (`src/broker.mjs:2058`), so a pass in flight starves it — six "commanded" 1,800–3,600 s windows ran 2,146–6,418 s.
+Open every window as `nohup timeout --signal=TERM --kill-after=60 <N> node cli.mjs serve --max-duration 3600 &`, then
+`node cli.mjs resume` before closing. Liveness is the last ` PASS ` line (pitfall 304), never the pid.
 
 **The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection). The audit's `paused:true` was
 right — `23:46:33 pause`, `23:49:41 unpause`, `23:50:48 pause`, nothing after. Closed at **`00:19:28Z`** by
@@ -124,7 +127,7 @@ fleet cannot do that, and the `01:01:21Z` window's `PASS 1 … woke=` names all 
 
 ## NEXT SESSION
 
-**Current item:** **the landing pass is CLOSED and the residue is pruned: `main` `03bdbf4d` → … → `cf42a577`, 20 refs landed, 1 held (#6959); refs 163 → 129, worktrees 157 → 123, nothing pushed.**
+**Current item:** **the conflict pass: `main` `03bdbf4d` → … → `62dee2d1` → `43223085` → `06cd45ae`. 46 refs landed by rule with a containment proof, 40 held for their authors, nothing pushed.** The instruments are in the suite: `node tools/conflict-resolvability.mjs --json .spike/r.json` (3.2 s), `node tools/chain-resolve.mjs --branch landing-X --refs a,b` (8.8 s / 43 refs), `node tools/merge-containment-proof.mjs --branch landing-X --refs a,b` (0.2 s). Full suite at `43223085`: **342/342 in 155.3 s** (`--all --jobs 4`); at `06cd45ae` the derived gate ran 39/344 and passed, the full suite has NOT been re-run — run it first.
 Each landed ref is proven two ways: `git merge-base --is-ancestor <ref> main` exit **0** and every `+` line of its
 branch-vs-base diff present on main (probe `.spike/landing-content-probe.mjs`, ~40 s: 1,087 lines for bin 1, 68 for
 the chain, 0 missing). Full suite at HEAD `94eddcdd`: `node scripts/test.mjs --all --jobs 4` → **341/341 in 135.7 s**
@@ -132,15 +135,11 @@ the chain, 0 missing). Full suite at HEAD `94eddcdd`: `node scripts/test.mjs --a
 `demo/noop-wake-census.test.mjs` with no `demo/test-areas.json` row, so the derived gate refused it
 (`demo/compaction-acceptance-gate.test.mjs:117`) — routed to `pm` (`node intent.mjs pm --body-file .spike/landing-pass-route-pm.md`, requestId `f37cd65f-ee7f-4581-8298-887d9d2ca60b`, drained on the next broker window), ref kept.
 
-**Older current item, still true:** the **N19 pool is CLOSED** — usable, alive, gate fired on a live seat: `pm` minted
-**#7700** (`pool:true, tier:"project"`) and TWO real seats claimed it and were REFUSED (`by=architect` 22:04:21Z,
-`by=pm` 22:44:08Z, reason `too-big:project(120000 tokens > 70% of the 164320-token usable window)`). Census at 00:31Z
-(`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s, read-only — re-read, the team keeps minting): `{rows:5,
-pooled:5, open:2, claimed:3, sizeRefused:1}`; open = **#7660** (`requires:"docs"`, no seat advertises it, `check`
-reports `pool-dead-gate`) and **#7700**. Seats: 11 × 164320 usable, auditor 12288; gate limits 115023 / 8601. The
-window seam landed in `src/config.mjs` (`usableContextBudget` → `declaredLocalWindow(...)`), a SEAM (D212) the gate
-cannot arm without. Backlog rate (`tools/backlog-burn.mjs --hours 4`): baseline done +8.5/h vs queued +15.3/h; effect
-window done +5.3/h vs queued +4.6/h — both growing, **no causal claim**.
+**Older current item, still true:** the **N19 pool is CLOSED** — the gate fired on live seats (#7700 refused by
+`architect` and `pm` as `too-big`); re-read the roster with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s,
+read-only) rather than trusting this line. The window seam is in `src/config.mjs` (`usableContextBudget` →
+`declaredLocalWindow(...)`), a SEAM (D212) the gate cannot arm without. Backlog rate is measured, not causal:
+`node tools/backlog-burn.mjs --hours 4`.
 
 **Run these first** (measured on this box; re-measure rather than trust):
 
@@ -158,9 +157,13 @@ node cli.mjs check rig.selfdev.json                                         # ~2
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.2 s — exit 1 if this file skips a shipped sha
 ```
 
-**Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the landing pass is closed (20 landed, 1 held,
-census `needsLanding: 0`), but 82 refs still conflict with `main` and are held for their authors to re-cut; the residue
-is routed to `pm` (requestId `f37cd65f`, spool `selfdev.sqlite.broker.inbox/0001794624001067-2163289-izsfo2.json`).
+**Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the mechanical lane is exhausted: 46 refs landed,
+**40 refs still conflict with `main` and cannot be merged by rule** (each one rewrites a region `main` already
+rewrote; per docs/runbooks/branch-cleanup.md Step 0b/0d that is the author's re-cut, not a delegate union). They are
+recorded row-by-row in `docs/DISPOSITIONS.md` ("Conflict-resolution pass, 2026-11-14") with the vanished lines and the
+exact command that lands them once re-cut. `item-7232` is the sharpest case: it merges cleanly but its failing-first
+test is red without `item-6556`'s `src/rig.mjs` change, which is itself conflicted — land the pair or neither.
+The census still reports `needsLanding: 0`; the residue is the 40 held refs, not unlanded clean ones.
 (2) The dry-run shows the capability-clean tranche would make rows claimable by seats the `ownership` map does not
 cover: **104 of 164 proposed pool rows name a non-owner claimant** (src-tools-harness 85 + workflow-docs 19 at `23:5xZ`;
 re-read `00:2xZ` says 105 of 165 — **re-run it, the team keeps minting**; list `.spike/pool-ownership-gaps.txt`).
@@ -168,10 +171,8 @@ Consequence: **no migration applied** — the tool stays a proposal; decisions 1
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.
 
-**The suite, with seconds.** 341 tests at HEAD `94eddcdd`: `--all --jobs 4` → **341/341 in 135.7 s** (`.spike/suite-final-94eddcdd.out`).
-The `--jobs 4` flake in `demo/restart-limit-behaviour.test.mjs` is contention-driven and intermittent (337/338 once at
-`8f4a63ce`, absent in two earlier runs); `--jobs 2` is the reproducible green (**338/338 in 253.9 s**). A red at
-`--jobs 4` is not a defect in the change — re-run the named test alone before chasing it.
+**The suite, with seconds.** 342 tests at `43223085`: `--all --jobs 4` → **342/342 in 155.3 s** (`.spike/suite-at-43223085.out`);
+the `--jobs 4` flake in `demo/restart-limit-behaviour.test.mjs` is contention-driven (`--jobs 2` is the reproducible green). A red at `--jobs 4` is not a defect in the change — re-run the named test alone before chasing it.
 
 **Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** — `ASSERT FAIL: the fresh context should be
 short, got 7 messages` (pm's #6924) — recorded, not touched. `demo/priority-directive-scope.test.mjs` went red on a
@@ -184,9 +185,7 @@ advisory (recommended, plus a `check` for disjoint owner/claimant pairs) or enfo
 case; recommended: no, warn + red `check` + author repair); (4) should a pool claim notify its author (recommended:
 annotate the author's `peek_queue`, no notice row).
 
-**Next command for the MIGRATION goal** (later, separately gated; `tools/pool-migrate.mjs` has NO write path by design):
-`node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` (1.7–10 s). Its first WRITE is not a tool run:
-once decisions 1–2 are ruled, `pm` annotates rows with `revise_work({itemId, requires})`, one `revised` transition each.
+**MIGRATION goal (later, separately gated):** `node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` (1.7–10 s) — it has NO write path by design; its first WRITE is `pm` annotating rows with `revise_work({itemId, requires})` once operator decisions 1–2 are ruled.
 
 **Traps this window** — `docs/SELFDEV.md` **330–334** (a landing plan is valid only against the HEAD it was computed on;
 `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved merge

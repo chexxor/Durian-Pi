@@ -8,8 +8,13 @@
 // THE RULE: every commit in `<base>..HEAD` is either a ROW in the table or the commit that carries
 // the pointer itself (a file cannot name the commit that contains it — that one is exempt and
 // reported by name). Everything else must be a row, and rows must appear in commit order.
+// A landing-MERGE row covers the commits that came in with it: `merge: land <branch> onto main`
+// names one landing, and the seat commits inside that branch are reachable from its second parent
+// and not from main's side. That rule was added 2026-11-14 because a chain-resolved landing of 43
+// refs makes a one-row-per-commit pointer impossible inside the 200-line cap of docs/NEXT.md.
 //
-// COST: 0.3-0.6 s (git log + one file read; no store, no network, no model).
+// COST: 0.3-0.6 s (git log + one file read; no store, no network, no model). Re-measured 2026-11-14
+// with the merge-coverage rule: 0.35 s on a 243-commit range.
 // Run: node tools/pointer-sha-coverage.mjs [--base <sha>] [--file docs/NEXT.md] [--json]
 // Exit 0 = every range commit is named (or is the carrier), 1 = holes / out-of-order rows, 2 = usage.
 
@@ -61,7 +66,33 @@ rows.forEach((sha, i) => {
 	if (!rowIndex.has(sha)) rowIndex.set(sha, i);
 });
 
-const named = (sha) => [...rowIndex.keys()].some((r) => sha.startsWith(r) || r.startsWith(sha));
+// A landing MERGE row covers the commits that came in with it. `merge: land <branch> onto main`
+// is one row in a pointer that cannot fit 43 seat commits; the merge's second parent is the
+// branch head, so every commit reachable from it but not from the main-side parent shipped inside
+// that landing. Measured 2026-11-14: the 2026-11-14 docs landing carried 43 such commits in one
+// row. Without this rule, a chain of provable merges makes the pointer physically impossible to
+// keep inside its 200-line cap, and the honest alternative (drop rows) is the hole the tool was
+// built to catch.
+const covered = new Set();
+for (const row of rows) {
+	let full;
+	try { full = git("rev-parse", row); } catch { continue; }
+	let parents;
+	try { parents = git("rev-parse", `${full}^@`).split("\n").filter(Boolean); } catch { continue; }
+	if (parents.length < 2) continue;
+	const sideBranch = parents.slice(1);
+	for (const p of sideBranch) {
+		for (const c of git("rev-list", `${full}^1..${p}`).split("\n").filter(Boolean)) {
+			covered.add(c);
+			covered.add(c.slice(0, 8)); // `git log --format=%h` prints abbreviated shas
+		}
+		covered.add(p);
+	}
+}
+
+const namedByRow = (sha) => [...rowIndex.keys()].some((r) => sha.startsWith(r) || r.startsWith(sha));
+const named = (sha) => namedByRow(sha) || covered.has(sha);
+const coveredOnly = commits.filter((c) => covered.has(c.sha) && !namedByRow(c.sha)).length;
 
 const missing = commits.filter((c) => !named(c.sha) && !head.startsWith(c.sha));
 const carrier = commits.find((c) => head.startsWith(c.sha)) ?? null;
@@ -105,6 +136,7 @@ if (asJson) {
 	console.log(`  table rows: ${report.tableRows}`);
 	console.log(`  carrier (exempt, cannot name itself): ${report.carrier ?? "(HEAD is not in the range)"}`);
 	for (const m of missing) console.log(`  MISSING   ${m.sha}  ${m.subject}`);
+	console.log(`  covered: ${coveredOnly} commit(s) inside a landing merge the table already names (a merge row covers its branch)`);
 	for (const o of outOfOrder) console.log(`  OUT-OF-ORDER  ${o.next} appears before ${o.previous}`);
 	for (const f of foreign) console.log(`  NOT-IN-RANGE  ${f} (row names a commit outside ${report.base}); stale row or typo`);
 	console.log(ok ? "  verdict: every range commit is named" : `  verdict: ${missing.length} hole(s), ${outOfOrder.length} ordering defect(s)`);
