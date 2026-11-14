@@ -126,7 +126,7 @@ persistent stores**."* The coding-agent's persistent one is `auth-storage.ts:1-4
 `resolve.ts:28-35`: *"A stored credential owns the provider: ambient/env is consulted only when nothing is
 stored. No silent env fallback after a failed refresh."*
 **Counterpart / cost here:** 333's option (b) is exactly "let the stored credential own the provider" — the
-sentence above is the *mechanical* reason (b) breaks the family/role guarantee (D48/D119) and makes a rotation
+sentence above is the *mechanical* reason (b) breaks the family/role guarantee (D134/D137/D166) and makes a rotation
 invisible (326): the seat's `DURIG_*` env would be ignored, not overridden. And the interface is the seam:
 durian-pi can hand pi-durable a `CredentialStore` **of our own** without touching pi.
 
@@ -359,13 +359,13 @@ adopt the *pattern* (each consumer gets its own scoped credential) and reject th
    rig a network broker puts a **token** where the key sits today — reachable by the same
    `/proc/<pid>/environ` path, because a client has to hold it. The **stdio** variant (M10) has *"no listener,
    no token"*, and is the only shape found that does not merely relocate H1.
-5. **Cross-family verifier (D48/D119) and loopback-only `local` (325).** pi's *"a stored credential owns the
+5. **Cross-family verifier (D134/D137/D166) and loopback-only `local` (325).** pi's *"a stored credential owns the
    provider"* precedence, and any gateway that collapses `local` and `verifier` behind one virtual key, both
    delete the guarantee that the verifier is a different family from the author. Whatever is adopted must keep
    the role→family mapping in durian-pi, not inherit it from a store.
 6. **Their scoping is *provider* scoping, not *role* scoping.** oh-my-pi's `models`/`accounts` file grants a
    client a slice of a pool; durian-pi's invariant is a **role→family** rule (a verifier seat must not route to
-   the author family — D48/D119). The format expresses that rule cleanly (one entry per seat,
+   the author family — D134/D137/D166). The format expresses that rule cleanly (one entry per seat,
    `"models": ["verifier/*"]`), but nothing in their design enforces it as an invariant — we would be adding the
    invariant, not borrowing it.
 7. **Spend attribution is per-seat today** (`selfdev.sqlite.spend.jsonl` rows carry `authKeyEnv`

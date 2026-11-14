@@ -183,7 +183,7 @@ mirror path is not yet in the config vocabulary.
   only. The 28 `PASS-FAILED … database is locked` entries in `selfdev.sqlite.broker.log` are the warning sign.
 * **Notes are not a permission source.** Confinement stays in `src/seatguard.mjs` / `src/writetargets.mjs`, which
   fail closed.
-* **Verification stays cross-family** (D48/D119): a note-format change must be verified by a seat of a different
+* **Verification stays cross-family** (D134/D137/D166): a note-format change must be verified by a seat of a different
   model family than the one that wrote the fixture, and the fixture should include a deliberately stale fact.
 * **Turn shape is still a separate blocker.** 9 of 12 seats are `AT RISK` on the alternating-template predicate
   before any window is reached; notes do not fix that, and the gate should report both legs, not conflate them.

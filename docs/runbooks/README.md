@@ -138,9 +138,12 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 - **Verification recording:** the `check` provenance line reports "runbooks verified against rev X"
   (ROADMAP 86).
 - **Env-name fidelity (#5911, swept 2026-11-10 on tree `f192f543`):** every command in these runbooks must name
-  the variable **the entry point it invokes actually reads**. Measured in that tree: `cli.mjs` (`cli.mjs:155`),
+  the variable **the entry point it invokes actually reads**. Measured in that tree, and every one of those four
+  citations re-checked with `git show f192f543:<file>`: `cli.mjs` (`cli.mjs:155`),
   `intent.mjs` (`intent.mjs:105`) and `scripts/land.mjs` (`scripts/land.mjs:248`) read `DURIG_DB`; 
-  `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. A command
+  `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. **Those line
+  numbers have since moved**: re-measured 2026-11-11 on `main 35001c3a` they are `cli.mjs:161`, `intent.mjs:105`
+  (unchanged), `scripts/land.mjs:264` and `scripts/clockin.mjs:468`. A command
   carrying a name the entry point ignores is not a typo - it silently runs against the fallback store, which is how
   a wrong store gets read as a quiet rig. 31 command lines across 14 runbooks were corrected in that sweep; the
   machine-side surfacing is `tools/broker-serve.mjs:153` (`legacy-env-set`), and ROADMAP 191 is the un-built
@@ -229,6 +232,23 @@ Two more figures in that record do not survive measurement on main:
 
 **Revival rule for anyone quoting a runbook-health number:** the command, the ref, the date, and the
 seat that ran it. Without the ref, the number is not a baseline; it is a hint.
+- **Census and the machine-rule gap (#6336, measured 2026-11-11):** `git grep -n 'DURIAN_PI_DB'` on `main 35001c3a`
+  returned **128 lines in 38 files** before this item's edits; on the `item-6336` branch after them it returns
+  **137 lines in 37 files** - `docs/TUI-TESTING.md` is the only file cleared, and the extra lines are the docs naming
+  the inert spelling as a counterexample. 68 of the lines are the verbatim archive `docs/NEXT-ARCHIVE.md` (the
+  disposition header that flags the stale form lives on branch `item-6334`, #6334, not yet landed, and adds 5 more
+  matching lines there - a plain recount on that branch reads 73). Two live runbook commands still had it
+  (`docs/runbooks/attach-a-gate.md:45,91`, `docs/runbooks/verifier-leg-unfunded.md:62`) and now name `DURIG_DB`.
+  Everything left outside the archive is a dated record, a trap discussion, a demo fixture, or the code's own
+  exception at `scripts/clockin.mjs:468`.
+  **Nothing checks this class.** `node cli.mjs check rig.selfdev.json --json` exits 0 with 23 rules
+  (`RULES.length` in `src/checkup.mjs`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
+  and none of them compares an env name printed in a doc with the entry point that doc names; `doc-integrity-guard`
+  tests env names nowhere. The only machine-side signal is `tools/broker-serve.mjs:153` (`legacy-env-set`), which
+  fires at broker start, not on a doc. The config file is stricter than the environment: a `DURIAN_PI_*` key in
+  `durig.config.json` makes `node cli.mjs config` **exit 1** naming it (`src/config.mjs`, the #5071
+  accepted-and-ignored class) - a probe run in this worktree printed `unknown config-file key(s): DURIAN_PI_DB,
+  DURIAN_PI_PROVIDER`. The machine-side guard is routed to `impl` as #6821 (2026-11-11); the naming decision is ROADMAP 191.
 
 ## Agent execution (from the research report)
 
@@ -264,6 +284,7 @@ seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 | [slow-loop.md](slow-loop.md) | a change takes minutes-to-hours to verify; one test or area dominates wall-clock; a test is red **only** because it needs a key/network/a model; you are about to run the whole suite "to be safe"; or you are reviewing a design and need to state what it costs to iterate on it (the operator's fast-iteration policy, D213 — measured here: full suite **257/258 in 57.0 s**, `demo/cli.test.mjs` alone **20.1 s**, `demo/offline.mjs` full delegation loop **0.301 s**, model-call **p50 52 ms / p95 9.0 s**, and **185 generations (0.29%) holding 64.6% of generation busy time**) | no |
 | [suite-red-standalone-green.md](suite-red-standalone-green.md) | a demo exits 0 alone but the suite prints `FAIL` or `TIMEOUT` for it; a red appears only while another suite run or a seat turn is live; the report's 8-line tail shows `signal: null, output: null` and no cause (measured 2026-11-10: one-file fixture reproduces the false TIMEOUT — demo exit 0, runner 60.1 s, exit 1; two concurrent `--all` runs drive `SwapFree` to 0 kB and manufacture one extra red; the inverse shape - red standalone AND red in the suite but green in a tree where the pin was linked - is the dependency set, measured 2026-11-11 on the same main `35001c3a`: 279/300 exit 1 unlinked (pi-durable 1.3.0) vs 300/300 exit 0 linked (1.5.1)) |
 | [process-leak-reap.md](process-leak-reap.md) | RAM climbs while nothing is running; the suite is slow or a demo times out; the verifier model server has no headroom; `ps` shows node processes with `0:00:00` CPU time — `node tools/process-leak-scan.mjs` (**0.04 s**, 644 pids, reads `/proc` only) names every suspect with age, RSS and a verdict, and `--kill` SIGTERMs only the reparented ones (measured 2026-11-12: 30 orphans / 2.42 GB, then 5 / 310 MB after a 38-minute recurrence — the leak is recurring, and its second generation, `fake-broker.mjs` fixture children, is now in the default pattern) | no |
+| [suite-red-standalone-green.md](suite-red-standalone-green.md) | a demo exits 0 alone but the suite prints `FAIL` or `TIMEOUT` for it; a red appears only while another suite run or a seat turn is live; the report's 8-line tail shows `signal: null, output: null` and no cause (measured 2026-11-10: one-file fixture reproduces the false TIMEOUT — demo exit 0, runner 60.1 s, exit 1; two concurrent `--all` runs drive `SwapFree` to 0 kB and manufacture one extra red); **`scripts/suite.mjs` reports a verdict seconds after the demo exited** — a green demo that spawned an unreaped child makes the runner wait for the pipe (#6268) |
 | [in-turn-read-hangs.md](in-turn-read-hangs.md) | a seat's turn hangs on `cli.mjs queue` / `status` / `scripts/clockin.mjs`; a broker window overruns its `--max-duration` bound while the log stops mid-pass; the read never returns and you cannot tell "the drain is stalled" from "the store is broken" | no |
 | [session-start-cost.md](session-start-cost.md) | a session is spending its first 30–60 minutes re-deriving rig state an instrument already prints; you are about to hand-query `selfdev.sqlite`; or you are deciding how many seats to wake (each wake is the expensive verb, and a failed one deposits rows) | no |
 | [workspace-move.md](workspace-move.md) | the rig's workspace moved machines or operating systems (fresh clone/copy, Linux box for a Windows rig, new user) — worktree registrations, seat cwds, the pin's links, or queue-cited commit shas do not resolve | yes |
@@ -288,6 +309,8 @@ seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 | [store-probe-identity.md](store-probe-identity.md) | you are querying the store directly for a QUEUE item id, or a probe returned a plausible row whose namespace you have not checked | no |
 | [store-baseline-comparison.md](store-baseline-comparison.md) | you need the store's size, its distance from a backup, or an explanation of why two `sha256sum` runs of "the store" disagree; you are about to report a store hash in a report; or you are wondering whether a backup is still a restore point (measured 2026-11-11: main 706,138,112 B, `-wal` 4,214,792 B, `-shm` 32,768 B - the main-file hash covers only the checkpointed part, and a 40-hex sha printed in a tool result is redacted as secret-shaped) | no |
 | [pi-pin-update.md](pi-pin-update.md) | the pinned pi must move (an ordered update, or a release we skipped); a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned **0 hits** and you are about to conclude something is absent upstream. **A backup is the only rollback — `sync-pi --unlink` cannot open our schema-v2 store** | yes (the pin, the vendored build, `node_modules`; the store only via the backup/restore ladder) |
+| [pi-pin-update.md](pi-pin-update.md) | the pinned pi must move (an ordered update, or a release we skipped); a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; `check` reports `pi-dependency-plane` and you do not know which pi the tree you are standing in resolves; or a `git grep` over `vendor/pi-main` returned **0 hits** and you are about to conclude something is absent upstream. **A backup is the only rollback — `sync-pi --unlink` cannot open our schema-v2 store** | yes (the pin, the vendored build, `node_modules`; the store only via the backup/restore ladder) |
+| [pi-pin-update.md](pi-pin-update.md) | the pinned pi must move (an ordered update, or a release we skipped); a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; a `git grep` over `vendor/pi-main` returned **0 hits** and you are about to conclude something is absent upstream; or **live progress is coarser than it used to be and a tool result only appears after the commit lands** (the in-flight seam emits at commit cadence, never per token — §"The two in-flight seams the 1.5.1 move left in our source"). **A backup is the only rollback — `sync-pi --unlink` cannot open our schema-v2 store** | yes (the pin, the vendored build, `node_modules`; the store only via the backup/restore ladder) |
 
 | [constitution-amendment.md](constitution-amendment.md) | you edited (or will edit) `constitution.txt`, or the 3 constitution-mirror demos fail their starter === constitution.txt assertion | no |
 | [seat-reset.md](seat-reset.md) | a seat is degenerate / looping / answering in the wrong language / emitting a tool call as text | yes |
@@ -314,6 +337,7 @@ seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
 | [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root; or you are about to concede "this worktree cannot measure" and hand the gate to the operator checkout — `sync-pi --sync` + `--link` makes the FULL suite runnable in the item worktree (measured 2026-11-12: 326/326 in 97.0 s, exit 0, pin unmoved) — including the shape `ERR_MODULE_NOT_FOUND: Cannot find package '@earendil-works/pi-schema'` inside a demo's `/tmp` scratch, because `pi-schema` is in the pin's package set but in `package-lock.json` zero times (#5819) | no |
+| [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root, or a verb refuses the store with `Durable SQLite schema version 2 is newer than supported version 1` while another tool on the same store reads it fine | no |
 | [prepare-workspace-refused.md](prepare-workspace-refused.md) | `prepare_workspace` returned `PREPARE_WORKSPACE_ERROR`, or refused: leftover dir, a branch another worktree holds, or a `base=` the item branch cannot honour | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
 | [branch-cleanup.md](branch-cleanup.md) | so many local git branches; merged branches were never pruned | no |
@@ -383,6 +407,43 @@ seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 | Provider request body | request-trace |
 | Research | research-request, competitor-review |
 | An item's branch/worktree never retires; refs pile up; how `staging` landing and operator promotion are supposed to work | branch-cleanup, land, merge, `docs/WORK-ITEM-MODEL.md` (the model), `docs/reviews/branch-lifecycle-llm-agent-teams.md` (round-1 research), `docs/DISPOSITIONS.md` (append-only disposition ledger) |
+
+## `Diagnose` blocks are EXECUTED in CI (`demo/runbook-diagnose.test.mjs`)
+
+ROADMAP 85. Every `## Diagnose (read-only)` fence is run against a throwaway rig — a temp git repo
+(with the item branches the runbook names), a temp store built by `cli.mjs init` + `up`, and the
+repo's `cli.mjs`, `src`, `tools`, `scripts` and `demo` reachable from it. A line is EXECUTED when
+every verb in it is on the read-only allowlist and every operand it names is present in that rig;
+anything else is a NAMED gap, printed with its reason, never a silent pass.
+
+What the fixture supplies, so a runbook's operands are not excuses (item 6330):
+
+- a real `<db>.broker.log`, written by a bounded `serve --max-duration 2`, and the serve's stderr at
+  `.spike/serve.err`; the fixture store also exists at `.spike/store/selfdev.sqlite`;
+- every `rig*.json` spec, `constitution.txt` and `AGENTS.md` (COPIES, so a Diagnose tool that rewrites a
+  file edits the fixture, never the repo), plus the `prompts/` personas and `extensions/` the suite demos read;
+- refs: every `item-<n>` a runbook names, plus `refs/rescued`; ref RANGES (`main..item-1234`) are
+  checked as refs, not paths;
+- the files a line WRITES: a line earlier in the same block that redirects into `merged.txt` makes
+  that file present for the line that reads it;
+- a stand-in `vendor/pi-main` (a shallow clone with `origin/main` and `packages/durable/package.json`)
+  and a `vendor/eval/` directory — the SHAPE the runbook probes is real, the NUMBERS are fixture-shaped.
+
+A command that guards its own absence (`... 2>/dev/null` or `... || true`) RUNS: the runbook expects
+the file may not exist, and exit 0 is the verdict. A command that does not guard it still needs the
+file to exist. A `for`/`while` unit is run only when every `;`-separated command inside it passes the
+allowlist, so a loop cannot smuggle a write into CI.
+
+A line that reads a shell variable the rig never set (`cat "$DB.broker.json"`) or a `git -C <dir>` whose
+directory the rig does not have is a NAMED gap - running it would return a 128 that reads like an answer
+about a rig that was never given.
+
+Still CI-unexecutable (pinned in the demo; it fails if a runbook joins or leaves the set): the host
+shells (`powershell`/`Get-CimInstance`/`taskkill`), live processes, network endpoints, inline `node -e`
+code, and globs. The current set is the 17 files listed in `NOTHING_EXECUTED`: four have no Diagnose section
+at all, four have a section with no fenced command block, one's only command is inline `node -e`, three are
+PowerShell (a host the harness does not have), and five have bash blocks whose every line names a state the
+rig cannot supply.
 
 ## Template
 

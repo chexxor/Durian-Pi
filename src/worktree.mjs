@@ -730,6 +730,129 @@ export async function uncommittedCount(worktree) {
 }
 
 /**
+ * SOLE-CARRIER PROBE (#5301, ROADMAP 311).
+ *
+ * WHY `reapable` IS NOT ENOUGH. `git worktree remove` keeps the branch - the ref and its commits
+ * survive a reap - so the content a reap CAN destroy is the content git does not track: an IGNORED
+ * or untracked-but-ignored file that exists in that directory and nowhere else. `uncommittedWork`
+ * is blind to it by design (`git status --porcelain` does not list ignored paths, and counting
+ * `node_modules` as work would make every tree unreapable), so a tree can be reported `clean` and
+ * `reapable` while holding the only copy of something. That loss already happened here once:
+ * `docs/incidents/2026-10-28-cross-os-ledger-pruned-and-untracked-loss.md` (eight instruments, all
+ * gitignored, all gone), and it is why `install.sh` is gitignored rather than deleted.
+ *
+ * WHAT COUNTS AS DISPOSABLE. Only an ignored path that a NAMED command regenerates. Each entry
+ * below states its regenerator; adding an entry is a licence to delete content git cannot restore,
+ * so an entry without a command is not admissible. Everything else ignored - `.spike/`, `.scratch/`,
+ * `.pi/`, `*.sqlite*`, `durig.config.json` - is PRESUMED sole content and REFUSES the reap, because
+ * the cheap direction of error is a kept worktree, not an unrecoverable file.
+ */
+export const REGENERATED_IGNORED = [
+	{ path: "node_modules/", regeneratedBy: "npm install per worktree (the dependency tree, #330)" },
+	{ path: "vendor/pi-main/", regeneratedBy: "node scripts/sync-pi.mjs --sync (reproducible from pi-main.pin.json)" },
+	{ path: "vendor/pi-warden/", regeneratedBy: "node scripts/sync-pi.mjs --sync" },
+	{ path: "vendor/eval/", regeneratedBy: "the TUI research clones (docs/TUI-IMPLEMENTATION-PLAN.md section E)" },
+	{ path: ".durig/", regeneratedBy: "the store: rig.mjs re-writes item bodies and queue mirrors from it" },
+];
+
+/** Is this ignored path one the rig regenerates by a named command? */
+export function isRegeneratedIgnored(path) {
+	const p = String(path ?? "").replace(/^!?\s*/, "").replace(/^\.\//, "");
+	return REGENERATED_IGNORED.some((e) => p === e.path || p.startsWith(e.path) || p === e.path.replace(/\/$/, ""));
+}
+
+/**
+ * The ignored paths in `worktree` that git CANNOT restore: `git status --porcelain --ignored`,
+ * `!!` lines only, minus the regenerated set. Fail-closed: a git that cannot answer returns a
+ * sentinel entry, so the caller refuses rather than reading "no sole content" out of a failure.
+ *
+ * @returns {Promise<string[]>} paths relative to the worktree (a sentinel on a read failure)
+ */
+export async function soleContentPaths(worktree) {
+	const wtNorm = String(worktree).replace(/\\/g, "/");
+	let stdout;
+	try {
+		({ stdout } = await run("git", ["-C", wtNorm, "status", "--porcelain", "--ignored"]));
+	} catch (error) {
+		return [`<cannot read the ignored set: ${error.message}>`];
+	}
+	return stdout
+		.split("\n")
+		.map((line) => (line.startsWith("!! ") ? line.slice(3).trim() : ""))
+		.filter((p) => p !== "")
+		.filter((p) => !isRegeneratedIgnored(p));
+}
+
+/**
+ * Is `branch` the ONLY ref carrying commits that are not on `mainRef`? Reported as EVIDENCE, not
+ * as a refusal cause, and the reason it is only evidence is stated here rather than left implied:
+ * a worktree reap does not delete a ref, so an unlanded branch survives its own reap, and
+ * `worktree prune-branch` refuses such a ref (#3491). Refusing every unlanded-branch worktree would
+ * keep most of the leaked set and buy no safety - measured 2026-11-07 on this host: `item-5147` is
+ * an ANCESTOR of main (`merge-base --is-ancestor` exit 0, 56 refs contain the tip), so the two
+ * worktrees keep-gate #5280 names are protected by the ignored-content and declared-carrier rules
+ * below, not by branch reachability.
+ *
+ * STRICT like `worktreeHoldingBranch`: a git failure returns `{ error }` and the caller treats an
+ * unreadable reachability as unlanded.
+ */
+export async function branchLandedness({ repoPath, branch, mainRef = "main" }) {
+	if (!repoPath || !branch) return { branch: branch ?? null, landed: false, how: "no-branch", error: null };
+	const ref = branch.startsWith("refs/") ? branch : `refs/heads/${branch}`;
+	try {
+		await run("git", ["-C", repoPath, "rev-parse", "--verify", "--quiet", ref]);
+	} catch (error) {
+		return { branch, landed: false, how: "no-such-ref", error: String(error.stderr ?? error.message ?? error).trim() };
+	}
+	try {
+		await run("git", ["-C", repoPath, "merge-base", "--is-ancestor", ref, mainRef]);
+		return { branch, landed: true, how: "ancestor-of-main", error: null };
+	} catch (error) {
+		// Non-zero is the ordinary answer (not an ancestor), not a failure; fall through to cherry.
+		if (error?.code === undefined && !String(error?.stderr ?? "").trim()) {
+			return { branch, landed: false, how: "unknown", error: "merge-base gave no reason" };
+		}
+	}
+	try {
+		const { stdout } = await run("git", ["-C", repoPath, "cherry", mainRef, ref]);
+		const lines = stdout.split("\n").filter((l) => l.trim() !== "");
+		// Same rule as prunePatchEquivalentBranch: an ANCESTOR prints nothing, so empty is not
+		// "all patch-equivalent" - vacuous truth would call every ref in the repo landed.
+		if (lines.length > 0 && lines.every((l) => l.startsWith("-"))) {
+			return { branch, landed: true, how: "patch-equivalent-to-main", error: null };
+		}
+		return { branch, landed: false, how: "commits-not-on-main", unlanded: lines.filter((l) => l.startsWith("+")).length, error: null };
+	} catch (error) {
+		return { branch, landed: false, how: "unknown", error: String(error.stderr ?? error.message ?? error).trim() };
+	}
+}
+
+/**
+ * The queue rows that DECLARE this branch/worktree to be a carrier. There is no structural
+ * carrier field on a row yet, so the honest instrument is a whole-token match of the branch name
+ * (`item-<id>`) in a NON-TERMINAL row's subject or body, and the row IDS are reported rather than
+ * their prose: the reader judges the gate, the machine only refuses. A false positive keeps a
+ * worktree (cheap); a false negative can delete a sole copy (not cheap), so the rule errs toward
+ * keeping. A row that has been resolved (done/cancelled) stops gating, which is what makes the
+ * gate endable - #5312's supersession of #5280 turns the refusal off once the content lands.
+ *
+ * @param {Array<{id:number,status:string,subject?:string,body?:string}>} liveRows
+ * @param {string} branch the branch/worktree token to match
+ */
+export function declaredCarrierRows(liveRows, branch) {
+	const token = String(branch ?? "").trim();
+	if (!token) return [];
+	const esc = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const re = new RegExp(`(^|[^A-Za-z0-9_-])${esc}([^A-Za-z0-9_-]|$)`);
+	return (liveRows ?? [])
+		// The docstring promises a resolved row stops gating; without this filter the gate is
+		// un-endable - the tree stays refused forever after the row closes (#5312 on #5280).
+		.filter((row) => !TERMINAL_ITEM_STATUSES.has(String(row?.status ?? "").toLowerCase()))
+		.filter((row) => re.test(String(row?.subject ?? "")) || re.test(String(row?.body ?? "")))
+		.map((row) => row.id);
+}
+
+/**
  * Remove a worktree. 
  *
  * `force` is required rather than defaulted, because removing a worktree discards whatever is in
@@ -1503,7 +1626,16 @@ export async function listWorktrees(repoPath, { strict = false } = {}) {
 			const value = rest.join(" ");
 			if (key === "worktree") current.worktree = value;
 			if (key === "branch") current.branch = value || null;
-			if (key === "locked") current.locked = true;
+			if (key === "locked") {
+				current.locked = true;
+				// git 2.56 puts the reason on the SAME line: `locked <text>`. Measured 2026-11-14
+				// (Linux, git 2.56.0): `git worktree lock w1 --reason "verifier is checking the
+				// artifact"` then `git worktree list --porcelain` prints
+				// `locked verifier is checking the artifact`. A separate `reason` line is also
+				// accepted, so neither build shape loses the WHY (#5301).
+				if (value) current.lockReason = value;
+			}
+			if (key === "reason" && current.locked) current.lockReason = value || null;
 			if (line === "" && current.worktree) {
 				// Normalize the DEFAULTS FIRST and let the parsed values override them: the old
 				// `{ ...current, locked: false }` put the default LAST, so a `locked` line parsed

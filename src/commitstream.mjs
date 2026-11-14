@@ -12,6 +12,14 @@
 //
 // A throw in `advance` is reported by the Session and DETACHES the observer, so `detach()` is
 // idempotent and safe to call from a finally block.
+//
+// #6211 (lead ruling from #6172): THIS IS A COMPATIBILITY LAYER, NOT THE SURFACE OF RECORD. It rides a
+// STORED cadence — partial answers and running tool output reach it only once they are flushed within
+// `settings.progress.persistWithinMs`, which the rig pins at 1,000 ms (`progressSettings` in
+// src/config.mjs), so anything on this stream is at most 1-second granular. The surface of record for
+// live progress is `watchDoc()` / `Conversation.watch()` (see src/livewatch.mjs). RETIREMENT CONDITION:
+// every live-progress listener reads `watchDoc()` and a demo asserts the cadence invariant —
+// `demo/persist-cadence.test.mjs` holds that assertion today.
 /**
  * Attach `listener(publication, context)` to every stored commit of `harness`.
  * Returns the unsubscribe function the callers used to get from `subscribeCommits`.

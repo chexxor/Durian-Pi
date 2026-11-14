@@ -52,7 +52,7 @@ array is append-only and already the audit trail, so this is not a schema change
 - Add a derived view `waiting` = every item with `status === "deferred"`, split by
   `deferredTo === "human"` (operator) vs a seat name, oldest-first, each with
   `{id, to, subject, question, deferredAt, ageMs, escalated}`. Pure query over the persisted queue —
-  the same class as `metrics`/`attention` (D24), served by the broker through the read spool (D111).
+  the same class as `metrics`/`attention` (D24), served by the broker through the read spool (D111b).
 - Surface it in two places, both read-only: a `status` headline ("N item(s) waiting on you") and
   `node cli.mjs queue --waiting`. The existing per-seat `deferred_awaiting_answer` notice is kept and
   sharpened to distinguish **human** from **seat** and to carry `ageMs` (a stale question must be
@@ -150,6 +150,6 @@ strictly enough to bar a new op.
 
 ## Evidence
 - Read: `src/rig.mjs:115,663-716,721-745`; `src/supervisor.mjs` (`applyEscalations`); `src/attention.mjs:359-366`;
-  `src/broker.mjs:368,377,508`; `src/driver.mjs:52-64`; `docs/DECISIONS.md` D23/D24/D111; ROADMAP 71.
+  `src/broker.mjs:368,377,508`; `src/driver.mjs:52-64`; `docs/DECISIONS.md` D23/D24/D111b; ROADMAP 71.
 - This is an exploration: no implementation, no test run claimed. The acceptance probes in §6 are the
   falsifiable checks a build would have to pass.

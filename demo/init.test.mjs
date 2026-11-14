@@ -98,7 +98,17 @@ try {
 	// exit 0 — the state a first-time operator is in.
 	const audit = runCli(fresh, ["check", "rig.json"]);
 	assert.equal(audit.code, 0, `check on the scaffold failed: ${initRun.stderr.slice(0, 300)} / ${audit.stdout.slice(0, 300)}`);
-	assert.deepEqual(audit.json?.findings, [], "the scaffold audits clean before up");
+	// #6374: the dependency-plane finding describes the CHECKOUT the CLI runs from, not the scaffold rig
+	// in this temp dir - in an un-linked worktree it is a real finding, in a linked one it is not. Every
+	// other rule must still be clean, and the plane must be measured rather than assumed.
+	assert.ok(audit.json?.plane?.line, "check did not measure the dependency plane of the tree it ran in");
+	const rigFindings = (audit.json?.findings ?? []).filter((f) => f.id !== "pi-dependency-plane");
+	assert.deepEqual(rigFindings, [], "the scaffold audits clean on its own rules before up");
+	assert.equal(
+		(audit.json?.findings ?? []).filter((f) => f.id === "pi-dependency-plane").length,
+		audit.json.plane.versionAgrees ? 0 : 1,
+		"the dependency-plane finding appears exactly when the measured plane disagrees with the pin",
+		);
 	const skippedIds = (audit.json?.checks ?? []).filter((c) => c.status === "skipped").map((c) => c.id);
 	assert.ok(skippedIds.includes("store-missing-seat"), "store rules skip (no store yet), not fail");
 	console.log("SCAFFOLD AUDITS CLEAN OK (exit 0, store rules skipped)");

@@ -62,8 +62,8 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings } from "./src/config.mjs";
-import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs";
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings, progressSettings } from "./src/config.mjs"
+import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs"
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
 import { contextConsumption } from "./src/context.mjs";
@@ -77,7 +77,7 @@ import {
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { followCommits } from "./src/commitstream.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent, reapWorktrees } from "./src/broker.mjs"
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -89,13 +89,14 @@ import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs"
 import { readCommitMessages } from "./src/commitmsg.mjs";
 import { readCitations } from "./src/citation.mjs";
 import { readDocCountClaims } from "./src/doccounts.mjs";
-import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs";
+import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs"
+import { readDependencyPlane } from "./src/depplane.mjs"
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
-import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS } from "./src/readclient.mjs";
+import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS, describeStoreOpenFailure } from "./src/readclient.mjs"
 import { installSignalHandlers, isStopping, stopSignalName, stoppableSleep } from "./src/signals.mjs";
 import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -195,7 +196,10 @@ async function openStore(path = DB_PATH) {
   try {
     return await openNodeSqliteStorage(path, { busyTimeoutMs: STORE_BUSY_TIMEOUT_MS });
   } catch (err) {
-    throw new Error(`cannot open ${path}: ${String(err?.message ?? err)}`);
+    // The schema-version refusal is a dependency-graph failure, not a broken store: an un-linked tree
+    // runs the lockfile pi-durable, which cannot open a schema-v2 store. Name the graph and the remedy
+    // so the reader does not reach for the forbidden fix (#6314, docs/DECISIONS.md D128).
+    throw new Error(describeStoreOpenFailure(path, err));
   }
 }
 
@@ -458,7 +462,7 @@ function buildModels(live = null) {
   // when it is registered, so a seat model "local/<id>" uses the author server and "verifier/<id>" uses the
   // verifier server while every other seat keeps the default provider. TWO servers is the point, not an
   // accident: an author and its verifier cannot share a blind spot only if they are different families
-  // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
+  // (D134/D137/D166, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
   // #5488 — THE GENERATION-SLOT GATE APPLIES HERE TOO, and this block is the whole fix.
   // `DURIG_MAX_CONCURRENT_SEATS` is documented (src/config.mjs; docs/SELFDEV.md's review recipe) as the key that
   // makes "seats queue in durig rather than inside the model". It did not: the faux branch and the metered
@@ -535,7 +539,7 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       models,
       registry,
       env: makeSeatEnv(seatRoster),
-      // `stream` AND `compaction` are configurable here; everything else keeps pi-durable's
+      // `stream`, `compaction` and `progress` are configurable here; everything else keeps pi-durable's
       // built-in defaults, which were chosen deliberately and which nothing in durian-pi's use argues
       // against. Compaction was added because the ABSENCE of a policy was a measured defect (#4898):
       // the defaults (reserve 16384 / keepRecent 20000 / background 32768) sit above the whole
@@ -544,7 +548,11 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       // work. See `streamSettings` and `compactionSettings` for why each one matters.
       // `restartLimit` is set HERE and nowhere else (#6173 / ROADMAP 355 C): pi-durable's default is 5 and
       // an unconfigured seat silently runs it. One seam, one value — see `runControlSettings`.
-      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG) },
+      // `progress` is here because 1.5.x defers partial answers and running tool output to storage within
+      // `persistWithinMs` (upstream default 1,000 ms), and a `subscribeCommits` listener only sees those
+      // commits once stored. The rig PINS that value rather than inheriting it — see `progressSettings`
+      // (#6211, lead ruling from #6172) for why 1,000 ms and why not 0.
+      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG), ...progressSettings(CFG) },
     },
     BACKGROUND_CONTEXT,
   );
@@ -3200,6 +3208,13 @@ async function cmdWorktreeAudit() {
     });
     const counts = {};
     for (const e of entries) counts[e.keepReason] = (counts[e.keepReason] ?? 0) + 1;
+    // `ok: true` USED TO MEAN "nothing to do" while `reapable` was non-empty, and that is the exact
+    // defect that let the leak run for three passes (15 -> 19 -> 16 -> 21 reapable, all reported,
+    // none consumed) (#5301). `ok` still answers the question the command was asked - did the audit
+    // run? - and the FINDING rides its own fields plus a non-zero exit, the same convention
+    // `check` and `format --check` use so a caller can gate on it without parsing prose.
+    const reapable = entries.filter((e) => e.keepReason === "reapable").length;
+    const clean = reapable === 0;
     out({
       ok: true,
       command: "worktree",
@@ -3208,13 +3223,78 @@ async function cmdWorktreeAudit() {
       repo: repoPath,
       total: entries.length,
       counts,
-      reapable: entries.filter((e) => e.keepReason === "reapable").length,
+      clean,
+      reapable,
       dirty: entries.filter((e) => e.keepReason === "dirty").length,
       locked: entries.filter((e) => e.keepReason === "locked").length,
+      // `stale` and `reapable` are NOT one population (they moved in OPPOSITE directions across
+      // passes: reapable 15->19->16->21 while stale 15->18), so they are counted and remedied
+      // separately: a stale registration is a ledger entry whose directory is gone and only
+      // `git worktree prune` clears it; a reapable tree is a live registration the reap verb
+      // removes. `clean` speaks ONLY to what this verb can act on.
+      remedy: clean
+        ? null
+        : `${reapable} tree(s) are reapable - run: node cli.mjs worktree reap --dry-run`,
       seatRoots,
       worktrees: entries,
     });
+    if (!clean) process.exitCode = 1;
   }
+}
+
+/**
+ * `worktree reap [--dry-run] [--main <ref>]` (#5301, ROADMAP 311 cut 2): the verb that CONSUMES
+ * `worktree audit`'s `reapable` set. It refuses a SOLE-CARRIER tree (gitignored content git cannot
+ * restore, or a branch a live queue row names as a carrier - keep-gate #5280) and names the branch,
+ * the item, the offending paths or row ids; and it reports the locked-over-TERMINAL-item trees as
+ * their OWN cause. Three causes, three messages - a single "skipped" line is what made the leak
+ * unreadable.
+ */
+async function cmdWorktreeReap(rest) {
+  const dryRun = rest.includes("--dry-run");
+  const mainAt = rest.indexOf("--main");
+  const mainRef = mainAt >= 0 ? rest[mainAt + 1] : "main";
+  if (mainAt >= 0 && (!mainRef || mainRef.startsWith("--"))) fail("worktree reap --main needs a ref (branch, tag or commit)");
+  const queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+  const seatRoots = await readData(DB_PATH, "roots", {}, (s) => readSeatRoots(s));
+  const LIVE = ["queued", "claimed", "deferred", "held"];
+  const liveItemIds = new Set(queueItems.filter((it) => LIVE.includes(it.status)).map((it) => it.id));
+  const terminalItemIds = new Set(queueItems.filter((it) => !LIVE.includes(it.status)).map((it) => it.id));
+  const statusById = new Map(queueItems.map((it) => [it.id, it.status]));
+  // The NON-TERMINAL rows are the carrier gates: a row still open that names a branch keeps that
+  // worktree, and resolving the row is what ends the keep (#5280).
+  const liveRows = queueItems
+    .filter((it) => LIVE.includes(it.status))
+    .map((it) => ({ id: it.id, status: it.status, subject: it.subject, body: it.body }));
+  const repoPath = dirname(resolve(DB_PATH));
+  const result = await reapWorktrees({
+    repoPath,
+    liveItemIds,
+    terminalItemIds,
+    statusById,
+    seatRoots: seatRoots.map((r) => r.cwd),
+    liveRows,
+    mainRef,
+    dryRun,
+  });
+  const ok = result.counts.removalFailed === 0;
+  out({
+    ok,
+    command: "worktree",
+    subcommand: "reap",
+    db: DB_PATH,
+    repo: repoPath,
+    mainRef,
+    ...result,
+    // Printed last so the three causes are the first thing a reader sees in the JSON.
+    summary:
+      `${result.counts.reaped} reaped` +
+      ` / ${result.counts.refusedSoleCarrier} refused-sole-carrier` +
+      ` / ${result.counts.lockedOverTerminalItem} locked-over-terminal-item` +
+      (dryRun ? ` (dry run: ${result.counts.pendingReap} would be reaped)` : "") +
+      (result.counts.removalFailed ? ` / ${result.counts.removalFailed} removal FAILED` : ""),
+  });
+  if (!ok) process.exitCode = 1;
 }
 
 /**
@@ -3684,6 +3764,13 @@ async function cmdCheck(rigFile, human, rest = []) {
   // claims only - not the file bodies), and null when docs/ cannot be read, which the rule reports
   // as UNKNOWN rather than as a pass.
   const docCounts = readDocCountClaims({ root: process.cwd() });
+  // #6374: WHICH pi this code actually runs. `readDependencyPlane` measures the resolved package, the
+  // pin and the store's schema version (the store is opened READ-ONLY, so this cannot migrate or take
+  // the broker's write lock); it never throws, so a leg that cannot be measured is reported as unknown
+  // rather than as a pass. The root is the checkout the code lives in, not cwd: a scaffold in /tmp can
+  // be the cwd while the imports still resolve from the checkout. The measurement is handed to auditRig
+  // as plain data, keeping that function fs-free.
+  const dependencyPlane = await readDependencyPlane({ db: DB_PATH });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -3699,6 +3786,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     sharedTreeLinked,
     contextBySeat,
     docCounts,
+    dependencyPlane,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {
@@ -3765,6 +3853,8 @@ usages:
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
   node cli.mjs worktree <path> [--source <dir>]   isolate a work item in its own checkout
+  node cli.mjs worktree audit                     read-only ledger of every registered worktree; exit 1 when the reapable count is non-empty (#5301)
+  node cli.mjs worktree reap [--dry-run] [--main <ref>]  consume the reapable set; REFUSE a sole-carrier tree (#5301)
   node cli.mjs format [--check] [-- <paths>]   format explicit files with the pinned prettier (--check = gate, no write)
 `;
 
@@ -3803,6 +3893,7 @@ try {
   }
   else if (cmd === "worktree") {
     if (rest[0] === "audit") await cmdWorktreeAudit();
+    else if (rest[0] === "reap") await cmdWorktreeReap(rest.slice(1));
     else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
     else if (rest[0] === "prune-branch") await cmdWorktreePruneBranch(rest[1]);
     else await cmdWorktree(rest);

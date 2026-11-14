@@ -146,7 +146,7 @@ Primary site: **the commit that closes the item** — `complete_work` (`src/rig.
 `cancel_work` (`:856-877`) already run inside `api.commit` with the whole queue document loaded, so an
 in-transaction `releaseDependents(tx, closedId, at)` makes the close and the dependent's release atomic
 (architect F7). `driver.mjs` has **no** store write path (`selectWakes` is pure; `driveOnce` submits
-wakes) and must not gain one (D111/D112). Backstop: a broker-pass sweep re-evaluates any `dependency`
+wakes) and must not gain one (D111b/D112b). Backstop: a broker-pass sweep re-evaluates any `dependency`
 whose queue gates are all `done`, for the crash case; the pass already loads the queue
 (`src/broker.mjs:1052`) and already writes in-pass.
 

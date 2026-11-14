@@ -31,7 +31,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -128,12 +128,44 @@ function buildFixture(extraRefs) {
     }
     // The code the runbooks name is reachable, so `node tools/fleet-health.mjs --db
     // ./selfdev.sqlite` runs against the fixture store rather than the live rig.
-    for (const entry of ["cli.mjs", "src", "tools", "scripts", "node_modules", "package.json", "rig.starter.json"]) {
+    for (const entry of ["cli.mjs", "src", "tools", "scripts", "demo", "prompts", "extensions", "node_modules", "package.json"]) {
       if (existsSync(join(ROOT, entry))) symlinkSync(join(ROOT, entry), join(dir, entry));
     }
     assert.equal(cli(["init"]).exitCode, 0, "fixture rig init");
     assert.equal(cli(["up", "rig.json", "--no-serve"]).exitCode, 0, "fixture rig up");
-    return { dir, db, git, cli };
+    // The OPERANDS a Diagnose block names. CI has no live rig, so the fixture builds the
+    // states a person would actually be reading: a broker log from a bounded serve, the
+    // store at the path a runbook names, the refs it probes, a stand-in vendor clone.
+    // Copied, not symlinked: a Diagnose tool that REWRITES one (fix-mojibake) would then
+    // edit the fixture's copy instead of the live repo.
+    for (const f of readdirSync(ROOT).filter((n) => /^rig.*\.json$/.test(n)).concat(["constitution.txt", "AGENTS.md"])) {
+      cpSync(join(ROOT, f), join(dir, f)); // every rig spec a named demo reads
+    }
+    mkdirSync(join(dir, ".spike"), { recursive: true });
+    // A bounded serve writes the real `<db>.broker.log` and its own stderr; that is the
+    // pair `broker-down-or-stalled.md` tells you to read. The serve is fixture setup, not
+    // a Diagnose command - it produces the artifact the Diagnose block reads.
+    const serve = cli(["serve", "--max-duration", "2"]);
+    writeFileSync(join(dir, ".spike", "serve.err"), serve.stderr || `serve exited ${serve.exitCode}\n`);
+    mkdirSync(join(dir, ".spike", "store"), { recursive: true });
+    symlinkSync(db, join(dir, ".spike", "store", "selfdev.sqlite"));
+    git(["update-ref", "refs/rescued", "main"]);
+    // `vendor/pi-main` is gitignored, so a fresh clone has no vendor tree. The fixture
+    // builds the SHAPE the runbook probes - a shallow clone with an origin/main ref and
+    // the durable package the pin points at. The NUMBERS it prints are fixture-shaped, not
+    // upstream: this proves the command is valid, not what the pin is.
+    const vendor = join(dir, "vendor", "pi-main");
+    mkdirSync(join(dir, "vendor", "eval"), { recursive: true });
+    writeFileSync(join(dir, "vendor", "eval", "README.md"), "fixture stand-in for the vendor/eval tree\n");
+    mkdirSync(join(vendor, "packages", "durable"), { recursive: true });
+    writeFileSync(join(vendor, "packages", "durable", "package.json"), JSON.stringify({ name: "pi-durable", version: "1.5.1" }) + "\n");
+    const vgit = (args) => run("git", args, vendor);
+    vgit(["init", "-q", "-b", "main", "."]);
+    vgit(["add", "packages"]);
+    vgit(["-c", "user.name=durig", "-c", "user.email=durig@localhost", "commit", "-m", "fixture vendor stand-in"]);
+    const vendorSha = vgit(["rev-parse", "HEAD"]).stdout.trim();
+    vgit(["update-ref", "refs/remotes/origin/main", vendorSha]);
+    return { dir, db, git, cli, vendorSha, vendor, decisions: readFileSync(join(dir, "docs", "DECISIONS.md"), "utf8"), competitors: readFileSync(join(dir, "docs", "COMPETITORS.md"), "utf8") };
   } catch (e) {
     rmSync(dir, { recursive: true, force: true });
     throw e;
@@ -161,6 +193,13 @@ const placeholderValues = {
   id: "1",
   port: "8080",
   example: "example",
+  base: "item-1234",
+  pin: fixture.vendorSha,
+  mint: Math.max(...[...fixture.decisions.matchAll(/\bD-?(\d+)\b/g)].map((m) => Number(m[1]))) + 1,
+  project: "OpenRig",
+  marker: "ROADMAP",
+  files: "docs/runbooks/README.md",
+  branches: fixture.git(["branch", "--format", "%(refname:short)"]).stdout.trim().split("\n").join(" "),
 };
 const usageOut = run(process.execPath, [join(ROOT, "cli.mjs"), "--help"], ROOT);
 const usageVerbs = cliUsageVerbs(`${usageOut.stdout}${usageOut.stderr}`);
@@ -184,9 +223,18 @@ const hasTool = (name) => {
   return toolCache.get(name);
 };
 
+// `created` holds the files an EARLIER Diagnose line wrote: the harness runs the block in
+// document order, so a file the runbook builds is present for the line that reads it.
+const created = new Set();
+// Variables an earlier line of the same block assigned. A line that reads one the
+// fixture never set is a NAMED gap - its exit code is not a verdict about the rig.
+const assigned = new Set(["DURIG_DB", "DURIAN_PI_DB", "HOME", "PWD", "PATH", "TMPDIR", "SHLVL", "LANG", "NODE"]);
 const inFixture = {
-  exists: (p) => existsSync(p.startsWith("/") ? p : join(fixture.dir, p)),
-  refExists: (r) => fixture.git(["rev-parse", "--verify", r]).exitCode === 0,
+  exists: (p) => created.has(p) || existsSync(p.startsWith("/") ? p : join(fixture.dir, p)),
+  refExists: (r, repo) => {
+    const dir = !repo || repo.startsWith("$") ? fixture.dir : (repo.startsWith("/") ? repo : join(fixture.dir, repo));
+    return run("git", ["rev-parse", "--verify", r], existsSync(dir) ? dir : fixture.dir).exitCode === 0;
+  },
   hasTool,
 };
 const probe = (line) => run("bash", ["-c", line], fixture.dir, { DURIG_DB: fixture.db, DURIAN_PI_DB: fixture.db });
@@ -195,6 +243,7 @@ const probe = (line) => run("bash", ["-c", line], fixture.dir, { DURIG_DB: fixtu
 const problems = [];
 const gaps = [];
 const executedByFile = new Map();
+const executedLines = [];
 let commandLines = 0;
 
 for (const rb of runbooks) {
@@ -225,7 +274,11 @@ for (const rb of runbooks) {
       const result = probe(filled.map((f) => f.line).join("\n"));
       const verdict = classifyProbeFailure({ line: fence.code, ...result });
       if (verdict.kind === "defect") problems.push(`${rb.file}: ${verdict.reason}: ${fence.code.split("\n")[0]}…`);
-      else executedByFile.set(rb.file, (executedByFile.get(rb.file) ?? 0) + 1);
+      else {
+        for (const m of fence.code.matchAll(/>\s*([A-Za-z0-9_./-]+)/g)) if (m[1] !== "/dev/null") created.add(m[1]);
+        executedByFile.set(rb.file, (executedByFile.get(rb.file) ?? 0) + 1);
+        executedLines.push({ file: rb.file, line: fence.code.split("\n")[0], exit: result.exitCode });
+      }
       continue;
     }
 
@@ -237,6 +290,11 @@ for (const rb of runbooks) {
         continue;
       }
       const line = filled.line;
+      const unset = [...new Set([...line.matchAll(/\$\{?([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]))].filter((v) => !assigned.has(v));
+      if (unset.length) {
+        gaps.push({ file: rb.file, line, reason: `the fixture never sets ${unset.join(", $")}` });
+        continue;
+      }
       const unknownVerb = unknownCliVerbProblem(line, usageVerbs);
       if (unknownVerb) {
         problems.push(`${rb.file}: ${unknownVerb}`);
@@ -259,12 +317,21 @@ for (const rb of runbooks) {
         if (!String(result.stdout).trim()) gaps.push({ file: rb.file, line, reason: "--json printed nothing against the fixture store" });
         else if (!stdoutIsJson(result.stdout)) problems.push(`${rb.file}: --json output is not parseable: ${line}`);
       }
+      for (const m of line.matchAll(/>\s*([A-Za-z0-9_./-]+)/g)) if (m[1] !== "/dev/null") created.add(m[1]);
+      const setVar = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)=/);
+      if (setVar) assigned.add(setVar[1]);
       executedByFile.set(rb.file, (executedByFile.get(rb.file) ?? 0) + 1);
+      executedLines.push({ file: rb.file, line, exit: result.exitCode });
     }
   }
 }
 
-if (process.env.DIAG_DEBUG) gaps.forEach((g) => console.log(`GAP ${g.file} :: ${g.line.slice(0,90)} :: ${g.reason}`));
+if (process.env.DIAG_DEBUG) {
+  gaps.forEach((g) => console.log(`GAP ${g.file} :: ${g.line.slice(0,90)} :: ${g.reason}`));
+  const verdicts = executedLines.filter((e) => e.exit !== 0);
+  console.log(`of the ${executedLines.length} executed, ${verdicts.length} returned a non-zero VERDICT`);
+  executedLines.forEach((e) => console.log(`RAN ${e.file} :: exit=${e.exit} :: ${e.line.slice(0,90)}`));
+}
 const neverExecuted = runbooks
   .filter((rb) => !executedByFile.has(rb.file))
   .map((rb) => rb.file)
@@ -316,6 +383,14 @@ for (const c of controls) {
 
 // The assertions are only as good as the probe behind them: a real command must pass for
 // real, and a broken one must genuinely fail.
+// The new rules, pinned: an operand the command guards is not a gap; a ref RANGE is a
+// ref, not a path; a `for` loop cannot smuggle a verb past the allowlist.
+assert.ok(classifyDiagnoseLine("cat selfdev.sqlite.broker.json 2>/dev/null", inFixture).runnable, "a command that tolerates the file being absent must RUN, not be waved past");
+assert.ok(!classifyDiagnoseLine("cat selfdev.sqlite.broker.json", inFixture).runnable, "the same command without the guard still needs the file");
+assert.ok(classifyDiagnoseLine("git rev-list --count main..item-1234", inFixture).runnable, "main..item-1234 is a ref range the fixture has");
+assert.ok(!classifyDiagnoseLine("git rev-list --count main..item-999999", inFixture).runnable, "a range naming a ref the fixture does not have is still a gap");
+assert.ok(!classifyDiagnoseBlock("for b in item-1234; do git commit -m x; done", inFixture).runnable, "a for loop that writes must be refused, not run as a unit");
+assert.ok(classifyDiagnoseBlock("for b in item-1234; do echo $b; git rev-list --count main..item-1234; done", inFixture).runnable, "a read-only for loop must run");
 const goodProbe = probe("node cli.mjs status --json");
 assert.equal(goodProbe.exitCode, 0, "the fixture CLI read path must work");
 assert.ok(stdoutIsJson(goodProbe.stdout), "status --json must print parseable JSON");
@@ -343,7 +418,7 @@ for (const file of neverExecuted) {
 if (process.env.DIAG_DEBUG) gaps.forEach((g) => console.log(`GAP ${g.file} :: ${g.line.slice(0,80)} :: ${g.reason}`));
 console.log(
   `RUNBOOK DIAGNOSE TEST PASS: ${runbooks.length} runbooks, ${commandLines} Diagnose command lines, ` +
-  `${executed} executed (exit 0, --json parseable), ${gaps.length} reported gaps, ` +
+  `${executed} executed (exit 0 or a verdict the command itself returned; any --json output parsed), ${gaps.length} reported gaps, ` +
   `${neverExecuted.length} runbooks CI cannot execute (${neverExecuted.join(", ")}).`,
 );
 const gapReasons = {};

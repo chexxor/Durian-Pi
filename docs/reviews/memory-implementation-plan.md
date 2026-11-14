@@ -245,6 +245,9 @@ security position) → 163 (invariants) → 165/166 once the substrate names the
   `CFG.DURIG_DB ?? "./rig.sqlite"`, so the documented spelling silently audits an **empty** `./rig.sqlite`.
   Observed directly this session: with `DURIAN_PI_DB`, `status` returned an empty queue and "no verifier seat
   to judge"; with `DURIG_DB`, it returned the 12 seats and 4,818 queue rows.
+  *(Closed 2026-11-11 by #6336: `AGENTS.md` step 4 now names `DURIG_DB`, the current line is `cli.mjs:161` (was 142
+  in that tree), and no `docs/SELFDEV.md` command line instructs `DURIAN_PI_DB` - the remaining occurrences there
+  are the discriminating probes that show the old name is ignored.)*
 - Queue shape (re-measured): 4,818 rows — 3,748 `done`, 777 `cancelled`, 274 `held`, 19 `deferred`. **No
   memory-feature item exists in the queue** (searched all 293 non-terminal rows).
 

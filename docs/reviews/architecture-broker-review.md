@@ -1,6 +1,6 @@
 # Architecture & code review — broker, CLI, UI, supervisor (edge cases + temporal faults)
 
-**Status:** review delivered (architect, 2026-10-19). Item **#2520**. Durable decision: **D112**
+**Status:** review delivered (architect, 2026-10-19). Item **#2520**. Durable decision: **D112b**
 (`docs/DECISIONS.md`).
 **Scope (in):** `src/broker.mjs`, `cli.mjs`, the UI surface (`ui.mjs`, `src/tui/*.mjs`, `src/watchview.mjs`,
 `src/readclient.mjs`, `src/brokerread.mjs`), `src/supervisor.mjs`, and the wake/task seam they sit on
@@ -225,7 +225,7 @@ Rank = end-user impact × likelihood × blast radius. Bug-fix/temporal/liveness 
 5. **Fix.** Eliminate `probeStorage`: serve `readStoppedConvIds`, `readSeatRoots`, and `superviseOnce`'s
    scans through `readStorage` (the harness's own `Storage`), as the `read` op already does; keep the
    `dispatchRead(readStorage ?? probeStorage, …)` fallback only for single-handle callers (demos).
-   **Invariant restored (D111's own principle):** one owner ⇒ one connection.
+   **Invariant restored (D111b's own principle):** one owner ⇒ one connection.
 6. **Failing-first test.** A demo that runs a `read`-op and a `document()`-based read on two connections
    against one live writer and asserts no `SQLITE_BUSY` past busy_timeout; plus a unit assert that the
    broker holds exactly one storage handle.
@@ -296,7 +296,7 @@ Rank = end-user impact × likelihood × blast radius. Bug-fix/temporal/liveness 
   `demo/broker-inbox.test.mjs`, `broker-read-nopass.test.mjs`, `broker-intent-wake.test.mjs` (green).
 - **The worktree keep-reason rule** (`src/broker.mjs` `classifyWorktrees`): refuse rather than destroy; a
   dirty tree is kept and reported (D60). Covered by `demo/broker-worktree-sweep.test.mjs`.
-- **The read seam's *direction*** (D111): when a broker is alive every read goes through the spool;
+- **The read seam's *direction*** (D111b): when a broker is alive every read goes through the spool;
   direct open only when no broker is alive. The residual is the in-process second connection (F8), not the
   direction.
 - **genlock's acquire-by-`O_EXCL` race**, lease renewal (`LEASE_RENEW_MS`), `STALE_MS` set above the
@@ -371,7 +371,7 @@ Run every item against any seam before shipping:
 
 ## 6. Disposition
 
-- This document is the review of record; the durable design decision is **D112** (`docs/DECISIONS.md`).
+- This document is the review of record; the durable design decision is **D112b** (`docs/DECISIONS.md`).
 - The ranked findings are handed back to `pm` as **separate queue items** (one per finding, each with the
   7-part block above), bug-fix/temporal/liveness ahead of capability, owners proposed by `pm`.
 - Escalation: the failure-scope policy (theme 1 / F2+F4) is an architecture change with a blast radius

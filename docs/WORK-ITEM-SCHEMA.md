@@ -196,7 +196,10 @@ The schema is only real when a check fails on violation:
 1. `item-title-schema` (error): a **new** item whose title starts with a state word, or with another
    item's id (except R6), or exceeds 100 chars.
 2. `item-kind` (fix-now): a `kind` outside §4/R3's vocabulary.
-3. `blockedBy-resolves` (error): a gate that names a non-existent id, or a `cancelled` gate.
+3. `blockedBy-resolves` — **declared, not enforced.** Two halves with two different severities, because they have two different populations:
+   - **mint (error):** a `blockedBy` id must exist in the queue document and must not already be terminal. Refuse it at `send_work`. Measured population of non-existent gate ids on this rig: **0** (census below), so this costs nothing today and stops new strands.
+   - **read (attention/soft):** an existing gate whose referenced row is `cancelled` is a strand to **report with a count**, never rewritten by the checker. Clearing it is a transition owned by the row's parties and by the gate-edit verb (#6530), not by the check.
+   Census: `node tools/probes/stranded-gate-census-6664.mjs` (exit 1 when the count is non-zero; **23** stranded rows at `2026-11-11T13:32:14Z`, 14 held / 9 deferred, 13 of them with no recorded block at all). Severity is raised only when that number falls — a rule whose severity is asserted rather than measured is a rule that gets disabled (#3539).
 4. `branch-name` (fix-now): a ref that does not encode exactly one item (`item-<id>`, or the legacy
    `<seat>-item-<id>` which is adopted rather than reported) (this would have caught all 19).
 5. New items set `notice: true` rather than relying on `isDoneNotice`'s regex, so R6's fallback can
@@ -208,7 +211,7 @@ The schema is only real when a check fails on violation:
 2. **Read both**: tooling maps legacy prefixes → `kind` so one query works across old and new.
 3. **Backfill lazily**: when an old item is re-touched (revised, released, re-routed), add its `kind` and
    convert its prose gate to `blockedBy`. Never a bulk rewrite.
-4. **Then enforce**: switch on §8's rules, with the legacy exemption (§7) in force.
+4. **Then enforce**: switch on §8's rules, with the legacy exemption (§7) in force. As of 2026-11-11 **none** of §8's five rules exists in `src/checkup.mjs` (it implements 23 rules; §8's are not among them), so this phase is a plan, not a state. A rule is real only when a run can fail on it.
 
 ## 10. How to verify this document
 
