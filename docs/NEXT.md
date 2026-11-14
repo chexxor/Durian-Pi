@@ -114,6 +114,11 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `e6aad7a5` | merge: land landing-20261114-docsonly onto main — `item-6537`, `item-6549` union-resolved by rule, containment proven 0 loss, docs area 8/8 |
 | `f2959764` | tools+docs: `chain-resolve` rules 8–9 (import union + link proof, provenance union), classes `I`/`P` + `--with-text` in `conflict-hunk-shape`, DISPOSITIONS correction, pitfall 344 — check 15/15 in 5.6 s, suite 346/346 in 151.6 s |
 | `8b5a19e1` | merge: land landing-20261114-c10 onto main — `item-6173` (seat restart limit 3 at the `openHarness` seam) + `item-6238` (pi-pin / unlinked-deps runbooks), containment proven 0 loss, suite 347/347 in 153.9 s |
+| `4b52ecc8` | tools(ref-recut --refresh, conflict-blocks --full/--census): the re-cut instruments, measured 25 refs in 4.7 s |
+| `1751a3c2` | merge: land item-6343/6374/6435/6664/7090 recuts (scripts/land.mjs --changed-suite, derived gate 73/354 green) |
+| `a9b0d007` | absorb 9 refs whose added lines are already in main verbatim (tools/absorb-refs.mjs; tree unchanged, refs kept) |
+| `af86fefe` | docs+tools: absorb-refs.mjs, disposition-rows.mjs, merge-containment-proof --all-lost; 19 disposition rows + verbatim residue |
+| `1872bc25` | docs(NEXT): the conflict pass closed out — 19 ancestors, 17 held with residue; the self-merge seam is next |
 | *(this commit)* | docs(NEXT): the two rows above — exempt, a file cannot name the commit that carries it |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
