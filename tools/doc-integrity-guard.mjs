@@ -210,8 +210,106 @@ for (const rel of expand(ENV_SITES)) {
     );
   });
 }
+/* 6. The ledger itself (#6344). docs/DECISIONS.md is citable only if a D-number names exactly one entry.
+ *    Measured on this tree (HEAD 35001c3a, before the rule existed): `node tools/doc-integrity-guard.mjs`
+ *    said "0 hard, 0 soft, exit 0" while the file had D91 heading three entries, D111-D120 and D258/D259
+ *    heading two each, six headings with no number at all (`## D###` and `## D-<mint>`), and 118 sentences of
+ *    80+ characters byte-identical in two different entries. Collisions and unnumbered headings are HARD:
+ *    "see D115" resolving to nothing is the same class of failure as a docs/NEXT.md pointer to a ROADMAP item
+ *    that was never registered. Repeated body text is SOFT, because a cross-reference legitimately repeats a
+ *    sentence and only the ledger owner can tell a duplicate ruling from a pointer to one. The verdict is derived
+ *    from the file it is run on, never pinned to a tree: measured 2026-11-14 (Linux, Fedora Linux 45, kernel
+ *    7.2.15-300.fc45.x86_64, node v24.22.1) — 2 hard on the recut base `8b5a19e1` (D265 and D266 each used twice)
+ *    and 0 hard on `main 026ab5f6` after the #6352 cleanup minted D265b/D266b/D271b/D272b. */
+const LEDGER = "docs/DECISIONS.md";
+const MIN_DUP_CHARS = 80; // below this, boilerplate ("Verify (ran; exit codes named).") repeats by design
+const ledger = read(LEDGER);
+const ledgerStats = { headings: 0, collisions: 0, placeholders: 0, dupPairs: 0 };
+if (ledger) {
+  const lines = ledger.split(/\r?\n/);
+  // Forms seen in the file: `## D91 — ...`, `## D-5015 — ...` (numbered by the item that minted it), the
+  // un-minted drafts `## D###` / `## D-<mint>` / `## D<mint>`, and the disambiguated re-mints `## D265b`.
+  // The suffix is part of the number: D265 and D265b are two entries that were given the same base number
+  // and separated by minting a letter onto the later one (docs/DECISIONS.md #6352, commit 026ab5f6).
+  // A regex that stops at the digits reads `D265b` as `D265` and reports a collision that does not exist —
+  // measured 2026-11-14 in the item-6344 recut worktree: the guard said "2 D-number collision(s)" on a
+  // ledger the cleanup pass had already made unique.
+  const headings = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^##\s*D-?([0-9]+[a-z]?|###|<mint>)/);
+    if (m) headings.push({ raw: lines[i], line: i + 1, token: m[1] });
+  }
+  ledgerStats.headings = headings.length;
+  const bodyOf = new Map(); // heading line -> the entry's body text, up to the next heading
+  headings.forEach((h, i) => {
+    const end = i + 1 < headings.length ? headings[i + 1].line - 1 : lines.length;
+    bodyOf.set(h.line, lines.slice(h.line, end).join(" ").replace(/\s+/g, " ").trim());
+  });
+  const byNumber = new Map(); // keyed by the token as written, so D265 and D265b do not collide
+  for (const h of headings) {
+    if (!/^[0-9]+[a-z]?$/.test(h.token)) {
+      ledgerStats.placeholders++;
+      hard.push(
+        `HARD LEDGER  ${LEDGER}:${h.line} heading "${h.raw.trim().slice(0, 72)}" carries no D-number (${h.token}) — ` +
+          `the entry cannot be cited, and an uncitable ruling in the ledger is not a style problem. Mint a number or fold it into the entry it duplicates.`,
+      );
+      continue;
+    }
+    const n = h.token;
+    if (!byNumber.has(n)) byNumber.set(n, []);
+    byNumber.get(n).push(h);
+  }
+  for (const [n, list] of [...byNumber].sort((a, b) => Number(a[0]) - Number(b[0]) || a[0].localeCompare(b[0]))) {
+    if (list.length < 2) continue;
+    ledgerStats.collisions++;
+    hard.push(
+      `HARD LEDGER  ${LEDGER} numbers D${n} at lines ${list.map((h) => h.line).join(", ")} — ` +
+        `${list.length} different entries share one number, so "see D${n}" names nothing: ` +
+        list.map((h) => h.raw.trim().slice(0, 60)).join("  |  "),
+    );
+  }
+  const seenIn = new Map(); // sentence -> set of entry heading lines it appears in
+  for (const h of headings) {
+    const body = bodyOf.get(h.line) || "";
+    const inThisEntry = new Set(); // a sentence repeated INSIDE one entry is not a duplicated ruling
+    for (const s of body.split(/(?<=[.!?])\s+/)) {
+      const t = s.trim();
+      if (t.length < MIN_DUP_CHARS) continue;
+      inThisEntry.add(t);
+    }
+    for (const t of inThisEntry) {
+      if (!seenIn.has(t)) seenIn.set(t, new Set());
+      seenIn.get(t).add(h.line);
+    }
+  }
+  const pairs = new Map();
+  for (const [sentence, entryLines] of seenIn) {
+    if (entryLines.size < 2) continue;
+    const arr = [...entryLines].sort((a, b) => a - b);
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const key = `${arr[i]}|${arr[j]}`;
+        if (!pairs.has(key)) pairs.set(key, { a: arr[i], b: arr[j], samples: [] });
+        if (pairs.get(key).samples.length < 2) pairs.get(key).samples.push(sentence.slice(0, 60));
+      }
+    }
+  }
+  ledgerStats.dupPairs = pairs.size;
+  for (const p of [...pairs.values()].sort((a, b) => a.a - b.a)) {
+    soft.push(
+      `SOFT LEDGER  ${LEDGER} entries at ${p.a} and ${p.b} carry byte-identical body text (>=${MIN_DUP_CHARS} chars): ` +
+        `"${p.samples.join("  ...  ")}" — same text, different entry. Either merge the two rulings or make the second one a pointer`,
+    );
+  }
+}
+
+
 if (!quiet) {
-  console.log(`DOC INTEGRITY GUARD  (docs/ROADMAP.md registers ${items.size} items; ${files.length} runbooks; env-name rule scanned ${expand(ENV_SITES).length} files, found ${deadNameHits} dead-name command(s))`);
+  console.log(
+    `DOC INTEGRITY GUARD  (docs/ROADMAP.md registers ${items.size} items; ${files.length} runbooks; ` +
+      `env-name rule scanned ${expand(ENV_SITES).length} files, found ${deadNameHits} dead-name command(s); ` +
+      `ledger: ${ledgerStats.headings} headings, ${ledgerStats.collisions} D-number collision(s), ${ledgerStats.placeholders} unnumbered heading(s), ${ledgerStats.dupPairs} duplicate-body pair(s))`,
+  );
   for (const h of hard) console.log("  " + h);
   if (showSoft) for (const s of soft) console.log("  " + s);
   else if (soft.length) console.log(`  (${soft.length} soft finding(s) hidden — re-run with --soft)`);
