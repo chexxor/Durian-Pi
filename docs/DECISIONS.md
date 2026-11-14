@@ -12457,6 +12457,28 @@ operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent doe
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
 
+## D307 — (provisional; re-mint at land from the MERGED tree) **`promote` is safe by CONTENT, not by identity: it refuses unless the promote is additive, shares one predicate with the landing gate, takes the landing lock, retires refs only after main advances, and stores its evidence as a queue row - and "operator only" is a layer, not a boundary** (architect review, item #7148, of build row #7147; host measured: Linux, kernel `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0; tree = branch `item-7148`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
+
+**Status.** Design ruling on the promote verb before #7147 is built. Whether `staging` exists at all is `lead`'s (WORK-ITEM-MODEL §7 is marked PROVISIONAL); the CLI-vs-spool placement is `pm`'s.
+
+**Context.** `node tools/probes/promote-verb-failure-modes-7148.mjs` → **exit 1**, built in a throwaway repo so the real refs were never touched. Measured: `refs/heads/staging` does **not** exist; `cli.mjs` has **no** promote command; the confinement guard (`refusalFor`, src/confine.mjs:903) ALLOWS a seat to run `git update-ref refs/heads/main <sha>`, `git update-ref refs/heads/staging <sha>`, `node scripts/promote.mjs staging main` and inline `node -e "execSync(...)"`. With a diverging staging, `git merge --ff-only staging` exits **128** (git refuses) while the tempting one-liner `git update-ref refs/heads/main staging` silently **loses a commit** from main. `src/broker.mjs:482-498` already states the enforcement limit for control-plane ops: `from` is producer-stamped, all seats share one OS user, same-user forgeability is a KNOWN RESIDUAL (UNVERIFIED-FOR-PREVENTION), "the layers narrow it; they do not eliminate it. Never claim otherwise."
+
+**Decision.**
+1. **Additive or refuse.** Before any write: `merge-base --is-ancestor main staging` must exit 0. Otherwise refuse with the remediation named (rebase staging onto main, or land the refs). Never force a revert into main.
+2. **One predicate.** `promote` calls the same exported gate as `land.mjs` (src/landinggate.mjs), keyed on the set of parent refs. Two copies of a landing rule drift, and drift at a landing gate is silent.
+3. **The same lock.** Promote takes the exclusive landing lock (`acquireAllSlotsSync`); a promote without it is the two-delegates-one-tree shape #4432 named.
+4. **Retire after, never before.** Refs are deleted only once main has advanced, only if they are ancestors of the new tip, and never if their worktree is dirty or locked - the rule `tools/branch-census.mjs` already computes. Unmerged refs are written to `docs/DISPOSITIONS.md`, and the row is written even when nothing is deleted.
+5. **Evidence is stored, not printed.** The verb records `{command, exitCode, artifact}` with the artifact naming the new main sha, as a queue row; suite capture stays `> out 2>&1; rc=$?`, never piped.
+6. **"Operator only" is a layer.** An identity gate is kept as detection; the enforcement is the content gate, because a stamp in a shared-user rig is forgeable. No demo can prove a seat cannot promote, so the spec must not promise one.
+
+**Options considered.** (A) identity/env gate as the boundary - rejected, it reads as a wall and is not one. (B) content gate shared with landing - chosen; testable and independent of who is at the terminal. (C) promote as a broker-side control-plane spool op (D113's shape) - the durable direction, but gated on unlanded spool work (#3969, #3975 held), and the rig's own recorded facts cut against it now: a mutating spool intent does not wake a dormant broker, and `broker-serve --start` refuses on a dirty live tree. **Trade-off accepted:** a seat can still run the verb; what the rig guarantees is that nothing reaches main unless it is additive, gated, locked and evidenced.
+
+**Consequences.**
+- `staging` must be created by the landing path, not hand-made; absent staging is a refusal, not a no-op.
+- `promote` and `land` cannot disagree, because they are the same function - the "second, weaker path to main" pm named is closed structurally, not by sequencing.
+- The verb is idempotent: re-running it reports "nothing to promote" via the ancestor test.
+- Falsifier: `tools/probes/promote-verb-failure-modes-7148.mjs` exits 1 today (a diverging promote loses a commit); it exits 0 only when the verb refuses non-additive promotes and the additive case advances main with evidence recorded.
+
 ## D306 — (provisional; re-mint at land from the MERGED tree — other unlanded branches already carry provisional D284 (`item-7026`), D285 (`item-7038`), D287 (`item-7082`), D288 (`item-7123`), D289 (`item-7123`)) **the landing gate keys on the PARENTS a landing advances, never on the derived merge sha; an author's own completion is not verification; and the requirement is phased - refuse on contradiction now, report absence, ratchet to refusal only after the habit exists** (architect review, item #7144, of build row #7143; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git version` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**, git **2.56.0**; tree = branch `item-7144`, `@earendil-works/pi-durable` **1.3.0** from this worktree's lockfile, NOT the seat root's 1.5.1)
 
 **Status.** Design ruling on the landing gate (`scripts/land.mjs`, `src/landinggate.mjs`) before #7143 is built.
