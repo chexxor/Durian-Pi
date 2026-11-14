@@ -38,14 +38,38 @@ procedure.
 (`tools/branch-census.mjs`) joins `worktree audit`, the queue, per-ref git facts and **this ledger**, then
 prints the tally and the exact prune commands. To EXECUTE that plan in one bounded call use
 `timeout 300 node tools/branch-prune.mjs --db ./selfdev.sqlite` (add `--reap-worktrees` to release only the
-trees the audit calls `reapable` — terminal, unlocked, clean — while leaving every ref in place) (2026-11-14, Linux, Fedora Linux 45, kernel
-`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): it re-runs the census, then per ref re-checks
+trees the audit calls `reapable` — terminal, unlocked, clean — while leaving every ref in place) (2026-11-14, Linux, Fedora Linux 45,
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): it re-runs the census, then per ref re-checks
 `git merge-base --is-ancestor` **at delete time**, does `git worktree remove` without `--force` and
 `git branch -d` without `-D`, prints a `git branch <name> <sha>` recovery line for every ref it removed, and
 writes that log to `.spike/prune-log.txt`. **Exit 1 means the plan and live git disagree** (a planned ref is no
 longer an ancestor, or a removal failed) — a pass that deleted nothing never exits 0. Pinned by
-`demo/branch-prune.test.mjs` (**0.21 s**, fixture repo, no store, no model). Measured 2026-11-11 at `e01e9256` (Linux, Fedora Linux 45,
+`demo/branch-prune.test.mjs` (**0.68 s**, fixture repo, no store, no model). Measured 2026-11-11 at `e01e9256` (Linux, Fedora Linux 45,
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): 77 refs / 69 worktrees in ~25-35 s, plan = 1.
+Re-measured 2026-11-14 after the retire pass at `18e378d2`: `--dry-run` **9.2 s**, exit 0, `planned 0`; the census leg
+is now **4.0 s** at 53 refs / 28 worktrees.
+
+**The retire verb — for refs git cannot prove landed.** A ref whose tip is **not** an ancestor of `main` is retired
+only when the pass is told, in writing, that it is dead, and only after a copy exists:
+```bash
+DURIG_DB=./selfdev.sqlite timeout 300 node tools/branch-prune.mjs --retire-merged \
+  --retire-unmerged '^landing-<yyyymmdd>' \
+  --bundle-dir .spike/quarantine-<date>/bundles --quarantine .spike/quarantine-<date> \
+  --unlock-locked --dry-run          # 4.4 s here; drop --dry-run to execute (26.0 s, exit 0)
+```
+- `--retire-merged` plans every ref live-proven an ancestor of `main`, **even when a stale `docs/DISPOSITIONS.md`
+  KEEP row (written before the landing) still names it**.
+- `--retire-unmerged <regex>` is an **allowlist**, not a wildcard: a ref that merely conflicts with `main` is never
+  in the plan (R-B #3270), and every ref it does name is bundled (`git bundle create <dir>/<ref>.bundle
+  <merge-base>..<ref>`) and `git bundle verify`-checked **before** `git update-ref -d`. No bundle, no delete.
+  Ref names with slashes are sanitised into flat file names (`wip/seat-prompt-files` → `wip_seat-prompt-files.bundle`).
+- `--quarantine DIR` copies a tree's **residue** (logs, probes, `out-*.test.mjs`, `tmp/`) out, runs
+  `git clean -fdq`, and only then removes the tree. A tracked modification or an unrecognised file keeps the tree
+  and the ref.
+- `--unlock-locked` releases a git-lock the audit calls terminal (the deadlock family, #3165). Without the flag a
+  locked tree is **skipped before any cleaning**, so a refusal never destroys the residue it was meant to protect.
+- `--active-within N` is a guard: an unmerged ref whose tip commit is younger than N days is never planned, even if
+  the regex matches it.
 It encodes two things a hand-rolled loop gets wrong: (i) it **will not plan a delete for a ref with a KEEP
 row in `docs/DISPOSITIONS.md`** — a reverted merge is an ancestor of `main`, so `git branch -d` deletes a
 ref the ledger says to keep (a delegate pass did exactly this to `item-6063/6064/6066` on 2026-11-11 and

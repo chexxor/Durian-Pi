@@ -8,13 +8,36 @@
 // recovery line for every ref it removed.
 //
 // Measured cost (Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
-// git 2.56.0, 99 refs / 94 worktrees after the 2026-11-14 prune): `--dry-run` on the live rig 8.4 s, exit 0.
-// The census leg is the whole cost (~7.7 s at 99 refs; 25-35 s on a 100+ ref rig); each delete is one `git`
-// spawn at ~2 ms (5 measured `merge-base` calls: 10 ms), so 120 deletes is under a second.
+// git 2.56.0, 53 refs / 28 worktrees after the 2026-11-14 retire pass, tip 18e378d2): `--dry-run` on the live rig
+// 9.2 s, exit 0, planned 0; the `--retire-merged` dry-run 4.4 s; the executed retire pass 26.0 s for 46 deletes +
+// 12 worktree removals + 9 residue quarantines. The census leg is the bulk of the read (4.0 s here, 25-35 s on a
+// 100+ ref rig); each delete is one `git` spawn at ~2 ms (5 measured `merge-base` calls: 10 ms), so 120 deletes is
+// under a second.
 //
 // Usage:
 //   node tools/branch-prune.mjs [--db ./selfdev.sqlite] [--repo .] [--dry-run] [--plan <census.json>]
 //   node tools/branch-prune.mjs --reap-worktrees [--dry-run]   # release the trees the audit calls reapable; refs untouched
+//   node tools/branch-prune.mjs --retire-merged --retire-unmerged '^landing-20261114' \
+//       --bundle-dir .spike/quarantine-<date> --quarantine .spike/quarantine-<date> --unlock-locked [--dry-run]
+//     --retire-merged : plan EVERY ref whose tip is provably an ancestor of main, even when a stale
+//                       docs/DISPOSITIONS.md KEEP row (written before the landing) still names it.
+//     --retire-unmerged <regex> : ALSO plan refs whose tip is NOT an ancestor of main and whose name matches
+//                       the regex. This is an explicit allowlist: a ref that merely conflicts with main is
+//                       kept (rule R-B #3270, "refs are dispositioned, never deleted") until a ruling names it.
+//     --active-within N : guard — an UNMERGED ref whose tip commit is younger than N days is never planned,
+//                       even if the regex matches it. Off unless the flag is given.
+//                       Omit --bundle-dir and every unmerged ref is skipped, so a retire pass can only
+//                       delete work it has a verified copy of.
+//     --bundle-dir DIR  : before deleting a ref that is NOT an ancestor of main, `git bundle create`
+//                       (thin, based on merge-base with main) + `git bundle verify`. No verified bundle,
+//                       no deletion. Such refs are removed with `git update-ref -d`, never `git branch -D`.
+//     --quarantine DIR  : copy a scratch tree's uncommitted residue into DIR/<tree>/ before releasing it.
+//     --unlock-locked   : `git worktree unlock` a git-locked tree the audit calls terminal before removing.
+// Structural refs (seat roots, refs attached to a non-terminal queue row) are never planned.
+// A tree is retired only when every uncommitted file in it is RESIDUE (a log, a probe, an out-*.test.mjs
+// capture, tmp/). Any tracked modification or unrecognised file counts as work and keeps the ref — the tool
+// never discards a seat's uncommitted work (operator ruling 2026-11-14: "archive only the scratch, keep the
+// real-work trees and their refs").
 // Exit codes:
 //   0  every planned ref was removed (or, with --dry-run, every planned ref passed the live gate)
 //   1  a planned ref was SKIPPED or a removal FAILED — the plan and the live git state disagree
@@ -44,6 +67,12 @@ const opt = (name, dflt) => {
 };
 
 const NEVER_PRUNE = /(snapshot|archive|pre-split|backup|selfdev-\d+)/i;
+
+// Residue vs work, one line each. Conservative on purpose: a file that is not clearly residue keeps the
+// whole tree. Measured on the 2026-11-14 rig: the 13 dirty trees split into 9 residue-only (item-5895,
+// 6290, 6317, 6328, 6429, 6998, 7316, 7413, 7599) and 4 holding real work (item-6057 `M demo/syncpi.test.mjs`,
+// item-6375 `M docs/runbooks/pi-pin-update.md`, item-6377 `src/entrypoint-coverage.mjs`, item-7188
+// `suite-lockfile.err`) — the second group is never released.
 
 /** Run one git verb. `.status` is the exit code — `.code` does not exist on spawnSync results. */
 function git(args, repo, timeoutMs = 20000) {
@@ -92,7 +121,90 @@ export function reapWorktrees({ repo, db, dryRun = false, auditJson = null }) {
  * Execute a prune plan. `plan` is the census's `plan` array: [{ref, worktree, command}].
  * Returns the counts; the caller turns them into an exit code.
  */
-export function prunePlan({ repo, plan, dryRun = false, logPath = null, mainRef = "refs/heads/main" }) {
+/** Parse `git worktree list --porcelain` into branch -> {path, locked}. */
+function worktreeIndex(repo) {
+	const out = new Map();
+	let cur = null;
+	for (const line of git(["worktree", "list", "--porcelain"], repo).stdout.split("\n")) {
+		if (line === "") { if (cur) out.set(cur.branch, cur); cur = null; continue; }
+		const sp = line.indexOf(" ");
+		const k = sp === -1 ? line : line.slice(0, sp);
+		const v = sp === -1 ? "" : line.slice(sp + 1);
+		if (k === "worktree") cur = { worktree: v, branch: null, locked: false };
+		else if (k === "branch") cur.branch = v || null;
+		else if (k === "locked") cur.locked = true;
+		}
+	if (cur) out.set(cur.branch, cur);
+	return out;
+}
+
+/**
+ * Build the retire plan: every ref that is provably not active work.
+ * `structuralRefs` = refs held by a seat root or a non-terminal queue row (from `cli.mjs worktree audit`).
+ * A ref whose tree still holds uncommitted WORK is excluded as well; residue-only trees are planned with
+ * the residue listed, so the executor quarantines it before releasing the tree.
+ */
+export function buildRetirePlan({ repo, db, activeWithinDays = null, structuralRefs = new Set(), retireUnmerged = null, mainRef = "refs/heads/main" }) {
+	const index = worktreeIndex(repo);
+	const unmergedRe = retireUnmerged ? new RegExp(retireUnmerged, "i") : null;
+	const plan = [];
+	const excluded = { structural: 0, activeWithin: 0, snapshot: 0, uncommittedWork: 0, unmergedNotNamed: 0 };
+	for (const line of git(["for-each-ref", "--format=%(refname)", "refs/heads"], repo).stdout.trim().split("\n")) {
+		const full = line.trim();
+		if (full === mainRef) continue;
+		const name = full.replace("refs/heads/", "");
+		if (NEVER_PRUNE.test(name)) { excluded.snapshot++; continue; }
+		if (structuralRefs.has(full)) { excluded.structural++; continue; }
+		const wt = index.get(full) || null;
+		// A tree that is not inside this repo, or is a seat root by name, belongs to a seat, not to an item.
+		if (wt && (!wt.worktree.startsWith(repo) || /seatroot/i.test(path.basename(wt.worktree)))) { excluded.structural++; continue; }
+		const dirt = wt ? treeDirt(repo, wt.worktree) : { residue: [], work: [], total: 0 };
+		if (dirt.work.length) { excluded.uncommittedWork++; continue; } // uncommitted work IS active work
+		const merged = git(["merge-base", "--is-ancestor", full, mainRef], repo).status === 0;
+		const ts = Number(git(["show", "-s", "--format=%ct", full], repo).stdout.trim());
+		const ageDays = Math.floor((Date.now() - ts * 1000) / 86400000);
+		if (merged) plan.push({ ref: name, merged: true, worktree: wt?.worktree || null, locked: wt?.locked || false, residue: dirt.residue, ageDays });
+		else if (activeWithinDays !== null && ageDays <= activeWithinDays) { excluded.activeWithin++; }
+		else if (!unmergedRe || !unmergedRe.test(name)) { excluded.unmergedNotNamed++; } // conflicts with main: needs a landing decision, not a delete
+		else plan.push({ ref: name, merged: false, bundle: true, worktree: wt?.worktree || null, locked: wt?.locked || false, residue: dirt.residue, ageDays });
+	}
+	return { plan, excluded };
+}
+
+// Split a tree's uncommitted files into residue (quarantine, then delete) and work (never touched).
+const SCRATCH_RE = /(\.log$|\.txt$|\.json$|\.scratch-|out-.*\.test\.mjs$|probe.*\.mjs$|\.spike-probe\.mjs$|tools\/probes\/.*\.mjs$|^tmp\/|^[a-z]$)/;
+function treeDirt(repo, worktree) {
+	const st = git(["-C", worktree, "status", "--porcelain"], repo);
+	const residue = [], work = [];
+	for (const line of st.stdout.split("\n").filter(Boolean)) {
+		const status = line.slice(0, 2).trim();
+		const p = line.slice(3).trim();
+		if (status === "??" && SCRATCH_RE.test(p)) residue.push(p);
+		else work.push(p);
+	}
+	return { residue, work, total: residue.length + work.length };
+}
+
+/**
+ * Refs the rig itself says are in use: seat roots and trees attached to a non-terminal queue row.
+ * A LOCKED tree is deliberately NOT structural: the audit's own remedy for a lock over a terminal item is
+ * "unlock and reap" (the deadlock family, #3165), and the retire pass decides it on live ancestry. Without
+ * --unlock-locked the locked tree refuses the removal and the run exits 1 with the reason printed.
+ */
+function structuralRefs(repo, db) {
+	const a = spawnSync("node", ["cli.mjs", "worktree", "audit", "--json"], { cwd: repo, env: { ...process.env, DURIG_DB: db }, encoding: "utf8", timeout: 120000 });
+	let audit;
+	try { audit = JSON.parse(a.stdout); } catch { return { ok: false, refs: new Set() }; }
+	const set = new Set();
+	for (const w of audit.worktrees || []) if (w.keepReason === "seat-root" || w.keepReason === "live" || w.keepReason === "not-terminal" || w.keepReason === "branch-unresolved") set.add(w.branch);
+	for (const s of audit.seatRoots || []) {
+		const r = git(["rev-parse", "--abbrev-ref", s.cwd], repo);
+		if (r.status === 0 && r.stdout && r.stdout !== "HEAD") set.add("refs/heads/" + r.stdout);
+		}
+	return { ok: true, refs: set };
+}
+
+export function prunePlan({ repo, plan, dryRun = false, logPath = null, mainRef = "refs/heads/main", bundleDir = null, quarantineDir = null, unlockLocked = false }) {
 	const res = {
 		ok: true,
 		repo,
@@ -105,6 +217,10 @@ export function prunePlan({ repo, plan, dryRun = false, logPath = null, mainRef 
 		skipped: 0,
 		log: [],
 	};
+
+	// Live worktree state, re-read once at execution time: a ref's tree can be locked or released between
+	// the census and this pass, and the ORDER matters — we must not clean a tree we cannot remove.
+	const liveIndex = worktreeIndex(repo);
 
 	// A tree mid-merge is never a safe place to prune refs (docs/runbooks/branch-cleanup.md, Diagnose).
 	const mergeHead = git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], repo);
@@ -122,38 +238,99 @@ export function prunePlan({ repo, plan, dryRun = false, logPath = null, mainRef 
 			continue;
 		}
 
-		// Live gate, not a remembered census verdict: refs are created and advanced while a pass runs.
-		const anc = git(["merge-base", "--is-ancestor", `refs/heads/${ref}`, mainRef], repo);
-		if (anc.status !== 0) {
-			res.skipped++;
-			res.log.push(`SKIP ${ref}: not an ancestor of main at delete time — keep it, the author re-cuts or lands it`);
-			continue;
+		const fullRef = ref.startsWith("refs/heads/") ? ref : `refs/heads/${ref}`;
+		const sha = git(["rev-parse", fullRef], repo).stdout;
+
+		// Live gate, re-checked at delete time: refs move while a pass runs.
+		const merged = git(["merge-base", "--is-ancestor", fullRef, mainRef], repo).status === 0;
+		let bundlePath = null;
+		if (!merged) {
+			if (!bundleDir) {
+				res.skipped++;
+				res.log.push(`SKIP ${ref}: not an ancestor of main and no --bundle-dir — its commits exist nowhere else`);
+				continue;
+			}
+			fs.mkdirSync(bundleDir, { recursive: true });
+			const base = git(["merge-base", mainRef, fullRef], repo).stdout;
+			if (!base) { res.skipped++; res.log.push(`SKIP ${ref}: no merge-base with main — refusing`); continue; }
+			// A ref name can contain slashes (wip/…, seatroot/…): the bundle file is flat, so the name is sanitised.
+			const stem = ref.replace(/\//g, "_");
+			bundlePath = path.join(bundleDir, `${stem}.bundle`);
+			git(["bundle", "create", bundlePath, `${base}..${fullRef}`], repo);
+			const verify = git(["bundle", "verify", bundlePath], repo);
+			if (verify.status !== 0) {
+				res.skipped++;
+				res.log.push(`SKIP ${ref}: bundle verify failed (${verify.stderr.split("\n")[0]}) — not deleted`);
+				continue;
+			}
+			fs.writeFileSync(path.join(bundleDir, `${stem}.sha`), sha + "\n");
 		}
 
-		const sha = git(["rev-parse", `refs/heads/${ref}`], repo).stdout;
 		if (dryRun) {
-			res.log.push(`DRY ${ref} @ ${sha.slice(0, 12)}${p.worktree ? `  worktree ${p.worktree}` : ""}`);
+			res.log.push(`DRY ${ref} @ ${sha.slice(0, 12)}${merged ? " (merged)" : ` (bundled -> ${bundlePath})`}${p.worktree ? `  worktree ${p.worktree}` : ""}`);
 			continue;
 		}
 
-		if (p.worktree) {
-			const w = git(["worktree", "remove", p.worktree], repo); // no --force: a refusal is the safety net
+		const tree = p.worktree ? (liveIndex.get(fullRef)?.worktree || p.worktree) : null;
+		if (tree) {
+			const lockedNow = liveIndex.get(fullRef)?.locked || false;
+			if (lockedNow && !unlockLocked) {
+				res.skipped++;
+				res.log.push(`SKIP ${ref}: tree ${tree} is git-locked — re-run with --unlock-locked`);
+				continue;
+			}
+			if (unlockLocked && lockedNow && git(["worktree", "unlock", tree], repo).status === 0) res.log.push(`UNLOCKED ${tree}`);
+			const dirt = treeDirt(repo, tree);
+			if (dirt.work.length) {
+				res.skipped++;
+				res.log.push(`SKIP ${ref}: ${p.worktree} holds uncommitted WORK (${dirt.work.slice(0, 4).join(", ")}) — tree and ref kept`);
+				continue;
+			}
+			if (dirt.residue.length) {
+				// Archive the residue, then clean it, so `git worktree remove` succeeds without --force.
+				const dir = path.join(quarantineDir || ".spike/quarantine", path.basename(tree));
+				fs.mkdirSync(dir, { recursive: true });
+				let n = 0;
+				for (const rel of dirt.residue) {
+					const src = path.join(p.worktree, rel);
+					if (fs.existsSync(src) && fs.statSync(src).isFile()) { fs.writeFileSync(path.join(dir, rel.replace(/\//g, "_")), fs.readFileSync(src)); n++; }
+				}
+				res.log.push(`QUARANTINED ${n} residue file(s) from ${tree} -> ${dir}`);
+				git(["-C", tree, "clean", "-fdq"], repo);
+				if (git(["-C", tree, "status", "--porcelain"], repo).stdout.trim()) {
+					res.skipped++;
+					res.log.push(`SKIP ${ref}: ${tree} still dirty after cleaning residue — not released`);
+					continue;
+				}
+			}
+			const w = git(["worktree", "remove", tree], repo); // no --force: a refusal is the safety net
 			if (w.status !== 0) {
 				res.worktreesFailed++;
-				res.log.push(`FAIL worktree remove ${p.worktree}: ${w.stderr.split("\n")[0]} — branch NOT deleted, tree still holds it`);
+				res.log.push(`FAIL worktree remove ${tree}: ${w.stderr.split("\n")[0]} — branch NOT deleted, tree still holds it`);
 				continue; // `git branch -d` would refuse a checked-out ref anyway
 			}
 			res.worktreesRemoved++;
 		}
 
-		const b = git(["branch", "-d", ref], repo); // -d, never -D: it cannot delete unmerged work
-		if (b.status !== 0) {
-			res.branchesFailed++;
-			res.log.push(`FAIL branch -d ${ref}: ${b.stderr.split("\n")[0]}`);
+		if (merged) {
+			const b = git(["branch", "-d", ref], repo); // -d, never -D: it cannot delete unmerged work
+			if (b.status !== 0) {
+				res.branchesFailed++;
+				res.log.push(`FAIL branch -d ${ref}: ${b.stderr.split("\n")[0]}`);
+			} else {
+				res.branchesDeleted++;
+				res.log.push(`DELETED ${ref} @ ${sha.slice(0, 12)} — recover: git branch ${ref} ${sha}`);
+			}
 		} else {
-			res.branchesDeleted++;
-			// Recovery line: the ref is recoverable while the reflog holds it.
-			res.log.push(`DELETED ${ref} @ ${sha.slice(0, 12)} — recover: git branch ${ref} ${sha}`);
+			// Not merged, so `git branch -d` would (correctly) refuse. Only reachable with a verified bundle.
+			const u = git(["update-ref", "-d", fullRef], repo);
+			if (u.status !== 0) {
+				res.branchesFailed++;
+				res.log.push(`FAIL update-ref -d ${ref}: ${u.stderr.split("\n")[0]}`);
+			} else {
+				res.branchesDeleted++;
+				res.log.push(`DELETED ${ref} @ ${sha.slice(0, 12)} — recover: git fetch ${bundlePath} && git branch ${ref} ${sha}`);
+			}
 		}
 	}
 
@@ -186,7 +363,13 @@ function main() {
 		}
 
 	let plan;
-	if (flag("--plan")) {
+	if (flag("--retire-merged")) {
+		const activeWithin = flag("--active-within") ? Number(opt("--active-within", "0")) : null;
+		const st = structuralRefs(repo, db);
+		const built = buildRetirePlan({ repo, db, activeWithinDays: activeWithin, structuralRefs: st.refs, retireUnmerged: opt("--retire-unmerged", null) });
+		plan = built.plan;
+		console.log(`retire plan: ${plan.length} candidate ref(s); excluded structural ${built.excluded.structural}, active-within-window ${built.excluded.activeWithin}, snapshot-named ${built.excluded.snapshot}, uncommitted-work ${built.excluded.uncommittedWork}, unmerged-and-not-named ${built.excluded.unmergedNotNamed}`);
+	} else if (flag("--plan")) {
 		plan = JSON.parse(fs.readFileSync(opt("--plan", ""), "utf8")).plan || [];
 	} else {
 		// The census is the plan. Cost: ~30 s on a 100-ref rig (measured, host in the header).
@@ -201,7 +384,7 @@ function main() {
 		plan = JSON.parse(c.stdout).plan || [];
 	}
 
-	const r = prunePlan({ repo, plan, dryRun: flag("--dry-run"), logPath: flag("--dry-run") ? null : logPath });
+	const r = prunePlan({ repo, plan, dryRun: flag("--dry-run"), logPath: flag("--dry-run") ? null : logPath, bundleDir: opt("--bundle-dir", null), quarantineDir: opt("--quarantine", null), unlockLocked: flag("--unlock-locked") });
 	const secs = ((Date.now() - t0) / 1000).toFixed(1);
 	console.log(
 		`prune @ ${git(["rev-parse", "HEAD"], repo).stdout.slice(0, 12)} — planned ${r.planned}; ` +

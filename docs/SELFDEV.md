@@ -4716,3 +4716,32 @@ at `:743`). Re-measure every `path:line` before repeating it.
     Safe order: scan → `--kill` → confirm no live process holds a fixture (`for p in $(pgrep node); do
     ls -l /proc/$p/fd 2>/dev/null | grep -q "/tmp/durig-" && echo $p; done` → 0 lines) → sweep the old ones with
     `find /tmp -maxdepth 1 -name 'durig-*' -type d -mtime +1 -exec rm -rf {} +` (14,055 dirs in one bounded call).
+
+## Operational pitfalls (delegate branch/worktree retire pass 2026-11-14 — numbered 370-373, continuing from 369; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+370. **A ref checked out in a worktree cannot be deleted at all — not with `-d`, not with `-D`.** Measured
+    2026-11-14: `git branch -d item-1158` on a branch held by `item-1158`'s worktree exits **1** with
+    `error: The branch 'item-1158' is checked out at '…/item-1158'`; the same with `-D` also exits 1. So the
+    only safe order is **release the tree, then delete the ref**, and a prune that plans the ref without the
+    tree creates a failure that looks like a git bug. `tools/branch-prune.mjs` reads `git worktree list
+    --porcelain` once at execution time and does tree → ref, per ref.
+371. **Cleaning a tree's residue before you know the removal will succeed destroys the very evidence the
+    refusal is protecting.** The first version of the retire verb quarantined + `git clean -fdq`'d a locked
+    dirty tree, then `git worktree remove` (no `--force`) refused it — the tree survived, minus its residue.
+    Caught by `demo/branch-prune.test.mjs` §12: the assertion "the refused tree still holds its residue" failed
+    because an earlier guarded run had already cleaned it. Rule: **check `locked` and `work` first, clean last**.
+    Cheap probe: `git -C <worktree> status --porcelain` and the porcelain `locked` line, both before any write.
+372. **"Dirty" is not one thing, and a cleanup that treats it as one deletes a seat's work.** Of the 13 dirty
+    trees at the start of this pass, **9** held only probe residue (`.log`, `.txt`, `.json`, `probe*.mjs`,
+    `out-*.test.mjs`, `tools/probes/*.mjs`) and **4** held real uncommitted work: `item-6057`
+    `M demo/syncpi.test.mjs` + `M scripts/sync-pi.mjs`, `item-6375` `M docs/runbooks/pi-pin-update.md`,
+    `item-6377` untracked `src/entrypoint-coverage.mjs`, `item-7188` untracked `suite-lockfile.err`. A tracked
+    modification is work; an untracked file that is not recognisable residue is work. Classify conservatively —
+    the tool keeps the tree when in doubt (operator ruling 2026-11-14: "archive only the scratch, keep the
+    real-work trees and their refs").
+373. **Recency is not activeness.** `--active-within 7` initially hid the 26 `landing-20261114-*` refs because
+    their tips were 11 hours old, and the operator's ruling is that "active" means **structural** — a seat root,
+    a non-terminal queue row, a locked in-flight run, or uncommitted tracked work in the tree — not "committed
+    this week". Keep the recency flag as a guard, but the delete list for non-ancestor refs must come from an
+    explicit allowlist (`--retire-unmerged <regex>`, ideally the ledger's verdicts) plus a bundle that verifies.
+    A ref that merely conflicts with `main` is never deleted: that is R-B #3270.

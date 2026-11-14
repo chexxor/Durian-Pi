@@ -756,3 +756,51 @@ Re-measure rather than trust: `node tools/self-merge-sla.mjs --json --strict` no
 `counts {conflicted: 49, landed: 45, gate-refused: 5}`, `ledger_coverage 54/54`, `gate_refused_proven: 5`,
 `gate_refused_unproven: []`, `stale: 0`, exit 0. The instrument is `tools/branch-prune.mjs` (the loop that ran
 this pass), pinned by `demo/branch-prune.test.mjs`.
+
+### Retire pass 2026-11-14, second tranche (delegate, goal `mwgrz17c-5gwim4`; operator request "clean up the branches and worktrees that are safe to remove") — **46 refs deleted, 12 trees released, 0 forced, 0 `-D`, nothing pushed**
+
+**The rule the instrument now enforces** (`tools/branch-prune.mjs`, extension plane per D212). A ref is deleted only
+if one of two proofs holds **at the moment of deletion**:
+1. `git merge-base --is-ancestor <ref> refs/heads/main` exits **0** — its content is already on `main`; then
+   `git branch -d` (never `-D`).
+2. The pass **names it explicitly** (`--retire-unmerged <regex>`) **and** a thin bundle of it
+   (`git bundle create <dir>/<ref>.bundle <merge-base>..<ref>`) passes `git bundle verify`; then
+   `git update-ref -d`. No bundle, no delete. Refs that merely conflict with `main` are never in the plan: that is
+   R-B #3270 ("refs are dispositioned, never deleted") and it is the boundary the R-B addendum in
+   `docs/DECISIONS.md` records.
+
+A tree is released only after its uncommitted files are proven **residue** (`.log`, `.txt`, `.json`,
+`out-*.test.mjs`, `probe*.mjs`, `tools/probes/*.mjs`, `tmp/`): they are copied to
+`.spike/quarantine-20261114/<tree>/`, `git clean -fdq` runs, and only then `git worktree remove` (no `--force`).
+Any tracked modification or unrecognised file keeps the ref and its tree. A git-locked tree is skipped unless
+`--unlock-locked` is passed — and the skip happens **before** any cleaning, so a refusal never destroys the
+residue it was meant to protect.
+
+**What was deleted (recovery is one command each; every sha is in `.spike/prune-log-20261114.txt`):**
+- **20 refs provably in `main`** — `item-1`, `item-1158`, `item-4`, `item-4378`, `item-5895`, `item-6063`,
+  `item-6064`, `item-6066`, `item-6177`, `item-6290`, `item-6317`, `item-6328`, `item-6429`, `item-6528`,
+  `item-6959`, `item-6998`, `item-7316`, `item-7375`, `item-7413`, `item-7599`.
+  Recovery: `git branch <name> <sha>`.
+- **26 `landing-20261114-*` chain snapshots** (`b1`…`b1m`, `b2a`, `b3a`, `c2`, `c3`, `c5`…`c9`, `c12`, `r1`, `r2`,
+  `r3`) — each bundled **before** deletion: 26 bundles, **26/26 verify**, 3,196,997 bytes, in
+  `.spike/quarantine-20261114/bundles/`. Recovery:
+  `git fetch .spike/quarantine-20261114/bundles/landing-20261114-b1.bundle && git branch landing-20261114-b1 <sha>`.
+  Their verdicts are already on this ledger and verbatim in
+  `docs/evidence/2026-11-14-landing-attempts/verdicts.md`, which is why the operator ruled them deletable.
+
+**What the pass deliberately kept** (re-measured, exit 0): **53 refs + `main`, 28 worktrees**; 28 refs still
+conflict with `main` (25 by the SLA's merge-shape count, 3 gate-refused) and need a seat re-cut; 4 refs are held by
+**uncommitted tracked work** in their own tree (`item-6057` `M demo/syncpi.test.mjs` + `M scripts/sync-pi.mjs`,
+`item-6375` `M docs/runbooks/pi-pin-update.md`, `item-6377` untracked `src/entrypoint-coverage.mjs`, `item-7188`
+untracked `suite-lockfile.err`); 21 refs are structural (seat roots or live queue rows), including
+`seatroot/linux`, whose tree is outside the repo. **9 residue trees quarantined, 3 terminal-locked trees
+unlocked and released** (`item-1158`, `item-4`, `item-6528`).
+
+Run it yourself: `DURIG_DB=./selfdev.sqlite node tools/branch-prune.mjs --dry-run --db ./selfdev.sqlite` →
+**planned 0, exit 0** (9.2 s at this tip). The retire verb, for the next such pass:
+```bash
+node tools/branch-prune.mjs --retire-merged --retire-unmerged '^landing-<yyyymmdd>' \
+  --bundle-dir .spike/quarantine-<date>/bundles --quarantine .spike/quarantine-<date> --unlock-locked --dry-run
+```
+Measured 2026-11-14 (Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
+dry-run **4.4 s** exit 0, the executed pass **26.0 s** exit 0, the fixture gate `demo/branch-prune.test.mjs` **0.68 s**.
