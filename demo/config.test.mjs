@@ -249,8 +249,8 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 	const cliSource = readFileSync(join(durigDir, "cli.mjs"), "utf8");
 	assert.match(
 		cliSource,
-		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\),\s*\.\.\.runControlSettings\(CFG\)\s*\}/,
-		"openHarness must pass streamSettings(CFG), compactionSettings(CFG) and runControlSettings(CFG) as the harness settings (#4898, #6173)",
+		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\),\s*\.\.\.runControlSettings\(CFG\),\s*\.\.\.progressSettings\(CFG\)\s*\}/,
+		"openHarness must pass streamSettings(CFG), compactionSettings(CFG), runControlSettings(CFG) and progressSettings(CFG) as the harness settings at ONE seam (#4898, #6173, #6211)",
 	);
 	// #6173: the restart limit is set at ONE seam. A second assembly site is the drift class this rig
 	// keeps hitting, and here it is invisible - the seat just runs pi-durable's default of 5.
@@ -258,8 +258,6 @@ console.log("SHIPPED DEFAULTS INTEGRATION OK (fresh install runs; file/env overr
 		(cliSource.match(/\.\.\.runControlSettings\(CFG\)/g) ?? []).length,
 		1,
 		"exactly one Harness.open settings site may spread runControlSettings(CFG)",
-		/settings:\s*\{\s*\.\.\.streamSettings\(CFG\),\s*\.\.\.compactionSettings\(CFG\),\s*\.\.\.progressSettings\(CFG\)\s*\}/,
-		"openHarness must pass streamSettings(CFG), compactionSettings(CFG) and progressSettings(CFG) as the harness settings (#4898, #6211)",
 	);
 	// #6211: the progress cadence is PINNED, not inherited. One seam, and the pin lives in
 	// src/config.mjs rather than a literal in the cli.
