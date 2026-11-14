@@ -78,6 +78,19 @@ const proof = scratchTree("`DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` â†
 const proofRun = runGuard(proof);
 check("a line reporting what the dead name does is exempt", proofRun.status === 0, `exit ${proofRun.status}: ${proofRun.stdout.trim()}`);
 
+// 4b. The SAME measurement, WRAPPED: markdown prose breaks the line, so the outcome lands on the next
+//     line of the sentence. Without the sentence window the guard reds a doc that is doing exactly what
+//     the rule wants - and #6335's own evidence line is the case that broke it (2026-11-14, main).
+const wrapped = scratchTree("> names and `src/config.mjs` has no alias resolver, so `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` resolves\n> `./rig.sqlite` (exit 1, `cause: no_store`) while `DURIG_DB=./nope-b.sqlite` resolves the path given\n");
+const wrappedRun = runGuard(wrapped);
+check("a wrapped measurement in prose is still evidence, not a command", wrappedRun.status === 0, `exit ${wrappedRun.status}: ${wrappedRun.stdout.trim()}`);
+
+// 4c. ...but the leniency stops at a fence: a command inside a code block is an instruction, and the
+//     outcome on the next line does not make it documentation.
+const fenced = scratchTree("```bash\nDURIAN_PI_DB=./selfdev.sqlite node cli.mjs status\n# (exit 1, cause: no_store)\n```\n");
+const fencedRun = runGuard(fenced);
+check("a dead-name command inside a code fence still goes red", fencedRun.status === 1, `exit ${fencedRun.status}: ${fencedRun.stdout.trim()}`);
+
 // 5. The real tree: no live doc carries a stale command-shaped store selector.
 const real = runGuard(ROOT);
 check("no live doc in this tree carries the dead name in a command", !real.stdout.includes("HARD ENV NAME"), real.stdout);
@@ -94,6 +107,8 @@ const guardSrc = readFileSync(GUARD, "utf8");
 check("the tool names the entry point that honours the dead name", /HONOURS_DEAD_NAME\s*=\s*\/clockin/i.test(guardSrc), guardSrc.slice(0, 0));
 check("the tool states why docs/NEXT-ARCHIVE.md and docs/ROADMAP.md are out of scope", guardSrc.includes("docs/ROADMAP.md too"), "");
 
+rmSync(wrapped, { recursive: true, force: true });
+rmSync(fenced, { recursive: true, force: true });
 rmSync(stale, { recursive: true, force: true });
 rmSync(clockin, { recursive: true, force: true });
 rmSync(correct, { recursive: true, force: true });

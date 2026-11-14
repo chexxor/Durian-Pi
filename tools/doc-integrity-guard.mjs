@@ -184,10 +184,22 @@ let deadNameHits = 0;
 for (const rel of expand(ENV_SITES)) {
   const text = read(rel);
   if (!text) continue;
-  text.split(/\r?\n/).forEach((line, i) => {
+  const lines = text.split(/\r?\n/);
+  let inFence = false;
+  lines.forEach((line, i) => {
+    if (/^\s*```/.test(line)) { inFence = !inFence; return; }
     if (!COMMAND_SHAPE.some((re) => re.test(line))) return;
     if (HONOURS_DEAD_NAME.test(line)) return; // scripts/clockin.mjs really does read it: the named exception
     if (OUTCOME_MARKER.test(line)) return; // the line reports what the dead name does: evidence, not an instruction
+    // Markdown prose WRAPS, so a quoted measurement's outcome can land on the line after the command.
+    // In prose the sentence is the unit of evidence; inside a fenced block the command is an instruction
+    // and gets no leniency. Measured 2026-11-14: docs/QUICKSTART.md wrapped `DURIAN_PI_DB=./nope-a.sqlite
+    // node cli.mjs status` away from its "(exit 1, cause: no_store)" and the guard read a measurement as a
+    // command - a false red that trains people to ignore the rule.
+    if (!inFence) {
+      const sentence = [lines[i - 1] ?? "", line, lines[i + 1] ?? ""].join(" ");
+      if (OUTCOME_MARKER.test(sentence)) return;
+    }
     deadNameHits++;
     hard.push(
       `HARD ENV NAME  ${rel}:${i + 1} runs a command with the superseded store selector ${DEAD_STORE_ENV}. ` +
