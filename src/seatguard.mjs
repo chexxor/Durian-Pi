@@ -18,6 +18,8 @@ import { isAbsolute, resolve as resolveNodePath } from "node:path";
 import { isInside, refusalFor } from "./confine.mjs";
 import { writeTargets } from "./writetargets.mjs";
 import { resolveSeatRoot, sameRoot } from "./seatroot.mjs";
+import { RigQueue, Seats } from "./rig.mjs";
+import { executionMode, needsChangedTree } from "./executionmode.mjs";
 import { SECRET_PREFIX_PATTERNS } from "./config.mjs";
 import { seatShellSelection, shellToolNames, shellWithheldReason } from "./shellregistry.mjs";
 import { afterTool as redactToolResult } from "./secretredact.mjs";
@@ -157,10 +159,50 @@ export function isReadOnlyCliInvocation(command) {
 	return SHARED_CWD_READ_VERBS.has(tokens[2].toLowerCase());
 }
 
+/**
+ * #7158: the MODE clause of a shared-tree refusal.
+ *
+ * Why the refusal needed it: today the message says "call prepare_workspace" and stops. For a row
+ * the rule classifies as BRANCHLESS (prose only, nothing to run), that instruction is a contradiction
+ * the seat cannot resolve on its own — the row names no change a tree could isolate, yet the guard
+ * will not let the probe its acceptance names run in the shared tree. The clause names the mode the
+ * row carries, the rule that produced it, and which of the two has to change. It refuses nothing new:
+ * it is wording on an existing refusal, computed by the SAME function mint used, so the two call
+ * sites cannot disagree silently.
+ */
+export function modeClause(row, command) {
+	if (!row) return "";
+	const minted = row.executionMode ?? executionMode(row);
+	// Re-running the rule with the command folded in is what makes the contradiction explicit.
+	const implied = executionMode({ subject: row.subject, body: `${row.body ?? ""}\n${command}` });
+	const id = row.id ? `#${row.id}` : "the row you are on";
+	if (minted.mode === implied.mode) {
+		return minted.mode === "isolated"
+			? ` ${id} is classified isolated (rule ${minted.rule}: ${minted.why}) — prepare_workspace gives it the tree it needs.`
+			: ` ${id} is classified branchless (${minted.why}), and a branchless row has no tree to run in: either prepare_workspace for it, or amend the row so its acceptance names the check it actually needs.`;
+	}
+	return ` ${id} was minted as ${minted.mode} (rule ${minted.rule ?? "none"}) but this command is ${implied.mode} (rule ${implied.rule}: ${implied.why}) — the row and the command disagree: prepare_workspace for the row, or re-cut it so its acceptance names what it needs.`;
+}
+
+/** The row this conversation is working on. FAIL-OPEN: a store read that throws must not turn a
+ * refusal's wording into a crash, and a seat with no live row gets the plain refusal. */
+async function liveRow(api, context) {
+	try {
+		const seats = await api.snapshot(Seats, undefined, context);
+		const name = Object.entries(seats?.seats ?? {}).find(([, seat]) => seat?.conversationId === api.conversationId)?.[0];
+		if (!name) return null;
+		const queue = await api.snapshot(RigQueue, undefined, context);
+		const rows = (queue?.items ?? []).filter((it) => it.to === name && (it.status === "claimed" || it.status === "deferred"));
+		return rows[0] ?? null;
+	} catch {
+		return null;
+	}
+}
+
 async function sharedTreeRefusal(
 	api,
 	context,
-	{ path = null, command = null, shell = false, verb = null } = {},
+	{ path = null, command = null, shell = false, verb = null, modeNote = "" } = {},
 ) {
 	// Only a KNOWN persisted cwd can be "degraded": with no persisted cwd the root is a fallback
 	// (DURIG_SEAT_ROOT / process cwd) and a seat that never prepared a workspace is not our case.
@@ -186,7 +228,11 @@ async function sharedTreeRefusal(
 			// host-dependent, so the block says which call it refused AND which shell this host registered —
 			// the two facts needed to re-issue the command instead of guessing at a shell that does not exist
 			// here. Nothing new is refused by this sentence: it is wording, not a rule.
-			(verb === null ? "" : ` Refused as a \`${verb}\` call; the seat shell registered on this host is \`${seatShellSelection.name}\`.`)
+			(verb === null ? "" : ` Refused as a \`${verb}\` call; the seat shell registered on this host is \`${seatShellSelection.name}\`.`) +
+			// #7158: the clause the CALLER computed (it has the command; this branch does not).
+			// It says which mode the row is in and which of the two must change. Wording only:
+			// nothing new is refused by it.
+			modeNote
 		);
 	}
 	if (path !== null) {
@@ -201,7 +247,8 @@ async function sharedTreeRefusal(
 	if (command !== null && GIT_COMMIT_RE.test(command)) {
 		return (
 			`refused by durig: this commit runs in the SHARED checkout (${seatRoot}), not an item worktree — ` +
-			`it would land ON the shared branch and bypass the landing pass. Call prepare_workspace first.`
+			`it would land ON the shared branch and bypass the landing pass. Call prepare_workspace first.` +
+			modeClause(await liveRow(api, context), command)
 		);
 	}
 	return null;
@@ -535,7 +582,13 @@ export async function beforeTool(call, api, context) {
 	}
 	// #3992: any OTHER shell command from a degraded cwd is refused outright, before any command
 	// classification - `run` is what has actually destroyed work in this repo.
-	const degradedShell = await sharedTreeRefusal(api, context, { shell: true, verb: call?.name });
+	const degradedShell = await sharedTreeRefusal(api, context, {
+		shell: true,
+		verb: call?.name,
+		// #7158: the mode clause is computed where the command is in hand. A store read is only
+		// paid for when the command is one that needs a tree carrying the change.
+		modeNote: needsChangedTree(command) ? modeClause(await liveRow(api, context), command) : "",
+	});
 	if (degradedShell !== null) return { block: degradedShell };
 	// #1966 layer (ii): a shell command naming the spool directory is refused (best-effort).
 	// #4374: the refusal is given the seat root and cwd, so a PATH-AWARE entry (`checkout-index`)
