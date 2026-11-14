@@ -360,6 +360,7 @@
       "demo/probe-shim-import-form.test.mjs",
       "tools/pool-migrate-test.mjs",
       "tools/pool-gate-live-probe-test.mjs",
+      "tools/pointer-sha-coverage-test.mjs",
       "demo/second-local-provider.test.mjs",
       "demo/spend-cap-guard.test.mjs",
       "demo/store-behaviour-gate.test.mjs",
