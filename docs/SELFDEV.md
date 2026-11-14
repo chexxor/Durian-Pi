@@ -4424,3 +4424,11 @@ at `:743`). Re-measure every `path:line` before repeating it.
     suite: "demo/noop-wake-census.test.mjs" is on disk but not mapped to any area (add it to
     demo/test-areas.json)` at `demo/compaction-acceptance-gate.test.mjs:117`. Each ref in that chain merge-tree'd
     clean individually; the merged tree is what broke. `grep -c "noop-wake" demo/test-areas.json` on main = **0**.
+334. **A prune plan is only as safe as the state names it hard-codes.** Measured at main `cf42a577` (2026-11-14):
+    `node tools/branch-census.mjs --plan` listed `item-5604` as prunable while `node cli.mjs worktree audit --json`
+    reported that tree `keepReason: "live"`, status `deferred`, git-LOCKED. The verdict chain tested
+    `claimed|queued|held` and omitted `deferred`; the base's own definition is `src/broker.mjs:1486`
+    `LIVE_STATUSES = ["queued", "claimed", "deferred", "held"]`. Nothing was lost — `git worktree remove` refused with
+    `fatal: cannot remove a locked working tree` (exit 128) — but a plan that names a live seat's branch is a plan you
+    cannot trust. Fixed in place: the tool mirrors the broker's list and honours `keepReason === "live"`. The general
+    rule: when a delegate tool and the base disagree about a state name, read the base, do not infer the set.

@@ -3,8 +3,8 @@ runbook: branch-cleanup
 symptom: "so many local git branches; merged branches were never pruned"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-10
-verified_by: scribe
+last_verified: 2026-11-14
+verified_by: delegate
 evidence: "2026-10-19 reclaim pass (see the row below); 2026-10-21 pass: 11 merged refs were pinned by worktrees — 1 clean+locked+terminal was reaped with the ancestor proof (`devtools-item-4463` @0e29ce72), 7 dirty and 4 held/locked were KEPT; refs 165→164, `main` unchanged, tree clean. Step 0e minting pre-flight: both probes run on `main` 2026-11-09, exit 0 each (11 duplicate `## D` numbers, 5 un-minted placeholders). Fold rule added 2026-11-10 (#6111), verified in `item-6111` off `main f192f543`: `grep -c 'RELAYS a ruling' docs/runbooks/branch-cleanup.md` → 2; `grep -c 'duplicate a recorded ruling' docs/runbooks/delegate-doc-hygiene.md` → 1; `git grep -niE 'relays|relay a ruling' -- docs/DECISIONS.md` → no matches, exit 1; `node tools/review-cite-check.mjs docs/runbooks/branch-cleanup.md` → 0 failing, exit 0. #6149 (2026-11-10, `main` f192f543): the Verify probe below was run on the re-cut `dd2583b` — `git merge-base --is-ancestor dd2583b main` exit 1, `git cherry -v main dd2583b` exit 0 printing `+ dd2583b12…`, per-file blob comparison against the landed re-cut `bc51ba5b` exit 0 with 4 of 5 files BLOB-IDENTICAL, `node demo/compacteval.test.mjs` exit 0, `node demo/worktree-prune-branch.test.mjs` exit 0. ; the 2026-11-10 release pass (refs 82→26, worktrees 75→18, 57 removals exit 0, no --force) is recorded in the Evidence section below; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 check_rule: null
 ---
@@ -432,3 +432,15 @@ git worktree prune
 ```
 
 57 removals, every one exit 0; wall clock **75 s** (user 1.05 s, sys 47.3 s). Then 56 refs `-d`'d, each gated on a **live** `git merge-base --is-ancestor <ref> main` exit 0 plus a check that no worktree still holds it — never `-D`. `git branch -d` is refused while a worktree holds the ref, which is why the order matters: release the trees first, prune the refs second. What is left is not clutter: 4 live rows (`#1158, #3087, #5912, #6177`), 4 dirty orphans whose residue was exported to `.spike/worktree-residue/` before anything was touched, 10 seat roots, and 8 ruled-kept refs. **One trap this pass proved:** `item-6057`'s tip is an ancestor of `main` while its worktree holds 88 uncommitted insertions (`sync-pi --no-repair`) that are nowhere in `main` — ancestor status gates the ref, never the residue.
+
+2026-11-14 (delegate prune pass, operator question "can these branches be cleaned safely?", **Linux**, Fedora Linux 45
+(Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0, `main` `cf42a577` unmoved): the census
+(`node tools/branch-census.mjs --plan`, 35 s, exit 0) listed **35** refs. **34** were removed — each gated on a live
+`git merge-base --is-ancestor <ref> main` exit 0 immediately before the delete, then `git worktree remove` (no
+`--force`) and `git branch -d` (never `-D`); the deleted shas are recorded in `.spike/prune-log.txt` for recovery.
+Refs **163 → 129**, worktrees **157 → 123**, `main` unchanged, tracked tree clean. **1 kept:** `item-5604` — git-
+LOCKED and queue status `deferred`, i.e. the item is still open (see "If it fails" below). A second census run at the
+same head returns **prune plan (0)**: everything git can safely release is released. What remains is not clutter and
+no git verb can touch it: **82** refs carry work that is not on `main` (author re-cut), **19** are dirty with seat
+residue, **8** are seat roots, **6** belong to live queue rows, **2** are mid-run locks, **11** are ruled KEEP in the
+ledger, and the census flags **49** refs with **no ledger row at all** — the record gap, not the cleanup job.

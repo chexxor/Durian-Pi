@@ -101,16 +101,15 @@ commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts o
 | `f3f72792` | docs(NEXT): the sha table names every commit in 03bdbf4d..HEAD (92 rows, tool-verified) |
 | `94eddcdd` | docs(NEXT): condense the pointer to 197 lines (the 200-line cap) + the previous carrier row |
 | `3c6d01fc` | docs(NEXT): suite numbers at HEAD, the pm route, pointer within the cap |
-| *(this commit)* | docs(decisions): the D265 addendum — a conflicted ref is an anchor collision, not a verdict — exempt: it carries this file |
+| `cf42a577` | docs(decisions): D265 addendum — a conflicted ref is an anchor collision, not a verdict |
+| *(this commit)* | the branch prune: 34 refs removed, the census `deferred` bug fixed — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
-**Broker windows.** A window is a LEASE and must be leased from OUTSIDE: `--max-duration` is checked only at the top
-of the broker loop (`src/broker.mjs:2058`), so a pass in flight starves the deadline — six "commanded" 1,800–3,600 s
-windows ran **2,146–6,418 s** (pid 1574499: bound 00:52:11Z, SIGTERM 00:57:53Z → `EXIT reason=deadline` 5 s later).
-Procedure: `nohup timeout --signal=TERM --kill-after=60 1800 node cli.mjs serve --max-duration 3600 …`, and close a
-leased window with `node cli.mjs resume` FIRST. Liveness is the last ` PASS ` line (pitfall 304), never the pid or
-heartbeat; the window open at clock-out was `1903310` (01:15:55.288Z, outer lease 3,600 s).
+**Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
+loop (`src/broker.mjs:2058`), so a pass in flight starves the deadline — six "commanded" 1,800–3,600 s windows ran
+**2,146–6,418 s**. Procedure: `nohup timeout --signal=TERM --kill-after=60 1800 node cli.mjs serve --max-duration 3600
+…`, then `node cli.mjs resume` before closing. Liveness is the last ` PASS ` line (pitfall 304), never the pid.
 
 **The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection). The audit's `paused:true` was
 right — `23:46:33 pause`, `23:49:41 unpause`, `23:50:48 pause`, nothing after. Closed at **`00:19:28Z`** by
@@ -125,7 +124,7 @@ fleet cannot do that, and the `01:01:21Z` window's `PASS 1 … woke=` names all 
 
 ## NEXT SESSION
 
-**Current item:** **the landing pass is CLOSED: `main` `03bdbf4d` → `82a3c51d` → `ab96bf0b` → `16166492` → `dd47ef89` → `f3f72792` → `94eddcdd`, 20 refs landed, 1 held (#6959), nothing pushed.**
+**Current item:** **the landing pass is CLOSED and the residue is pruned: `main` `03bdbf4d` → … → `cf42a577`, 20 refs landed, 1 held (#6959); refs 163 → 129, worktrees 157 → 123, nothing pushed.**
 Each landed ref is proven two ways: `git merge-base --is-ancestor <ref> main` exit **0** and every `+` line of its
 branch-vs-base diff present on main (probe `.spike/landing-content-probe.mjs`, ~40 s: 1,087 lines for bin 1, 68 for
 the chain, 0 missing). Full suite at HEAD `94eddcdd`: `node scripts/test.mjs --all --jobs 4` → **341/341 in 135.7 s**
@@ -147,9 +146,9 @@ window done +5.3/h vs queued +4.6/h — both growing, **no causal claim**.
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — the residue after the pass
+timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — prune plan now returns (0)
 timeout 120 node tools/landing-batch-plan.mjs --max 12                        # ~13 s — RE-RUN after every bin (pitfall 330)
-node cli.mjs worktree audit --json                                            # ~1 s — 157 worktrees still open
+node cli.mjs worktree audit --json                                            # ~1 s — 123 worktrees now open
 node scripts/test.mjs --all --jobs 4                                          # 135.7 s — 341/341 at HEAD 94eddcdd
 grep ' PASS ' selfdev.sqlite.broker.log | tail -1; cat selfdev.sqlite.broker.json   # liveness is the last PASS line
 node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.8 s — every pool row + transitions
@@ -189,11 +188,12 @@ annotate the author's `peek_queue`, no notice row).
 `node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` (1.7–10 s). Its first WRITE is not a tool run:
 once decisions 1–2 are ruled, `pm` annotates rows with `revise_work({itemId, requires})`, one `revised` transition each.
 
-**Traps this window** — `docs/SELFDEV.md` **330–333** (a landing plan is valid only against the HEAD it was computed on;
+**Traps this window** — `docs/SELFDEV.md` **330–334** (a landing plan is valid only against the HEAD it was computed on;
 `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved merge
 that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area mapping is
-not landable and only the gate catches it). Older **318–329**: `seats` LIST vs DOCUMENT roster; `usableWindow: null` from
-`up`; "armed" ≠ "fired"; a count is not a trace; `check` auditing `./rig.json`; `--local` control-read staleness;
-`--max-duration` bounds the loop not the wall clock; a hand-written sha table skips a sha — run the coverage tool.
+not landable and only the gate catches it; a prune plan that omits `deferred` from the live set names a live seat's
+branch — the base's `LIVE_STATUSES` at `src/broker.mjs:1486` is the authority). Older **318–329**: `seats` LIST vs
+DOCUMENT roster; `usableWindow: null` from `up`; "armed" ≠ "fired"; a count is not a trace; `check` auditing `./rig.json`;
+`--local` control-read staleness; `--max-duration` bounds the loop not the wall clock; a hand-written sha table skips a sha.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)

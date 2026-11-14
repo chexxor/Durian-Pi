@@ -41,6 +41,13 @@ const opt = (name, dflt) => {
 const repo = opt("--repo", process.cwd());
 const dbPath = opt("--db", process.env.DURIG_DB || "./selfdev.sqlite");
 
+// Addendum 2026-11-14 (delegate, measured at main cf42a577): the live set must match the broker's own.
+// `deferred` was missing here, so `item-5604` — queue status `deferred`, worktree rig-LOCKED, the audit
+// reporting keepReason "live" — appeared in the prune plan. `git worktree remove` refused it (locked),
+// so nothing was lost, but a plan that names a live item's branch is a plan you cannot trust.
+// Source of truth: src/broker.mjs:1486 `LIVE_STATUSES = ["queued", "claimed", "deferred", "held"]`.
+const LIVE_STATUSES = ["queued", "claimed", "deferred", "held"]; // mirrors src/broker.mjs:1486
+
 const run = (cmd, timeoutMs = 20000) => {
 	try {
 		return execSync(cmd, { cwd: repo, timeout: timeoutMs, encoding: "utf8" }).trim();
@@ -148,7 +155,8 @@ const rows = refs.map((ref) => {
 	else if (w?.keepReason === "locked") verdict = "keep: locked (a run is in flight)";
 	else if (dirty) verdict = "keep: uncommitted work — a seat commits it or the operator rules it discarded";
 	else if (ruling) verdict = `keep: ruled in docs/DISPOSITIONS.md (${ruling})`;
-	else if (status === "claimed" || status === "queued" || status === "held") verdict = "keep: item is live";
+	else if (w?.keepReason === "live" || LIVE_STATUSES.includes(status))
+		verdict = "keep: item is live (queue row not terminal)";
 	else if (f.merged) verdict = "prune: merged into main";
 	else if (f.redundant) verdict = "prune: content already in main, no net change";
 	else if (f.conflict === "conflict") verdict = "keep: conflicts with main — the author re-cuts it";
