@@ -4745,3 +4745,35 @@ at `:743`). Re-measure every `path:line` before repeating it.
     this week". Keep the recency flag as a guard, but the delete list for non-ancestor refs must come from an
     explicit allowlist (`--retire-unmerged <regex>`, ideally the ledger's verdicts) plus a bundle that verifies.
     A ref that merely conflicts with `main` is never deleted: that is R-B #3270.
+
+## Operational pitfalls (delegate landing-integrity pass 2026-11-14 — numbered 374-377, continuing from 373; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+374. **`git stash pop` without `git stash list` first edits the shared tree with someone else's WIP.** To get a
+    clean HEAD for a red-first measurement, `git stash push -- src/rig.mjs demo/test-areas.json
+    demo/by-id-claim-gate.test.mjs` **failed** (an untracked path is not a valid stash pathspec, so nothing was
+    stashed), and the next call — `git stash pop` — popped an *unrelated* stash from another window
+    (`stash@{0}: "delegate: park goal WIP (signals + read drain) for 2026-11-10 branch landing window"`) and
+    planted conflict markers in `cli.mjs`, `src/broker.mjs` and `src/readclient.mjs`. Recovery:
+    `git checkout HEAD -- cli.mjs src/broker.mjs src/readclient.mjs`; the stash entry survived the failed pop.
+    Never pop blind: `git stash list` first, and prefer `git show HEAD:<path> > /tmp/x.mjs` for a red-first
+    baseline over stashing at all.
+375. **Two adjacent template literals without `+` parse as a tagged template, and `node --check` does not
+    catch it.** A refusal string written as `` `A … ${found.id} … ` `` newline `` `B …` `` made the first literal
+    the *tag* of the second: `TypeError: found.id is not a function` at runtime. `node --check src/rig.mjs`
+    exits 0 — only running the demo finds it. When concatenating message fragments, put them in one literal or
+    join an array; run the demo, not the parser.
+376. **A fixture with a fixed clock is a landmine with a fuse measured in days.** `demo/human-defer-lease.test.mjs`
+    shipped green on 2026-11-12 and went red on 2026-11-14 with no code change, because `src/driver.mjs` called
+    `escalations(items)` — no clock — while the demo asserted against `NOW = 2026-11-12T20:30Z`. The suite
+    number then reads as a regression and a seat wastes a turn bisecting a calendar. **Fix the seam, not the
+    assertion:** `selectWakes` now takes `now = Date.now()` and passes it to `escalations`
+    (`src/driver.mjs:160`, verified with `grep -n 'now = Date.now()' src/driver.mjs`), and the demo proves the seam with the anti-vacuity pair — same row, two clocks, two
+    verdicts (ROADMAP 375, commits `2dfce088`/`1f1a881c`). Rule for every fixture: if a predicate reads a clock,
+    take the clock as an argument.
+377. **A crash fixture that dies *after* the observation charges nothing.** `demo/restart-limit-behaviour.test.mjs`
+    planted 5 crashes, asserted 5 restarts, and 2 of 10 STANDALONE runs charged 4 and settled `done`: `flag.dead`
+    was set after `until()` returned, leaving an await gap in which the generation committed its terminal state —
+    the "host death" then landed on a run that had already settled. Measured 10 runs before (2 red) and 10 after
+    (0 red), 14 s wall, host above. The general shape: **make the fault happen at the instant the precondition is
+    observed**, not one await later; and when a suite red appears only under `--jobs 4`, run the file 10 times
+    alone before routing it (pitfall 367).

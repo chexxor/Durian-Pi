@@ -1,11 +1,13 @@
-**Last update:** 2026-11-14 (delegate). Every shipped commit in this window is a ROW below, **in commit order** —
-enforced by `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (0.3-0.6 s, exit 0/1), not by eye. The ONE exempt
-commit is the one carrying this file (the restart-limit fixture fix ships in it). Rows for the earlier part of the milestone are VERBATIM in
-[docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md). Nothing pushed — the push grant is the operator's.
+**Last update:** 2026-11-14 (delegate, landing-integrity tranche). Every shipped commit in this window is a ROW
+below, **in commit order** — enforced by `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (0.4 s, exit 0/1),
+not by eye. The ONE exempt commit is the one carrying this file. Rows for the earlier part of the milestone are
+VERBATIM in [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md). Nothing pushed — the push grant is the operator's.
 
-**Milestone this window worked** — **retiring the refs and trees that are provably not work (ROADMAP 372,
-`tools/branch-prune.mjs`)** — the second tranche of the branch catch-up that closes the self-merge milestone
-(D265, landing rule D314). Refs **99 + `main` → 53 + `main`**, worktrees **40 → 28**: 46 refs deleted and 12 trees
+**Milestone this window worked** — **closing the landing-integrity gap (ROADMAP 371, 368, 373, the 374 residual,
+and 375)** — the third tranche of the branch catch-up that closes the self-merge milestone (D265, landing rule
+D314): the by-id `claim_work` gate now refuses what the gate rule forbids, a malformed org edge refuses instead
+of throwing, the worktree audit prints both lock numbers named, `branch-prune` takes its allowlist from the
+ledger rather than a typed regex, and the suite gate no longer goes red on a calendar. Refs **99 + `main` → 53 + `main`**, worktrees **40 → 28**: 46 refs deleted and 12 trees
 released with **0 `--force`, 0 `-D`, 0 failures**, `main` unmoved, nothing pushed. Each delete was gated live on
 `git merge-base --is-ancestor <ref> refs/heads/main` exit 0, or — for the 26 `landing-20261114-*` chain snapshots the
 operator ruled dead — on a thin bundle that `git bundle verify` accepted first (26 bundles, 26 verified,
@@ -81,6 +83,14 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `a23961dc` | docs(catch-up): the conflicted-set census at `47e221cf` (49 = 21 semantic / 19 mechanical / 9 wording-only; 27 rule-shaped re-cuts → 3 clean, 24 need a human), the 24 zero-commit recut aliases named, SELFDEV pitfall 363, and the `47e221cf` pointer row |
 | `969b9774` | the prune carrier as pushed: `tools/branch-prune.mjs` + `demo/branch-prune.test.mjs`, the branch-and-worktree skill, the runbook step 0a, the R-B addendum — refs 219 → 99, worktrees 155 → 94, `main` unmoved, nothing forced, nothing pushed by the delegate |
 | `18e378d2` | docs+tools: correct the worktree-audit `locked` count (20 git-locked trees vs the audit's keep-reason bucket of 3), re-verify `tools/process-leak-scan.mjs`, register ROADMAP 373, and name the worktree floor 155 → 94 → 40 |
+| `e9a96b6f` | branch/worktree retire pass: `branch-prune` gains `--retire-merged`/`--retire-unmerged`/`--active-within`/`--bundle-dir`/`--quarantine`/`--unlock-locked`, 46 refs and 12 trees retired (refs 99+`main` → 53+`main`, worktrees 40 → 28), 0 forced, 0 failures |
+| `965ab7c5` | **ROADMAP 371** — `claim_work`'s `itemId` door calls the SAME `workable()` predicate `selectNextWork` uses: a named claim on an open/cancelled/held gate is refused with the hop named, an id naming no row is `UNKNOWN_ITEM`, a named claim never claims a different row; `demo/by-id-claim-gate.test.mjs` 12 red checks → 0 in 0.31 s, pinned in the rig area |
+| `0ecd56e8` | DISPOSITIONS: re-attempt rows for `item-7232-recut` / `item-3570-recut` / `item-3747-recut-r2` at `965ab7c5`, each with the verbatim lander refusal |
+| `e1c66bfc` | **ROADMAP 368** — `assertSendAllowed` refuses a malformed Edges link (no `maySendTo`) instead of throwing a `TypeError`; `edgeProblems()` is the ONE predicate the write side (`cli.mjs up`) and the gate share; `cli.mjs up` validates edges BEFORE any write; `demo/edge-fail-closed.test.mjs` 24 checks, 0.78 s |
+| `796ac233` | **ROADMAP 373** — the audit prints `lockedTrees` (17) and `lockedKept` (0) both named plus a lockNote; `auditSummary()` in `src/broker.mjs` is the single derivation; `branch-census` carries both; `docs/runbooks/branch-cleanup.md` step 5 corrected in place |
+| `fc4e3730` | **ROADMAP 374 residual** — `branch-prune --retire-ruled` reads `docs/DISPOSITIONS.md` verdicts (last row wins, specificity-matched) instead of a typed regex; bundle-verify guard unchanged; `demo/branch-prune.test.mjs` §15 |
+| `2dfce088` | **ROADMAP 375** — `selectWakes` takes a named `now`; the human-defer-lease demo drives a fixture clock and pins the seam (same row, two clocks, two verdicts) — the suite was red on a calendar, not a defect |
+| `1f1a881c` | **ROADMAP 375** — the restart-limit crash fixture dies AT the observation, not one await after it: 10 standalone runs 2 red → 10 runs 0 red (14 s wall); full suite 361/361 in 192.3 s |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -99,30 +109,38 @@ seat `landing_health` + `land_my_item`, and `cli.mjs check` runs `ready-ref-stal
 Armed in the gitignored `durig.config.json`: `DURIG_EXTENSIONS: "extensions/continuity.mjs, extensions/self-merge.mjs"`.
 Run `docs/runbooks/land.md` §"Seat self-merge (the default)" for the commands and their measured costs.
 
-**State after the 2026-11-14 retire pass** (goal `mwgrz17c-5gwim4`, tip `18e378d2` at measurement, `main` unmoved by
-the pass itself, nothing pushed): **53 refs + `main`, 28 worktrees** (99 + `main` / 40 at window start; 155 before
-the earlier prune). Prune plan **0**, unaccounted refs **0**, needs-a-landing-decision **0**, audit `total 28, clean
-true, reapable 0` in 1.5 s. What is left is the floor, not clutter:
-**28** refs still are not ancestors of `main` — 25 conflicted and 3 gate-refused — and each needs a seat re-cut, not
-a delete (R-B #3270); **4** are held by **uncommitted tracked work in their own tree** (`item-6057`, `item-6375`,
-`item-6377`, `item-7188`); **21** are structural (seat roots, live queue rows, and `seatroot/linux`, whose tree lives
-outside this repo). The 28 worktrees are 9 seat roots, 12 live item trees, 3 terminal-locked (all released by this
-pass except the three that were unlocked and removed: `item-1158`, `item-4`, `item-6528`), 4 dirty, 3 non-item
-(`durian-dev/seatroot`, `.spike/ins-6101` — the re-cut pass with its conflict markers still uncommitted — and
-`item-7290/.scratch-7290`). No git verb can release any of them without losing someone's work. **Read the audit's
-entries, not its counts:** 20 trees still carry a git lock, while `counts.locked: 3` is the *keep-reason bucket*
-(terminal items deadlocked behind a lock), because `classifyWorktrees` classifies each tree once, `live → locked →
-not-terminal → dirty → reapable` (`src/broker.mjs:1356-1360`) — pitfall 368. The 3 remaining `gate-refused` refs
-(`item-7232-recut`, `item-3747-recut`, `item-3570-recut`) are held by one missing implementation — **ROADMAP 371**,
-the by-id `claim_work` gate in `src/rig.mjs` — not by a merge conflict.
+**State after the 2026-11-14 landing-integrity pass** (goal `mwgw93nx-jg40zf`, tip `1f1a881c` at measurement, `main`
+moved only by the four shipped commits, nothing pushed): **53 refs + `main`, 28 worktrees** (99 + `main` / 40 at
+the window start; 155 before the earlier prune). Prune plan **0**, unaccounted refs **0**, needs-a-landing-decision
+**0**, audit `total 28, clean true, reapable 0, lockedTrees 17, lockedKept 0` in 2.0 s. What is left is the floor,
+not clutter: **28** refs still are not ancestors of `main` — **26 conflicted** and **2 gate-refused** — and each
+needs a seat re-cut, not a delete (R-B #3270); **4** are held by **uncommitted tracked work in their own tree**
+(`item-6057`, `item-6375`, `item-6377`, `item-7188`); **21** are structural (seat roots, live queue rows, and
+`seatroot/linux`, whose tree lives outside this repo). The 28 worktrees are 9 seat roots, 12 live item trees, 17
+git-locked (only 0 of them kept *because* of the lock), 4 dirty, 3 non-item (`durian-dev/seatroot`,
+`.spike/ins-6101` — the re-cut pass with its conflict markers still uncommitted — and `item-7290/.scratch-7290`).
+No git verb can release any of them without losing someone's work. **Read the audit's entries, not its counts:**
+17 trees carry a git lock while `counts.locked` is the *keep-reason bucket*, because `classifyWorktrees` classifies
+each tree once, `live → locked → not-terminal → dirty → reapable` (`src/broker.mjs:1356-1360`) — pitfall 368, now
+printed as two named numbers (ROADMAP 373). **ROADMAP 371 is implemented**, so the by-id claim gate is no longer
+the blocker: `item-7232-recut` is dispositioned **NOTHING-TO-LAND** (its demo blob is byte-identical to `main`'s,
+`4d4010564e9bf5bfeee8fde770e09f26c89d44ee`), and `item-3570-recut` and `item-3747-recut-r2` are **KEEP-HELD** with
+the verbatim refusals in `docs/DISPOSITIONS.md` — 3570 needs `blockedBy` on the `revise_work` schema plus an area
+mapping; 3747 needs a human re-cut (its R5-BOTH merge put two `check` rule counts, 28 and 24, into
+`docs/WORKFLOWS.md` and `doc-count-drift` fires).
 
 **Run these first** (measured on this box; re-measure rather than trust):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json --strict # 2.6 s, 53 refs — 25 landed, 25 conflicted,
-                                                                      # 3 gate-refused (all proven), stale 0, coverage 28/28, exit 0
+DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json --strict # 4.6 s, 53 refs — 25 landed, 26 conflicted,
+                                                                      # 2 gate-refused (both proven), stale 0, coverage 28/28, exit 0
 node tools/branch-census.mjs --db ./selfdev.sqlite                      # 4.0 s, exit 0 — 53 refs / 28 worktrees, prune plan 0
+node cli.mjs worktree audit --json                                      # 2.0 s — lockedTrees 17, lockedKept 0, counts.locked named
+node tools/branch-prune.mjs --retire-ruled --dry-run --db ./selfdev.sqlite
+                                                                      # 1.3 s, exit 1 — reads 250 ledger rows / 251 refs ruled, plans
+                                                                      # 1 (item-7232-recut, NOTHING-TO-LAND), skips it: no --bundle-dir.
+                                                                      # Give it --bundle-dir .spike/quarantine-<date>/bundles to delete it
 node tools/branch-prune.mjs --dry-run --db ./selfdev.sqlite             # 9.2 s, exit 0, planned 0 — the census + the safe delete loop
 node tools/branch-prune.mjs --reap-worktrees --dry-run                  # 1.9 s, exit 0 — 0 trees the audit calls reapable
 node tools/branch-prune.mjs --retire-merged --retire-unmerged '^landing-<yyyymmdd>' \
@@ -130,7 +148,10 @@ node tools/branch-prune.mjs --retire-merged --retire-unmerged '^landing-<yyyymmd
                                                                       # 4.4 s — the retire verb; the executed pass took 26.0 s, 46 refs,
                                                                       # 12 trees, 0 forced, 0 failures, exit 0
 node tools/process-leak-scan.mjs --strict                                # 1.9 s, exit 0 today — 0 orphans (15 found, 594 MB on 2026-11-14); add --kill
-node demo/branch-prune.test.mjs                                         # 0.68 s — the prune gate, on a git fixture
+node demo/branch-prune.test.mjs                                         # 0.68 s — the prune gate, on a git fixture, §15 covers --retire-ruled
+node demo/by-id-claim-gate.test.mjs                                     # 0.31 s — ROADMAP 371, the by-id claim door, 0 failed checks
+node demo/edge-fail-closed.test.mjs                                     # 0.78 s — ROADMAP 368, a malformed org edge refuses, never throws
+node demo/human-defer-lease.test.mjs                                    # 0.13 s — ROADMAP 375, the wake census reads the caller's clock
 node cli.mjs check rig.selfdev.json --json                              # 14.3 s — MUST name the rig; ready-ref-stale is a row
 node demo/self-merge-seat.test.mjs                                      # 0.94 s — the seat verb, end to end, no model
 timeout 120 node scripts/test.mjs --area worktree                       # 9.9 s, 28/28
@@ -141,16 +162,20 @@ node tools/pointer-sha-coverage.mjs --base 8b5a19e1                     # 0.4 s 
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                     # 0.4 s — exit 0, 379 commits, 43+140 rows
 ```
 
-**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **359/359 in 192.3 s** at `a23961dc`, and **358/359 in
-192.4 s** at this window's tip (the commit carrying this file) — the one red was `demo/restart-limit-behaviour.test.mjs`, which **passes
-in isolation** (`node demo/restart-limit-behaviour.test.mjs`, exit 0, 0.6 s) and **passes in its own area**
-(`--area rig` 95/95 in 25.2 s, `--jobs 4`). Treat it as a contention flake under a 359-test parallel run, not a
-regression: re-measure it in its area before believing a full-suite red for it. Slowest: `runbook-diagnose` 92.7 s, `starter` 51.9 s,
-`check-pool-gate` 21.0 s, `clockin-digest` 20.0 s, `broker-wakepath` 16.3 s. Host: Linux, Fedora Linux 45
-(Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Areas instead of the whole suite:
-`--area worktree` **28/28 in 8.6 s**, `--area check` 16/16 in 73.4 s, `--area toolchain` 41/41 in 36.0 s. The one red at the previous HEAD,
-`demo/restart-limit-behaviour.test.mjs`, is fixed (one scripted response per crash is not enough — a restart
-consumes another, so the run settled `done` and the streak never reached the limit).
+**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **361/361 in 192.3 s, exit 0** at `1f1a881c` (host below).
+The two reds that preceded it were both instrument defects, not fleet defects, and both are now closed
+(ROADMAP **375**): `demo/human-defer-lease.test.mjs` went red because `selectWakes` read the **wall** clock while
+the fixture asserted a named one — red 2 days after shipping with no code change, exit 1 in 0.145 s; and
+`demo/restart-limit-behaviour.test.mjs` failed **2 of 10 standalone runs** (it planted 5 crashes, charged 4, and
+asserted a limit on a run that had already settled) because the simulated host died one await after the
+observation. After the fixes: human-defer-lease exit 0 in 0.126 s; restart-limit **10 runs, 0 red, 14 s wall**.
+Standing rule: classify a suite red by running the file alone **10 times** before believing it
+(`for i in $(seq 10); do node demo/<file>.test.mjs || echo red; done`, ~15 s for this file). Slowest this run:
+`runbook-diagnose` 87.1 s, `starter` 27.4 s, `clockin-digest` 23.6 s, `cli` 16.8 s, `broker-wakepath` 16.8 s —
+`runbook-diagnose` alone is 45 % of the suite's wall clock; a bounded subset of it is the next thing worth
+measuring. Host: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+Areas instead of the whole suite: `--area rig` **97/97 in 27.6 s** (one red before the clock fix, 0 after),
+`--area worktree` **28/28 in 8.8 s**, `--area docs` **8/8 in 87.8 s**.
 
 **The gate-rig trap now fixed (pitfall 355).** The gate runs in a detached scratch worktree, and
 `durig.config.json` is gitignored, so the scratch armed ZERO extensions: `cli.mjs check rig.selfdev.json --json`
@@ -167,21 +192,27 @@ the broker's environment**: `127.0.0.1:8080` now answers 401 to the rig's loopba
 `node --env-file="$HOME/.config/durig/env" cli.mjs serve` (`docs/runbooks/local-provider-down.md` Do 0). A broker
 started without it wakes seats that die in ~3 ms with `provider_auth`. (2) **17 refs still need a seat's semantic judgement** (rows in `docs/DISPOSITIONS.md`, verbatim hunk in
 `docs/evidence/2026-11-14-recut-residue/`). After the retire pass the arithmetic is smaller and clean: **28** refs
-are not ancestors of `main` — **25 conflicted**, **3 gate-refused**, ledger coverage **28/28**, `stale: 0`. The
+are not ancestors of `main` — **26 conflicted**, **2 gate-refused**, ledger coverage **28/28**, `stale: 0`, both
+refusals proven (`gate_refused_unproven: []`). The
 26 `landing-20261114-*` chain snapshots that inflated that count are gone (bundled first, see the retire-pass row
 in `docs/DISPOSITIONS.md`). `wip/seat-prompt-files` now carries a dated **KEEP-HELD** row in `docs/DISPOSITIONS.md`
 (2026-11-14): the merge is provably lossy (`merge-containment-proof` exit 1 — 41 lines of `cli.mjs` and 6 of
 `prompts/impl.md` vanish), so the ref is kept; the next move is the author folding the two wordings into one commit,
-then `node tools/chain-resolve.mjs --branch <landing> --refs wip/seat-prompt-files`. (3) **`cli.mjs check` on this rig exits 1 for two pre-existing error findings**
-(`store-missing-seat`, `pool-dead-gate` #7660) — that is why `demo/depplane.test.mjs` is red at this HEAD; it is
-not the new rule. (4) `item-3570`'s recut is blocked by a real defect: the harness rejects `revise_work` with
-`blockedBy: unknown field` although `src/rig.mjs` lists it (probe `node .spike/probe-3570.mjs`).
+then `node tools/chain-resolve.mjs --branch <landing> --refs wip/seat-prompt-files`. (3) **`cli.mjs check` on this rig exits 1** — re-measured at `1f1a881c` (14.3 s): 198 findings, severity counts
+`{fix-now: 197, error: 1}`; the one `error` is `pool-dead-gate` #7660. `store-missing-seat` is declared in
+`src/checkup.mjs:76` but does not fire as an error today, and the claim that this makes `demo/depplane.test.mjs`
+red is **now false** — it passes (`node demo/depplane.test.mjs` → `PASS depplane: 0 failing assertion(s)`, exit 0).
+(4) `item-3570`'s recut is blocked by a real defect: the harness rejects `revise_work` with
+`blockedBy: unknown field` although `src/rig.mjs` lists it (probe `node .spike/probe-3570.mjs`, path verified with
+`test -e`).
 
 **Three things not to re-derive:** (a) an R5 union of two evolutionary versions of the *same* statement is a
 regression, not a merge — always land with `--changed-suite` (pitfall 347); (b) a demo with absolute dates is a
 time bomb — build fixtures relative to `Date.now()` (pitfall 348); (c) "can any branch be cleaned up?" is a 9 s
 question — `node tools/branch-prune.mjs --dry-run --db ./selfdev.sqlite` — not a hand-loop over `git branch -d`
-(pitfall 364); and a ref that only *conflicts* with `main` is never in that plan (pitfall 370).
+(pitfall 364); and a ref that only *conflicts* with `main` is never in that plan (pitfall 370). (d) **a suite red
+is a hypothesis until the file has run 10 times alone** — two of this window's three "flakes" were fixture bugs
+(ROADMAP 375, pitfalls 376-377), not fleet bugs, and each cost a turn to bisect.
 
 **Operator decisions owed.** (a) Grant (or refuse) waking the fleet for the live seat proof. (b) `item-6373`
 vendor pin 1.3.0 → 1.5.1 is a grant decision. (c) Whether the rig mints a *union-import* rule rather than a
