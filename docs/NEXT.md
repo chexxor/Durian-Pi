@@ -1,10 +1,11 @@
-**Last update:** 2026-11-14T01:1xZ (delegate). Every shipped commit in this milestone is a ROW below, **in commit order** —
+**Last update:** 2026-11-14T03:3xZ (delegate). Every shipped commit in this milestone is a ROW below, **in commit order** —
 enforced by `node tools/pointer-sha-coverage.mjs --base 03bdbf4d` (0.2 s, exit 0/1), not by eye. The ONE exempt commit
 is the one carrying this file (a file cannot name its container; `git log -1 --format=%h -- docs/NEXT.md` names it),
 and the session that edits this file adds the previous carrier as a row or the tool fails. Nothing pushed — the push grant is the operator's.
 
-**Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE.** Every commit in the
-range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts of this pointer SKIPPED are marked ← new):
+**Milestone this window worked** — **the unlanded-ref residue (the work-item lifecycle, D265; ROADMAP 347 "Milestone
+closure is prose") — a gated landing pass: 20 of the 21 refs the census said needed landing are now on `main`.** Every
+commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts of this pointer SKIPPED are marked ← new):
 
 | sha | shipped |
 |---|---|
@@ -39,7 +40,10 @@ range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts of this pointer
 | `280d6ad3` | unpause verified by behaviour (#7722 claimed 6 min after it), fresh census, suite re-run |
 | `8f4a63ce` | the sha table becomes a TOOL-checked claim (`tools/pointer-sha-coverage.mjs` + test); the window lease; the bound recorded per window and the lease measurement |
 | `313c525b` | the suite table with its seconds, the pointer cut back under the 200-line cap, pitfalls 328–329 |
-| *(this commit)* | records the re-leased window `1903310` — exempt: it carries this file |
+| `54fa9649` | the pointer records the re-leased window `1903310`, the one open at clock-out |
+| `ab96bf0b` | `docs/DISPOSITIONS.md`: 20 LANDED rows with ancestry+content evidence, `item-6959` KEEP-HELD with the gate refusal quoted; no ref deleted (rule R-B #3270) |
+| `16166492` | pitfalls 330–333 + the `tools/landing-batch-plan.mjs` addendum (a plan is HEAD-scoped; `merge-tree`'s exit code is the verdict) |
+| *(this commit)* | the landing-pass pointer rewrite — exempt: it carries this file |
 
 The two ordering defects this table had (the tool now catches both) were `36f57a36` before `517dc58d` and `7008d11d` before `35ff79f2`.
 
@@ -95,7 +99,15 @@ And it is still driving now: the `01:01:21Z` window's `PASS 1 … woke=` names a
 
 ## NEXT SESSION
 
-**Current item:** **the N19 pool is CLOSED — usable, alive, and the gate has fired on a LIVE seat.** `pm` minted
+**Current item:** **the landing pass is CLOSED: `main` `03bdbf4d` → `82a3c51d` → `16166492`, 20 refs landed, 1 held.**
+Each landed ref is proven two ways: `git merge-base --is-ancestor <ref> main` exit **0** and every `+` line of its
+branch-vs-base diff present on main (probe `.spike/landing-content-probe.mjs`, ~40 s: 1,087 lines for bin 1, 68 for
+the chain, 0 missing). Full suite at `82a3c51d`: `node scripts/test.mjs --all --jobs 4` → **341/341 in 136.8 s**
+(Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1). One ref did NOT land: `item-6959` adds
+`demo/noop-wake-census.test.mjs` with no `demo/test-areas.json` row, so the derived gate refused it
+(`demo/compaction-acceptance-gate.test.mjs:117`) — routed to `pm`, ref kept.
+
+**Older current item, still true:** **the N19 pool is CLOSED — usable, alive, and the gate has fired on a LIVE seat.** `pm` minted
 **#7700** (`pool:true, tier:"project"`, `21:20:16.789Z`); the live scheduler refuses it by name for every seat
 (`SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
 usable window))`, 113 lines by 21:47Z); and **two real seats claimed it by id and were REFUSED** — `size-refused` on
@@ -131,6 +143,10 @@ GROWING — **no causal claim**: closes and intake both fell while the fleet lan
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
+timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — the residue after the pass
+timeout 120 node tools/landing-batch-plan.mjs --max 12                        # ~13 s — RE-RUN after every bin (pitfall 330)
+node cli.mjs worktree audit --json                                            # ~1 s — 157 worktrees still open
+node scripts/test.mjs --all --jobs 4                                          # 136.8 s — 341/341 at 82a3c51d
 grep ' PASS ' selfdev.sqlite.broker.log | tail -1; cat selfdev.sqlite.broker.json   # liveness is the last PASS line
 node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.8 s — every pool row + transitions
 node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5       # 1.7-10 s — read-only denominator, balance line
@@ -154,13 +170,10 @@ The suite is **338 tests** since this window added `tools/pointer-sha-coverage-t
 
 | sha | command | result | log |
 |---|---|---|---|
+| `82a3c51d` | `--all --jobs 4` | **341/341 in 136.8 s** | `.spike/suite-final-jobs4.out` |
 | `280d6ad3` | `--all --jobs 4` | **337/337 in 140.1 s** | `.spike/suite-jobs4-2026-11-14T00-52Z.out` |
-| `280d6ad3` | `--all --jobs 4` (the auditor's own run) | **337/337 in 138.8 s** | quoted in the audit |
-| `11290f1e` | `--all --jobs 2` | **337/337 in 245.1 s** | `.spike/suite-2026-11-14T00-42Z.out` |
-| `0de543ae` | `--all --jobs 2` | **337/337 in 257.8 s** | — |
-| `8f4a63ce` | `--all --jobs 4` | **337/338 in 142.9 s** — `demo/restart-limit-behaviour.test.mjs` failed 2 checks (`charged 5, not 3 -- restarts=4`) | `.spike/suite-jobs4-8f4a63ce.out` |
+| `8f4a63ce` | `--all --jobs 4` | **337/338 in 142.9 s** — `demo/restart-limit-behaviour.test.mjs` failed 2 checks, PASS when run alone twice | `.spike/suite-jobs4-8f4a63ce.out` |
 | `8f4a63ce` | `--all --jobs 2` | **338/338 in 253.9 s** | `.spike/suite-jobs2-8f4a63ce.out` |
-| `8f4a63ce` | the failed test ALONE, twice | **PASS, PASS** (exit 0 both) | `/tmp/rl-1.out`, `/tmp/rl-2.out` |
 
 The flake is REAL and it is `--jobs 4`-only and intermittent: it did not appear in two earlier `--jobs 4` runs at
 `280d6ad3` and did appear once at `8f4a63ce`, whose diff is a tool plus a test and touches nothing the test exercises.
@@ -190,7 +203,10 @@ node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --seat devtools --li
 Its first WRITE is not a tool run: once decisions 1–2 are ruled, `pm` annotates chosen rows with
 `revise_work({itemId, requires})` (author or `pm`), one `revised` transition each.
 
-**Traps this window** — `docs/SELFDEV.md` **318–329** (the `seats` LIST vs DOCUMENT roster trap; `usableWindow: null`
+**Traps this window** — `docs/SELFDEV.md` **330–333** (a landing plan is valid only against the HEAD it was computed
+on; `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved
+merge that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area
+mapping is not landable and only the gate catches it). Older: **318–329** (the `seats` LIST vs DOCUMENT roster trap; `usableWindow: null`
 from `up`; "armed" ≠ "fired"; an unclaimable pool row; a count is not a trace; `check` auditing `./rig.json`; a
 `--local` control read staleness; a hardcoded future date in a fixture; **328** `--max-duration` bounds the loop, not
 the wall clock, so lease every window from outside; **329** a hand-written sha table skips a sha — run
