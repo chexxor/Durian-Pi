@@ -11783,6 +11783,38 @@ the very condition it diagnoses. Every route must print which path served the re
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
 
+## D282 (PROVISIONAL - mint at land; DECISIONS.md already collides at D258/D259, re-check the number) — there is ONE claim-admission predicate: every path into `claim_work` runs `workable()`, and the refusal keeps `NO_QUEUED_WORK` as a stable prefix (architect, item #6531, review `docs/reviews/architecture-claim-by-id-6531.md`, 2026-11-11)
+
+**Status:** proposed, awaiting lead's scope ruling on whether the by-id bypass is intentional.
+
+**Context.** `claim_work` has two paths. The oldest path runs `selectOldestWorkable` -> `workable()` (status, `requires`, every `blockedBy` gate). The by-id path filters `it.id === args.itemId && it.to === me && it.status === "queued"` and its comment claims the whitelist is "IDENTICAL to the oldest path". Measured at HEAD `9ae345df` (`tools/probes/claim-by-id-gate-bypass.mjs`, exit 1): the by-id branch contains no `workable`, no `blockedBy`, no `requires`; a row the predicate refuses with `gate-open:#5001(queued)` is admitted by the filter, and a row `requires: design` is admitted for a seat with no `design` capability.
+
+**Decision.** Both paths call the same predicate. The refusal is `NO_QUEUED_WORK - #<id> is <status> (<predicate reason>); <remedy verb>` — the prefix stays stable because three demos and the driver's wake documentation match on it, and the detail is appended, exactly as the oldest path already does at `src/rig.mjs:958`. "No such row" is reserved for an id that does not exist.
+
+**Options considered.** (a) Fix only the message and leave the bypass: cheapest, behaviour-stable, and it leaves a documented predicate the verb does not honour. (b) One predicate: makes the by-id path refuse rows it currently admits, which is a behaviour change on a verb every seat uses. Chosen: **(b)** — a refusal is retryable once the gate closes; work started before its prerequisite lands is not.
+
+**Consequences.** `requires` becomes binding in both paths (a seat pointed at a row it cannot do now gets a named reason instead of a claim it cannot fulfil). Any future path into claiming must use `workable()` or the class reopens. Demos `race.test.mjs:84`, `rearmclaim.test.mjs:132`, `defer.test.mjs:228` must stay green.
+
+**Residual (lead):** if forcing a claim by id is meant to be an operator escape hatch, that is a scope decision, and the code comment must be corrected either way.
+
+## D283 (PROVISIONAL - mint at land) — coordinator standing is a RECORDED field that must be RE-VALIDATED at the verb, bounded to depth 1, and undoable by whoever added the gate (architect review of lead's #6532 ruling, item #6532, review `docs/reviews/architecture-coordinator-standing-6532.md`, 2026-11-11)
+
+**Status:** adopted in direction (lead chose (b)); this ADR records the four conditions the ruling left open.
+
+**Context.** `coordinatedBy` does not exist in `src/rig.mjs` today; the only non-party grant is `release_work` (`:1332`), which derives standing at call time from `seatIsCoordinator` (`src/seattools.mjs:292`), a predicate over a closed four-entry list `WORKING_CAPABILITIES = ["implement","code","verify","review"]` (`:262`). Measured by `tools/probes/coordinator-standing-surface.mjs` (exit 1): 0 recorded field, 1 unbounded non-party grant, 0 sites that clear a gate, and `seatIsCoordinator({capabilities:["design"]}) = true`.
+
+**Decision.** Four conditions, all falsifiable:
+1. `coordinatedBy` is set at mint (to `from` when `seatIsCoordinator(from)`), never mutated, never inferred from forwarding history.
+2. Authority is additive on gate/constraint fields only (`blockedBy`, `reviewBy`), never subject, body, tier, status or cancellation, and never after the row is claimed.
+3. The verb checks BOTH the record and the predicate: `item.coordinatedBy === me && seatIsCoordinator(seats[me])`, and the refusal names which half failed. Standing that cannot lapse is a latent grant.
+4. Scope is depth 1: `coordinatedBy === me` or a gate naming a row whose `from === me`. "The gate chain" is not a bound. And additive authority includes removal of the edges that same actor added, recorded per edge.
+
+**Options considered.** (a) no coordinator standing — cheap, leaves sequencing in prose (#3570). (b) standing without re-validation — rejected: a recorded snapshot plus a predicate that flips means two truths about one seat. Chosen: (b) narrowed as above; the trade-off accepted is one extra field and one graph-depth computation per gate write.
+
+**Consequences.** Capability vocabulary becomes load-bearing: a seat whose capabilities are spelled outside the four-entry list currently reads as a coordinator, so unknown capability strings must be reported by `check` rather than silently granting standing. Removal becomes part of the same seam as addition — #6508 and #6530 are one contract, not two rows that meet in the middle.
+
+**Residual (lead):** whether `design`/`architecture`/`docs` count as working capabilities, and whether a coordinator may gate a row it neither minted nor is party to at all. Both are scope, not design.
+
 ## D281 (PROVISIONAL - mint at land; D258 and D259 already collide, re-check the number) — a gate is validated where it is WRITTEN, never where it is read; and an additive gate verb is not shippable without a removal path and a graph check (architect, item #6517, review `docs/reviews/architecture-gate-verb-decomposition-6517.md`, 2026-11-11)
 
 **Status:** proposed, ready to adopt with the #6508-#6516 tranche.
