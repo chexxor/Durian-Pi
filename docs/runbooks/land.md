@@ -113,7 +113,8 @@ WORK. The `repo` field guarded against a TOOL THAT LIED, and that tool is FIXED;
 against a WORLD THAT MOVES, and it never stops moving. One cause could be removed; the other cannot.
 
 **The landing LOCK serialises landings — there is no operator-confirmation gate.** The protection against
-two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured:
+two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured **2026-10-21**
+(the pass that retired the gate, #4431) - these are that day's numbers, not a live reading:
 `{ slots: 4, held: 4, waitedMs: 160062, liveHolders: 3 }` — a landing WAITED 160 seconds for a slot behind
 three live holders. Two delegates cannot merge into one tree simultaneously, because the tool will not let
 them. So: (1) DO NOT hold a landing for an operator to confirm no other delegate is landing — that is an
