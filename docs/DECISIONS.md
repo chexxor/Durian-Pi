@@ -11833,6 +11833,23 @@ Rejected with a reason, not silently: a purpose-prefix naming taxonomy enforced 
 no fetched source shows one enforced, and a naming rule the tooling cannot enforce is a rule set that gets
 violated silently.
 
+**Addendum — 2026-11-14, the gated landing pass: a conflicted ref is an anchor collision, not a verdict on the work.**
+Rule 1 ("dispositioned, never deleted") was exercised on the 21 refs the census named (`node tools/branch-census.mjs
+--json`, 35 s, exit 0 at main `54fa9649`: 21 needing landing, 17 prune-merged, 82 conflicting, 19 dirty). Twenty landed
+through `scripts/land.mjs`: bin 1 (11 refs) exit 0, gate "derived: 121/341; areas NOT covered []", main `54fa9649` →
+`33cee497`; the nine that conflicted were resolved per file — append-only ledger rows unioned, runbook additions placed
+in their own sections, trailing newline restored — then landed as one chain through the same lander (exit 0, merge
+`82a3c51d`, parents `33cee497 8d3f3dad`, derived gate 45/341, 0 suite failures). Each landed ref is an ancestor of
+`main` AND every `+` line of its branch-vs-base diff is present on `main` (1,087 lines bin 1, 68 the chain, 0 missing).
+`item-6959` is KEEP-HELD: its new demo has no `demo/test-areas.json` row, so the derived gate refuses it
+(`demo/compaction-acceptance-gate.test.mjs:117`); the ref stays and the fix is routed to `pm`. Post-pass census:
+`needsLanding: 0`. **Why this shape:** deleting a conflicted ref destroys a seat's committed work and removes it from
+the audit trail; punting all nine to seats costs nine seat turns for a mechanical join. The union keeps the human
+judgement where the design puts it — in `scripts/land.mjs`'s chokepoint (pre-flight, genlock, derived gate, clean
+merge) — and the pass only ever feeds that chokepoint a resolvable candidate; it never bypasses it. Full suite at HEAD
+`3c6d01fc`: **341/341 in 135.7 s** (`node scripts/test.mjs --all --jobs 4`), Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`,
+node v24.22.1, git 2.56.0.
+
 ## D266 — 2026-11-12T06:5xZ: **claim order is a declared POLICY with a name, a default that changes nothing, and a priority that EXPIRES; a setting nobody reads back is not a setting** (delegate, on the operator's directive "I like that idea. Implement that yourself now, bypassing the team to get this done"; host measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0`)
 
 **Decision.** The order a seat takes work in is a **named policy**, not an emergent property of array order:

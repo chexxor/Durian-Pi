@@ -100,7 +100,8 @@ commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts o
 | `dd47ef89` | the pointer rewrite: the landing pass, 20 refs landed, item-6959 held, suite 341/341 |
 | `f3f72792` | docs(NEXT): the sha table names every commit in 03bdbf4d..HEAD (92 rows, tool-verified) |
 | `94eddcdd` | docs(NEXT): condense the pointer to 197 lines (the 200-line cap) + the previous carrier row |
-| *(this commit)* | docs(NEXT): suite numbers at HEAD, the pm route — exempt: it carries this file |
+| `3c6d01fc` | docs(NEXT): suite numbers at HEAD, the pm route, pointer within the cap |
+| *(this commit)* | docs(decisions): the D265 addendum — a conflicted ref is an anchor collision, not a verdict — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
