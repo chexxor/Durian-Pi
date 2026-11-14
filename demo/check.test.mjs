@@ -370,7 +370,10 @@ try {
   // version the module reads. Everything except that rule must still match.
   const fixturePlane = await readDependencyPlane({ root: dir, db: naiveDb });
   assert.equal(fixturePlane.resolved, null, `the fixture dir resolves ${fixturePlane.resolved}, expected nothing`);
-  assert.ok(ids(naivePayload).includes("pi-dependency-plane"), "the CLI did not report the plane it measured");
+  // The CLI measures the CHECKOUT its own code lives in, not the fixture dir (#6374): the payload must
+  // carry that measurement, and a FINDING rides with it only when the measured plane disagrees.
+  assert.ok(naivePayload.plane && naivePayload.plane.line, "the CLI did not report the plane it measured");
+  assert.ok(naivePayload.checks.some((c) => c.id === "pi-dependency-plane"), "the plane rule is in the report");
   assert.deepEqual(
     ids(naivePayload).filter((id) => id !== "pi-dependency-plane"),
     ids(naive),
