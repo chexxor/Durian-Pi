@@ -78,7 +78,8 @@ Run `docs/runbooks/land.md` §"Seat self-merge (the default)" for the commands a
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json          # 9.2 s, 197 refs — who is ready, who is stale
+DURIG_DB=./selfdev.sqlite node tools/self-merge-sla.mjs --json          # 7.2 s, 193 refs — 52 conflicted, 134 landed,
+                                                                      # 5 ready, 2 ready-unverified, 0 stale, exit 0 (HEAD 10ca88ee)
 node cli.mjs check rig.selfdev.json --json                              # 14.3 s — MUST name the rig; ready-ref-stale is a row
 node demo/self-merge-seat.test.mjs                                      # 0.94 s — the seat verb, end to end, no model
 timeout 120 node scripts/test.mjs --area worktree                       # 8.9 s, 26/26
@@ -86,9 +87,12 @@ timeout 320 node scripts/test.mjs --all --jobs 4                        # ~214 s
 node tools/pointer-sha-coverage.mjs --base 8b5a19e1                     # 0.3 s — exit 1 if this file skips a shipped sha
 ```
 
-**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 215.9 s** at `5b1daea5`; re-run at the
-final HEAD before closing the window (slowest: `runbook-diagnose` 102.8 s, `starter` 71.1 s). Host: Linux, Fedora
-Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1. The one red at the previous HEAD,
+**Suite tally:** `node scripts/test.mjs --all --jobs 4` → **357/357 passed in 209.0 s, 0 fails, 0 skips, at the final
+HEAD `10ca88ee`** (run detached: `nohup timeout 420 node scripts/test.mjs --all --jobs 4 > .spike/suite-final.out 2>
+.spike/suite-final.err`; stderr 0 bytes). Slowest: `runbook-diagnose` 97.2 s, `starter` 64.5 s, `check-pool-gate`
+28.4 s, `clockin-digest` 28.1 s, `check` 17.6 s. Host: Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. Areas instead of the whole suite: `--area worktree` 27/27 in
+9.6 s, `--area check` 16/16 in 61.8 s. The one red at the previous HEAD,
 `demo/restart-limit-behaviour.test.mjs`, is fixed (one scripted response per crash is not enough — a restart
 consumes another, so the run settled `done` and the streak never reached the limit).
 
@@ -106,8 +110,12 @@ refuses without the operator's `--yes-pm-wakes` grant. (1b) **Every seat run nee
 the broker's environment**: `127.0.0.1:8080` now answers 401 to the rig's loopback placeholder; start with
 `node --env-file="$HOME/.config/durig/env" cli.mjs serve` (`docs/runbooks/local-provider-down.md` Do 0). A broker
 started without it wakes seats that die in ~3 ms with `provider_auth`. (2) **17 refs still need a seat's semantic judgement** (rows in `docs/DISPOSITIONS.md`, verbatim hunk in
-`docs/evidence/2026-11-14-recut-residue/`); 52 refs report `conflicted` in the SLA census. `wip/seat-prompt-files`
-has no DISPOSITIONS row yet. (3) **`cli.mjs check` on this rig exits 1 for two pre-existing error findings**
+`docs/evidence/2026-11-14-recut-residue/`); 52 refs report `conflicted` in the SLA census — that is **wider than the
+36-ref census**: it includes the 22 `landing-20261114-*` scratch refs whose content was dispositioned and refs that
+were never in the census. `wip/seat-prompt-files` now carries a dated **KEEP-HELD** row in `docs/DISPOSITIONS.md`
+(2026-11-14): the merge is provably lossy (`merge-containment-proof` exit 1 — 41 lines of `cli.mjs` and 6 of
+`prompts/impl.md` vanish), so the ref is kept; the next move is the author folding the two wordings into one commit,
+then `node tools/chain-resolve.mjs --branch <landing> --refs wip/seat-prompt-files`. (3) **`cli.mjs check` on this rig exits 1 for two pre-existing error findings**
 (`store-missing-seat`, `pool-dead-gate` #7660) — that is why `demo/depplane.test.mjs` is red at this HEAD; it is
 not the new rule. (4) `item-3570`'s recut is blocked by a real defect: the harness rejects `revise_work` with
 `blockedBy: unknown field` although `src/rig.mjs` lists it (probe `node .spike/probe-3570.mjs`).

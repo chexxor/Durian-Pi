@@ -13397,6 +13397,24 @@ and the exact argv, no `push`), `demo/self-merge-sla.test.mjs` (0.47 s — every
 The instrument also found its own bug on first live use: the rule's finding mapped over `result.rows`, naming
 already-landed refs as debt (a landed row carries no `land_command`); it maps `stale_rows` now, and landed rows
 carry `stale: false` so no other consumer trips on a missing field.
-**Still unproven:** a live seat conversation calling `land_my_item` on the running fleet. The broker was down for
-this window (`node tools/broker-serve.mjs --status` → `broker: down`); waking the fleet is a capacity grant the
+**Still unproven (at the time of the ruling):** a live seat conversation calling `land_my_item` — i.e. a model
+choosing the verb in a real turn, not a harness invoking it. The production broker was down for this window
+(`node tools/broker-serve.mjs --status` → `broker: down`); waking the 12-seat fleet is a capacity grant the
 operator holds.
+
+**Addendum (2026-11-14, same window, live proof on a two-seat rig).** A seat conversation did call the verb.
+Proof rig: `.spike/fleet-proof/rig.proof.json`, store `.spike/fleet-proof/proof.sqlite`, two seats on
+`local/qwen3.8-flash-next-q2_0`, declared $0, broker started with `node --env-file="$HOME/.config/durig/env"
+cli.mjs serve --max-duration 500`. Seat `impl` claimed queue row #1, committed on `item-1` (tip `0470697b`), then
+ran `land_my_item` itself in the SAME session: `helper_exit 0`, `report.ok true`, local main `c608e5b4` → `07e0e76f`,
+`merged [{branch: item-1, sha 0470697b, mergeSha 07e0e76f}]`, gate `{kind: derived, "derived: 26/357 test(s); areas
+NOT covered [readapi]"}`, `gateRig {extensions: "extensions/continuity.mjs, extensions/self-merge.mjs", source:
+"the landing repo's config file"}`, lock `{slots: 4, held: 4, waitedMs: 0, liveHolders: 0}`, 26 tests, exit 0, 0
+skips. Independent checks after the fact: `git merge-base --is-ancestor refs/heads/item-1 refs/heads/main` exit 0;
+`node tools/merge-containment-proof.mjs --branch refs/heads/main --refs item-1` → `refs_with_loss: 0`. Wall clock
+from broker WAKE (13:46:26Z) to the merge commit (13:47:08Z): **~40 s**. Host: Linux, Fedora Linux 45 (Forty Five),
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. **What this does not prove:** the same verb on the
+12-seat production fleet under a real gate load — that needs the operator's `--yes-pm-wakes`. The first two
+attempts on that rig failed for a reason the ruling did not anticipate: the gate scratch has no `durig.config.json`,
+so the gate ran with zero armed extensions and `ready-ref-stale` was not in the rule set (pitfall 355, ROADMAP 369);
+`scripts/land.mjs` now supplies the landing repo's `DURIG_EXTENSIONS` to every gate child and reports `gateRig`.
