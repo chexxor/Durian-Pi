@@ -116,9 +116,6 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `8b5a19e1` | merge: land landing-20261114-c10 onto main — `item-6173` (seat restart limit 3 at the `openHarness` seam) + `item-6238` (pi-pin / unlinked-deps runbooks), containment proven 0 loss, suite 347/347 in 153.9 s |
 | `4b52ecc8` | tools(ref-recut --refresh, conflict-blocks --full/--census): the re-cut instruments, measured 25 refs in 4.7 s |
 | `1751a3c2` | merge: land item-6343/6374/6435/6664/7090 recuts (scripts/land.mjs --changed-suite, derived gate 73/354 green) |
-| `a9b0d007` | absorb 9 refs whose added lines are already in main verbatim (tools/absorb-refs.mjs; tree unchanged, refs kept) |
-| `af86fefe` | docs+tools: absorb-refs.mjs, disposition-rows.mjs, merge-containment-proof --all-lost; 19 disposition rows + verbatim residue |
-| `1872bc25` | docs(NEXT): the conflict pass closed out — 19 ancestors, 17 held with residue; the self-merge seam is next |
 | `9ddf8c4c` | absorb item-5002 (content already in main verbatim; tree unchanged; ref kept) |
 | `42983b07` | absorb item-6177 |
 | `c600a2a9` | absorb item-6268 |
@@ -128,6 +125,10 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `25a082f9` | absorb item-6562 |
 | `9a7ac64b` | absorb item-6643 |
 | `a9b0d007` | absorb item-7158 (item-7448 follows as its ancestor) |
+| `af86fefe` | docs+tools: absorb-refs.mjs, disposition-rows.mjs, merge-containment-proof --all-lost; 19 disposition rows + verbatim residue |
+| `1872bc25` | docs(NEXT): the conflict pass closed out - 19 ancestors, 17 held with residue; the self-merge seam is next |
+| `4ad4c38e` | docs(NEXT): add this window's five commit rows so tools/pointer-sha-coverage.mjs stays honest |
+| `dba822b1` | docs(NEXT): register this window's commit rows so tools/pointer-sha-coverage.mjs stays honest |
 | *(this commit)* | docs(NEXT): the two rows above — exempt, a file cannot name the commit that carries it |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
