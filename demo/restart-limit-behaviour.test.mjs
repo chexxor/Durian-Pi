@@ -91,7 +91,7 @@ function hangingStorage(inner, flag) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Wait until `predicate` is true, up to `tries` polls of 50 ms. */
-async function until(predicate, tries = 120) {
+async function until(predicate, tries = 240) {
 	for (let i = 0; i < tries; i += 1) {
 		if (await predicate()) return true;
 		await sleep(50);
@@ -117,9 +117,16 @@ async function crashLoop({ restartLimit, crashes }) {
 	let taskId = null;
 	let restarts = null;
 	let threw = null;
+	// Addendum 2026-11-14 (delegate, measured Linux Fedora 45 kernel 7.2.15-300.fc45.x86_64 node v24.22.1):
+	// under suite load (`--all --jobs 4`) 5 planted crashes charged only 4 restarts - the 6 s poll bound expired
+	// before a partial reached storage, so the host died on a task that never started running and charged
+	// no restart. A crash that never reached a running task is not a crash: count the ones that landed.
+	let landed = 0;
+	let attempts = 0;
 
 	try {
-		for (let crash = 0; crash < crashes; crash += 1) {
+		while (landed < crashes && attempts < crashes + 4) {
+			attempts += 1;
 			faux.setResponses([fauxAssistantMessage(ANSWER)]);
 			const flag = { dead: false };
 			const harness = await Harness.open(hangingStorage(inner, flag), { models, registry, settings }, ctx);
@@ -127,7 +134,7 @@ async function crashLoop({ restartLimit, crashes }) {
 			const root = await harness.root(ctx, { agent: { model: { provider: "faux", modelId: "faux-seat" } } });
 			if (submissionId === null) submissionId = (await root.submit({ type: "input", content: "hi" }, ctx)).id;
 			// Crash only while the task is committed `running` AND a partial has reached storage.
-			await until(async () => {
+			const reached = await until(async () => {
 				const live = (await harness.snapshot(LiveDoc, ROOT_CONVERSATION_ID, ctx)) ?? {};
 				if (live.run?.taskId === undefined) return false;
 				taskId = live.run.taskId;
@@ -135,6 +142,8 @@ async function crashLoop({ restartLimit, crashes }) {
 				return live.generation?.message !== undefined && rec?.state?.status === "running";
 			});
 			flag.dead = true; // the host dies: no clean close, nothing more written
+			if (reached) landed += 1;
+			else console.log(`  note  attempt ${attempts} never reached a running task: no restart charged, planting again`);
 		}
 
 		// Final open, this one NOT killed: the scheduler charges the streak and decides.
@@ -155,7 +164,7 @@ async function crashLoop({ restartLimit, crashes }) {
 		const submission = submissionId === null ? null : await harness.submission(submissionId, ctx);
 		const settled = submission ? await submission.wait(ctx) : null;
 		await inner.close(ctx);
-		return { settled, restarts, runFailure: live.runFailure ?? null, threw };
+		return { settled, restarts, landed, attempts, runFailure: live.runFailure ?? null, threw };
 	} catch (err) {
 		return { settled: null, restarts, runFailure: null, threw: err };
 	} finally {
@@ -207,6 +216,7 @@ check("charged 5, not 3", atFiveFive.restarts === 5, "restarts=" + atFiveFive.re
 check("restartLimit 3 + 2 crashes: not ended by the limit", !endedByLimit(shortOfLimit), "settled=" + JSON.stringify(shortOfLimit.settled) + " restarts=" + shortOfLimit.restarts);
 
 /* 5. the vacuity control */
+check("every planted crash landed on a running task", atRuled.landed === 3 && atDefault.landed === 3 && atFiveFive.landed === 5 && shortOfLimit.landed === 2, `landed ${atRuled.landed}/${atDefault.landed}/${atFiveFive.landed}/${shortOfLimit.landed} in ${atRuled.attempts}/${atDefault.attempts}/${atFiveFive.attempts}/${shortOfLimit.attempts} attempts`);
 check("vacuity control: the limited and the unlimited fixture both pass a no-throw assertion", atRuled.threw === null && atDefault.threw === null, "threw: " + (atRuled.threw?.message ?? "none") + " / " + (atDefault.threw?.message ?? "none"));
 check("only the reason assertion separates them", endedByLimit(atRuled) && !endedByLimit(atDefault), atRuled.settled?.reason + " vs " + atDefault.settled?.reason);
 

@@ -27,7 +27,7 @@
 // written to docs/DISPOSITIONS.md instead — a disposition, with a reason, is the record that keeps
 // "unmerged" from becoming "deleted".
 
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -48,12 +48,16 @@ const dbPath = opt("--db", process.env.DURIG_DB || "./selfdev.sqlite");
 // Source of truth: src/broker.mjs:1486 `LIVE_STATUSES = ["queued", "claimed", "deferred", "held"]`.
 const LIVE_STATUSES = ["queued", "claimed", "deferred", "held"]; // mirrors src/broker.mjs:1486
 
+// Addendum 2026-11-14 (delegate, measured at main 1a31a79a, Linux Fedora 45, kernel 7.2.15-300.fc45.x86_64,
+// node v24.22.1, git 2.56.0): `cli.mjs worktree audit --json` exits 1 whenever it has remedies to print
+// (this rig: 192 worktrees, 67 remedies, exit 1, `ok: true` in the payload). execSync threw on that exit
+// code and the census reported "worktree audit failed" - the census died on a healthy audit. A non-zero
+// exit is a verdict, not a crash: keep the stdout, report the code.
 const run = (cmd, timeoutMs = 20000) => {
-	try {
-		return execSync(cmd, { cwd: repo, timeout: timeoutMs, encoding: "utf8" }).trim();
-	} catch (e) {
-		return `__ERR__ ${e.message.split("\n")[0]}`;
-	}
+	const r = spawnSync(cmd, { cwd: repo, timeout: timeoutMs, shell: true, encoding: "utf8" });
+	const out = (r.stdout || "").trim();
+	if (out) return out;
+	return `__ERR__ ${(r.stderr || r.message || "no output").split("\n")[0]} (exit ${r.status})`;
 };
 
 if (!fs.existsSync(path.join(repo, ".git"))) {

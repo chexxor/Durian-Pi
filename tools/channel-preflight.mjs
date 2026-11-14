@@ -51,10 +51,16 @@ const decodeCliJson = (text) => {
 	return JSON.parse(text.slice(at, text.lastIndexOf("}") + 1));
 };
 const cli = (args) => {
+	// Addendum 2026-11-14 (delegate, measured Linux Fedora 45 kernel 7.2.15-300.fc45.x86_64 node v24.22.1):
+	// passing the RIG as DURIG_CONFIG is a category error - src/config.mjs:6 reads DURIG_CONFIG as a *config*
+	// file, and the validator exits 1 with "unknown config-file key(s): _readme, version, workStrategy, seats,
+	// edges, ownership, constitution in ./rig.selfdev.json". That killed this preflight at step 2 (the queue
+	// read) while the rig itself is fine: `node cli.mjs queue --no-body` exits 0. The rig path is kept for the
+	// report and for `--rig`-taking verbs only, never as the config.
 	const r = spawnSync(process.execPath, ["cli.mjs", ...args], {
 		encoding: "utf8",
 		maxBuffer: 64 * 1024 * 1024,
-		env: { ...process.env, DURIG_DB: DB, DURIG_CONFIG: RIG },
+		env: { ...process.env, DURIG_DB: DB },
 	});
 	if (r.status !== 0) throw new Error(`cli.mjs ${args.join(" ")} exit ${r.status}: ${String(r.stderr).slice(0, 200)}`);
 	return decodeCliJson(r.stdout);

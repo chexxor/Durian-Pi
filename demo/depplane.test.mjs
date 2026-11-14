@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readDependencyPlane, pinVersion } from "../src/depplane.mjs";
 import { auditRig, formatCheck, RULES } from "../src/checkup.mjs";
@@ -181,11 +181,19 @@ try {
 
   // 5. The CLI wiring: `check` carries the plane in both output forms - the human line and the JSON
   //    field a pipe reads - and exits 0, because a check reports, it does not decide.
+  //    It runs against a rig IN THE SCRATCH with no store, not against rig.selfdev.json: the live
+  //    rig's exit code is decided by whatever error findings that rig happens to carry, so the
+  //    assertion measured the rig instead of the wiring. Measured 2026-11-14 on Linux Fedora 45
+  //    (kernel 7.2.15-300.fc45.x86_64, node v24.22.1): `node cli.mjs check --rig rig.selfdev.json
+  //    --json` exits 1 with one error finding (pool-dead-gate #7660), which turned this suite red
+  //    for a reason that has nothing to do with the dependency plane. A scratch rig is the seam.
+  const rigPath = join(scratch, "plane.rig.json");
+  writeFileSync(rigPath, JSON.stringify(spec(), null, 2));
   const runCli = (args) =>
     new Promise((resolve) => {
       const child = spawn(process.execPath, ["cli.mjs", ...args], {
         cwd: ROOT,
-        env: { ...process.env, DURIG_PROVIDER: "faux" },
+        env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(scratch, "no-store.sqlite") },
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";
@@ -194,8 +202,8 @@ try {
       child.stderr.on("data", (c) => (stderr += c));
       child.once("exit", (code) => resolve({ code, stdout, stderr }));
     });
-  const human = await runCli(["check", "--rig", "rig.selfdev.json", "--human"]);
-  const json = await runCli(["check", "--rig", "rig.selfdev.json", "--json"]);
+  const human = await runCli(["check", rigPath, "--human"]);
+  const json = await runCli(["check", rigPath, "--json"]);
   check("human check exits 0 and prints the dependency plane", () => {
     assert.equal(human.code, 0, `cli check exited ${human.code}: ${human.stderr}`);
     assert.ok(/dependency plane: pi-durable \d+\.\d+\.\d+/.test(human.stdout), `no plane line in output:\n${human.stdout}`);
@@ -210,6 +218,9 @@ try {
     assert.ok(payload.plane && payload.plane.line, "no plane field in the JSON payload");
     assert.equal(payload.plane.resolved, plane.resolved, "the CLI measured a different version than the module");
     assert.ok(payload.checks.some((c) => c.id === "pi-dependency-plane"), "the rule is missing from the checks list");
+    // ROADMAP 345 / D314: an extension rule (self-merge ready-ref-stale) is in the same list, so a
+    // seat's landing health is audited by the same verb and the same exit code.
+    assert.ok(payload.checks.some((c) => c.id === "ready-ref-stale"), "the extension check is missing from the checks list");
   });
   console.log(`\ncli check plane line: ${(human.stdout.match(/dependency plane: .*/) || ["(none)"])[0]}`);
   console.log(`${failures === 0 ? "PASS" : "FAIL"} depplane: ${failures} failing assertion(s)`);
