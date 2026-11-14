@@ -4444,7 +4444,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     cannot trust. Fixed in place: the tool mirrors the broker's list and honours `keepReason === "live"`. The general
     rule: when a delegate tool and the base disagree about a state name, read the base, do not infer the set.
 
-## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-342, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-343, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
 
 335. **`git diff` omits `,1` in a one-line hunk header.** `@@ -1 +1 @@`, not `@@ -1,1 +1,1 @@`. A hunk parser
    written as `/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/` silently drops every single-line hunk, so a conflicted file
@@ -4500,3 +4500,10 @@ at `:743`). Re-measure every `path:line` before repeating it.
    --check -` (`.spike/patch-apply-probe.mjs` loops it over 40 refs in ~2 s). Result: **0 of 40 apply cleanly** — every
    held ref touches lines main has already rewritten. Run it before anyone proposes a bulk merge; a ref whose merge is
    clean AND whose patch applies is the only case where landing is obviously safe.
+343. **The decision log has two number collisions and a probe already says how to fix them.** `node
+   tools/probes/adr-number-collisions.mjs` (0.23 s, exit **1** while any number is shared) reports `D265` and `D266`
+   each used by two **DISTINCT** decisions — lines 2330 and 12239, and 2816 and 12345. Its rule: the first mint in
+   file order keeps the bare number, the later one is suffixed `b`; **0 deletions, 2 suffixes**, line-neutral, because
+   ~50 DECISIONS.md line-pins sit downstream. Before running it, read the citations: `docs/NEXT.md` uses "D265" for
+   the work-item lifecycle, which is the entry at line **12239**, not the one at 2330 — a rename that keeps the wrong
+   referent makes every "see D265" point at the wrong decision. Disambiguation is a ruling, not a sweep.

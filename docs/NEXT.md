@@ -109,7 +109,8 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `78666643` | docs(pointer+SELFDEV): the pointer re-cut under the 200-line cap, pitfalls 339–340, suite 346/346 in 152.0 s |
 | `26f35059` | docs(dispositions): the seven wording-only hunks read in full — stale imports, provenance, one superseded pin |
 | `38deb7d1` | docs(pointer): rows for the two previous carriers, the run-list counts re-measured, pointer at 199 lines |
-| *(this commit)* | docs(pointer): the suite number at this HEAD, the POOL-QUEUE-SPEC pointer folded into the pool row — exempt: it carries this file |
+| `3d07f9f5` | docs(pointer): the suite number at this HEAD, the POOL-QUEUE-SPEC pointer folded into the pool row |
+| *(this commit)* | docs(SELFDEV+NEXT): pitfalls 339–343 — the seven hunks read in full, the patch-lane measurement, the DECISIONS.md number collisions — exempt: it carries this file |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
 loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open every window as `nohup timeout --signal=TERM
@@ -125,12 +126,11 @@ the last ` PASS ` line (pitfall 304), never the pid.
 
 **Current item:** **the conflict pass — 46 refs landed by rule with a containment proof, 40 held for a re-cut, nothing
 pushed.** Instruments, in the suite: `node tools/conflict-resolvability.mjs --json .spike/r.json` (3.2 s),
-`node tools/chain-resolve.mjs --branch landing-X --refs a,b` (8.8 s / 43 refs),
-`node tools/conflict-hunk-shape.mjs --refs <held> --json .spike/hunk-shape.json` (2 s),
-`node tools/merge-containment-proof.mjs --branch landing-X --refs a,b` (0.2 s). Each landed ref is proven two ways:
-`git merge-base --is-ancestor <ref> main` exit **0**, and every `+` line of its branch-vs-base diff present on main.
-One ref did NOT land: `item-6959` adds `demo/noop-wake-census.test.mjs` with no `demo/test-areas.json` row, so the
-derived gate refused it — routed to `pm`, ref kept.
+`node tools/chain-resolve.mjs --branch landing-X --refs a,b` (8.8 s / 43 refs), `node tools/conflict-hunk-shape.mjs
+--refs <held> --json .spike/hunk-shape.json` (2 s), `node tools/merge-containment-proof.mjs --branch landing-X --refs
+a,b` (0.2 s). Each landed ref is proven: `git merge-base --is-ancestor <ref> main` exit **0** plus every `+` line of its
+branch-vs-base diff present on main. One ref did NOT land: `item-6959` adds `demo/noop-wake-census.test.mjs` with no
+`demo/test-areas.json` row, so the derived gate refused it — routed to `pm`, ref kept.
 
 **Older current item, still true:** the **N19 pool is CLOSED** — the gate fired on live seats (#7700 refused by
 `architect` and `pm` as `too-big`); re-read it with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s, read-only). Read
@@ -187,12 +187,12 @@ enforced at claim; `devtools` vs `code`; should `send_work` refuse an unadvertis
 notify its author. `node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` has NO write path by design.
 
 
-**Traps this window** — `docs/SELFDEV.md` **330–342**: a landing plan is valid only against the HEAD it was computed on;
+**Traps this window** — `docs/SELFDEV.md` **330–343**: a landing plan is valid only against the HEAD it was computed on;
 `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved merge
 that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area mapping is
 not landable and only the gate catches it; a prune plan that omits `deferred` from the live set names a live seat's
 branch (`src/broker.mjs` `LIVE_STATUSES` is the authority); a quoted count in a ledger is read as a live claim; measure
-hunk shape before deciding who resolves a conflict. Older **318–329**: `seats` LIST vs DOCUMENT roster;
+hunk shape before deciding who resolves a conflict; a `wording-only` code hunk is usually a stale import. Older **318–329**: `seats` LIST vs DOCUMENT roster;
 `usableWindow: null` from `up`; "armed" ≠ "fired"; a count is not a trace; `check` auditing `./rig.json`; `--local`
 control-read staleness; `--max-duration` bounds the loop not the wall clock; a hand-written sha table skips a sha.
 
