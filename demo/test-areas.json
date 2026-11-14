@@ -38,6 +38,7 @@
       "demo/keycheck.test.mjs",
       "demo/config-unknown-key.test.mjs",
       "demo/config.test.mjs",
+      "demo/restart-limit-seam.test.mjs",
       "demo/constitution.test.mjs",
       "demo/continuity-note.test.mjs",
       "demo/entrypoint-execution.test.mjs",

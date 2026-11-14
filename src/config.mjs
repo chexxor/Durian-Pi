@@ -822,3 +822,27 @@ export function describeConfig({ config, source }) {
 		DEEPINFRA_API_KEY: config.DEEPINFRA_API_KEY ? "set" : "unset",
 	};
 }
+
+/**
+ * ROADMAP 355 C / #6173: how many times a task may be cut off before its phase ENDS it.
+ *
+ * pi-durable's `DEFAULT_RESTART_LIMIT` is 5 (`dist/harness/agent.js:36`) and nothing in this tree
+ * set it, so every seat ran the unconfigured default. `docs/runbooks/pi-pin-update.md` already rules
+ * the answer: 3, explicit, never 0 and never a silent default — because 1.5.0 surfaces a parked task
+ * as a `restart_limit` run failure instead of quietly parking it, so the number is now observable
+ * rather than invisible.
+ *
+ * ONE seam (cli.mjs `openHarness`). A value set in two places is a value that drifts, and the drift
+ * is invisible: the seat just runs 5. It is a constant, not a config key: an unregistered key is the
+ * accepted-and-ignored class #5071 names, and "never 0" should not be one operator typo away.
+ */
+export const SEAT_RESTART_LIMIT = 3;
+
+/**
+ * The run-control half of `settings` for the harness seam.
+ *
+ * @returns {{restartLimit: number}}
+ */
+export function runControlSettings() {
+	return { restartLimit: SEAT_RESTART_LIMIT };
+}
