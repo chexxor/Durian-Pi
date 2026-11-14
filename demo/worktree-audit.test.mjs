@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { auditWorktrees, classifyWorktrees, reconcileOrphanedWorktrees } from "../src/broker.mjs";
+import { auditSummary, auditWorktrees, classifyWorktrees, reconcileOrphanedWorktrees } from "../src/broker.mjs";
 import { listWorktrees, removeSeatWorkspace } from "../src/worktree.mjs";
 
 const run = promisify(execFile);
@@ -84,6 +84,36 @@ try {
 	assert.equal(byId.get(7).keepReason, "locked", "a LOCKED worktree is kept by the lock, whatever its dirt");
 	assert.equal(byId.get(7).uncommitted, 1, "the audit still reports the uncommitted count under the lock");
 	assert.equal(byId.get(7).locked, true, "the audit reports the lock state");
+
+	// (4) ROADMAP 373: the audit must print BOTH lock numbers, named, because they count different things.
+	// `lockedTrees` is git's answer (how many registered trees are LOCKED); `lockedKept` is the rig's keep
+	// REASON (how many trees the lock is what kept them). classifyWorktrees assigns one keepReason per tree
+	// in the order live > locked > not-terminal > dirty > reapable, so a locked tree over a live item is in
+	// lockedTrees and NOT in lockedKept — which is exactly how a pass read "0 locked" over 17 locked trees.
+	const here = auditSummary(entries);
+	assert.equal(
+		here.lockedTrees,
+		(await listWorktrees(repo)).filter((w) => w.locked).length,
+		"lockedTrees equals git's own lock count",
+	);
+	assert.equal(here.lockedTrees, 2, "item-7 (dirty+locked) and item-9 (clean+locked) are the two locked trees here");
+	assert.equal(here.lockedKept, 2, "in THIS fixture the lock is what kept both of them");
+	assert.equal(here.locked, here.lockedKept, "the legacy `locked` field is the bucket, not the lock count");
+	const twoLockedOneLive = classifyWorktrees({
+		worktrees: [
+			{ worktree: join(repo, "item-21"), branch: "impl-item-21", locked: true },
+			{ worktree: join(repo, "item-22"), branch: "impl-item-22", locked: true },
+		],
+		liveItemIds: new Set([21]),
+		terminalItemIds: new Set([22]),
+		statusById: new Map([[21, "claimed"], [22, "done"]]),
+		dirty: {},
+	});
+	const two = auditSummary(twoLockedOneLive);
+	assert.equal(two.lockedTrees, 2, "git says two trees are locked");
+	assert.equal(two.counts.locked, 1, "only one of them is kept BY the lock; the other is kept because its item is live");
+	assert.equal(two.lockedKept, 1, "the named bucket is the same number as counts.locked");
+	assert.equal(two.counts.live, 1, "the live tree is classified live, not locked");
 
 	const removed = await reconcileOrphanedWorktrees({ repoPath: repo, liveItemIds, terminalItemIds, seatRoots: [wt(10)] });
 	assert.deepEqual(removed.sort((a, b) => a - b), [2, 4], "only the terminal, unlocked, CLEAN trees are reaped");

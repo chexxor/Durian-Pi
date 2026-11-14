@@ -78,7 +78,7 @@ import {
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { followCommits } from "./src/commitstream.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent, reapWorktrees } from "./src/broker.mjs"
+import { applyPauseOp, auditSummary, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent, reapWorktrees } from "./src/broker.mjs"
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -3222,39 +3222,46 @@ async function cmdWorktreeAudit() {
       statusById,
       seatRoots: seatRoots.map((r) => r.cwd),
     });
-    const counts = {};
-    for (const e of entries) counts[e.keepReason] = (counts[e.keepReason] ?? 0) + 1;
-    // `ok: true` USED TO MEAN "nothing to do" while `reapable` was non-empty, and that is the exact
-    // defect that let the leak run for three passes (15 -> 19 -> 16 -> 21 reapable, all reported,
-    // none consumed) (#5301). `ok` still answers the question the command was asked - did the audit
-    // run? - and the FINDING rides its own fields plus a non-zero exit, the same convention
-    // `check` and `format --check` use so a caller can gate on it without parsing prose.
-    const reapable = entries.filter((e) => e.keepReason === "reapable").length;
-    const clean = reapable === 0;
+    const summary = auditSummary(entries);
+    // #1545/#5301: `ok` still answers "did the audit run?"; the FINDING rides its own fields plus a
+    // non-zero exit, the same convention `check` and `format --check` use so a caller can gate on it
+    // without parsing prose.
     out({
       ok: true,
       command: "worktree",
       subcommand: "audit",
       db: DB_PATH,
       repo: repoPath,
-      total: entries.length,
-      counts,
-      clean,
-      reapable,
-      dirty: entries.filter((e) => e.keepReason === "dirty").length,
-      locked: entries.filter((e) => e.keepReason === "locked").length,
+      total: summary.total,
+      counts: summary.counts,
+      clean: summary.clean,
+      reapable: summary.reapable,
+      dirty: summary.dirty,
+      // #373: TWO lock numbers, both named, because they count different things and a reader who sees
+      // one alone will mistake it for the other. `lockedTrees` is git's own answer (how many registered
+      // trees are LOCKED); `lockedKept` is the rig's KEEP REASON — how many trees the lock is the thing
+      // that kept them. classifyWorktrees assigns one keepReason per tree in the order live > locked >
+      // not-terminal > dirty > reapable, so a locked tree over a live item is in `lockedTrees` and NOT in
+      // `lockedKept`. `locked` is kept as an alias of `lockedKept` for callers that already read it.
+      lockedTrees: summary.lockedTrees,
+      lockedKept: summary.lockedKept,
+      locked: summary.lockedKept,
+      lockNote:
+        summary.lockedTrees === summary.lockedKept
+          ? null
+          : `${summary.lockedTrees} tree(s) are git-LOCKED; only ${summary.lockedKept} of them are kept BECAUSE of the lock (the rest are kept by a live item, a seat root, or dirt first)`,
       // `stale` and `reapable` are NOT one population (they moved in OPPOSITE directions across
       // passes: reapable 15->19->16->21 while stale 15->18), so they are counted and remedied
       // separately: a stale registration is a ledger entry whose directory is gone and only
       // `git worktree prune` clears it; a reapable tree is a live registration the reap verb
       // removes. `clean` speaks ONLY to what this verb can act on.
-      remedy: clean
+      remedy: summary.clean
         ? null
-        : `${reapable} tree(s) are reapable - run: node cli.mjs worktree reap --dry-run`,
+        : `${summary.reapable} tree(s) are reapable - run: node cli.mjs worktree reap --dry-run`,
       seatRoots,
       worktrees: entries,
     });
-    if (!clean) process.exitCode = 1;
+    if (!summary.clean) process.exitCode = 1;
   }
 }
 

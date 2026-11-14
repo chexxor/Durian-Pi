@@ -1392,6 +1392,35 @@ export async function auditWorktrees({
 }
 
 /**
+ * ROADMAP 373: the two lock numbers, named. A worktree can be git-LOCKED and still be kept for a
+ * DIFFERENT reason — `classifyWorktrees` assigns exactly one keepReason per tree in the order
+ * live > locked > not-terminal > dirty > reapable, so a locked tree over a live item never lands in the
+ * `locked` bucket. Reporting only the bucket is how a cleanup pass reads "0 locked" over 17 locked trees
+ * (measured 2026-11-14 at `main` e1c66bfc: audit `locked: 0`, entries with `locked: true`: 17, `git
+ * worktree list --porcelain | grep -c '^locked'`: 17). This is the ONE place both counts are derived, so
+ * the CLI and any tool reading the audit cannot disagree.
+ */
+export function auditSummary(entries = []) {
+  const counts = {};
+  for (const e of entries) counts[e.keepReason] = (counts[e.keepReason] ?? 0) + 1;
+  const lockedTrees = entries.filter((e) => e.locked === true).length;
+  const lockedKept = counts.locked ?? 0;
+  const reapable = counts.reapable ?? 0;
+  return {
+    total: entries.length,
+    counts,
+    // git says these trees are LOCKED, whatever kept them.
+    lockedTrees,
+    // of those, the ones whose KEEP REASON is the lock (a lock over a terminal, clean tree).
+    lockedKept,
+    reapable,
+    dirty: counts.dirty ?? 0,
+    clean: reapable === 0,
+    locked: lockedKept, // kept for callers that already read `locked`; it is the bucket, NOT the lock count
+  };
+}
+
+/**
  * The EXPLICIT verify-scratch cleanup (ROADMAP 76 leak source B prevention, #1907). Call it when a
  * VERIFY COMPLETES: it unlocks and removes every registered verify-scratch worktree (`.verify-*` /
  * `verify*` / `wt-*`) — unlike the automatic sweep, which only reaps UNLOCKED scratch, this is the

@@ -240,7 +240,15 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    because of the lock — and `classifyWorktrees` in `src/broker.mjs:1356-1360` is exclusive and ordered
    `live → locked → not-terminal → dirty → reapable`. So `locked: 3` means "3 terminal items deadlocked behind a
    lock", NOT "only 3 trees are locked"; the other 17 locks sit on live items and seat roots. Read the entries,
-   not the count. **(c) dirty** → keep. `leaked-worktrees.md`
+   not the count.
+   **ROADMAP 373 shipped the two numbers (2026-11-14, `main` e1c66bfc, same host):** the audit now prints
+   `lockedTrees` (git's own lock count) and `lockedKept` (the keep-reason bucket, still mirrored in the legacy
+   `locked` field), plus a `lockNote` whenever they differ. Re-measured at this tip: `node cli.mjs worktree audit --json`
+   → `lockedTrees: 17`, `lockedKept: 0`, `counts: {"seat-root":9,"non-item":3,"live":12,"dirty":4}`, and
+   `git worktree list --porcelain | grep -c '^locked'` → **17** — the audit's lock count now equals git's.
+   `auditSummary` in `src/broker.mjs:1403` is the ONE place both are derived, so a tool reading the audit and the
+   CLI cannot disagree. Pinned by `demo/worktree-audit.test.mjs` section (4) (fixture: 2 git-locked trees, one over
+   a live item → `lockedTrees: 2`, `counts.locked: 1`). **(c) dirty** → keep. `leaked-worktrees.md`
    § "Reclaiming a merged item-branch pinned by a verify worktree" covers the qa `verify-*` tree case.
    **When (c) is dirty and the branch IS merged, the operator-approved resolution is to RELOCATE the
    worktree out-of-tree** (`git worktree move` to `../pi-opendurig.worktrees/`, then `switch --detach`,

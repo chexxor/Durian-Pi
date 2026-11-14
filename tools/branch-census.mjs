@@ -178,6 +178,7 @@ const rows = refs.map((ref) => {
 		status,
 		ledgerRuling: ruling,
 		uncommitted: w?.uncommitted || 0,
+		gitLocked: w?.locked === true, // #373: git's lock is not the same population as keepReason "locked"
 		last: f.last,
 		verdict,
 	};
@@ -210,6 +211,11 @@ const out = {
 	host: run("uname -s && uname -r && (. /etc/os-release && echo \"$PRETTY_NAME\") && node -v && git --version", 10000),
 	refs: refs.length,
 	worktrees: (audit.worktrees || []).length,
+	// #373: two lock numbers, both named. `git worktree remove` refuses ANY git-locked tree, so a prune
+	// plan that only counts keepReason "locked" under-reports what the removal will refuse (pitfall: a tree
+	// classified `live` still refuses removal because it is locked). Use the audit verb, not a hand parse.
+	lockedTrees: (audit.worktrees || []).filter((w) => w.locked === true).length,
+	lockedKept: (audit.worktrees || []).filter((w) => w.keepReason === "locked").length,
 	tally,
 	unaccounted,
 	plan,
