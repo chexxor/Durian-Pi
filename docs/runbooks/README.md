@@ -241,7 +241,7 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
-| [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root; or you are about to concede "this worktree cannot measure" and hand the gate to the operator checkout — `sync-pi --sync` + `--link` makes the FULL suite runnable in the item worktree (measured 2026-11-12: 326/326 in 97.0 s, exit 0, pin unmoved) | no |
+| [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root; or you are about to concede "this worktree cannot measure" and hand the gate to the operator checkout — `sync-pi --sync` + `--link` makes the FULL suite runnable in the item worktree (measured 2026-11-12: 326/326 in 97.0 s, exit 0, pin unmoved) — including the shape `ERR_MODULE_NOT_FOUND: Cannot find package '@earendil-works/pi-schema'` inside a demo's `/tmp` scratch, because `pi-schema` is in the pin's package set but in `package-lock.json` zero times (#5819) | no |
 | [prepare-workspace-refused.md](prepare-workspace-refused.md) | `prepare_workspace` returned `PREPARE_WORKSPACE_ERROR`, or refused: leftover dir, a branch another worktree holds, or a `base=` the item branch cannot honour | no |
 | [merge.md](merge.md) | a completed branch is not on `main`, or you are about to land one | no |
 | [branch-cleanup.md](branch-cleanup.md) | so many local git branches; merged branches were never pruned | no |
@@ -318,6 +318,3 @@ New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROAD
 `--dry-run`, executable `Diagnose` blocks, verification provenance, a gated agent runtime, the daemon
 runbook).
 
-
-| [worktree-unlinked-deps.md](worktree-unlinked-deps.md) | `prepare_workspace` reports `DEPENDENCY NOT LINKED`, or a fresh worktree's suite fails demos that pass in the seat root — including the shape `ERR_MODULE_NOT_FOUND: Cannot find package '@earendil-works/pi-schema'` inside a demo's `/tmp` scratch, because `pi-schema` is in the pin's package set but in `package-lock.json` zero times (#5819) | no |
-| What a model call costs, where the money went, and what stops a call before it is sent (three cap axes, one ledger, locality of the endpoint) | spend-cap-tripped |
