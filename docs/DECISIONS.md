@@ -12457,6 +12457,27 @@ operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent doe
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
 
+## D301 — (provisional; re-mint at land from the MERGED tree) **a park is a LEASE with an owner and a horizon, and it is delegable to a coordinating seat only under four mandatory bounds; expiry makes staleness countable, never a silent un-park** (architect seam design, item #7026; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7026`, pi-durable **1.3.0** from this worktree's lockfile, not the seat root's 1.5.1)
+
+**Status.** Design ruling on the property and the authority rule. The verb's shape and sequencing stay with `pm`; whether priority is a row field or a seat lease is `lead`'s call (#7025).
+
+**Context.** `set_priority` is already delegable to a coordinating seat, with a mandatory reason and a mandatory expiry capped at 30 days (`MAX_PRIORITY_LEASE_MS`, src/workstrategy.mjs:64), and its reply names which strategy is in force (src/rig.mjs:1520-1522). `hold_work` is not delegable: the `item.to !== me` guard in `hold_work` (src/rig.mjs:1337 in this tree; pm's row pinned it at :1251 in an earlier revision), while `release_work` explicitly allows a coordinating seat to un-park a row it did not mint (src/rig.mjs:1395-1401). Measured, `node tools/probes/park-authority-asymmetry-7026.mjs` → **exit 1**: pm's `hold_work(#1)` leaves #1 `queued`; impl's `hold_work(#1)` makes it `held` and `workable` reports `not-queued:held`; pm's `release_work(#1)` restores it to claimable; pm's `set_priority(#3,"now")` reorders the selection under `priority_first`. The park record itself is `{"class":"unattributed","basis":"nothing recorded…","gateIds":[],"recordedAt":…}` — src/rig.mjs:531 writes no author, no resolver, no expiry. Live store at snapshot 2026-11-12T09:3xZ (`node cli.mjs queue --json --no-body`, 7168 rows): **428 held**, median **532.8 h** since the last transition, max 640.4 h; only 13 carry a structured park record, 163 an authored block, and 135 carry a `reviewBy` (77 still in the future, 58 already past).
+
+**Decision.**
+1. **Priority stays data on the row; ordering policy stays configuration.** Never a queue-level ordering doc and never a per-seat priority table: one fact, one owner. An absent priority ranks neutral, so opting into `priority_first` reorders nothing that nobody prioritised.
+2. **Unknown is not a value.** `effectivePriority` returns `unknown: raw === null`; metrics read that as UNKNOWN, never as "medium". Rank parity with `next` is deliberate and pinned by the `selectOldestWorkable` alias demos.
+3. **A park carries `{by, resolver, reviewBy, expiresAt, delegated}` in addition to `{class, basis, gateIds, recordedAt}`.**
+4. **Delegated parks are allowed only with all four bounds:** mandatory `reason`, mandatory `resolver`, mandatory `reviewBy`, mandatory `expiresAt` (≤ 30 days), a per-seat cap on active delegated parks, and only on a `queued` row — never one in flight.
+5. **Expiry does not auto-revert.** A lapsed priority changes order with no write; a lapsed park must not change claimability without one. Staleness is reported (`stale-park`), and an un-park is an authored verb.
+
+**Options considered.** (a) Keep `hold` party-only and let the coordinator use the lease — rejected as the whole answer: a lease changes order, not eligibility, so "do not start this" has no expression. (b) Chosen: bounded delegation. (c) Remove release's delegation for symmetry — rejected: it fixes symmetry by making 428 parked rows un-releasable.
+
+**Consequences.**
+- The seat that sees the whole queue gets a lever that is checkable field by field; the seat that owns the work keeps the unbounded one.
+- Existing parks keep their shape; the new fields are additive, so nothing has to migrate (428 rows are not touched by this decision).
+- New surface, new failure modes, all with a check: unattributed park (add `by`), unbounded park (expiry + cap), coordinator interrupting in-flight work (queued-only), wake loops on parked rows (the parked-signature bound, #5927), and a park on a row whose gate is void (release already refuses when the gate names a cancelled id; D283 makes void a chain property).
+- Falsifier: `tools/probes/park-authority-asymmetry-7026.mjs` exits 1 today and must exit 0 only when a delegated park is accepted **and** the four refusals (missing reason/resolver/reviewBy/expiry, cap reached, `claimed` row) are demonstrable.
+
 ## D300 — (provisional; re-mint at land from the MERGED tree; amends D282) **a gate's authority to be cleared is a property of the CHAIN, not of the hop's status; and the acceptance metric must count void gates and parked gates separately or it rewards clearing the wrong ones** (architect review of lead's ruling on #6530, item #7012; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v` → **Linux**, kernel `7.2.15-300.fc45.x86_64`, **Fedora Linux 45 (Forty Five)**, node **v24.22.1**; tree = branch `item-7012`, pi-durable **1.3.0** from this worktree's lockfile, not the seat root's 1.5.1)
 
 **Status.** Review ruling, before the `gate_work` chain builds. Sequencing stays lead's; the single-chain ruling (validator commit first, verb commit second) is accepted and not reopened.
