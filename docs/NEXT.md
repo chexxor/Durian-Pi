@@ -43,6 +43,7 @@ and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 | 540123 | 1800 s | 20:42:21.399Z → 21:32:41.503Z | 3,020 s | 311912 alive-but-dead; `serve --stop` refused → `kill -TERM` → `resume` |
 | 774849 | 1800 s | 21:34:01.725Z → 22:13:24.335Z | 2,363 s | 540123 froze past its deadline; same fallback |
 | 899525 | keepalive's own bound (NOT recorded by it) | 22:13:26.113Z → 00:10:24.944Z | 6,418 s | 774849 stranded; exited `reason=max-duration passes=335` |
+| 1574499 | 1800 s | 00:22:11.251Z → (live at 00:29Z) | — | 899525's max-duration exit; started after the fleet was unpaused |
 
 Every window was **commanded** ≤ 3600 s, and **windows 1–2 overran their command and lingered in read-drain** (the
 documented alive-but-dead shape) — that overshoot is a base defect, not a licence; the keepalive path records no
@@ -92,7 +93,7 @@ node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.
 node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5       # 1.7-10 s — read-only denominator, balance line
 node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite                   # 7-19 s — the gate refusing the LIVE roster's seats
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
-node scripts/test.mjs --all --jobs 4                                        # 145 s — 337/337 at 446c4084
+node scripts/test.mjs --all --jobs 2                                        # 258 s — 337/337 at 0de543ae (jobs 4 flakes; see below)
 ```
 
 **Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would
@@ -102,6 +103,10 @@ claimant** (src-tools-harness 85 + workflow-docs 19 = 104 at `23:5xZ`; the tool 
 Consequence: **no migration applied** — the tool stays a proposal; decisions 1–2 are the operator's. (2) Nothing
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.
+
+**Suite flake under `--jobs 4` (recorded, both green standalone twice):** `demo/restart-limit-behaviour.test.mjs` and
+`demo/compaction-guard-gate.test.mjs`. A `--jobs 2` run at `0de543ae` is **337/337 in 257.8 s**; the `--jobs 4` run is
+336/337 with one of those two. Re-run the named test alone before chasing it.
 
 **Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** —
 `ASSERT FAIL: the fresh context should be short, got 7 messages` (pm's #6924) — recorded, not touched.
