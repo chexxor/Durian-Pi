@@ -8,7 +8,9 @@
 
 One concern: what the **redaction** surface (`src/secretredact.mjs` `afterTool`, which rewrites a tool result before pi-durable commits it) does to a **git object name**, and what that costs a seat that must *act on* or *cite* that name. The credential-detection surface (`src/secretdetect.mjs`) and the commit-diff gate (`src/seatguard.mjs`, prefix families only, #1317) are referenced, not re-litigated.
 
-## Measured state today (main `46c28b73`, Linux, `@earendil-works/pi-durable 1.3.0` from the lockfile; exit 0 on all three)
+## Measured state at the time of writing (main `46c28b73`, 2026-11-06, Linux, `@earendil-works/pi-durable 1.3.0` from the lockfile; exit 0 on all three)
+
+**These figures are dated.** They were true of `46c28b73`; the tree has moved and two of the three conclusions below are now superseded — the re-measurement immediately after the table is the current state of main. Read the table as history, the re-measurement as the fact.
 
 Re-runnable, verbatim:
 
@@ -30,6 +32,25 @@ git grep -l isGitObject -- src/ demo/
 | 9-char short sha | detect 0 / redact 0 | The workaround works — at a cost, below. It is everywhere: `src/worktree.mjs:422-429` (`shortSha` = `slice(0, 9)`, applied whenever a ref is a 40/64-hex), `src/seattools.mjs:55` (same 9-char trim), and `docs/runbooks/land.md:618-622` which tells every operator to **"Use `--short` ids … never conclude 'the branch has no tip' from a redacted line"** — i.e. the runbook already documents the hazard and prescribes avoidance instead of a control. |
 
 **Live instance in this seat's own transcript, 2026-11-06:** `git log -1 --format='%H %ad %an' main` returned the id replaced by `[redacted by durig: secret-shaped value (high-entropy-token) from tool bash …]`, and the `peek_queue` view rendered a sha-bearing item subject the same way. This seat had to fall back to 8-char ids to write its own evidence rows on #5232/#5241. That is the mechanism #4922 reports, observed while doing verification work — not inferred.
+
+## Re-measured on main `06de1bba`, 2026-11-13T22:57Z (devtools, #5854) — same commands, exit 0 each
+
+Dependency plane named, because the number is not portable between trees: the probes ran in a detached scratch worktree of `main` with the shared `node_modules` symlinked in, so `@earendil-works/pi-durable` resolved **1.5.1** (the linked plane), not 1.3.0 from the lockfile.
+
+| Measurement | 2026-11-06 (`46c28b73`) | 2026-11-13 (`06de1bba`) | What the change means |
+|---|---|---|---|
+| ids in all refs vs ids the raw shape regex calls secret-shaped | 2386 / 2386 | **3400 / 3400** | Still 100%: the SHAPE test never exempts a git object. The count grew because the ref set grew, not because the regex changed. |
+| `git log --format=%H %s` (40 lines) through `secretSpans` | 40 spans | **0 spans** | The redactor now resolves before it redacts (`src/gitobject.mjs`, #3128): a token that resolves as a git object is not a value. The destroyed column is no longer destroyed. |
+| same text through `secretTokens` (detector) | 39 findings | **0 findings** | Both surfaces now share ONE git-object verdict. The ~97%-object-ids notice stream is gone. |
+| `git grep -l isGitObject -- src/ demo/` | 2 files (`secretdetect.mjs`, `secretdetect.test.mjs`) | **4 files: `src/gitobject.mjs`, `src/secretdetect.mjs`, `demo/secretdetect.test.mjs`, `demo/sha-object-verdict.test.mjs`** | **P-1 (hoist to one shared site) has SHIPPED** — the verdict lives in `src/gitobject.mjs` and is consumed by both surfaces (`secretredact.mjs:24` imports `objectExemptor`). |
+| matrix: `HEAD=<real sha>` | detect 0 / redact 1 | **0 / 0** | The cross-surface drift this addendum called "live" is **closed**: neither surface touches a resolved object id. |
+| matrix: bare real sha | detect 1 / redact 1 | **0 / 0** | **P-3 (bare-resolution extension) has SHIPPED.** |
+| matrix: bare random 40-hex | detect 1 / redact 1 | **1 / 1** | Canary intact. Shape-only 40-hex that does not resolve is still caught — the exemption is by resolution, never by shape. Do not regress this. |
+| matrix: 9-char short sha | 0 / 0 | 0 / 0 | Unchanged. |
+
+**What is still unbuilt, as of `06de1bba`:** E-1 and E-2 (refusing a `complete_work` `evidence.artifact` that contains a redaction marker, or that does not resolve in the tree it claims). Measured by grep: `grep -n artifact cli.mjs` returns one hit, and it is unrelated to evidence validation — there is no completion-time artifact check in `cli.mjs`. So the transport-layer attack described below is no longer a redaction problem; it is still an *unvalidated-field* problem.
+
+Consequence for the mitigation below: the id reaching a seat's transcript is no longer mangled, so `docs/runbooks/land.md`'s `--short` mandate is now a **belt on top of a resolved exemption**, not a compensation for a missing one. Its re-scoping belongs to #3128/#5852, not here.
 
 ## What is NEW since 2026-10-19: the damage moved from *noise* to *evidence*
 
