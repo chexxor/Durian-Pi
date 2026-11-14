@@ -377,6 +377,7 @@
       "demo/spend-cap-guard.test.mjs",
       "demo/store-behaviour-gate.test.mjs",
       "demo/suite-provenance.test.mjs",
+      "demo/suite-runner-exit-verdict.test.mjs",
       "demo/suite-signature.test.mjs",
       "demo/syncpi.test.mjs",
       "demo/test-areas.test.mjs",
