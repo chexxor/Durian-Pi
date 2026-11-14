@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import {
 	applyPinUpdate,
 	behindAhead,
+	declaredPlane,
 	decideDrift,
 	deepenClone,
 	dependencySet,
@@ -24,6 +25,7 @@ import {
 	namePinRef,
 	parseArgs,
 	parseLsRemote,
+	pinVersion,
 	readCarriedPin,
 	readPin,
 	resolveRef,
@@ -91,6 +93,64 @@ assert.throws(
 assert.throws(() => resolveRef(entries, "", "repo"), /refusing to resolve an empty ref/, "an empty ref is not 'use the default'");
 assert.throws(() => resolveRef(entries, null, "repo"), /refusing to resolve an empty ref/);
 console.log("REF RESOLUTION OK");
+
+// --- the DECLARED dependency plane vs the pin (#6373) -----------------------
+// The defect in one line: `--link` installs with `npm install --no-save`, so package.json and the
+// lock never move with the pin. The pin reached tag v1.5.1 while package.json still declared ^1.3.0
+// and the lock still resolved 1.3.0. An item worktree has no vendored build to link, so it installs
+// the LOCKFILE, and a released pi-durable 1.3.0 refuses the store the pin already migrated:
+// "Durable SQLite schema version 2 is newer than supported version 1". Measured in the item-6373
+// worktree on 2026-11-11: that refusal at exit 1, and `node scripts/suite.mjs --jobs 12` answering
+// pass=279 fail=20; declaring the pin's release in the plane made the SAME tree answer pass=299 fail=0.
+assert.equal(pinVersion({ ref: "v1.5.1", refType: "tag" }), "1.5.1", "a tag ref is the release npm resolves");
+assert.equal(pinVersion({ ref: "1.4.0", refType: "tag" }), "1.4.0", "the v is optional in the ref");
+assert.equal(pinVersion({ sha: "abc123", refType: "sha" }), null, "a sha pin names no version, so the check says so rather than guessing");
+assert.equal(pinVersion({}), null, "an empty pin names no version");
+
+const planeDir = mkdtempSync(join(tmpdir(), "plane-"));
+const planePin = {
+	ref: "v1.5.1",
+	refType: "tag",
+	sha: "abc123",
+	packages: [{ name: "@earendil-works/pi-durable", dir: "packages/durable" }, { name: "@earendil-works/pi-schema", dir: "packages/schema" }],
+};
+const writePlane = (declared, resolved) => {
+	writeFileSync(join(planeDir, "package.json"), JSON.stringify({ name: "rig", dependencies: declared }, null, 2) + "\n");
+	writeFileSync(
+		join(planeDir, "package-lock.json"),
+		JSON.stringify({ name: "rig", packages: Object.fromEntries(Object.entries(resolved).map(([n, v]) => [`node_modules/${n}`, { version: v }])) }, null, 2) + "\n",
+	);
+};
+// THE STATE THIS ROW FOUND: caret range plus a lock frozen at the old release.
+writePlane({ "@earendil-works/pi-durable": "^1.3.0" }, { "@earendil-works/pi-durable": "1.3.0" });
+const drifted = declaredPlane(planePin, planeDir);
+assert.equal(drifted.mismatches.length, 1, "the drifted package is named, not silently accepted");
+assert.equal(drifted.mismatches[0].name, "@earendil-works/pi-durable");
+assert.equal(drifted.mismatches[0].declared, "^1.3.0", "the declared spec is reported as it is written");
+assert.equal(drifted.mismatches[0].resolved, "1.3.0", "and so is what the lock actually resolves");
+assert.match(drifted.verdict, /PLANE DRIFT/);
+assert.match(drifted.verdict, /Declare them at 1\.5\.1/, "the verdict names the remedy, not just the finding");
+// A vendored package that is only TRANSITIVE is checked by what the lock resolves.
+writePlane({ "@earendil-works/pi-durable": "1.5.1" }, { "@earendil-works/pi-durable": "1.5.1", "@earendil-works/pi-schema": "1.3.0" });
+assert.equal(declaredPlane(planePin, planeDir).mismatches.length, 1, "a transitive pi package left on the old release is still plane drift");
+// FIXED plane.
+writePlane({ "@earendil-works/pi-durable": "1.5.1" }, { "@earendil-works/pi-durable": "1.5.1", "@earendil-works/pi-schema": "1.5.1" });
+const agreed = declaredPlane(planePin, planeDir);
+assert.equal(agreed.mismatches.length, 0);
+assert.match(agreed.verdict, /agrees with the pin: 2 vendored packages, all resolving 1\.5\.1/);
+// A pin that names no version cannot be compared - reported as unknown, never as a pass.
+const shaPin = { ...planePin, ref: null, refType: "sha" };
+const unknown = declaredPlane(shaPin, planeDir);
+assert.equal(unknown.expected, null, "a sha pin names no version");
+assert.equal(unknown.mismatches.length, 0, "and the tool invents no drift from nothing");
+assert.match(unknown.verdict, /cannot be compared/);
+// No package.json at all is its own named answer.
+assert.match(declaredPlane(planePin, join(planeDir, "nowhere")).verdict, /no package.json/);
+// THE SHIPPED TREE: the guard is only real if the tree it runs on is in agreement.
+const shipped = declaredPlane(readPin());
+assert.equal(shipped.mismatches.length, 0, `the shipped plane must match the pin: ${shipped.verdict}`);
+rmSync(planeDir, { recursive: true, force: true });
+console.log("DECLARED PLANE OK (a caret+lock drift is named with its remedy; a transitive package left behind counts; a sha pin reports unknown instead of a pass; the shipped tree agrees with its pin)");
 
 // --- drift -----------------------------------------------------------------
 assert.equal(decideDrift("aaa", "aaa").drift, false, "same sha is no drift");
@@ -289,6 +349,8 @@ try {
 	assert.equal(ran.status, 0, `the report must still exit 0: ${ran.stderr}`);
 	const report = JSON.parse(ran.stdout);
 	assert.equal(report.drift.gap, "measured", "the report answers the gap instead of printing nulls");
+	assert.ok(report.declaredPlane, "the report answers which pi the declared plane resolves (#6373)");
+	assert.match(report.declaredPlane.verdict, /no package.json/, "a rig with no package.json says so plainly");
 	assert.equal(report.drift.behind, 2, "how far behind is the only question that matters - it is answered");
 	assert.equal(report.drift.ahead, 0);
 	assert.equal(report.pinRef, "v1.0.0", "the validated checkpoint is NAMED in the report");
