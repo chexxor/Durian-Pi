@@ -1,11 +1,11 @@
 ---
 runbook: worktree-unlinked-deps
-symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version"
+symptom: "prepare_workspace says DEPENDENCY NOT LINKED, or a fresh worktree's suite fails demos that pass in the seat root (measured shape 2026-11-10: 261/282 with 21 reds in the broker/cli/tui-durable families and `TypeError: listener is not a function` at pi-durable 1.3.0 `session.js:575`), or the same demo file gives different results in the item worktree and the seat root while BOTH report the same pi-durable version, or a verb refuses the store with `Durable SQLite schema version 2 is newer than supported version 1`"
 writes: false
 precondition: "read-only"
 last_verified: 2026-11-13
 verified_by: devtools
-evidence: "#5819 (2026-11-13, worktree item-5819 at main 657d8c60): demo/commit-discipline-personas.test.mjs exit 1 unlinked (ERR_MODULE_NOT_FOUND on @earendil-works/pi-schema, 6 checks) and exit 0 after `sync-pi --sync` + `--link` (dependencySet=built-pin); `grep -c earendil-works/pi-schema package-lock.json` = 0 while every other pin package has hits. #5065 (2026-11-12, Linux, node v24.22.1): in one thin item worktree `node scripts/sync-pi.mjs --sync` exit 0 (10 packages built, `linked: []`), then `node scripts/sync-pi.mjs --link` exit 0 (`dependencySet: built-pin`, `test -L node_modules/@earendil-works/pi-durable` exit 0), `git status --porcelain` empty afterwards, and `node scripts/test.mjs --all` **326/326 passed in 97.0 s, exit 0** with the header `PROVENANCE tree=792445d5 branch=item-5065 pi-durable=1.5.1 dependencySet=built-pin pin=main@dd30101cfc5b` - the pin UNMOVED. The same tree at a fork base two commits behind main was 324/326 exit 1, and both reds were base-lag, not dependency graph: `demo/next-pointer.test.mjs` (docs/NEXT.md 216 lines at the base vs 195 on main) and `demo/clockin-digest.test.mjs` (digest 20265 B over its 20000 B budget). #6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree.; #6278 (2026-11-11, native Windows host, node v24.22.1): the SAME commit `35001c3a` in the SAME item worktree `item-6207` measured **279/300 exit 1** on the lockfile graph and **300/300 exit 0** once the pinned build was present; the carry that fixes it is pinned by `node demo/worktree-deps-link.test.mjs` (exit 0) and its reporting by `node demo/syncpi.test.mjs` (exit 0). #3821 - the link step's failure is recorded and reported instead of console.warned. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees."
+evidence: "#5819 (2026-11-13, worktree item-5819 at main 657d8c60): demo/commit-discipline-personas.test.mjs exit 1 unlinked (ERR_MODULE_NOT_FOUND on @earendil-works/pi-schema, 6 checks) and exit 0 after `sync-pi --sync` + `--link` (dependencySet=built-pin); `grep -c earendil-works/pi-schema package-lock.json` = 0 while every other pin package has hits. #5065 (2026-11-12, Linux, node v24.22.1): in one thin item worktree `node scripts/sync-pi.mjs --sync` exit 0 (10 packages built, `linked: []`), then `node scripts/sync-pi.mjs --link` exit 0 (`dependencySet: built-pin`, `test -L node_modules/@earendil-works/pi-durable` exit 0), `git status --porcelain` empty afterwards, and `node scripts/test.mjs --all` **326/326 passed in 97.0 s, exit 0** with the header `PROVENANCE tree=792445d5 branch=item-5065 pi-durable=1.5.1 dependencySet=built-pin pin=main@dd30101cfc5b` - the pin UNMOVED. The same tree at a fork base two commits behind main was 324/326 exit 1, and both reds were base-lag, not dependency graph: `demo/next-pointer.test.mjs` (docs/NEXT.md 216 lines at the base vs 195 on main) and `demo/clockin-digest.test.mjs` (digest 20265 B over its 20000 B budget). #6196/#6202 (2026-11-11): `node scripts/sync-pi.mjs --report` in the item-6196 worktree printed `PROVENANCE tree=35001c3a … dependencySet=lockfile-released` with a FALLBACK line before `--sync --link` (exit 0), and `dependencySet=built-pin pi-durable=1.5.1` with a DRIFT summary after it (exit 1, the lockfile still declares 1.3.0); `node demo/suite-provenance.test.mjs` exit 0; `node scripts/test.mjs --all --jobs 6` 301/301 exit 0 in the linked tree. #3821 - the link step's failure is now recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree.; #6278 (2026-11-11, native Windows host, node v24.22.1): the SAME commit `35001c3a` in the SAME item worktree `item-6207` measured **279/300 exit 1** on the lockfile graph and **300/300 exit 0** once the pinned build was present; the carry that fixes it is pinned by `node demo/worktree-deps-link.test.mjs` (exit 0) and its reporting by `node demo/syncpi.test.mjs` (exit 0). #3821 - the link step's failure is recorded and reported instead of console.warned. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees."; "#6314 (2026-11-11, native Windows host, node v24.22.1), ONE named tree (`item-6314`) with only the dependency graph changed: unlinked (lockfile pi-durable **1.3.0**) -> a write-mode open of the live store REFUSED with `Durable SQLite schema version 2 is newer than supported version 1`, exit 1; after `node scripts/sync-pi.mjs --sync --link` (27 s, `dependencySet: "built-pin"`, **1.5.1**) the same store opened, exit 0. The refusal is PATH-dependent: `node tools/held-gate-audit.mjs --db <copy> --limit 3` exited **0** in the same unlinked tree (`rows=6838 held=430`) because it reads through `src/readonlystore.mjs` (`node:sqlite` readOnly, no migration), which never reads `durable_schema`. Pinned by `node demo/store-open-refusal.test.mjs` exit 0, both branches walked against the vendor's own refusal. #3821 - the link step's failure is recorded and reported instead of console.warned; demo/worktree-deps-link.test.mjs. #5217 (2026-11-06, Linux, node v24.22.1): all three states walked in one worktree - UNBUILT (built-dist exit 1, symlink exit 1) -> `sync-pi --sync` (exit 0, 9 packages built) -> `--link` (exit 0, symlink exit 0 pointing at vendor/pi-main/packages/durable). Version stayed **1.3.0 in every state and in every tree** while the artifact changed: sha256 of `node_modules/@earendil-works/pi-durable/dist/index.js` = `4cee4286b156…` (linked, built from the pin) vs `467d9cf6b27c…` (lockfile) in two other worktrees. `node demo/worktree-deps-link.test.mjs` exit 0 in the linked tree."
 check_rule: null
 ---
 
@@ -158,6 +158,42 @@ of unlinked worktrees), so a FALLBACK line is a fact to cite, not a gate that st
 The missing build tree is the usual cause: `--link` has nothing to point at, so it exits 1 with
 `nothing built yet; run --sync before --link`, and provisioning continues on the lockfile by design.
 
+## The schema-version refusal is PATH-dependent, not tree-dependent (#6314)
+
+Measured 2026-11-11 in worktree `item-6314`, the only variable being the dependency graph:
+
+| state | what ran | result |
+|---|---|---|
+| unlinked, lockfile pi-durable **1.3.0** | a write-mode open of the store | `Durable SQLite schema version 2 is newer than supported version 1`, **exit 1** |
+| the same tree after `node scripts/sync-pi.mjs --sync --link` (27 s, `dependencySet: "built-pin"`, **1.5.1**) | the same open of the same store | opens, **exit 0** |
+| unlinked | `node tools/held-gate-audit.mjs --db <copy> --limit 3` | **exit 0**, `rows=6838 held=430` |
+
+The third row is how a refusal gets reported and then "fails to reproduce": the audit tool reads through
+`src/readonlystore.mjs` (`node:sqlite`, `readOnly: true`, no migration), which never reads the
+`durable_schema` row at all. The vendor's predicate is in `applySqliteMigrationsForSchema`: it throws when
+`durable_schema.version` exceeds the last migration the installed package carries. 1.3.0 declares
+`[{version: 1}]`; the pinned 1.5.1 declares `[{version: 1}, {version: 2}]`, where 2 rebuilds the `tasks`
+table to admit the `sleeping` status. A read-only shim can therefore serve a store the installed package
+could not open - and a number from it is a number about a graph the reader has not named.
+
+Since #6314 the refusal names the graph it came from and the remedy. Real output from an unlinked tree:
+
+```text
+cannot open .spike/ahead-store.sqlite: Durable SQLite schema version 9 is newer than supported version 1.
+The store is not corrupt: it is ahead of the pi this tree can read. This tree resolves
+@earendil-works/pi-durable 1.3.0 from the LOCKFILE, not the pinned build v1.5.1 - the store is readable
+only from the pinned graph. Fix the graph, not the store: node scripts/sync-pi.mjs --sync --link in
+<worktree>. Do NOT lower durable_schema.version by hand (docs/DECISIONS.md D128), and note that
+sync-pi --unlink is not a rollback - it restores a released package that cannot open a schema-v2 store.
+```
+
+A linked tree is told the opposite truth - `This tree IS on the pinned build (v1.5.1) ... the pin has to
+move, per docs/runbooks/pi-pin-update.md` - because syncing there would not help.
+
+These sites still open the store raw and print the vendor text with no graph: `scripts/read-constitution.mjs`,
+`scripts/compact-eval.mjs`, `tools/compaction-acceptance.mjs`, `tools/probes/checkpoint-bound-size-leg.mjs`,
+`src/tui/durable/enter.mjs`.
+
 ## Do
 
 ## What provisioning now does: the CARRY (#6278)
@@ -269,10 +305,8 @@ exit 0 printing `dependencySet: "built-pin"`, `built: 10`, `linked: 10`.
 
 And the header itself is pinned (#6196/#6202):
 
-```bash
 node demo/suite-provenance.test.mjs; echo "exit=$?"   # header format, LOUD fallback, drift, built-pin
 node scripts/sync-pi.mjs --report | head -2; echo "exit=${PIPESTATUS[0]}"
-```
 
 Ran 2026-11-11 in `item-6196`: the demo exits 0 in 3.7s (5 assertions, all ok); `--report` exits 1 in a
 linked tree because the lockfile still declares 1.3.0 against the pin's 1.5.1 - the summary line names
@@ -282,15 +316,20 @@ FALLBACK line and exited 0.
 **The pi-schema pair, run 2026-11-13 in `item-5819` (main `657d8c60`)** - this Verify step can fail, which
 is the point:
 
-```bash
 node scripts/sync-pi.mjs --unlink; echo "exit=$?"                      # exit 0, dependencySet=lockfile-released
 node demo/commit-discipline-personas.test.mjs; echo "exit=$?"          # exit 1 - ERR_MODULE_NOT_FOUND pi-schema
 node scripts/sync-pi.mjs --sync; node scripts/sync-pi.mjs --link       # both exit 0, dependencySet=built-pin
 node demo/commit-discipline-personas.test.mjs; echo "exit=$?"          # exit 0 - PASS
-```
 
 Same file, same commit, opposite verdicts, and the only difference is the dependency set. That is why
 the count and the `dependencySet` travel together.
+
+The refusal's provenance is pinned by a demo that walks BOTH branches against the vendor's own refusal
+(a fixture store at `durable_schema` version 9, which no installed pi can open): a lockfile-released tree
+is told to fix the graph, a built-pin tree is told the pin has to move, and an unrelated open failure is
+left alone. Verified 2026-11-11 in `item-6314`:
+
+node demo/store-open-refusal.test.mjs; echo "exit=$?"   # expect 0 and a PASS line
 
 ## If it fails
 

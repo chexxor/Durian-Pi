@@ -20,7 +20,7 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { openReadOnlyStore } from "./readonlystore.mjs";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { NO_STORE_CAUSE } from "./causes.mjs";
@@ -69,6 +69,80 @@ export function localReadsEnabled() {
 /** Is a live broker driving `dbPath`? The read verbs branch on this. */
 export function brokerAliveFor(dbPath) {
   return brokerAlive(readBrokerState(dbPath));
+}
+
+/** The rig root THIS code is running in, derived from the module's own path (Windows-safe: a
+ * `file:` pathname can carry a drive letter). Used to measure the dependency graph of the tree that
+ * hit a store-open failure. */
+const RIG_ROOT = resolve(new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"), "..");
+
+/**
+ * Which pi-durable THIS tree actually resolves, measured from disk (#6314).
+ *
+ * Why it matters: the same store is readable from the pinned vendored build and unreadable from the
+ * lockfile release, because the vendor's `applySqliteMigrations` refuses a `durable_schema` version
+ * newer than the migrations the installed package carries (`@earendil-works/pi-durable` 1.3.0 declares
+ * `[{version:1}]`; the pinned 1.5.1 build declares `[{version:1},{version:2}]`, where 2 rebuilds
+ * `tasks` to admit the `sleeping` status). A refusal that does not say WHICH graph it ran in reads as a
+ * corrupt store, and invites the one move that is forbidden - lowering `durable_schema.version` by
+ * hand (docs/DECISIONS.md D128).
+ */
+export function dependencyGraph(durigDir = RIG_ROOT) {
+  const entry = join(durigDir, "node_modules", "@earendil-works", "pi-durable");
+  let version = null;
+  try {
+    version = JSON.parse(readFileSync(join(entry, "package.json"), "utf8")).version ?? null;
+  } catch {
+    // nothing installed at that path
+  }
+  let resolvedTo = null;
+  try {
+    resolvedTo = realpathSync(entry);
+  } catch {
+    // the entry does not exist
+  }
+  const builtHere = existsSync(join(durigDir, "vendor", "pi-main", "packages", "durable", "dist", "index.js"));
+  const linkedToBuild = Boolean(resolvedTo) && resolvedTo.replace(/\\/g, "/").includes("vendor/pi-main");
+  let pin = null;
+  try {
+    const read = JSON.parse(readFileSync(join(durigDir, "pi-main.pin.json"), "utf8"));
+    pin = { sha: read.sha ?? null, ref: read.ref ?? null };
+  } catch {
+    // no pin file to name
+  }
+  return {
+    version,
+    resolvedTo,
+    pin,
+    builtHere,
+    graph: linkedToBuild ? "built-pin" : version ? "lockfile-released" : "not-installed",
+  };
+}
+
+/**
+ * A store-open failure, phrased so the reader knows which dependency graph produced it and what to run.
+ * Only the schema-version refusal gets the extra half: every other failure keeps its own text, so the
+ * wrapper never diagnoses a cause it did not measure (#6314).
+ */
+export function describeStoreOpenFailure(dbPath, err, durigDir = RIG_ROOT) {
+  const message = String(err?.message ?? err);
+  if (!/[Ss]chema version \d+ is newer than supported version \d+/.test(message)) {
+    return `cannot open ${dbPath}: ${message}`;
+  }
+  const graph = dependencyGraph(durigDir);
+  const pinRef = graph.pin?.ref ?? graph.pin?.sha ?? "the pin (unreadable)";
+  const remedy =
+    graph.graph === "built-pin"
+      ? `This tree IS on the pinned build (${pinRef}), so the store is ahead of what the pin can read: the pin has to move, per docs/runbooks/pi-pin-update.md`
+      : `This tree resolves @earendil-works/pi-durable ${graph.version ?? "(nothing installed)"} from the LOCKFILE, not the pinned build ${pinRef} - the store is readable only from the pinned graph. Fix the graph, not the store: node scripts/sync-pi.mjs --sync --link in ${durigDir}`;
+  return (
+    `cannot open ${dbPath}: ${message}. ` +
+    `The store is not corrupt: it is ahead of the pi this tree can read. ` +
+    `${remedy}. ` +
+    `Do NOT lower durable_schema.version by hand (docs/DECISIONS.md D128), and note that ` +
+    `sync-pi --unlink is not a rollback - it restores a released package that cannot open a schema-v2 store. ` +
+    `Diagnose: docs/runbooks/worktree-unlinked-deps.md`
+  );
 }
 
 /**
@@ -226,7 +300,7 @@ export async function readLocal(dbPath, fn) {
   try {
     storage = await openNodeSqliteStorage(dbPath, { busyTimeoutMs: STORE_BUSY_TIMEOUT_MS });
   } catch (err) {
-    throw new Error(`cannot open ${dbPath}: ${String(err?.message ?? err)}`);
+    throw new Error(describeStoreOpenFailure(dbPath, err));
   }
   try {
     return await fn(storage);

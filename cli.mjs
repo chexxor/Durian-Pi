@@ -95,7 +95,7 @@ import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
-import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS } from "./src/readclient.mjs";
+import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS, describeStoreOpenFailure } from "./src/readclient.mjs"
 import { installSignalHandlers, isStopping, stopSignalName, stoppableSleep } from "./src/signals.mjs";
 import { partialView, peerGraph } from "./src/viewmodel.mjs";
 import { createWorktree, prunePatchEquivalentBranch } from "./src/worktree.mjs";
@@ -195,7 +195,10 @@ async function openStore(path = DB_PATH) {
   try {
     return await openNodeSqliteStorage(path, { busyTimeoutMs: STORE_BUSY_TIMEOUT_MS });
   } catch (err) {
-    throw new Error(`cannot open ${path}: ${String(err?.message ?? err)}`);
+    // The schema-version refusal is a dependency-graph failure, not a broken store: an un-linked tree
+    // runs the lockfile pi-durable, which cannot open a schema-v2 store. Name the graph and the remedy
+    // so the reader does not reach for the forbidden fix (#6314, docs/DECISIONS.md D128).
+    throw new Error(describeStoreOpenFailure(path, err));
   }
 }
 
