@@ -108,9 +108,8 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `b3365b1c` | feat(tools): `conflict-hunk-shape` — hunk-level taxonomy of every conflict; the DISPOSITIONS count elision that turned `check`/`doc-count-drift`/`starter` green |
 | `78666643` | docs(pointer+SELFDEV): the pointer re-cut under the 200-line cap, pitfalls 339–340, suite 346/346 in 152.0 s |
 | `26f35059` | docs(dispositions): the seven wording-only hunks read in full — stale imports, provenance, one superseded pin |
-| *(this commit)* | docs(pointer): rows for the two previous carriers, the run-list counts, the pointer re-cut under the 200-line cap — exempt: it carries this file |
-
-Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
+| `38deb7d1` | docs(pointer): rows for the two previous carriers, the run-list counts re-measured, pointer at 199 lines |
+| *(this commit)* | docs(pointer): the suite number at this HEAD, the POOL-QUEUE-SPEC pointer folded into the pool row — exempt: it carries this file |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
 loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open every window as `nohup timeout --signal=TERM
@@ -134,8 +133,9 @@ One ref did NOT land: `item-6959` adds `demo/noop-wake-census.test.mjs` with no 
 derived gate refused it — routed to `pm`, ref kept.
 
 **Older current item, still true:** the **N19 pool is CLOSED** — the gate fired on live seats (#7700 refused by
-`architect` and `pm` as `too-big`); re-read it with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s, read-only). The
-window seam is in `src/config.mjs` (`usableContextBudget`), a SEAM (D212).
+`architect` and `pm` as `too-big`); re-read it with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s, read-only). Read
+`docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE
+decisions) before touching the pool; the window seam is in `src/config.mjs` (`usableContextBudget`), a SEAM (D212).
 
 **Run these first** (measured on this box; re-measure rather than trust):
 
@@ -163,7 +163,7 @@ neither. The census reports `needsLanding: 0`; the residue is the 40 held refs, 
 most proposed rows (105 of 165 at `00:2xZ`; re-run, the team keeps minting; list `.spike/pool-ownership-gaps.txt`).
 #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports `pool-dead-gate`).
 
-**The suite, with seconds.** At this pointer re-cut: `--all --jobs 4` → **346/346 in 152.0 s** (Linux Fedora 45,
+**The suite, with seconds.** At `38deb7d1` (this pointer): `--all --jobs 4` → **346/346 in 150.4 s** (Linux Fedora 45,
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1); slowest `runbook-diagnose` 58.8 s, `clockin-digest` 24.3 s. At
 `28690eb8` it was 342/345; the three red (`check`, `doc-count-drift`, `starter`) had ONE cause — a ledger row quoted a
 `check` rule count and `doc-count-drift` read the quotation as a live claim (the code declares 27). Eliding the number
