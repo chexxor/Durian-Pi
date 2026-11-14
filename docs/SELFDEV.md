@@ -4593,3 +4593,9 @@ at `:743`). Re-measure every `path:line` before repeating it.
     Pinned in `demo/land-helper.test.mjs` §10 (the whole demo, 8.6 s): armed → landing green; config removed → the
     gate demo exits 1, the landing is refused, main does not move. **Read `report.gateRig` before blaming a branch
     for a gate red.**
+356. **The pointer-coverage carrier is HEAD only, so a run of pointer-only commits never closes.** Measured
+    2026-11-14: `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (0.3-0.6 s) exempts exactly the commit that
+    carries `docs/NEXT.md` (`tools/pointer-sha-coverage.mjs:98` — `carrier = commits.find(c => head.startsWith(c.sha))`).
+    Six successive NEXT.md-only commits each left the *previous* NEXT.md commit un-named, so the verdict stayed at
+    "1 hole(s)" forever. **Fix: squash the pointer churn** (`git reset --soft <last real commit>` then one commit)
+    or make every commit name its predecessor in the same commit. Do not loop on adding rows — the loop is the defect.
