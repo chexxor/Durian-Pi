@@ -4444,7 +4444,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     cannot trust. Fixed in place: the tool mirrors the broker's list and honours `keepReason === "live"`. The general
     rule: when a delegate tool and the base disagree about a state name, read the base, do not infer the set.
 
-## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-338, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-340, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
 
 335. **`git diff` omits `,1` in a one-line hunk header.** `@@ -1 +1 @@`, not `@@ -1,1 +1,1 @@`. A hunk parser
    written as `/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/` silently drops every single-line hunk, so a conflicted file
@@ -4471,3 +4471,19 @@ at `:743`). Re-measure every `path:line` before repeating it.
    branch: for each row that is a merge, `git rev-list <merge>^1..<second-parent>` is credited to that row (measured
    0.6 s on the 243-commit range). The invariant is unchanged — nothing ships unnamed — but the granularity is the
    landing, not the commit.
+339. **A quotation inside a ledger table is read as a live claim.** `docs/DISPOSITIONS.md` rows quoted a ref's
+   evidence line verbatim: a backticked `check` followed by a parenthesised rule count of 23. `src/doccounts.mjs`
+   `DOC_COUNT_CLAIM` matches `` `check` (<n> rules) `` in ANY top-level `docs/*.md` — it does not know the number is
+   inside a quoted excerpt — so `doc-count-drift` reported three fix-now findings and took **three suite tests red**
+   (`check`, `doc-count-drift`, `starter`; 342/345). The rig's code declares 27 (`src/checkup.mjs` `RULES`). Fix: elide
+   the number in quoted evidence (`(… rules`). Cheap probe before writing a ledger row that quotes a count:
+   `node -e "import('./src/doccounts.mjs').then(m=>console.log(m.readDocCountClaims({root:process.cwd()})))"` (0.3 s).
+340. **"Conflicts with main" is not one kind of problem; measure the hunk shape before deciding who resolves it.**
+   `tools/conflict-resolvability.mjs` answers at PATH granularity, so a ref whose only conflict is one reworded
+   sentence and a ref that rewrites eight predicates in `src/rig.mjs` both print `decision`. `tools/conflict-hunk-shape.mjs`
+   (40 refs in 2 s) classifies every hunk A/B/C/D/U (provable union), F (same sentence, stale number), G (>= 90%
+   content-word overlap — paraphrase), E (neither side contains the other). Measured on the 40 held refs: **175 hunks,
+   128 E, 34 G, 4 F, 4 A/B/C/D, 2 U; zero refs fully mechanical; seven refs have no E at all** (`item-5301`,
+   `item-5301-resolved`, `item-6173`, `item-6211`, `item-6343`, `item-6643`, `item-6664`) and together carry 23
+   ref-only lines that a "main wins" rule would drop — which is a ruling the operator has not granted, so
+   `tools/chain-resolve.mjs` rule 7 refuses them. Sequence the re-cut by hunk count, not by ref id.
