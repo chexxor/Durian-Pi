@@ -106,20 +106,21 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `06cd45ae` | merge: land landing-20261114-c4 onto main — `item-4821`, `item-7702`, `item-7272`, containment proven |
 | `28690eb8` | feat(tools): chain-resolve + conflict-resolvability + merge-containment-proof, `demo/chain-resolve-rules.test.mjs`, 40 held-ref dispositions, pitfalls 335–338 |
 | `b3365b1c` | feat(tools): `conflict-hunk-shape` — hunk-level taxonomy of every conflict; the DISPOSITIONS count elision that turned `check`/`doc-count-drift`/`starter` green |
-| *(this commit)* | docs+tools: the seven wording-only hunks read in full, pitfalls 339–342, the pointer re-cut under the 200-line cap — exempt: it carries this file |
+| `78666643` | docs(pointer+SELFDEV): the pointer re-cut under the 200-line cap, pitfalls 339–340, suite 346/346 in 152.0 s |
+| `26f35059` | docs(dispositions): the seven wording-only hunks read in full — stale imports, provenance, one superseded pin |
+| *(this commit)* | docs(pointer): rows for the two previous carriers, the run-list counts, the pointer re-cut under the 200-line cap — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
-loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open every window as
-`nohup timeout --signal=TERM --kill-after=60 <N> node cli.mjs serve --max-duration 3600 &`, then `node cli.mjs resume`
-before closing. Liveness is the last ` PASS ` line (pitfall 304), never the pid.
+loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open every window as `nohup timeout --signal=TERM
+--kill-after=60 <N> node cli.mjs serve --max-duration 3600 &`, then `node cli.mjs resume` before closing. Liveness is
+the last ` PASS ` line (pitfall 304), never the pid.
 
 **The fleet is UNPAUSED and was seen to DRIVE.** Closed at **`00:19:28Z`** by `node cli.mjs unpause`, verified on a
 **broker** `status --json` (never `--local`; pitfall 326): `control {paused:false}`. Re-read the state, do not trust this line.
 
-**Host for every number here**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
-`7.2.15-300.fc45.x86_64`, node **v24.22.1**, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
+**Host for every number here** (measured with the measurement): **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
 
 ## NEXT SESSION
 
@@ -143,8 +144,7 @@ cd /home/chexxor/Git/Durian-Pi
 timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — prune plan now returns (0)
 timeout 120 node tools/landing-batch-plan.mjs --max 12                        # ~13 s — RE-RUN after every bin (pitfall 330)
 node cli.mjs worktree audit --json                                            # ~1 s — 128 worktrees open, 133 refs, 93 clean / 40 conflicting
-node scripts/test.mjs --all --jobs 4                                          # ~155 s — the honest number is below
-grep ' PASS ' selfdev.sqlite.broker.log | tail -1; cat selfdev.sqlite.broker.json   # liveness is the last PASS line
+node scripts/test.mjs --all --jobs 4                                          # ~152 s — the honest number is below
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.2 s — exit 1 if this file skips a shipped sha
 ```
