@@ -4378,3 +4378,24 @@ at `:743`). Re-measure every `path:line` before repeating it.
     it took the whole suite red at HEAD (336/337) while every other area stayed green. Any fixture whose meaning is
     "a lease that has not lapsed" must be built from the clock it is read with (`Date.now() ± N`). The recorded full
     suite time is only meaningful with the time it was run at.
+328. **`--max-duration` bounds the LOOP, not the wall clock, and a parked pass starves it.** The deadline is checked at
+    the top of the broker loop (`src/broker.mjs:2058`) and the loop only returns there after a pass settles; the
+    read-drain keeps serving on its own timer, so a stuck pass leaves a bounded broker alive and "working" forever.
+    Measured 2026-11-14 on this box: six consecutive windows commanded `--max-duration` 1800–3600 s ran 2,146 s,
+    2,363 s, 3,020 s, 5,414 s, 5,939 s and 6,418 s; pid 1574499's bound was `00:52:11Z`, its last pass froze at
+    `00:49:21`, `READ-DRAIN served=1` lines kept arriving, and `kill -TERM` at `00:57:53Z` produced
+    `EXIT … reason=deadline passes=-` at **`00:57:58.038Z` (5 s)**. The exit path is prompt; only the deadline CHECK is
+    starved. So a window is a lease that must be bounded from OUTSIDE as well: open every window as
+    `DURIG_DB=./selfdev.sqlite nohup timeout --signal=TERM --kill-after=60 <N> node cli.mjs serve --max-duration 3600 &`
+    and measure the actual, not the commanded. Measured after the change: pid 1799704 ran **125.0 s** against a 120 s
+    lease. Two closing steps, both evidenced: `node cli.mjs resume` re-arms the submissions the TERM cut (4 "placed,
+    run-cancelled"), and the NEXT start reclaims the dead pid's slot leases (`src/broker.mjs:1481`; `generation_stale`
+    4 → 0). A command that names a bound is not evidence the bound bound.
+329. **A sha table in a hand-written pointer WILL skip a sha; make the claim checkable.** Three audits in a row found the
+    same defect by eye — `5b8e3644` missing, then `0de543ae` missing, then rows out of commit order (`36f57a36` before
+    `517dc58d`, `7008d11d` before `35ff79f2`) — while the table's own header claimed "every milestone object is named by
+    sha". A file cannot name the commit that carries it, but that is ONE exemption, not a licence for holes.
+    `node tools/pointer-sha-coverage.mjs --base <milestone-base>` (0.17 s, exit 0/1) now decides it: every commit in
+    `base..HEAD` needs a row, in commit order, and the carrier is reported by name. On first run it found 4 holes and 2
+    ordering defects that no audit had yet named. Rule for the next session: run the tool, then edit the table; a doc
+    claim of the form "every X is named" needs a command that fails when it is false.

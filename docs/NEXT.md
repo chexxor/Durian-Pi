@@ -1,9 +1,7 @@
-**Last update:** 2026-11-14T01:0xZ (delegate). Every shipped commit in this milestone is a ROW in the table below,
-**in commit order** — enforced mechanically, not by eye: `node tools/pointer-sha-coverage.mjs --base 03bdbf4d`
-(0.2 s, exit 0/1) names every commit in `base..HEAD` that has no row. The ONE exempt commit is the one carrying this
-file, because a file cannot name the commit that contains it; `git log -1 --format=%h -- docs/NEXT.md` names it.
-The session that edits this file adds the previous carrier as a row — the tool fails (exit 1) if it does not.
-Ahead of `origin/main`, **nothing pushed** — the push grant is the operator's.
+**Last update:** 2026-11-14T01:1xZ (delegate). Every shipped commit in this milestone is a ROW below, **in commit order** —
+enforced by `node tools/pointer-sha-coverage.mjs --base 03bdbf4d` (0.2 s, exit 0/1), not by eye. The ONE exempt commit
+is the one carrying this file (a file cannot name its container; `git log -1 --format=%h -- docs/NEXT.md` names it),
+and the session that edits this file adds the previous carrier as a row or the tool fails. Nothing pushed — the push grant is the operator's.
 
 **Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE.** Every commit in the
 range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts of this pointer SKIPPED are marked ← new):
@@ -39,13 +37,12 @@ range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts of this pointer
 | `0de543ae` | ← new: unpause the fleet, fix the `priority-directive-scope` time bomb, record the pause sequence |
 | `11290f1e` | windows/pointer record: the green `--jobs 2` suite run and the two concurrency flakes |
 | `280d6ad3` | unpause verified by behaviour (#7722 claimed 6 min after it), fresh census, suite re-run |
-| *(this commit)* | the table above, the lease procedure, and the `--jobs 4` seconds — exempt: it carries this file |
+| `8f4a63ce` | the sha table becomes a TOOL-checked claim (`tools/pointer-sha-coverage.mjs` + test); the window lease; the bound recorded per window and the lease measurement |
+| *(this commit)* | the suite table above and the `328`/`329` pitfalls — exempt: it carries this file |
 
-The two ordering defects this table had (and the tool now catches) were `36f57a36` listed before `517dc58d` and
-`7008d11d` before `35ff79f2`.
+The two ordering defects this table had (the tool now catches both) were `36f57a36` before `517dc58d` and `7008d11d` before `35ff79f2`.
 
-Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the number reconciliation; the live evidence)
-and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
+Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
 **Broker windows this session — the commanded bound, the OUTER lease, and what actually happened.** A window is a
 LEASE, and it is now leased from outside as well as inside (see the defect below):
@@ -78,19 +75,18 @@ node cli.mjs resume                      # re-arms submissions the TERM cut (mea
 ```
 
 The window that opens at `01:01:21.405Z` uses exactly that line, so the rig cannot park on a pass again; the next
-start also reclaims the dead pid's slot leases (`src/broker.mjs:1481`; measured `generation_stale` 4 → **0** after the
-`01:01:21Z` start). Liveness is still the last ` PASS ` line (pitfall 304): read
-`grep ' PASS ' selfdev.sqlite.broker.log | tail -1` and `cat selfdev.sqlite.broker.json` BEFORE acting.
+start also reclaims the dead pid's slot leases (`src/broker.mjs:1481`; measured `generation_stale` 4 → **0**).
+Liveness is still the last ` PASS ` line (pitfall 304): `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` plus
+`cat selfdev.sqlite.broker.json`, BEFORE acting.
 
-**The fleet is UNPAUSED and was seen to DRIVE** (this was the one objection the 8th audit raised that had to be
-closed, so the evidence is spelled out). The audit read `paused:true, pausedAt:23:50:48.611Z, pausedBy:operator` and
-was right: `23:46:33.518Z pause`, `23:49:41.162Z unpause`, `23:50:48.607Z pause`, nothing after — a second pause landed
-11 s after the unpause. Closed at **`00:19:28Z`** by `node cli.mjs unpause`; verified by a **broker** `status --json`
-read (not `--local`, whose second-connection staleness is pitfall 326): `control {paused:false, pausedAt:null,
-pausedBy:null}`. `paused:false` alone is a claim, so here is the behavioural proof: **`#7722` was minted by
-`architect` at `23:31:40.751Z` — INSIDE the pause — sat unclaimed for the whole pause, and carries
-`pool-claimed by=advocate` at `2026-11-14T00:25:35.756Z`**, a live pool claim 6 minutes after the unpause and none
-before it (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s). A paused fleet cannot produce that transition.
+**The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection, so the evidence is spelled out).
+The audit read `paused:true, pausedAt:23:50:48.611Z` and was right: `23:46:33.518Z pause`, `23:49:41.162Z unpause`,
+`23:50:48.607Z pause`, nothing after — a second pause landed 11 s after the unpause. Closed at **`00:19:28Z`** by
+`node cli.mjs unpause`, verified on a **broker** `status --json` read (never `--local`; pitfall 326): `control
+{paused:false, pausedAt:null}`. `paused:false` is a claim; the behaviour is that **`#7722`, minted by `architect` at
+`23:31:40.751Z` INSIDE the pause, sat unclaimed all pause and carries `pool-claimed by=advocate`
+`2026-11-14T00:25:35.756Z`** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s). A paused fleet cannot do that.
+And it is still driving now: the `01:01:21Z` window's `PASS 1 … woke=` names all eleven non-auditor seats.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -103,35 +99,28 @@ before it (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s). A paused fleet 
 (`SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
 usable window))`, 113 lines by 21:47Z); and **two real seats claimed it by id and were REFUSED** — `size-refused` on
 the row `by=architect` `22:04:21.104Z` and `by=pm` `22:44:08.942Z`, reason
-`too-big:project(120000 tokens > 70% of the 164320-token usable window)`. Their live transcript carries the whole
-string, verbatim: `CLAIM_REFUSED: #7700 is in the POOL but you cannot claim it (too-big:project(120000 tokens > 70% of
-the 164320-token usable window)). It was sent by pm. … Split it: send_work the pieces …, then close #7700 with
-complete_work(itemId: 7700, closedAs: "split", children: [...]) - a row nobody can finish is a sizing problem, not a
-queue problem.` Census: **`sizeRefused: 1`**. Corroborated by `demo/pool-gate-live-roster.test.mjs` (live roster) and
-`tools/pool-gate-live-probe.mjs` (byte-copy of the live store: impl and auditor each refused with `Split it: …`).
+`too-big:project(120000 tokens > 70% of the 164320-token usable window)`, with the whole `CLAIM_REFUSED: … Split it:
+…` instruction in their transcript. Census: **`sizeRefused: 1`**; corroborated by
+`demo/pool-gate-live-roster.test.mjs` and `tools/pool-gate-live-probe.mjs` (byte-copy of the live store).
 
 **State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s, read-only — re-read it, the team keeps
-minting): at `00:31Z` `pool {rows:5, pooled:5, open:2, claimed:3, ownerOfRecord:3, sizeRefused:1,
-seatsWithoutWindow:[]}`. Open: **#7660** (`small`, `requires:"docs"`, no seat advertises it) and **#7700**
-(`project`, refused twice, still open) — the pool is down to two unclaimable rows *by design*, which is the state the
-gate is supposed to produce. Claimed: **#7667**
-(`pool-claimed by=advocate` 18:35:43.701Z, `done` 21:28:24.564Z), **#7669** (`pool-claimed by=security`
-18:36:48.521Z, `done` 21:14:32.765Z) and **#7722** (`pool-claimed by=advocate` `00:25:35.756Z`, in flight — minted by
-`architect` at 23:31:40.751Z, organic use, not asked for by this goal). #7667 and #7669 both name
-`docs/DECISIONS.md`, which `ownership` gives to `advocate` ALONE, so security's claim is the milestone's cross-owner
-probe on a live row. `requires` carries no live annotation: **9 of 885 queued rows** have one and **0** rows have a
-`revised` transition with `requiresFrom/To` — every one was minted with it by `send_work` (the baseline's 7 was a
-smaller census). Seats: 11 × 164320, auditor 12288; gate limits 115023 / 8601, so **only `project` can be refused**.
-Precisely as the audit put it: **`tierTokens {trivial:3400, small:6100, feature:6200, project:120000}` is ONE
-roster-level table** read by `seatSizeBudget(seatsDoc, seatEntry)`; **`usableWindow` is the per-seat field** (11 ×
-164320, auditor 12288), and no seat carries its own `tierTokens` entry.
+minting): at `00:31Z` `pool {rows:5, pooled:5, open:2, claimed:3, ownerOfRecord:3, sizeRefused:1}`. Open: **#7660**
+(`small`, `requires:"docs"`, no seat advertises it) and **#7700** (`project`, refused twice) — two unclaimable rows
+*by design*, which is the state the gate is supposed to produce. Claimed: **#7667** (advocate, `done` 21:28:24.564Z),
+**#7669** (security, `done` 21:14:32.765Z) and **#7722** (advocate, `00:25:35.756Z`, in flight, minted by `architect`
+23:31:40.751Z — organic use, not asked for by this goal). #7667/#7669 both name `docs/DECISIONS.md`, which `ownership`
+gives to `advocate` ALONE, so security's claim is the milestone's cross-owner probe on a live row. `requires` carries
+no live annotation: **9 of 885 queued rows** have one and **0** rows a `revised` transition with `requiresFrom/To` —
+all minted by `send_work` (the baseline's 7 was a smaller census). Seats: 11 × 164320, auditor 12288; gate limits
+115023 / 8601, so **only `project` can be refused**. As the audit put it: **`tierTokens {3400,6100,6200,120000}` is ONE
+roster-level table** read by `seatSizeBudget(seatsDoc, seatEntry)`; **`usableWindow` is the per-seat field**.
 
 **One scope deviation, stated rather than buried:** the window seam landed in **`src/config.mjs`**
-(`usableContextBudget` falls back to `declaredLocalWindow(...)`), which is NOT in the objective's IN list — the goal
-named `src/rig.mjs`, `src/driver.mjs`/`src/readapi.mjs`, `prompts/*.md`, `peek_queue`, `tools/pool-migrate.mjs`, demos
-and docs. It was needed because `up --refresh` wrote `usableWindow: null` for all 12 seats and the gate cannot be armed
-without it; it is a SEAM (D212), not a feature, and its only consumer is the size gate. It is recorded here as a
-`src/config.mjs`, not an `src/rig.mjs`, change — earlier prose in this session said "not in config", which was wrong.
+(`usableContextBudget` falls back to `declaredLocalWindow(...)`), NOT in the objective's IN list (which named
+`src/rig.mjs`, `src/driver.mjs`/`src/readapi.mjs`, `prompts/*.md`, `peek_queue`, `tools/pool-migrate.mjs`, demos, docs).
+It was needed because `up --refresh` wrote `usableWindow: null` for all 12 seats and the gate cannot be armed without
+it; it is a SEAM (D212), not a feature, and its only consumer is the size gate. Earlier prose in this session said
+"not in config" — that was wrong, and this is the correction.
 
 **Backlog rate** (`node tools/backlog-burn.mjs --hours 4`): baseline (1,281 min) done **+8.5/h**, queued **+15.3/h**;
 effect window 19:11:35Z → 22:13:03Z (181 min, contains #7667/#7669 closing) done **+5.3/h**, queued **+4.6/h**. Both
@@ -159,14 +148,24 @@ Consequence: **no migration applied** — the tool stays a proposal; decisions 1
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.
 
-**The full suite, both ways, with the seconds (the objective asks for `--all`, and the audit asked for the numbers):**
-`node scripts/test.mjs --all --jobs 4` at `280d6ad3` is **337/337 in 140.1 s** (log
-`.spike/suite-jobs4-2026-11-14T00-52Z.out`); the independent auditor's own run of the same command at the same sha is
-**337/337 in 138.8 s**. `--jobs 2` at `11290f1e` is **337/337 in 245.1 s** (log
-`.spike/suite-2026-11-14T00-42Z.out`), and at `0de543ae` **337/337 in 257.8 s**. The two `--jobs 4` concurrency flakes
-that forced the earlier `--jobs 2` framing (`demo/restart-limit-behaviour.test.mjs`,
-`demo/compaction-guard-gate.test.mjs`) did NOT recur in two consecutive `--jobs 4` runs; each was green standalone twice.
-Re-run a named test alone before chasing it.
+**The full suite, both ways, with the seconds (the objective asks for `--all`, and the audit asked for the numbers).**
+The suite is **338 tests** since this window added `tools/pointer-sha-coverage-test.mjs`:
+
+| sha | command | result | log |
+|---|---|---|---|
+| `280d6ad3` | `--all --jobs 4` | **337/337 in 140.1 s** | `.spike/suite-jobs4-2026-11-14T00-52Z.out` |
+| `280d6ad3` | `--all --jobs 4` (the auditor's own run) | **337/337 in 138.8 s** | quoted in the audit |
+| `11290f1e` | `--all --jobs 2` | **337/337 in 245.1 s** | `.spike/suite-2026-11-14T00-42Z.out` |
+| `0de543ae` | `--all --jobs 2` | **337/337 in 257.8 s** | — |
+| `8f4a63ce` | `--all --jobs 4` | **337/338 in 142.9 s** — `demo/restart-limit-behaviour.test.mjs` failed 2 checks (`charged 5, not 3 -- restarts=4`) | `.spike/suite-jobs4-8f4a63ce.out` |
+| `8f4a63ce` | `--all --jobs 2` | **338/338 in 253.9 s** | `.spike/suite-jobs2-8f4a63ce.out` |
+| `8f4a63ce` | the failed test ALONE, twice | **PASS, PASS** (exit 0 both) | `/tmp/rl-1.out`, `/tmp/rl-2.out` |
+
+The flake is REAL and it is `--jobs 4`-only and intermittent: it did not appear in two earlier `--jobs 4` runs at
+`280d6ad3` and did appear once at `8f4a63ce`, whose diff is a tool plus a test and touches nothing the test exercises.
+The reproducible green at HEAD is `--jobs 2`. **338/338 in 253.9 s** is the number to quote at `8f4a63ce`; a
+`--jobs 4` number is 337 or 338 depending on contention, and a red line there is not a defect in the change.
+Re-run the named test alone before chasing it.
 
 **Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** —
 `ASSERT FAIL: the fresh context should be short, got 7 messages` (pm's #6924) — recorded, not touched.
@@ -190,7 +189,10 @@ node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --seat devtools --li
 Its first WRITE is not a tool run: once decisions 1–2 are ruled, `pm` annotates chosen rows with
 `revise_work({itemId, requires})` (author or `pm`), one `revised` transition each.
 
-**Traps this window** — `docs/SELFDEV.md` **318–325** (the `seats` LIST vs DOCUMENT roster trap; `usableWindow: null`
-from `up`; "armed" ≠ "fired"; an unclaimable pool row; a count is not a trace; `check` auditing `./rig.json`).
+**Traps this window** — `docs/SELFDEV.md` **318–329** (the `seats` LIST vs DOCUMENT roster trap; `usableWindow: null`
+from `up`; "armed" ≠ "fired"; an unclaimable pool row; a count is not a trace; `check` auditing `./rig.json`; a
+`--local` control read staleness; a hardcoded future date in a fixture; **328** `--max-duration` bounds the loop, not
+the wall clock, so lease every window from outside; **329** a hand-written sha table skips a sha — run
+`tools/pointer-sha-coverage.mjs` instead of trusting the eyes).
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
