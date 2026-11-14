@@ -4544,3 +4544,40 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `2026-11-13T12:00Z` and had aged past the 24 h SLA. Any test whose verdict depends on a threshold must build
     its fixture relative to `Date.now()` (`hoursAgo(48)`, `hoursAgo(1)`), and its assertion must PRINT the offending
     rows. Fix measured: the demo passes in 0.47 s; `node scripts/test.mjs --area worktree` 26/26 in 8.9 s.
+
+## Operational pitfalls (delegate instrument-repair pass 2026-11-14 — numbered 349-354, continuing from 348; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+349. **`cli.mjs worktree audit --json` exits 1 when it has REMEDIES, not when it fails.** Measured at main
+    `f5dc28be`: `total:192`, `ok:true`, `counts.reapable:82`, 67 remedy lines, exit **1**. Any wrapper built on
+    `execSync` throws on that exit code and the instrument reports "worktree audit failed" while the audit is
+    healthy — `tools/branch-census.mjs` did exactly that. Rule for every instrument: `spawnSync`, keep stdout,
+    print the exit code as a verdict. A non-zero exit is data.
+350. **A rig file is not a config file.** `tools/channel-preflight.mjs` passed `DURIG_CONFIG=./rig.selfdev.json`
+    into every CLI read; `src/config.mjs:6` treats `DURIG_CONFIG` as a *config* path and the validator exits 1 with
+    `unknown config-file key(s): _readme, version, workStrategy, seats, edges, ownership, constitution`. The
+    preflight died at step 2 and printed nothing. Pass `DURIG_DB` only; the rig path belongs to verbs that take a
+    rig. Re-measured: the preflight now runs in ~2 s, exit 0.
+351. **A demo that asserts the live rig's exit code measures the rig, not the wiring.**
+    `demo/depplane.test.mjs` asserted `cli.mjs check --json` exits 0 and ran it against `rig.selfdev.json`, which
+    exits 1 because the rig carries one `error` finding (`pool-dead-gate #7660`) — and since D314
+    `ready-ref-stale` is `error` severity too, so any stale ready ref makes the suite red for a reason the demo
+    cannot name. The seam: run the CLI against a rig written in the scratch with no store. Measured: depplane
+    PASS, 0 failing assertions, 16.9 s.
+352. **Suite load can make a crash fixture under-count.** `demo/restart-limit-behaviour.test.mjs` planted 5
+    crashes and charged 4 restarts under `--all --jobs 4` (green standalone, and green in 4 concurrent copies of
+    itself). The 6 s poll bound expired before a partial reached storage, so "the host dies" landed on a task that
+    never started running and charged no restart. The fixture now counts the crashes that landed on a `running`
+    task, plants again until the count is right, and asserts the landed count. **Classify a suite red by running
+    the file alone *and* under load before blaming either.**
+353. **`cli.mjs send <seat>` is not a bounded call.** It waits for the turn to settle; a `timeout 240` killed the
+    pm intake turn in this window at exit 124 with the reply lost. A turn on the locally served model that reads
+    the branch census through `run_readonly` takes minutes. Run it detached
+    (`nohup timeout 600 env DURIG_DB=… node cli.mjs send pm --body-file … > .spike/x.out 2> .spike/x.err`) and read
+    the artifact, or spool with `intent.mjs` and let a resident broker deliver.
+354. **`git worktree remove` refuses a scratch worktree whose only untracked content is the `node_modules`
+    bridge.** Measured 2026-11-14: `.spike/chain-landing-20261114-c11` → "contains modified or untracked files,
+    use --force". Never `--force` a worktree (that is how a seat's uncommitted work disappears); remove the
+    gitignored bridge directory first, then `git worktree remove`, then `git branch -d`. Pruning a ref is legal
+    only when `git merge-base --is-ancestor <ref> refs/heads/main` exits 0 **and** `docs/DISPOSITIONS.md` has no
+    KEEP row for it — 22 `landing-20261114-*` scratch refs in this window failed the ancestor test and were left
+    in place.
