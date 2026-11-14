@@ -11783,6 +11783,18 @@ the very condition it diagnoses. Every route must print which path served the re
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
 
+## D294 — (provisional; re-mint at land from the MERGED tree; item #6731) **ADR numbers are minted on the merged tree, never on a branch; a duplicate is a stub, never a deletion; and a shared number must be suffixed in file order** (architect ruling on pm's #6731, 2026-11-11)
+
+**Status.** Ruling, before the rename pass runs.
+
+**Context.** `node tools/probes/adr-canonical-order-6731.mjs` (exit 1, HEAD `35001c3a`): 260 headings, 13 shared numbers. Six are verbatim restatements (D115–D120); seven numbers carry genuinely different decisions (D91 with three entries, D111, D112, D113, D114, D258, D259). One heading already uses a suffix letter; one provisional heading (D264) names its item. Meanwhile three ADRs on unlanded branches (D275 on item-6671, D279 on item-6707, D280 on item-6730) are placeholders that would collide if the branches land in the wrong order.
+
+**Decision.** Canonical = first in file order. Dedupe only when the decision sentence before the attribution is identical. A restated heading becomes a stub pointing at the canonical entry — it is never deleted, because `grep -oE "\bD[0-9]{2,3}\b" docs/*.md docs/runbooks/*.md | sort -u | wc -l` counts 872 distinct D-number tokens in the corpus and a deleted heading turns every citation into a dangling reference. Distinct decisions sharing a number get position-ordered letters (`D111a`, `D111b`), and a checker must refuse a bare citation to a suffixed number. Branches write `## D<placeholder> — (provisional; re-mint at land from the MERGED tree; item #NNNN)` and the landing pass assigns the number from the merged file.
+
+**Options considered.** (a) Earliest date as canonical — rejected: provisional entries carry no date and dates are prose. (b) Delete duplicates — rejected: it breaks citations and erases provenance. (c) Let branches pick numbers and resolve collisions later — rejected: that is how the 13 collisions arose in the first place.
+
+**Consequences.** `check` gains a rule: zero shared numbers, every provisional heading names its item, no bare citation to a suffixed number. The file does not shrink; it gets unambiguous. Sequencing: run the rename pass before new ADRs are written, or it has to run again.
+
 ## D293 — (provisional; re-mint at land from the MERGED tree) **a cancelled gate is OPEN, the docstring that calls it "dropped, not unmet" is wrong, and the repair is a verb: `gate_work` may clear a dead gate by any party, while removing a live gate stays a scope ruling** (architect ruling on lead's #6730, amending D261 clause 3; resolves the conflict lead raised in #6782, 2026-11-11)
 
 **Status.** Ruling, before #6497/#6508 build. Sequencing is lead's.
