@@ -3771,6 +3771,38 @@ async function cmdCheck(rigFile, human, rest = []) {
   // be the cwd while the imports still resolve from the checkout. The measurement is handed to auditRig
   // as plain data, keeping that function fs-free.
   const dependencyPlane = await readDependencyPlane({ db: DB_PATH });
+  // THE EXTENSION-PLANE CHECK SEAM (D212). A team's own landing-hygiene rule is customization, so it lives in
+  // an extension, not in src/checkup.mjs. Each loaded extension may declare `checks: [{id, severity, what,
+  // run(ctx)}]`; the audit folds them in exactly like a base rule. A rule that throws or cannot measure is
+  // recorded as UNKNOWN/SKIPPED with its reason — never as a pass.
+  const extensionRules = [];
+  const extensionFindings = [];
+  const extensionSkipped = [];
+  for (const path of parseExtensionList(CFG.DURIG_EXTENSIONS ?? "")) {
+    let loaded;
+    try {
+      loaded = await loadExtensions([path]);
+    } catch (err) {
+      extensionSkipped.push({ id: "extension-check", why: `extension ${path} could not be loaded: ${String(err?.message ?? err)}`, unknown: true });
+      continue;
+    }
+    for (const { extension } of loaded) {
+      for (const rule of extension.checks ?? []) {
+        if (!rule?.id || typeof rule.run !== "function") {
+          extensionSkipped.push({ id: rule?.id ?? "extension-check", why: `extension ${path} declares a check with no id or run(); nothing was measured` , unknown: true });
+          continue;
+        }
+        extensionRules.push({ id: rule.id, severity: rule.severity ?? "fix-now", what: rule.what ?? "" });
+        try {
+          const res = rule.run({ repo: process.cwd(), db: DB_PATH, rig: rigFile }) ?? {};
+          if (res.skipped) extensionSkipped.push({ id: rule.id, why: res.skipped });
+          if (res.findings?.length) extensionFindings.push(...res.findings.map((f) => ({ id: rule.id, severity: rule.severity, ...f })));
+        } catch (err) {
+          extensionSkipped.push({ id: rule.id, why: `the check threw: ${String(err?.message ?? err)}`, unknown: true });
+        }
+      }
+    }
+  }
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -3787,6 +3819,9 @@ async function cmdCheck(rigFile, human, rest = []) {
     contextBySeat,
     docCounts,
     dependencyPlane,
+    extensionRules,
+    extensionFindings,
+    extensionSkipped,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {

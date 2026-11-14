@@ -198,6 +198,7 @@
       "demo/wake-trace-wiring.test.mjs"
     ],
     "worktree": [
+      "demo/self-merge-sla.test.mjs",
       "demo/complete-teardown-root.test.mjs",
       "demo/land-changed-suite.test.mjs",
       "demo/land-helper.test.mjs",
@@ -318,6 +319,7 @@
       "demo/viewmodel.test.mjs"
     ],
     "check": [
+      "demo/self-merge-plan.test.mjs",
       "demo/check-autodiscover.test.mjs",
       "demo/check-evidence.test.mjs",
       "demo/check-pool-gate.test.mjs",

@@ -501,12 +501,19 @@ export function runbookFrontMatterProblems(runbook) {
  *   rule reports UNKNOWN, never a false pass (#6155).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null, extensionRules = [], extensionFindings = [], extensionSkipped = [] }) {
+  // THE EXTENSION-PLANE SEAM (D212). A team's own hygiene rule — "a ready ref must not sit" — is not a base
+  // capability, so it must be able to arrive from a loaded extension without being bolted into this file.
+  // The base provides the SHAPE (a rule with an id/severity/what, plus findings and a skipped-with-reason
+  // state), never the policy. `RULES` still owns the base's declared count, so a doc claiming "N rules"
+  // stays checkable against the file it names.
+  const rules = [...RULES, ...extensionRules];
+  const severityOf = new Map([...SEVERITY_OF, ...extensionRules.map((r) => [r.id, r.severity])]);
   const findings = [];
   const skipped = [];
   let plane = null; // #6374: the measured dependency plane, echoed in the result so the human output can print it
   const add = (id, subject, detail, fix) =>
-    findings.push({ id, severity: SEVERITY_OF.get(id), subject, detail, fix });
+    findings.push({ id, severity: severityOf.get(id), subject, detail, fix });
 
   const seats = Array.isArray(spec?.seats) ? spec.seats : [];
   const names = new Set(seats.map((s) => s.name));
@@ -1259,9 +1266,23 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     }
   }
 
+  // Extension-contributed rules enter the SAME report: a finding is a finding, and a rule that could not be
+  // measured is SKIPPED or UNKNOWN, never passed (the #3539 blind-pass shape).
+  for (const f of extensionFindings) {
+    findings.push({
+      id: f.id,
+      severity: severityOf.get(f.id) ?? "fix-now",
+      subject: f.subject ?? "refs",
+      detail: f.detail ?? "",
+      fix: f.fix ?? "",
+      ...(f.measured ? { measured: f.measured } : {}),
+    });
+  }
+  for (const s of extensionSkipped) skipped.push(s);
+
   const summary = { error: 0, "fix-now": 0, total: findings.length };
   for (const f of findings) summary[f.severity] += 1;
-  const checks = RULES.map((r) => {
+  const checks = rules.map((r) => {
     const skip = skipped.find((s) => s.id === r.id);
     const found = findings.filter((f) => f.id === r.id).length;
     // "unknown" is the could-not-judge state; "skipped" is the not-applicable state (#5767).

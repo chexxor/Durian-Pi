@@ -25,7 +25,11 @@ import { pathToFileURL } from "node:url";
 
 /** The shapes an extension may declare. An extension with none of them would be
  * installed and do nothing, which is worse than failing: it looks configured. */
-const DECLARABLE = ["tools", "sections", "hooks", "tasks", "wraps"];
+// `checks` is the seam a team's own hygiene rule uses (D212): an extension may declare
+// `{ id, severity, what, run(ctx) }` and `cli.mjs check` folds its findings into the audit. The base owns
+// the SHAPE of a rule; the extension owns the POLICY. A rule that cannot be measured must return
+// `{skipped: "why"}`, never a silent pass.
+const DECLARABLE = ["tools", "sections", "hooks", "tasks", "wraps", "checks"];
 
 /**
  * `DURIG_EXTENSIONS` is a comma-separated list, in the same vocabulary as every
