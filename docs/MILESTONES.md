@@ -111,10 +111,20 @@ delegate closing those rows would be asserting an acceptance the verification ga
 capacity grant, and the operator holds it — and granted it on 2026-11-09. What is still missing is a provider that registers a model, so no seat can run a request at all (`curl http://127.0.0.1:8080/v1/models` → **401** `missing or wrong API key`, `DURIG_LOCAL_API_KEY` unset). Arming without a running seat proves nothing, and the gate now says that instead of reporting a mechanism failure.
 
 **Milestone-level caveat, stated rather than smoothed over:** ROADMAP 331's acceptance is "truncated summaries drop
-to zero over 100 compactions measured by `compacteval`". That cannot be measured until real seat runs stop failing
-— the live store carries 2,354 compactions, 432 failed, 219 truncated, 209 refused by the run cap, and the broker
-is down with 10 intents spooled and 0 delivered. The mechanism is proven offline; the outcome is not yet measured
-on a running fleet.
+to zero over 100 compactions measured by `compacteval`" — that sentence is **INTENDED** (a target), not a measurement.
+The two populations that could ever satisfy it are counted separately and never added:
+
+| figure | population | label | provenance |
+|---|---|---|---|
+| 100 driven compaction tasks, **0 truncated** | **driven** — compactions forced on a snapshot copy by `tools/compaction-acceptance.mjs` | **RESOLVED** (driven) | `docs/runbooks/compaction-acceptance-measure.md`, measured 2026-11-10 on branch `item-6131`, pi-durable 1.5.1 built pin, node v24.22.1, Linux kernel `7.2.15-300.fc45.x86_64`; every run prints its own `PROVENANCE tree=… pi-durable=… dependencySet=…` line |
+| 9 compactions since arming, 0 truncated, 9 note-backed | **natural** — compactions real seats actually performed | **RESOLVED** (natural), as of 2026-11-09 | `docs/DECISIONS.md`, the entry headed "**The measurement is driven, and says so**" (grep for it); the window is open, so the count moves |
+| 2,354 compactions, 432 failed, 219 truncated, 209 refused by the run cap | **natural**, whole-store history | **RESOLVED** (natural), snapshot 2026-11-09 | `docs/evidence/2026-11-08-context-window/milestone-check-2026-11-09-live.txt`, read from `selfdev.sqlite` by `milestone-check.mjs` |
+
+"100/0" is **not** "100 summaries": it is 100 driven tasks with 0 truncations, and how many markers a task places
+depends on whether that conversation had a cut to make at all. The `docs/DECISIONS.md` entry headed "**What this does
+NOT decide.**
+acceptance line cannot be called met until real seat runs stop failing; the mechanism is proven offline, the outcome
+on a running fleet is not. **Never print a driven count and a natural count as one number.**
 
 ---
 

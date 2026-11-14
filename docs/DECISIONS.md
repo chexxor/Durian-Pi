@@ -11190,6 +11190,10 @@ calls = 100 growth turns + 0 summariser requests** (25.4–28.5 s). The negative
 --stopReason length`, reproduces the harness's own truncation branch and reports **11 truncated** — the counter is
 provably not vacuous. In parallel, the live fleet gives the honest natural number: **9 compactions since arming, 0
 truncated, 9 note-backed**. A driven 100/0 is not a fleet outcome; both numbers are reported, never merged.
+*(tagged per the #6077 figure-label convention, item #6537: the 100/0 is **RESOLVED** on the **driven** population and
+its tree/dependency set are the run's own `PROVENANCE` line (`docs/runbooks/compaction-acceptance-measure.md`); the 9 is
+**RESOLVED** on the **natural** fleet window as of 2026-11-09, which is open and still moving — it is not a subset of the
+100, and "100 tasks" is not "100 summaries": a driven task that has no cut to make places no marker.)*
 
 **A trap this window measured.** `node tools/compaction-guard-install.mjs --check` exits **0** in the repo root
 (`UP TO DATE`) and **1** in a seat worktree (`item-6057`: `NOT INSTALLED`, `tools/compaction-guard-install.mjs:37`).
