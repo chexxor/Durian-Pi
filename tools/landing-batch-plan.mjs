@@ -29,6 +29,15 @@
 //
 // Exit 0 = a plan was produced. Nonzero = the census or git could not be read.
 //
+// ADDENDUM 2026-11-14 (delegate, measured Linux Fedora 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0):
+// A PLAN IS ONLY VALID AGAINST THE HEAD IT WAS COMPUTED ON. The 2026-11-14 pass planned bins 12+2+7 against
+// main 54fa9649; after bin 1 landed (main -> 33cee497) `git merge-tree --write-tree main refs/heads/<ref>`
+// returned exit **1** for all 9 remaining refs - each now conflicts in docs/DISPOSITIONS.md, because landing
+// bin 1 appended rows at the same append-only anchor. RE-RUN THIS TOOL AFTER EVERY BIN, or the second bin's
+// "clean" is a stale claim. Second measured fact: `git merge-tree --write-tree` prints the tree oid on line 1
+// EVEN WHEN IT CONFLICTS - the conflicts are the following lines and the EXIT CODE is the verdict (0 clean,
+// 1 conflict). Screening with `head -1 | grep '^[0-9a-f]{40}$'` reports CLEAN for a conflicted merge.
+//
 // WHAT IT DOES NOT CLAIM: a clean chain is a clean MERGE, not a clean LANDING — `scripts/land.mjs`
 // is the enforcement chokepoint (shared-tree pre-flight, genlock, suite gate). Semantic
 // conflicts (two refs both adding different code to the same function) merge fine and still

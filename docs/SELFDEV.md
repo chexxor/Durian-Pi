@@ -4399,3 +4399,28 @@ at `:743`). Re-measure every `path:line` before repeating it.
     `base..HEAD` needs a row, in commit order, and the carrier is reported by name. On first run it found 4 holes and 2
     ordering defects that no audit had yet named. Rule for the next session: run the tool, then edit the table; a doc
     claim of the form "every X is named" needs a command that fails when it is false.
+
+## Operational pitfalls (delegate landing pass 2026-11-14 — numbered 330-333, continuing from 329; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+330. **A landing-batch plan is valid only against the HEAD it was computed on.** Measured at main `54fa9649`:
+    `node tools/landing-batch-plan.mjs --max 12` returned 21 refs needing landing, bins 12+2+1×7, `unlandable: []`.
+    After bin 1 landed (main → `33cee497`), `git merge-tree --write-tree main refs/heads/<ref>` returned exit **1**
+    for **all 9** remaining refs — every one now conflicts in `docs/DISPOSITIONS.md`, because landing bin 1 appended
+    rows at the same append-only anchor. Re-run the tool after every bin; a second bin's "clean" is stale the moment
+    main moves.
+331. **`git merge-tree --write-tree` prints the tree oid on line 1 even when it CONFLICTS.** The conflicts are the
+    following lines; the EXIT CODE is the verdict (0 clean, 1 conflict). A screen that greps line 1 for a 40-hex oid
+    reports CLEAN for a conflicted merge — that is exactly how this pass initially mis-sorted 9 refs.
+332. **A hand-resolved merge must keep the file's trailing newline, or the lander refuses it.** `scripts/land.mjs`
+    exit **1**: `refusing to land landing-20261114: 1 file(s) fail TEXT INTEGRITY — docs/DISPOSITIONS.md`. The union
+    join dropped the final newline; `node tools/text-integrity-scan.mjs` named it (`no-trailing-newline`). Second
+    trap in the same class: a blind tail-union put a runbook's `last_verified:`/`evidence:` front-matter lines at
+    EOF, and duplicated an index row that main already carried in a newer form. Fix: resolve per file, put each
+    side's additions in the section they belong to, then prove containment (every `+` line of the branch-vs-base
+    diff present in the merged file — this pass: 68 added lines, 0 missing) before landing.
+333. **A branch that adds a demo without mapping it into the area manifest is not landable, and only the gate
+    catches it.** `scripts/land.mjs … item-6959 … --changed-suite` exit **1**: `STOPPED:
+    demo/compaction-acceptance-gate.test.mjs failed … AssertionError: the area manifest does not partition the
+    suite: "demo/noop-wake-census.test.mjs" is on disk but not mapped to any area (add it to
+    demo/test-areas.json)` at `demo/compaction-acceptance-gate.test.mjs:117`. Each ref in that chain merge-tree'd
+    clean individually; the merged tree is what broke. `grep -c "noop-wake" demo/test-areas.json` on main = **0**.
