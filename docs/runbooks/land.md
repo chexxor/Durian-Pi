@@ -73,7 +73,9 @@ source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the enc
 are routed separately and give this rule teeth.
 
 **`git status --porcelain` IMMEDIATELY BEFORE the landing is BEST-EFFORT, not a guarantee — the LOCK is
-the serialisation.** The status check is a RACE, not a guard: measured `dirt=1`, then clean SECONDS later
+the serialisation.** The status check is a RACE, not a guard. The figures below are dated - they are
+measurements from **2026-10-21**, the pass that wrote this block (#4469), not live readings: measured
+`dirt=1`, then clean SECONDS later
 (the dirt was transient, written by another delegate mid-landing), with `main` moving twice underneath
 (`c7b6d30 → 9682817 → da01550`) under fresh landings from another seat. "CHECK STATUS, THEN LAND" HAS A
 WINDOW, and the window is however long it takes to type the landing command. **THE LOCK IS WHAT ACTUALLY
