@@ -98,35 +98,32 @@ commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts o
 | `ab96bf0b` | docs(dispositions): landing pass 2026-11-14 — 20 … |
 | `16166492` | docs+tools: landing-pass pitfalls 330-333 and the… |
 | `dd47ef89` | the pointer rewrite: the landing pass, 20 refs landed, item-6959 held, suite 341/341 |
-| *(this commit)* | the landing-pass pointer rewrite — exempt: it carries this file |
-
+| `f3f72792` | docs(NEXT): the sha table names every commit in 03bdbf4d..HEAD (92 rows, tool-verified) |
+| *(this commit)* | the pointer condensation to the 200-line cap — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
-**Broker windows this pass.** A window is a LEASE and must be leased from OUTSIDE: `--max-duration` is checked only
-at the top of the broker loop (`src/broker.mjs:2058`), so a pass in flight starves the deadline — six consecutive
-windows "commanded" 1,800–3,600 s actually ran **2,146–6,418 s** (measured pid 1574499: bound 00:52:11Z, last pass
-froze 00:49:21, SIGTERM 00:57:53Z → `EXIT reason=deadline` 5 s later; the exit path is prompt, only the deadline
-check is starved). Procedure now: `nohup timeout --signal=TERM --kill-after=60 1800 node cli.mjs serve --max-duration 3600 …`,
-and close a leased window with `node cli.mjs resume` FIRST. The window open at clock-out was `1903310`
-(01:15:55.288Z, outer lease 3,600 s). Liveness is the last ` PASS ` line (pitfall 304), never the pid or heartbeat.
+**Broker windows.** A window is a LEASE and must be leased from OUTSIDE: `--max-duration` is checked only at the top
+of the broker loop (`src/broker.mjs:2058`), so a pass in flight starves the deadline — six "commanded" 1,800–3,600 s
+windows ran **2,146–6,418 s** (pid 1574499: bound 00:52:11Z, SIGTERM 00:57:53Z → `EXIT reason=deadline` 5 s later).
+Procedure: `nohup timeout --signal=TERM --kill-after=60 1800 node cli.mjs serve --max-duration 3600 …`, and close a
+leased window with `node cli.mjs resume` FIRST. Liveness is the last ` PASS ` line (pitfall 304), never the pid or
+heartbeat; the window open at clock-out was `1903310` (01:15:55.288Z, outer lease 3,600 s).
 
-**The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection, so the evidence is spelled out).
-The audit read `paused:true, pausedAt:23:50:48.611Z` and was right: `23:46:33.518Z pause`, `23:49:41.162Z unpause`,
-`23:50:48.607Z pause`, nothing after — a second pause landed 11 s after the unpause. Closed at **`00:19:28Z`** by
-`node cli.mjs unpause`, verified on a **broker** `status --json` read (never `--local`; pitfall 326): `control
-{paused:false, pausedAt:null}`. `paused:false` is a claim; the behaviour is that **`#7722`, minted by `architect` at
-`23:31:40.751Z` INSIDE the pause, sat unclaimed all pause and carries `pool-claimed by=advocate`
-`2026-11-14T00:25:35.756Z`** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s). A paused fleet cannot do that.
-And it is still driving now: the `01:01:21Z` window's `PASS 1 … woke=` names all eleven non-auditor seats.
+**The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection). The audit's `paused:true` was
+right — `23:46:33 pause`, `23:49:41 unpause`, `23:50:48 pause`, nothing after. Closed at **`00:19:28Z`** by
+`node cli.mjs unpause`, verified on a **broker** `status --json` (never `--local`; pitfall 326): `control {paused:false}`.
+The behaviour, not the claim: **`#7722`, minted by `architect` INSIDE the pause, sat unclaimed all pause and carries
+`pool-claimed by=advocate` `2026-11-14T00:25:35.756Z`** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s) — a paused
+fleet cannot do that, and the `01:01:21Z` window's `PASS 1 … woke=` names all eleven non-auditor seats.
 
-**Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
-`7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
-`uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
+**Host for every number here**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node **v24.22.1**, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release && echo
+"$PRETTY_NAME") && node -v && git --version`.
 
 ## NEXT SESSION
 
-**Current item:** **the landing pass is CLOSED: `main` `03bdbf4d` → `82a3c51d` → `16166492`, 20 refs landed, 1 held.**
+**Current item:** **the landing pass is CLOSED: `main` `03bdbf4d` → `82a3c51d` → `16166492` → `dd47ef89` → `f3f72792`, 20 refs landed, 1 held (#6959).**
 Each landed ref is proven two ways: `git merge-base --is-ancestor <ref> main` exit **0** and every `+` line of its
 branch-vs-base diff present on main (probe `.spike/landing-content-probe.mjs`, ~40 s: 1,087 lines for bin 1, 68 for
 the chain, 0 missing). Full suite at `82a3c51d`: `node scripts/test.mjs --all --jobs 4` → **341/341 in 136.8 s**
@@ -134,37 +131,15 @@ the chain, 0 missing). Full suite at `82a3c51d`: `node scripts/test.mjs --all --
 `demo/noop-wake-census.test.mjs` with no `demo/test-areas.json` row, so the derived gate refused it
 (`demo/compaction-acceptance-gate.test.mjs:117`) — routed to `pm`, ref kept.
 
-**Older current item, still true:** **the N19 pool is CLOSED — usable, alive, and the gate has fired on a LIVE seat.** `pm` minted
-**#7700** (`pool:true, tier:"project"`, `21:20:16.789Z`); the live scheduler refuses it by name for every seat
-(`SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
-usable window))`, 113 lines by 21:47Z); and **two real seats claimed it by id and were REFUSED** — `size-refused` on
-the row `by=architect` `22:04:21.104Z` and `by=pm` `22:44:08.942Z`, reason
-`too-big:project(120000 tokens > 70% of the 164320-token usable window)`, with the whole `CLAIM_REFUSED: … Split it:
-…` instruction in their transcript. Census: **`sizeRefused: 1`**; corroborated by
-`demo/pool-gate-live-roster.test.mjs` and `tools/pool-gate-live-probe.mjs` (byte-copy of the live store).
-
-**State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s, read-only — re-read it, the team keeps
-minting): at `00:31Z` `pool {rows:5, pooled:5, open:2, claimed:3, ownerOfRecord:3, sizeRefused:1}`. Open: **#7660**
-(`small`, `requires:"docs"`, no seat advertises it) and **#7700** (`project`, refused twice) — two unclaimable rows
-*by design*, which is the state the gate is supposed to produce. Claimed: **#7667** (advocate, `done` 21:28:24.564Z),
-**#7669** (security, `done` 21:14:32.765Z) and **#7722** (advocate, `00:25:35.756Z`, in flight, minted by `architect`
-23:31:40.751Z — organic use, not asked for by this goal). #7667/#7669 both name `docs/DECISIONS.md`, which `ownership`
-gives to `advocate` ALONE, so security's claim is the milestone's cross-owner probe on a live row. `requires` carries
-no live annotation: **9 of 885 queued rows** have one and **0** rows a `revised` transition with `requiresFrom/To` —
-all minted by `send_work` (the baseline's 7 was a smaller census). Seats: 11 × 164320, auditor 12288; gate limits
-115023 / 8601, so **only `project` can be refused**. As the audit put it: **`tierTokens {3400,6100,6200,120000}` is ONE
-roster-level table** read by `seatSizeBudget(seatsDoc, seatEntry)`; **`usableWindow` is the per-seat field**.
-
-**One scope deviation, stated rather than buried:** the window seam landed in **`src/config.mjs`**
-(`usableContextBudget` falls back to `declaredLocalWindow(...)`), NOT in the objective's IN list (which named
-`src/rig.mjs`, `src/driver.mjs`/`src/readapi.mjs`, `prompts/*.md`, `peek_queue`, `tools/pool-migrate.mjs`, demos, docs).
-It was needed because `up --refresh` wrote `usableWindow: null` for all 12 seats and the gate cannot be armed without
-it; it is a SEAM (D212), not a feature, and its only consumer is the size gate. Earlier prose in this session said
-"not in config" — that was wrong, and this is the correction.
-
-**Backlog rate** (`node tools/backlog-burn.mjs --hours 4`): baseline (1,281 min) done **+8.5/h**, queued **+15.3/h**;
-effect window 19:11:35Z → 22:13:03Z (181 min, contains #7667/#7669 closing) done **+5.3/h**, queued **+4.6/h**. Both
-GROWING — **no causal claim**: closes and intake both fell while the fleet landed and `main` moved.
+**Older current item, still true:** the **N19 pool is CLOSED** — usable, alive, gate fired on a live seat: `pm` minted
+**#7700** (`pool:true, tier:"project"`) and TWO real seats claimed it and were REFUSED (`by=architect` 22:04:21Z,
+`by=pm` 22:44:08Z, reason `too-big:project(120000 tokens > 70% of the 164320-token usable window)`). Census at 00:31Z
+(`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s, read-only — re-read, the team keeps minting): `{rows:5,
+pooled:5, open:2, claimed:3, sizeRefused:1}`; open = **#7660** (`requires:"docs"`, no seat advertises it, `check`
+reports `pool-dead-gate`) and **#7700**. Seats: 11 × 164320 usable, auditor 12288; gate limits 115023 / 8601. The
+window seam landed in `src/config.mjs` (`usableContextBudget` → `declaredLocalWindow(...)`), a SEAM (D212) the gate
+cannot arm without. Backlog rate (`tools/backlog-burn.mjs --hours 4`): baseline done +8.5/h vs queued +15.3/h; effect
+window done +5.3/h vs queued +4.6/h — both growing, **no causal claim**.
 
 **Run these first** (measured on this box; re-measure rather than trust):
 
@@ -180,8 +155,6 @@ node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5       # 1.
 node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite                   # 7-19 s — the gate refusing the LIVE roster's seats
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.2 s — exit 1 if this file skips a shipped sha
-node scripts/test.mjs --all --jobs 4                                        # 138.8-140.1 s — 337/337 at 280d6ad3 (auditor's run and mine)
-node scripts/test.mjs --all --jobs 2                                        # 245-258 s — 337/337 (the lower-jobs re-run)
 ```
 
 **Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would
@@ -192,27 +165,14 @@ Consequence: **no migration applied** — the tool stays a proposal; decisions 1
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.
 
-**The full suite, both ways, with the seconds (the objective asks for `--all`, and the audit asked for the numbers).**
-The suite is **338 tests** since this window added `tools/pointer-sha-coverage-test.mjs`:
+**The suite, with seconds.** 341 tests at `82a3c51d`: `--all --jobs 4` → **341/341 in 136.8 s** (`.spike/suite-final-jobs4.out`).
+The `--jobs 4` flake in `demo/restart-limit-behaviour.test.mjs` is contention-driven and intermittent (337/338 once at
+`8f4a63ce`, absent in two earlier runs); `--jobs 2` is the reproducible green (**338/338 in 253.9 s**). A red at
+`--jobs 4` is not a defect in the change — re-run the named test alone before chasing it.
 
-| sha | command | result | log |
-|---|---|---|---|
-| `82a3c51d` | `--all --jobs 4` | **341/341 in 136.8 s** | `.spike/suite-final-jobs4.out` |
-| `280d6ad3` | `--all --jobs 4` | **337/337 in 140.1 s** | `.spike/suite-jobs4-2026-11-14T00-52Z.out` |
-| `8f4a63ce` | `--all --jobs 4` | **337/338 in 142.9 s** — `demo/restart-limit-behaviour.test.mjs` failed 2 checks, PASS when run alone twice | `.spike/suite-jobs4-8f4a63ce.out` |
-| `8f4a63ce` | `--all --jobs 2` | **338/338 in 253.9 s** | `.spike/suite-jobs2-8f4a63ce.out` |
-
-The flake is REAL and it is `--jobs 4`-only and intermittent: it did not appear in two earlier `--jobs 4` runs at
-`280d6ad3` and did appear once at `8f4a63ce`, whose diff is a tool plus a test and touches nothing the test exercises.
-The reproducible green at HEAD is `--jobs 2`. **338/338 in 253.9 s** is the number to quote at `8f4a63ce`; a
-`--jobs 4` number is 337 or 338 depending on contention, and a red line there is not a defect in the change.
-Re-run the named test alone before chasing it.
-
-**Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** —
-`ASSERT FAIL: the fresh context should be short, got 7 messages` (pm's #6924) — recorded, not touched.
-`demo/priority-directive-scope.test.mjs` went red at `23:59Z` because its fixture hardcoded
-`expiresAt: "2026-11-13T23:59:00Z"`; the path correctly refused a past expiry and the demo crashed on the null result.
-**Fixed** (time-relative fixture): the suite is reproducible again, and the lesson is pitfall 327.
+**Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** — `ASSERT FAIL: the fresh context should be
+short, got 7 messages` (pm's #6924) — recorded, not touched. `demo/priority-directive-scope.test.mjs` went red on a
+hardcoded `expiresAt: "2026-11-13T23:59:00Z"` fixture; **fixed** (time-relative), lesson pitfall 327.
 
 **Operator decisions owed** (options/pros/cons in `docs/reviews/2026-11-13-capability-ownership-ruling.md`): (5) who may
 annotate `requires` — author-or-`pm` as shipped, all coordinators, or a named `lead` exception; (1) is `ownership`
@@ -221,14 +181,9 @@ advisory (recommended, plus a `check` for disjoint owner/claimant pairs) or enfo
 case; recommended: no, warn + red `check` + author repair); (4) should a pool claim notify its author (recommended:
 annotate the author's `peek_queue`, no notice row).
 
-**Exact next command for the MIGRATION goal** (a later, separately gated goal; the tool has NO write path by design):
-
-```bash
-node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --json .spike/pool-migrate-live.json --limit 5   # re-measure first
-node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --seat devtools --limit 10                       # the clean tranche, by id
-```
-Its first WRITE is not a tool run: once decisions 1–2 are ruled, `pm` annotates chosen rows with
-`revise_work({itemId, requires})` (author or `pm`), one `revised` transition each.
+**Next command for the MIGRATION goal** (later, separately gated; `tools/pool-migrate.mjs` has NO write path by design):
+`node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` (1.7–10 s). Its first WRITE is not a tool run:
+once decisions 1–2 are ruled, `pm` annotates rows with `revise_work({itemId, requires})`, one `revised` transition each.
 
 **Traps this window** — `docs/SELFDEV.md` **330–333** (a landing plan is valid only against the HEAD it was computed
 on; `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved

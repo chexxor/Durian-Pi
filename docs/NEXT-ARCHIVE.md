@@ -14782,3 +14782,39 @@ store; (b) `up --refresh` records `usableWindow: null` when the window is declar
 armed and *unexercisable* when only one tier exceeds it, so "the gate is armed" is not "the gate has fired".
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
+
+
+## Cut from the pointer 2026-11-14 (landing pass), verbatim
+
+**Older current item, still true:** **the N19 pool is CLOSED — usable, alive, and the gate has fired on a LIVE seat.** `pm` minted
+**#7700** (`pool:true, tier:"project"`, `21:20:16.789Z`); the live scheduler refuses it by name for every seat
+(`SKIP auditor reason=pool-gated:2 #7660(requires:docs),#7700(too-big:project(120000 tokens > 70% of the 12288-token
+usable window))`, 113 lines by 21:47Z); and **two real seats claimed it by id and were REFUSED** — `size-refused` on
+the row `by=architect` `22:04:21.104Z` and `by=pm` `22:44:08.942Z`, reason
+`too-big:project(120000 tokens > 70% of the 164320-token usable window)`, with the whole `CLAIM_REFUSED: … Split it:
+…` instruction in their transcript. Census: **`sizeRefused: 1`**; corroborated by
+`demo/pool-gate-live-roster.test.mjs` and `tools/pool-gate-live-probe.mjs` (byte-copy of the live store).
+
+**State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s, read-only — re-read it, the team keeps
+minting): at `00:31Z` `pool {rows:5, pooled:5, open:2, claimed:3, ownerOfRecord:3, sizeRefused:1}`. Open: **#7660**
+(`small`, `requires:"docs"`, no seat advertises it) and **#7700** (`project`, refused twice) — two unclaimable rows
+*by design*, which is the state the gate is supposed to produce. Claimed: **#7667** (advocate, `done` 21:28:24.564Z),
+**#7669** (security, `done` 21:14:32.765Z) and **#7722** (advocate, `00:25:35.756Z`, in flight, minted by `architect`
+23:31:40.751Z — organic use, not asked for by this goal). #7667/#7669 both name `docs/DECISIONS.md`, which `ownership`
+gives to `advocate` ALONE, so security's claim is the milestone's cross-owner probe on a live row. `requires` carries
+no live annotation: **9 of 885 queued rows** have one and **0** rows a `revised` transition with `requiresFrom/To` —
+all minted by `send_work` (the baseline's 7 was a smaller census). Seats: 11 × 164320, auditor 12288; gate limits
+115023 / 8601, so **only `project` can be refused**. As the audit put it: **`tierTokens {3400,6100,6200,120000}` is ONE
+roster-level table** read by `seatSizeBudget(seatsDoc, seatEntry)`; **`usableWindow` is the per-seat field**.
+
+**One scope deviation, stated rather than buried:** the window seam landed in **`src/config.mjs`**
+(`usableContextBudget` falls back to `declaredLocalWindow(...)`), NOT in the objective's IN list (which named
+`src/rig.mjs`, `src/driver.mjs`/`src/readapi.mjs`, `prompts/*.md`, `peek_queue`, `tools/pool-migrate.mjs`, demos, docs).
+It was needed because `up --refresh` wrote `usableWindow: null` for all 12 seats and the gate cannot be armed without
+it; it is a SEAM (D212), not a feature, and its only consumer is the size gate. Earlier prose in this session said
+"not in config" — that was wrong, and this is the correction.
+
+**Backlog rate** (`node tools/backlog-burn.mjs --hours 4`): baseline (1,281 min) done **+8.5/h**, queued **+15.3/h**;
+effect window 19:11:35Z → 22:13:03Z (181 min, contains #7667/#7669 closing) done **+5.3/h**, queued **+4.6/h**. Both
+GROWING — **no causal claim**: closes and intake both fell while the fleet landed and `main` moved.
+
