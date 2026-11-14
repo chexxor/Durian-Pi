@@ -3,8 +3,9 @@ runbook: broker-down-or-stalled
 symptom: "seats idle with queued work; no `serve` process, or a fresh heartbeat with a stale PASS (dormant); log stops after a storage error or `database is locked`; `cli.mjs status` exits 1 with `read health: timed out awaiting the broker's result`, or hangs to exit 124 with no output at all, while the store itself answers fine"
 writes: true
 precondition: "broker-stopped"   # diagnosis half is read-only; the Do half writes
-last_verified: 2026-11-10
-verified_by: delegate
+last_verified: 2026-11-11
+verified_by: impl
+Addendum 2026-11-11 (impl, item-6160 worktree off main `35001c3a`, dependency set `built-pin` after `scripts/sync-pi.mjs --sync && --link`, pi-durable 1.5.1): the CLOSED-HARNESS variant above is pinned by `node demo/broker-harness-dead.test.mjs` → exit 0. Its RED baseline ran in a scratch worktree of HEAD (`git worktree add .spike/red-6160 HEAD`): `brokerHealth` on a wedged state returned `{"state":"degraded","reason":"no pass within the progress timeout","passAgeMs":400000}` with NO cause field — exit 1. The `## Verify` step below (`tail -8 selfdev.sqlite.broker.log` against a live broker) was not re-run in that pass."
 evidence: "2026-10-16 (items 54/66/68) + the 2026-10-18 recurrence (docs/incidents/2026-10-18-broker-dormant-stalled.md) ; env-name corrected to DURIG_DB (#5911, 2026-11-10, tree f192f543 - the CLI reads DURIG_DB: cli.mjs:155; only scripts/clockin.mjs:379 takes DURIAN_PI_DB)"
 evidence_addendum: "2026-11-06 (Linux Fedora 45, node v24.22.1): the post-`--max-duration` linger signature below was run end-to-end — pid 483056 alive 1 h 39 m, fresh heartbeatAt, lastPassAt frozen 75 min, no genlock, CLI reads timing out at 120 s while a direct read-only store open answered in 111 ms. The `taskkill` half of Do stays Windows-only and unverified here; on Linux the sequence was `serve --stop` (refused) then `kill <pid>` (logged `EXIT reason=deadline passes=-`). Registered as ROADMAP 303. Addendum 2026-11-08T07:4xZ (impl, #5663): the three read shapes in the section below were reproduced deterministically in an item worktree of main `7ccb2163` on a 139,264 B store made by `node cli.mjs up rig.starter.json` — no live store, no broker process, so the shape is NOT size- or load-dependent. No state file: `node cli.mjs status --json` exit 0. Forged state naming a live pid (a `sleep 400`) with a fresh heartbeat and nothing draining the spool: exit 1 after 120 s, and exit 124 with ZERO bytes when an external `timeout 60` killed the wait. The `Do` half (kill, `resume`, restart) was NOT run in that repro and stays unverified. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here. Addendum 2026-11-07 (same host, the 05:18Z diagnostic pass, pid 1673276, `--max-duration 120`, 14 passes): the signature recurred, and three instrument facts were measured — `pgrep -a node | grep \"cli.mjs serve\"` returned NOTHING while the broker was ALIVE (do not call a run uncleanly exited off it); the reads that work are `cat <db>.broker.json` then `ps -o pid,etime,args -p <pid>`; and that broker's `EXIT … reason=deadline passes=-` is a hard-coded CLI-side line (`cli.mjs:2105`, on the stop-grace force timer) whose reason and pass count are both untrustworthy — see ROADMAP 328. 2026-11-08 (Linux Fedora 45, node v24.22.1): the **silent** variant measured — reads exit 124 with 0 bytes and no error line at all (two reads at an 8 s cap, eight concurrent at 25 s) while a direct read-only store open answered the same minute; pass loop dead since 21:26:06Z after `PASS-FAILED … database is locked errcode=5` — 11 dated 2026-11-08 out of 23 in the cumulative log (the log is cumulative; time-box any count). Diagnose half verified read-only via `docs/evidence/2026-11-08-context-window/read-path-probe.mjs`; the `Do` half still unverified here. #5829 re-ran that recipe and found the exit-1 step does NOT reproduce when the forged heartbeat is written once and reused: by the second read it is older than the 60 s liveness gate, the routing falls back to `readLocal`, and the verb exits 0. The recipe below now refreshes the heartbeat before each read; both shapes re-measured green. Addendum 2026-11-10 (architect, #5630, read-only): the CLASSIFYING probe in the Diagnose block was run on this rig — `node tools/stranded-inbox.mjs selfdev.sqlite` exit 0 printing `inbox=9 drainStranded=9 resultFiles=0 hbAgeS=5 progressAgeS=22731`; nine undrained reads, zero result rows. That command has no `check` rule behind it, so the population is invisible until someone thinks to run it. Addendum 2026-11-10 (scribe, tree main `f192f543`, thin item worktree - pi-durable 1.3.0 from the lockfile, not `--link`ed): the one-seat remedy bullet is now evidence-backed rather than asserted - `cli.mjs status` does emit `admitted_not_started` with the submission id and its age in seconds (`src/attention.mjs:490-499`), and the admission deadline exists but is NOT wired (`grep -rn 'admissionVerdict(' src/` returns exactly one hit, the definition at `src/broker.mjs:955`); `node demo/admission-deadline.test.mjs` exit 0. The `## Verify` section's `tail -8 selfdev.sqlite.broker.log` needs a live broker and was NOT run in this pass, so this runbook's Verify step remains unverified as a whole. Addendum 2026-11-10T23:0xZ (delegate, `main` at `c32557cb` plus the `src/cli-seam.mjs` follow-up; Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1): the Diagnose half and the restart half were run end to end. `node tools/broker-serve.mjs --status` reported `broker: degraded pid=562329 heartbeat 14s ago last pass 3463s ago`; restarting with `set -a; . "$HOME/.config/durig/env"; set +a; node tools/broker-serve.mjs --start --max-duration 600` (preflight 0 blocking, 5 notes) produced reads under 10 s with the broker resident and seats mid-turn: `status --json` 4.758 s, `queue --json --no-body` 2.587 s, `watch --once --human` 2.212 s, `ps` 0.878 s, `log pm 5` 1.950 s, all exit 0; `grep -c READ-DRAIN selfdev.sqlite.broker.log` = 38. Ctrl-C ends a verb: `watch --json` + SIGINT exits 130, 79 ms after the signal. Full table: `docs/evidence/2026-11-10-cli-signals/ctrl-c-and-read-bounds.md`. The `taskkill` half of `Do` is still Windows-only and unverified on this box. Addendum 2026-11-11 (devtools, item-6189 worktree off `main` `9ae345df`, dependency set `built-pin`): the "seat that has queued rows and still never wakes" section is SCOPED-verified only - `node demo/wake-claimability.test.mjs` exit 0 and `node scripts/test.mjs --all --jobs 6` 300/300 exit 0 in that tree; the `## Verify` step (`tail -8 selfdev.sqlite.broker.log` against a live broker) was NOT run in that pass, so the runbook as a whole remains verified at 2026-11-10. Addendum 2026-11-11T23:5xZ (delegate, Linux Fedora 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1): the `Do` half was run end to end on a **parked** broker — pid 2876055, heartbeat 9 s fresh, `lastPassAt` frozen 48,370 s, 4 genlock slots held, one `op=message` intent classified `DRAIN-STRANDED` by `node tools/stranded-inbox.mjs selfdev.sqlite`; `serve --stop` refused, `kill -TERM` logged `EXIT pid=2876055 reason=deadline passes=-` 10 s later, `cli.mjs resume` found 1602 and cleared the stranded runs, and the restart ran `PASS 1..6` with `INTENT delivered=1 dead=0 dup=0` within 90 s. Full account: `docs/incidents/2026-11-11-parked-broker-strands-a-mutating-intent.md`. The `taskkill` half is still Windows-only and unverified on this box."
 check_rule: null
@@ -668,6 +669,50 @@ Also note `--max-duration` is not a kill switch. `ps -o etime -p <pid>` on a bro
 `--max-duration 1800` showed **02:05:25** elapsed — the duration, like the `.stop` file, is honoured only at a pass
 boundary (`src/broker.mjs:1651`), so a stalled pass loop makes the broker unkillable by design. Only SIGTERM/SIGINT
 stops it at once, and that aborts live seat runs.
+
+## Variant: the harness is CLOSED — alive, heartbeating, and unable to pass (#6160)
+
+The log lines that identify this shape, measured on this rig on 2026-11-11:
+
+```
+PASS-FAILED Error: SqliteStorage is closed
+HARNESS-REOPEN attempt=1 in=5000ms
+...
+HARNESS-REOPEN-CAP-EXCEEDED attempts=4
+```
+
+The broker process stays resident, the heartbeat keeps advancing, `lastPassAt` freezes, and every
+broker-routed read times out. It is NOT the dormant-pass variant above: the pass loop is still turning,
+but the handle it drives is dead.
+
+**Detection is now in the state file, not only in the log.** Hitting the reopen cap writes
+`fatal: {cause, kind, attempts, at, firstAt}` into `<db>.broker.json`, and `brokerHealth` reports it as
+`degraded` with the CAUSE in the reason instead of the generic "no pass within the progress timeout":
+
+```bash
+node cli.mjs status --local --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const b=JSON.parse(s).broker;console.log(b.state,"|",b.reason,"|",JSON.stringify(b.fatal))})'
+# degraded | harness closed: reopen cap exceeded (4 attempts, SqliteStorage is closed) | {...}
+```
+
+A read that still times out against that broker fails with `code: broker_harness_dead` and a remedy that
+says restart, rather than `broker_read_timeout` with a generic "wait or restart". The exit drain of such
+a broker is BOUNDED (`EXIT_DRAIN_BOUND_MS = 15 s`): waiting for `waitForIdle` on a closed handle is the
+unbounded wait that keeps the process alive with a fresh heartbeat and a frozen pass.
+
+**Do**: `node cli.mjs serve --stop`, then `node cli.mjs serve`, then wait — the recovery is mechanical and
+it works; what was broken was detection.
+
+**Verify** (deterministic, no fleet, no broker):
+
+```bash
+node demo/broker-harness-dead.test.mjs   # exit 0
+```
+
+It pins: fresh heartbeat + frozen pass ≠ `up`; a non-owner cannot write `fatal`; the owner's record
+survives in the state file; the health reason names the closed harness and the attempt count even when
+the pass clock is recent; the mutate bound drops to 10 s and a down broker's to 0; the read failure
+carries `broker_harness_dead`; a terminal-harness exit drain is bounded while an ordinary cooperative
+stop stays unbounded; and `settledWithin` distinguishes a fired bound from no-grace.
 
 ## Why a hung `cli.mjs status` prints nothing: the read was dead-lettered
 
