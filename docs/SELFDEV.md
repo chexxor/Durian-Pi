@@ -4524,3 +4524,23 @@ at `:743`). Re-measure every `path:line` before repeating it.
    the SAME demo passes in the chain worktree with the root's `node_modules` symlinked in (`demo/stop.test.mjs`, exit 0,
    measured 2026-11-14, Linux Fedora 45 kernel `7.2.15-300.fc45.x86_64` node v24.22.1). Run the demo in the chain before
    blaming the branch (#5793 is the same trap in the other direction).
+
+## Operational pitfalls (delegate self-merge window 2026-11-14 — numbered 345-348, continuing from 344; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+345. **A live item worktree directory makes a bare branch name ambiguous.** With `item-6343/` checked out at the
+    repo root, `git log -1 item-6343` dies: `ambiguous argument 'item-6343': unknown revision or path not in the
+    working tree` — it is both a ref and a directory. Every instrument that reads a ref must use
+    `refs/heads/<name>`. `tools/self-merge-sla.mjs` does (its `rev` variable), and it is the reason the tool
+    returns verdicts instead of errors on this rig.
+346. **`spawnSync`'s 1 MB default buffer truncates `cli.mjs queue --json`.** On this store the queue is thousands
+    of rows; without `maxBuffer: 256 * 1024 * 1024` the parse fails and every ref reads `ready-unverified`. Measured
+    in `tools/self-merge-sla.mjs` `readQueue()`. A silent truncation reads as "the queue has no row for this item".
+347. **An R5 union of two evolutionary versions of the SAME statement is a regression, not a merge.**
+    `item-6374` landed a duplicate assertion in `demo/check.test.mjs` and a stale "24 rules" line; the derived gate
+    caught it, the rule did not. Union only when both sides are additive; otherwise re-cut by hand
+    (`docs/runbooks/branch-cleanup.md` Step 0b/0d). Land with `--changed-suite`, never a bare merge.
+348. **A demo with absolute commit dates is a time bomb.** `demo/self-merge-sla.test.mjs` asserted "exactly one
+    stale ref" and reported 2 eight days after it was written: the fixture's "in flight" branch was committed on
+    `2026-11-13T12:00Z` and had aged past the 24 h SLA. Any test whose verdict depends on a threshold must build
+    its fixture relative to `Date.now()` (`hoursAgo(48)`, `hoursAgo(1)`), and its assertion must PRINT the offending
+    rows. Fix measured: the demo passes in 0.47 s; `node scripts/test.mjs --area worktree` 26/26 in 8.9 s.

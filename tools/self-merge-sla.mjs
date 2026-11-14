@@ -130,7 +130,7 @@ export function landingHealth({
 	 })();
 
 		if (gitAt(repo, ["merge-base", "--is-ancestor", rev, mainSha]).code === 0) {
-			rows.push({ ref, verdict: "landed", age_s: age });
+			rows.push({ ref, verdict: "landed", stale: false, age_s: age, queue_status: "n/a — already in main", gate: null });
 			continue;
 		}
 		// ONE merge-tree call, stdout discarded: a conflicted merge-tree prints megabytes of hunk text (a probe

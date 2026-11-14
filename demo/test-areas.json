@@ -199,6 +199,7 @@
     ],
     "worktree": [
       "demo/self-merge-sla.test.mjs",
+      "demo/self-merge-seat.test.mjs",
       "demo/complete-teardown-root.test.mjs",
       "demo/land-changed-suite.test.mjs",
       "demo/land-helper.test.mjs",

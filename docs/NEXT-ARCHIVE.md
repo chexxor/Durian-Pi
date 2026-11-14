@@ -14818,3 +14818,132 @@ it; it is a SEAM (D212), not a feature, and its only consumer is the size gate. 
 effect window 19:11:35Z → 22:13:03Z (181 min, contains #7667/#7669 closing) done **+5.3/h**, queued **+4.6/h**. Both
 GROWING — **no causal claim**: closes and intake both fell while the fleet landed and `main` moved.
 
+
+
+## Pointer rows cut 2026-11-14 (delegate, self-merge window) — verbatim
+
+The rows below are the sha table from docs/NEXT.md as it stood before this window's re-cut (base `03bdbf4d`, 104 rows, newest row `dba822b1`). They are kept verbatim; the live pointer now carries only the `8b5a19e1..HEAD` range and links here for the rest.
+
+| sha | shipped |
+|---|---|
+| `851c3e9c` | docs(runbook): broker-down-or-stalled.md - the he… |
+| `8c0de873` | #5065: runbook row - a thin item worktree CAN run… |
+| `d34b15d1` | feat(tools): landing-closure probe (#4378) — a ro… |
+| `a15a5a48` | docs(dispositions): ledger row superseding #5611'… |
+| `6c8b0320` | #7601: re-anchor the stale G11 line pin in the sa… |
+| `5140de6e` | docs(roadmap+dispositions): #5501 — RM-318 closes… |
+| `d04f124d` | docs(spec,#7615): make the landing spec's numbers… |
+| `e375f724` | docs(dispositions): #7353 - register scribe-item-… |
+| `655c44e2` | N19 pool row 3: revise_work can annotate `require… |
+| `1782b495` | N19 pool doctrine: one paragraph in the shared co… |
+| `4ed6b8d0` | N19 pool tranche 1: read-only pool-migrate propos… |
+| `517dc58d` | N19 row 5 seam: usableContextBudget falls back to… |
+| `bfa0472e` | #5347 landing preflight: refuse on dirt the landi… |
+| `9780b0bf` | #5347 runbook (docs/runbooks/land.md): the pre-fl… |
+| `c91b3550` | docs(dispositions): #7371 - register scribe-item-… |
+| `3c9e6337` | docs(runbook): #7371 - land.md's remaining H2->H4… |
+| `36f57a36` | pool-migrate: read the roster through the seats D… |
+| `69a63baf` | docs(dispositions): #7372 - register scribe-item-… |
+| `657d8c60` | merge: land win/item-4786 onto main |
+| `c0f4709a` | #5459 runbook: the landing gate trips over the sp… |
+| `a6d2b6e7` | docs(decisions): #7373 - D122 mint status recorde… |
+| `06b5d2ec` | docs(dispositions): #7373 - register scribe-item-… |
+| `99250682` | N19 pool: record what shipped and was measured, a… |
+| `78bc0364` | pool: the live check finding on #7660, and the tr… |
+| `55d2fba1` | docs(runbook): #7374 - land.md's lock figures are… |
+| `dea8f63f` | docs(dispositions): #7374 - register scribe-item-… |
+| `1c0c5920` | pool: the gate is proven on the real roster, and … |
+| `2bfb9e43` | NEXT: the resident broker predates the skip-line … |
+| `f6177f21` | pool: narrow the annotation authority back to the… |
+| `02105352` | pool: print the refusal, record the LIVE roster r… |
+| `784bc2a9` | docs(runbook): #7375 - land.md's KEEP-ALL-SECTION… |
+| `a5fff83c` | docs(dispositions): #7375 - register scribe-item-… |
+| `c4b0ea7e` | pool: the gate refusing a project row from a byte… |
+| `d37bd216` | pool-gate-live-roster: the header still carried t… |
+| `5363e377` | NEXT: the sha table now names c4b0ea7e and d37bd2… |
+| `9caf9638` | #5819 runbook worktree-unlinked-deps: the pi-sche… |
+| `3f3de023` | #5819 runbook land.md: a landing proof is a tripl… |
+| `ac6b7a8a` | pool: the lifecycle doc stops contradicting the v… |
+| `2e5e8f18` | feat(landing): one queue split rule for the row s… |
+| `4f9e87d9` | pool: the LIVE scheduler now refuses #7700 by nam… |
+| `8abc961e` | NEXT: record the one 336/337 flake (restart-limit… |
+| `44da626c` | docs(test-areas): map demo/tui-queue-split.test.m… |
+| `35ff79f2` | NEXT: the broker record is five windows with the … |
+| `7008d11d` | NEXT: re-cut to 115 lines / 8.8 KB — the clockin … |
+| `1f6605db` | docs(dispositions): #7376 - register scribe-item-… |
+| `446c4084` | pool: the gate FIRED on two live seats — #7700 re… |
+| `06de1bba` | pool: delete the sentences that denied the live f… |
+| `a8bd182b` | docs(runbook): #7377 - date the race/lock measure… |
+| `28004fd0` | docs(dispositions): #7377 - register scribe-item-… |
+| `18c7a3b8` | NEXT: pool census re-read (5 pooled / 3 open; arc… |
+| `8135b68c` | docs(reviews, #5854): re-measure #4922's addendum… |
+| `f52b05e0` | fix(genlock, #5020): the lander's live-holder pro… |
+| `88ec4aeb` | docs(runbooks, #5020): land.md states what the la… |
+| `3fb50030` | pool: record the pause/unpause evidence and when … |
+| `5b8e3644` | NEXT: the sha table ends with a HEAD row so the p… |
+| `a3e8f7d4` | docs(reviews) #7515: content probe of the 119 alr… |
+| `0e6445f4` | docs(runbooks) #7515: stale-held-backlog gains ru… |
+| `0de543ae` | pool: unpause the fleet, fix the time-bomb demo, … |
+| `11290f1e` | NEXT: record the live window 1574499, the green -… |
+| `280d6ad3` | pointer: the fleet is unpaused and seen to drive … |
+| `8f4a63ce` | pointer: every shipped sha is a row, in commit or… |
+| `313c525b` | pointer+pitfalls: the suite numbers at HEAD, the … |
+| `54fa9649` | pointer: the re-leased window 1903310 is the one … |
+| `6f478c69` | merge: land item-4378 onto main |
+| `fb056834` | merge: land item-4812 onto main |
+| `847bb984` | merge: land item-5020 onto main |
+| `fafb14f9` | merge: land item-5065 onto main |
+| `1069cc89` | merge: land item-5347 onto main |
+| `8b803244` | merge: land item-5459 onto main |
+| `c7942ed8` | merge: land item-5501 onto main |
+| `dd7615a0` | merge: land item-5825 onto main |
+| `f0beb3d5` | merge: land item-7515 onto main |
+| `bc90acb9` | merge: land item-7601 onto main |
+| `33cee497` | merge: land item-7615 onto main |
+| `a0caa286` | merge: land item-5819 (append-only ledger conflic… |
+| `1977e058` | merge: land item-6002 (append-only ledger conflic… |
+| `70ae5124` | merge: land item-7371 (append-only ledger conflic… |
+| `03e3fe9d` | merge: land item-7372 (append-only ledger conflic… |
+| `d1e78382` | merge: land item-7373 (append-only ledger conflic… |
+| `81b77238` | merge: land item-7374 (append-only ledger conflic… |
+| `007cca82` | merge: land item-7375 (append-only ledger conflic… |
+| `9e9dab59` | merge: land item-7376 (append-only ledger conflic… |
+| `45ef4633` | merge: land item-7377 (append-only ledger conflic… |
+| `94f21a75` | merge-correction: place the #5819 runbook additio… |
+| `8d3f3dad` | merge-correction: restore the trailing newline th… |
+| `82a3c51d` | merge: land landing-20261114 onto main |
+| `ab96bf0b` | docs(dispositions): landing pass 2026-11-14 — 20 … |
+| `16166492` | docs+tools: landing-pass pitfalls 330-333 and the… |
+| `dd47ef89` | the pointer rewrite: the landing pass, 20 refs landed, item-6959 held, suite 341/341 |
+| `f3f72792` | docs(NEXT): the sha table names every commit in 03bdbf4d..HEAD (92 rows, tool-verified) |
+| `94eddcdd` | docs(NEXT): condense the pointer to 197 lines (the 200-line cap) + the previous carrier row |
+| `3c6d01fc` | docs(NEXT): suite numbers at HEAD, the pm route, pointer within the cap |
+| `cf42a577` | docs(decisions): D265 addendum — a conflicted ref is an anchor collision, not a verdict |
+| `62dee2d1` | fix(tools)+docs: branch-census mirrors the broker's `LIVE_STATUSES`; the prune pass, pitfall 334 |
+| `43223085` | merge: land landing-20261114-docs onto main — 43 conflicted refs union-resolved by rule, 37 colliding `## D<n>` re-minted D275..D311 |
+| `06cd45ae` | merge: land landing-20261114-c4 onto main — `item-4821`, `item-7702`, `item-7272`, containment proven |
+| `28690eb8` | feat(tools): chain-resolve + conflict-resolvability + merge-containment-proof, `demo/chain-resolve-rules.test.mjs`, 40 held-ref dispositions, pitfalls 335–338 |
+| `b3365b1c` | feat(tools): `conflict-hunk-shape` — hunk-level taxonomy of every conflict; the DISPOSITIONS count elision that turned `check`/`doc-count-drift`/`starter` green |
+| `78666643` | docs(pointer+SELFDEV): the pointer re-cut under the 200-line cap, pitfalls 339–340, suite 346/346 in 152.0 s |
+| `26f35059` | docs(dispositions): the seven wording-only hunks read in full — stale imports, provenance, one superseded pin |
+| `38deb7d1` | docs(pointer): rows for the two previous carriers, the run-list counts re-measured, pointer at 199 lines |
+| `3d07f9f5` | docs(pointer): the suite number at this HEAD, the POOL-QUEUE-SPEC pointer folded into the pool row |
+| `1a60386b` | docs(SELFDEV+NEXT): pitfall 343 (DECISIONS.md D265/D266 collide; `tools/probes/adr-number-collisions.mjs` exit 1), pitfall 342, suite 346/346 in 154.6 s |
+| `e6aad7a5` | merge: land landing-20261114-docsonly onto main — `item-6537`, `item-6549` union-resolved by rule, containment proven 0 loss, docs area 8/8 |
+| `f2959764` | tools+docs: `chain-resolve` rules 8–9 (import union + link proof, provenance union), classes `I`/`P` + `--with-text` in `conflict-hunk-shape`, DISPOSITIONS correction, pitfall 344 — check 15/15 in 5.6 s, suite 346/346 in 151.6 s |
+| `8b5a19e1` | merge: land landing-20261114-c10 onto main — `item-6173` (seat restart limit 3 at the `openHarness` seam) + `item-6238` (pi-pin / unlinked-deps runbooks), containment proven 0 loss, suite 347/347 in 153.9 s |
+| `4b52ecc8` | tools(ref-recut --refresh, conflict-blocks --full/--census): the re-cut instruments, measured 25 refs in 4.7 s |
+| `1751a3c2` | merge: land item-6343/6374/6435/6664/7090 recuts (scripts/land.mjs --changed-suite, derived gate 73/354 green) |
+| `9ddf8c4c` | absorb item-5002 (content already in main verbatim; tree unchanged; ref kept) |
+| `42983b07` | absorb item-6177 |
+| `c600a2a9` | absorb item-6268 |
+| `199ebd70` | absorb item-6314 |
+| `b055d6a4` | absorb item-6326 |
+| `1f90d7e8` | absorb item-6336 |
+| `25a082f9` | absorb item-6562 |
+| `9a7ac64b` | absorb item-6643 |
+| `a9b0d007` | absorb item-7158 (item-7448 follows as its ancestor) |
+| `af86fefe` | docs+tools: absorb-refs.mjs, disposition-rows.mjs, merge-containment-proof --all-lost; 19 disposition rows + verbatim residue |
+| `1872bc25` | docs(NEXT): the conflict pass closed out - 19 ancestors, 17 held with residue; the self-merge seam is next |
+| `4ad4c38e` | docs(NEXT): add this window's five commit rows so tools/pointer-sha-coverage.mjs stays honest |
+| `dba822b1` | docs(NEXT): register this window's commit rows so tools/pointer-sha-coverage.mjs stays honest |

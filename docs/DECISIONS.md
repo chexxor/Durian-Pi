@@ -13363,3 +13363,42 @@ is worth:
 **Options considered.** (a) every queue verb dirties the scheduler — rejected: duplicates a trigger that provably works, gives two owners of the dirty bit, and still misses the suppression that loses the wake. (b) scheduler re-reads the store each turn — rejected on measurement: the harness's own view is cached, so the poll would read stale state; a raw read is a second reader (P5/#110) and the cadence is what hot-looped the broker in #2237. (c) bounded heartbeat alone — accepted only as a backstop: it cannot see what the harness cannot see, and it adds passes. Trade-off accepted: a slightly wider parked signature (more wakes on gate churn, bounded by the existing dedup) in exchange for making stranded gates visible.
 
 **Consequences.** A wake predicate that reads derived state must read the *same* derived state as the release refusal, or the two disagree and a seat is woken for work it cannot claim — the contradiction class #5438 already recorded. The diagnostic line is worthless unless `status`/checkup surfaces it; checkup's rule count is 23 and none of WORK-ITEM-SCHEMA §8's five is implemented, so the rule belongs with #6659, not before it. Separately: `src/commitstream.mjs` attaches with the 1.5.1 observer-object contract while the npm-pinned 1.3.0's `observeCommits` takes a function and routes it to the session's *internal* listener set, so the first publish throws and the session fails (`node_modules/@earendil-works/pi-durable/dist/session/session.js:371`); a worktree that resolves 1.3.0 has a dormant broker with no symptom. The attach should feature-detect and refuse loudly.
+
+## D314 — The authoring seat lands its own item; the base only supplies the seam (2026-11-14, delegate, goal mwg3lsdp-waokdl)
+
+**Decision.** Landing an item worktree is part of the item, not a later coordinator step. A seat that authored a
+branch runs `landing_health` and then `land_my_item` in the same session it committed; the verb shells out to
+`scripts/land.mjs` — the rig's one chokepoint — merges in a scratch worktree, runs the DERIVED gate there, and
+fast-forwards **local main only**. `cli.mjs check` carries a rule of `error` severity, `ready-ref-stale`, so a
+ready ref that sits past the SLA (default 24 h) fails the audit rather than reading as a note. Nothing in this
+path can push.
+
+**Context.** Measured 2026-11-14 on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node
+v24.22.1, git 2.56.0: `node tools/self-merge-sla.mjs --db ./selfdev.sqlite` reads 197 refs in 9.2 s wall clock
+(the tool's own `elapsed_s` 7.7 s) and reports `{conflicted: 52, landed: 138, ready: 5, ready-unverified: 2}`,
+0 stale at 24 h. The backlog is not a permission problem: `src/seatguard.mjs` does not block
+`scripts/land.mjs` (measured `shellWriteRefusal` → `block: null` for that command from an item worktree,
+`docs/runbooks/land.md` "Why a landing stalls"). What was missing was a named verb, a stated cost, and a rule
+that says when the landing is due.
+
+**Alternatives considered.** (a) Put the landing verb in the base — rejected: D212 says customization goes on the
+extension plane, and "who lands and when" is team policy, not substrate. The base gained exactly one seam
+(`auditRig` takes `extensionRules`/`extensionFindings`/`extensionSkipped` at `src/checkup.mjs:504`;
+`src/extensions.mjs` declares `checks`), which is the smallest change that lets a team rule arrive without
+entering the base. (b) Let a seat `git merge` into main by hand — rejected: that is the failure mode
+`src/landinggate.mjs` (#6090) and the #4247 shared-root guard exist to close. (c) Make "ready" mean "gate
+passed" — rejected: git can prove cleanliness and ancestry without running anything, and a rule that runs the
+suite for every ref is a 120 s audit. "Ready" is a git-mechanical state; `scripts/land.mjs --changed-suite`
+remains the proof.
+
+**Consequences.** Three demos gate it, all model-free and store-free:
+`demo/self-merge-seat.test.mjs` (0.94 s — the verb executed with cwd = the seat's own worktree advances main, the
+derived gate is recorded, a branch naming an item the seat does not hold is refused, and the check rule fires on a
+48 h-old ready ref → audit `status fail`, `exitCode 1`), `demo/self-merge-plan.test.mjs` (0.17 s — five refusals
+and the exact argv, no `push`), `demo/self-merge-sla.test.mjs` (0.47 s — every verdict, staleness as a threshold).
+The instrument also found its own bug on first live use: the rule's finding mapped over `result.rows`, naming
+already-landed refs as debt (a landed row carries no `land_command`); it maps `stale_rows` now, and landed rows
+carry `stale: false` so no other consumer trips on a missing field.
+**Still unproven:** a live seat conversation calling `land_my_item` on the running fleet. The broker was down for
+this window (`node tools/broker-serve.mjs --status` → `broker: down`); waking the fleet is a capacity grant the
+operator holds.

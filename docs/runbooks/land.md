@@ -1067,3 +1067,61 @@ cleared-to-land was superseded by #3260's rebase pass — ownership ambiguous), 
 rather than leaving the shared tree mid-merge. If `main` is red before the pass, land the row that *fixes* the red
 first (today that is **#5398**, whose 28 KB deferred dump is the whole digest overrun). After the pass, re-fast-forward
 the seat root to `main`, or the next `prepare_workspace` forks from a stale base.
+
+## Seat self-merge (the default): the author lands their own item, in the same session (measured 2026-11-14, delegate)
+
+**Symptom this closes.** A seat's branch is committed, green and ready — and it sits for days because landing is
+someone else's step. On 2026-11-14 the census (`node tools/self-merge-sla.mjs --db ./selfdev.sqlite`, 197 refs,
+9.2 s wall clock) found 52 conflicted, 138 landed, 5 ready and 2 ready-unverified: the work was done and the
+`main` pointer had not moved. The seat guard never blocked it (see *Why a landing stalls* above, measurement 2);
+there was simply no named verb, no stated cost, and no rule saying when the landing is due.
+
+**The policy lives on the extension plane (D212).** `extensions/self-merge.mjs` is loaded only through the
+explicit `DURIG_EXTENSIONS` list (`src/extensions.mjs` has no auto-discovery, on purpose). On this rig it is armed
+in the gitignored machine config:
+
+```bash
+grep DURIG_EXTENSIONS durig.config.json   # -> "extensions/continuity.mjs, extensions/self-merge.mjs"
+```
+
+The base gained exactly one seam for this: `auditRig` accepts `extensionRules` / `extensionFindings` /
+`extensionSkipped` (`src/checkup.mjs:504`) and `src/extensions.mjs` lists `checks` as a declarable. A seat verb is
+an extension; the merge itself is still `scripts/land.mjs`, the chokepoint.
+
+**What a seat does, in order** (from inside its own item worktree):
+
+```bash
+landing_health                      # which of my refs are ready, and how long they have waited
+land_my_item                        # merge my branch in a scratch, run the derived gate there, FF local main
+```
+
+Both are defined in `extensions/self-merge.mjs`; `land_my_item` shells out to the rig's own helper, and its argv is
+`["node","scripts/land.mjs",<branch>,"--repo",<shared root>,"--db",<store>,"--changed-suite"]` — the same command a
+delegate runs, with the shared root resolved from `git worktree list` so a seat in a linked worktree cannot land
+into the wrong repository (#4247). **It never contains `push`**; publishing is the operator's grant.
+
+**Read the verdict, not the wish.** `landing_health` answers with git facts, not intentions: `landed` (an ancestor
+of main), `conflicted` (merge-tree exits 1 — needs an author re-cut, `docs/runbooks/branch-cleanup.md`),
+`poisoned-committed-markers`, `no-op-ref` (its tree already equals main's: `tools/absorb-refs.mjs` is the verb),
+`ready` (clean, no markers, changes main's tree, queue row `done`), `ready-unverified` (the git facts hold and the
+queue row could not be read — the missing fact is named, not guessed), and `in-flight` (the row is still claimed).
+"Ready" is not "verified": the proof is `scripts/land.mjs --changed-suite` green in the scratch.
+
+**The rule that makes it happen on time.** `cli.mjs check` runs the extension rule `ready-ref-stale` (severity
+`error`, so `check` exits 1): a ref that is ready and older than the SLA — default 24 h, override
+`DURIG_SELF_MERGE_SLA_HOURS` — is a finding with the exact landing command as its fix. Measured
+`node cli.mjs check rig.selfdev.json --json` → 14.3 s, `{id: "ready-ref-stale", status: "pass", found: 0}`.
+
+**Proof that it works, in the suite (no model, no store, no network):**
+
+```bash
+node demo/self-merge-seat.test.mjs    # 0.94 s — a seat verb run with cwd = its own worktree advances main,
+                                      #   the derived gate is recorded, an unheld branch is refused, and the
+                                      #   check rule FIRES on a 48 h old ready ref (exit 1)
+node demo/self-merge-plan.test.mjs    # 0.17 s — five refusals and the exact argv
+node demo/self-merge-sla.test.mjs     # 0.47 s — every verdict, and staleness as a threshold, on a git fixture
+```
+
+**What is still owed:** a live fleet run. The mechanism is gated; a real seat conversation has not yet been
+observed calling `land_my_item` on the live rig (the broker was down for this window —
+`node tools/broker-serve.mjs --status`). Waking the fleet is a capacity decision the operator makes.

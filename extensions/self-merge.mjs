@@ -218,10 +218,14 @@ export const selfMergeExtension = defineExtension({
 			 const result = landingHealth({ repo, db, slaHours: sla });
 			 if (result.error) return { skipped: `git could not be read here: ${result.error}` };
 				if (result.stale === 0) return { findings: [] };
+				// Only the STALE rows become findings: a ref that is ready but young, or one already in
+				// main, is not landing debt. (Map over `stale_rows`, not every row — mapping all rows is
+				// how a landed ref got named as overdue, and landed rows carry no land_command at all.)
 				return {
-					findings: result.rows.map((r) => ({
+					findings: result.stale_rows.map((r) => ({
+						id: SELF_MERGE_RULE.id,
 						subject: r.ref,
-						detail: `${r.ref} is ready to land and has waited ${r.age_h} h (SLA ${sla} h); queue status ${r.queue_status}, derived gate ${r.gate.derivedTests} test(s)`,
+						detail: `${r.ref} is ready to land and has waited ${r.age_h} h (SLA ${sla} h); queue status ${r.queue_status}, derived gate ${r.gate?.derivedTests ?? 0} test(s)`,
 						fix: r.land_command,
 					})),
 					measured: { refs: result.refs, landed: result.counts.landed ?? 0, ready: result.counts.ready ?? 0, elapsed_s: result.elapsed_s },
