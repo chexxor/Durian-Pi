@@ -6,8 +6,8 @@
 // distinguish — landed, conflicted, poisoned-committed-markers, no-op-ref, ready — and pins which one is
 // STALE and which is not.
 //
-// Run: node demo/self-merge-sla.test.mjs      (measured 2026-11-14, Linux Fedora Linux 45, kernel
-// 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0 — ~1.5 s; git + node only, no store, no model)
+// Run: node demo/self-merge-sla.test.mjs      (measured 2026-11-14, Linux, Fedora Linux 45 (Forty Five),
+// kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0 — 0.47 s; git + node only, no store, no model)
 //
 // What it proves, in order:
 //   1. every verdict the tool can print is produced by the fixture that should produce it
@@ -20,6 +20,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { landingHealth } from "../tools/self-merge-sla.mjs";
+
+/* Every date in this fixture is RELATIVE to the moment the demo runs. Absolute dates make the test a time
+ * bomb: a ref written "48 h ago" is 48 h old the day it is committed and 96 h old a week later, so a 24 h SLA
+ * assertion depends on the calendar instead of the rule (measured 2026-11-14: the fixture reported stale=2
+ * because the branch meant to be 'in flight' had aged past the SLA). */
+const NOW = Date.now();
+const hoursAgo = (h) => new Date(NOW - h * 3600 * 1000).toISOString();
 
 const repo = mkdtempSync(join(tmpdir(), "durig-self-merge-sla-"));
 const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -35,7 +42,7 @@ function init() {
 	git("init", "-q", "-b", "main");
 	writeFileSync(join(repo, "a.txt"), "first\n");
 	git("add", "a.txt");
-	commitAt("2026-11-01T00:00:00Z", "main: initial");
+	commitAt(hoursAgo(72), "main: initial");
 }
 
 init();
@@ -48,7 +55,7 @@ git("branch", "item-101", "main");
 git("checkout", "-q", "item-101");
 writeFileSync(join(repo, "b.txt"), "ready work\n");
 git("add", "b.txt");
-commitAt("2026-11-12T00:00:00Z", "item-101: the work");
+commitAt(hoursAgo(48), "item-101: the work");
 git("checkout", "-q", "main");
 
 /* 3. CONFLICTED — both sides rewrite the SAME line, so merge-tree exits 1. */
@@ -56,18 +63,18 @@ git("branch", "item-102", "main");
 git("checkout", "-q", "item-102");
 writeFileSync(join(repo, "a.txt"), "branch-side\n");
 git("add", "a.txt");
-commitAt("2026-11-12T01:00:00Z", "item-102: my side of the line");
+commitAt(hoursAgo(46), "item-102: my side of the line");
 git("checkout", "-q", "main");
 writeFileSync(join(repo, "a.txt"), "main-side\n");
 git("add", "a.txt");
-commitAt("2026-11-13T00:00:00Z", "main: the same line moved too");
+commitAt(hoursAgo(44), "main: the same line moved too");
 
 /* 4. POISONED — merges clean, but the tip carries a committed conflict marker. */
 git("branch", "item-104", "main");
 git("checkout", "-q", "item-104");
 writeFileSync(join(repo, "c.txt"), "<<<<<<< HEAD\nresolved by nobody\n=======\nthe other side\n>>>>>>> main\n");
 git("add", "c.txt");
-commitAt("2026-11-12T02:00:00Z", "item-104: markers committed");
+commitAt(hoursAgo(45), "item-104: markers committed");
 git("checkout", "-q", "main");
 
 /* 5. NO-OP — a branch AHEAD of main whose tree is main's tree (an empty commit). This is the case
@@ -77,7 +84,7 @@ git("branch", "item-105", "main");
 git("checkout", "-q", "item-105");
 	execFileSync("git", ["-c", "user.email=test@example.invalid", "-c", "user.name=test", "commit", "-q", "--allow-empty", "-m", "item-105: a commit that changes nothing"], {
 		cwd: repo,
-		env: { ...process.env, GIT_AUTHOR_DATE: "2026-11-12T03:00:00Z", GIT_COMMITTER_DATE: "2026-11-12T03:00:00Z" },
+		env: { ...process.env, GIT_AUTHOR_DATE: hoursAgo(45), GIT_COMMITTER_DATE: hoursAgo(45) },
 		stdio: ["ignore", "pipe", "ignore"],
 	});
 git("checkout", "-q", "main");
@@ -87,8 +94,7 @@ git("branch", "item-106", "main");
 git("checkout", "-q", "item-106");
 writeFileSync(join(repo, "e.txt"), "fresh work\n");
 git("add", "e.txt");
-const nowIso = new Date(Date.now() - 3600 * 1000).toISOString();
-commitAt(nowIso, "item-106: fresh");
+commitAt(hoursAgo(1), "item-106: fresh");
 git("checkout", "-q", "main");
 
 /* 7. IN FLIGHT — merges clean, but the queue row is still claimed, so it is not ready. */
@@ -96,7 +102,7 @@ git("branch", "item-107", "main");
 git("checkout", "-q", "item-107");
 writeFileSync(join(repo, "f.txt"), "work in progress\n");
 git("add", "f.txt");
-commitAt("2026-11-13T12:00:00Z", "item-107: still working");
+commitAt(hoursAgo(6), "item-107: still working");
 git("checkout", "-q", "main");
 
 const status = new Map([[101, "done"], [102, "done"], [104, "done"], [105, "done"], [106, "done"], [107, "claimed"]]);
@@ -130,10 +136,13 @@ console.log("\n=== 3. the CLI's exit code is the code a gate can use ===");
 // item-102 conflict), so a capture taken at init would compare against a tree that no longer exists.
 const mainBefore = git("rev-parse", "main");
 const refsBefore = git("for-each-ref", "--format=%(refname:short)", "refs/heads").split("\n").filter(Boolean);
-const cli = spawnSync("node", [join(process.cwd(), "tools", "self-merge-sla.mjs")], { cwd: repo, timeout: 60000 });
+// Point the store at a file that does not exist IN THE FIXTURE, so the run is deterministic no matter what
+// DURIG_DB the suite runner has in the environment: the fixture has no queue, and the tool must still make
+// verdicts from git alone (it reports them as `ready-unverified` rather than guessing).
+const cli = spawnSync("node", [join(process.cwd(), "tools", "self-merge-sla.mjs")], { cwd: repo, timeout: 60000, env: { ...process.env, DURIG_DB: join(repo, "no-such-store.sqlite") } });
 assert.equal(cli.status, 1, "the CLI exits 1 when a ready ref is overdue — the same code check gates on");
 const printed = JSON.parse(cli.stdout.toString());
-assert.equal(printed.stale, 1, "the CLI's own JSON names exactly one stale ref");
+assert.equal(printed.stale, 1, `the CLI's own JSON names exactly one stale ref (got ${printed.stale}: ${printed.stale_rows.map((r) => `${r.ref}/${r.verdict}/${r.age_h}h`).join(", ")})`);
 assert.ok(cli.stderr.toString().includes("scripts/land.mjs"), "and the refusal tells you the command to run");
 assert.ok(!cli.stderr.toString().includes("push"), "the remedy it names never contains a push — landing is local main only");
 assert.ok(printed.land_command === undefined || !printed.land_command.includes("push"), "no land_command suggests a push");

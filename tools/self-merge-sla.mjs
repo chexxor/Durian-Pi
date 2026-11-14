@@ -34,9 +34,10 @@
 // It writes nothing: no merge, no delete, no push. Refs are never removed (rule R-B #3270).
 //
 // Cost (measured 2026-11-14, Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node
-// v24.22.1, git 2.56.0, 197 refs / 59 unlanded): **10.5 s** — the printed `elapsed_s` is the number to trust;
+// v24.22.1, git 2.56.0, 197 refs / 59 unlanded): **7.7 s** — the printed `elapsed_s` is the number to trust;
 // `--json` on a subset of 3 refs is 2.1 s. The queue read is the only subprocess other than git.
-// last_verified: 2026-11-14, `node demo/self-merge-sla.test.mjs` exit 0.
+// last_verified: 2026-11-14, `node demo/self-merge-sla.test.mjs` exit 0 and `node scripts/test.mjs --area
+// worktree` 26/26 in 8.9 s.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -132,9 +133,11 @@ export function landingHealth({
 			rows.push({ ref, verdict: "landed", age_s: age });
 			continue;
 		}
+		// ONE merge-tree call, stdout discarded: a conflicted merge-tree prints megabytes of hunk text (a probe
+		// that buffered it OOM'd at 4 GB), and the verdict is the EXIT CODE, not the output. Whether the ref
+		// changes main's tree is answered by the ref's OWN tree oid — cheaper than a second merge-tree.
 		const mtCode = gitAt(repo, ["merge-tree", "--write-tree", mainSha, rev], { discardStdout: true }).code;
-		// Only a CLEAN merge-tree prints one line (the tree oid); that is the only case its stdout is read.
-		const mergeTreeOid = mtCode === 0 ? gitAt(repo, ["merge-tree", "--write-tree", mainSha, rev]).out.split("\n")[0] : null;
+		const refTree = gitAt(repo, ["rev-parse", `${rev}^{tree}`]).out;
 		const markers = gitAt(repo, ["grep", "-l", "^<<<<<<<", rev], { discardStdout: true });
 		const itemId = Number((ref.match(/(\d+)/) || [])[0] ?? null);
 		const status = itemId !== null ? itemStatus?.get(itemId) ?? "no-row" : "no-row";
@@ -142,7 +145,7 @@ export function landingHealth({
 		let verdict;
 		if (mtCode === 1) verdict = "conflicted";
 		else if (markers.code === 0) verdict = "poisoned-committed-markers";
-		else if (mergeTreeOid === mainTree) verdict = "no-op-ref";
+		else if (refTree === mainTree) verdict = "no-op-ref";
 		else if (status === "done") verdict = "ready";
 		else if (status === "no-row") verdict = "ready-unverified";
 		else verdict = "in-flight";
@@ -170,7 +173,7 @@ export function landingHealth({
 			age_s: age,
 			age_h: age === null ? null : +(age / 3600).toFixed(1),
 			queue_status: status,
-		ruled: ledger && ledger.includes(ref) ? "DISPOSITIONS row" : null,
+			ruled: ledger && ledger.includes(ref) ? "DISPOSITIONS row" : null,
 			gate: { changedPaths: changedPaths.length, derivedTests: selected.length, areas: [...new Set(selected.map((t) => areaOf.get(t)).filter(Boolean))] },
 			land_command: `node scripts/land.mjs ${ref} --repo ${repo} --db ${db} --changed-suite`,
 		});
