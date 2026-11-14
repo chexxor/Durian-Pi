@@ -12,9 +12,10 @@
 // event shapes src/inflight.mjs, src/guard.mjs and src/tui/durable/bridge.mjs already speak.
 //
 // WHAT IS APPROXIMATE, SAID OUT LOUD:
-//   - Deltas arrive at pi.live's commit cadence, not per token. With `settings.progress.persistWithinMs`
-//     at its 1,000 ms default the TUI's streaming is coarser than it was. The cadence is a seat
-//     decision (ROADMAP 355), not something this module invents.
+//   - Deltas arrive at pi.live's commit cadence, not per token. `settings.progress.persistWithinMs` is PINNED
+//     by the rig at 1,000 ms (`progressSettings` in src/config.mjs, #6211 / lead ruling #6172) rather than
+//     inherited, so this module is a compatibility layer over a stored cadence and the surface of record is
+//     `watchDoc()`. The cadence is a seat decision (ROADMAP 355), not something this module invents.
 //   - `turn_start`/`turn_end` are derived from the generation attempt, not from a turn record; a
 //     multi-turn run may see one `turn_start` per attempt rather than per turn.
 //   - Nothing here writes. It is a read-attach, exactly like the stream it replaces.

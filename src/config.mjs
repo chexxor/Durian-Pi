@@ -157,6 +157,11 @@ export const CONFIG_KEYS = [
 	"DURIG_LOCAL_PRICE_AS_OF",
 	"DURIG_LOCAL_PRICE_JSON",
 	"DURIG_STREAM_TIMEOUT_MS",
+	// #6211 (lead ruling from #6172, ROADMAP 355 item 1): the progress-persist cadence is a RIG decision.
+	// The key exists so the tuning rule has somewhere to land — a measured smaller EXPLICIT value (e.g. 250)
+	// is allowed, 0 is refused by `progressSettings`. Unset means the pinned default below, never an
+	// upstream default we never chose.
+	"DURIG_PROGRESS_PERSIST_WITHIN_MS",
 	"DURIG_STRANDED_MS",
 	"DURIG_CONTEXT_WINDOW",
 	// THE POOL SIZE GATE (N19 "The Pool", docs/POOL-QUEUE-SPEC.md §6.2, build row 0). Registered so a config
@@ -374,6 +379,46 @@ export async function loadConfig({ env = {}, readFile, defaults = {}, defaultsSo
  * @param {Record<string, unknown>} [config]
  * @returns {{stream?: {timeoutMs: number}}}
  */
+/*
+ * #6211 (lead ruling from #6172; ROADMAP 355 item 1): pi-durable 1.5.x defers partial answers and
+ * running tool output to storage within `settings.progress.persistWithinMs`, and a `subscribeCommits()`
+ * listener only sees those commits once they are stored. Upstream ships that value at 1,000 ms.
+ *
+ * We do NOT inherit it. Two reasons, both measured in this rig:
+ *   - 0 makes every token a transaction against the store the broker already writes — the load
+ *     ROADMAP 331 names ("database is locked"), and write-lock contention is already open enough to
+ *     have its own investigation (#2482). Render granularity is a UI concern; store contention is a
+ *     shared-resource concern that touches every seat. Where the two conflict, the shared resource wins.
+ *   - an unconfigured default is an unmade decision: the value governing behaviour is invisible in our
+ *     tree, and an upstream change silently changes rig behaviour — the same class of problem as the
+ *     unconfigured `restartLimit`.
+ *
+ * WHAT THIS GIVES UP, stated plainly: live progress is at most 1-second granular, not per-token.
+ * src/commitstream.mjs and src/livewatch.mjs ride that stored cadence and say so in their headers.
+ * TUNING RULE: if measurement later shows 1 s starves the live view, the answer is a smaller EXPLICIT
+ * value (e.g. 250 ms) chosen against measured lock contention — never 0.
+ */
+export const PROGRESS_PERSIST_WITHIN_MS = 1000;
+
+/**
+ * The harness `progress` settings, always explicit.
+ * @param {Record<string, unknown>} [config]
+ * @returns {{progress: {persistWithinMs: number}}}
+ */
+export function progressSettings(config) {
+	const raw = config?.DURIG_PROGRESS_PERSIST_WITHIN_MS;
+	if (raw === undefined || raw === null || raw === "") return { progress: { persistWithinMs: PROGRESS_PERSIST_WITHIN_MS } };
+	const ms = Number(raw);
+	// Fail loudly, and refuse 0 outright: 0 is the per-token transaction load this pin exists to avoid,
+	// so a rig that asks for it is asking for the contention, not tuning around it.
+	if (!Number.isFinite(ms) || ms <= 0) {
+		throw new Error(
+			`DURIG_PROGRESS_PERSIST_WITHIN_MS must be a positive number of milliseconds (0 is refused: it makes every token a store transaction — see ROADMAP 331/#2482), got: ${raw}`,
+		);
+	}
+	return { progress: { persistWithinMs: ms } };
+}
+
 export function streamSettings(config) {
 	const raw = config?.DURIG_STREAM_TIMEOUT_MS;
 	if (raw === undefined || raw === null || raw === "") return {};

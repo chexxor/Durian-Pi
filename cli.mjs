@@ -62,8 +62,8 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings } from "./src/config.mjs";
-import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs";
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings, progressSettings } from "./src/config.mjs"
+import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs"
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
 import { contextConsumption } from "./src/context.mjs";
@@ -535,7 +535,7 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       models,
       registry,
       env: makeSeatEnv(seatRoster),
-      // `stream` AND `compaction` are configurable here; everything else keeps pi-durable's
+      // `stream`, `compaction` and `progress` are configurable here; everything else keeps pi-durable's
       // built-in defaults, which were chosen deliberately and which nothing in durian-pi's use argues
       // against. Compaction was added because the ABSENCE of a policy was a measured defect (#4898):
       // the defaults (reserve 16384 / keepRecent 20000 / background 32768) sit above the whole
@@ -544,7 +544,11 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       // work. See `streamSettings` and `compactionSettings` for why each one matters.
       // `restartLimit` is set HERE and nowhere else (#6173 / ROADMAP 355 C): pi-durable's default is 5 and
       // an unconfigured seat silently runs it. One seam, one value — see `runControlSettings`.
-      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG) },
+      // `progress` is here because 1.5.x defers partial answers and running tool output to storage within
+      // `persistWithinMs` (upstream default 1,000 ms), and a `subscribeCommits` listener only sees those
+      // commits once stored. The rig PINS that value rather than inheriting it — see `progressSettings`
+      // (#6211, lead ruling from #6172) for why 1,000 ms and why not 0.
+      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG), ...progressSettings(CFG) },
     },
     BACKGROUND_CONTEXT,
   );
