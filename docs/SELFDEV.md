@@ -4444,7 +4444,7 @@ at `:743`). Re-measure every `path:line` before repeating it.
     cannot trust. Fixed in place: the tool mirrors the broker's list and honours `keepReason === "live"`. The general
     rule: when a delegate tool and the base disagree about a state name, read the base, do not infer the set.
 
-## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-340, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+## Operational pitfalls (delegate conflict-resolution pass 2026-11-14 — numbered 335-342, continuing from 334; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
 
 335. **`git diff` omits `,1` in a one-line hunk header.** `@@ -1 +1 @@`, not `@@ -1,1 +1,1 @@`. A hunk parser
    written as `/^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/` silently drops every single-line hunk, so a conflicted file
@@ -4487,3 +4487,16 @@ at `:743`). Re-measure every `path:line` before repeating it.
    `item-5301-resolved`, `item-6173`, `item-6211`, `item-6343`, `item-6643`, `item-6664`) and together carry 23
    ref-only lines that a "main wins" rule would drop — which is a ruling the operator has not granted, so
    `tools/chain-resolve.mjs` rule 7 refuses them. Sequence the re-cut by hunk count, not by ref id.
+341. **A `wording-only` hunk in a code file is usually a stale API reference, not wording.** Seven of the 40 held
+   refs have no `E` hunk, so a side-picking rule looks safe. Read the hunk: four of them are a `cli.mjs` **import**
+   line, and the two lines share ~95% of their content words — which is exactly why the `G` classifier calls it a
+   paraphrase. The ref side names `reapWorktrees`, `runControlSettings`, `progressSettings`; on main
+   `grep -c reapWorktrees src/broker.mjs` = **0** and `grep -rn "runControlSettings\|progressSettings" src/ cli.mjs`
+   = **0 hits**. A merge cannot decide who verified what either (`verified_by: architect` vs `verified_by: impl`,
+   `docs/runbooks/continuation-notes.md`). Rule: before proposing any "main wins" rule, dump the hunk and grep the
+   symbols. `docs/DISPOSITIONS.md` §"Addendum, 2026-11-14" carries the seven, verbatim.
+342. **The patch lane is a cheap second opinion, and here it says the same thing.** For each held ref, apply the ref's
+   OWN diff onto main's tree — one shell line, no worktree: `git diff "$(git merge-base main <ref>)" <ref> | git apply
+   --check -` (`.spike/patch-apply-probe.mjs` loops it over 40 refs in ~2 s). Result: **0 of 40 apply cleanly** — every
+   held ref touches lines main has already rewritten. Run it before anyone proposes a bulk merge; a ref whose merge is
+   clean AND whose patch applies is the only case where landing is obviously safe.

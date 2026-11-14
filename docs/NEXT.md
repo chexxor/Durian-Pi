@@ -106,7 +106,7 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `06cd45ae` | merge: land landing-20261114-c4 onto main — `item-4821`, `item-7702`, `item-7272`, containment proven |
 | `28690eb8` | feat(tools): chain-resolve + conflict-resolvability + merge-containment-proof, `demo/chain-resolve-rules.test.mjs`, 40 held-ref dispositions, pitfalls 335–338 |
 | `b3365b1c` | feat(tools): `conflict-hunk-shape` — hunk-level taxonomy of every conflict; the DISPOSITIONS count elision that turned `check`/`doc-count-drift`/`starter` green |
-| *(this commit)* | docs(pointer)+docs(SELFDEV): pitfalls 339–340, the pointer re-cut under the 200-line cap — exempt: it carries this file |
+| *(this commit)* | docs+tools: the seven wording-only hunks read in full, pitfalls 339–342, the pointer re-cut under the 200-line cap — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
@@ -116,8 +116,7 @@ loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open every window 
 before closing. Liveness is the last ` PASS ` line (pitfall 304), never the pid.
 
 **The fleet is UNPAUSED and was seen to DRIVE.** Closed at **`00:19:28Z`** by `node cli.mjs unpause`, verified on a
-**broker** `status --json` (never `--local`; pitfall 326): `control {paused:false}`; the `01:01:21Z` window's
-`PASS 1 … woke=` names all eleven non-auditor seats. Re-read the state, do not trust this line.
+**broker** `status --json` (never `--local`; pitfall 326): `control {paused:false}`. Re-read the state, do not trust this line.
 
 **Host for every number here**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
@@ -134,8 +133,8 @@ One ref did NOT land: `item-6959` adds `demo/noop-wake-census.test.mjs` with no 
 derived gate refused it — routed to `pm`, ref kept.
 
 **Older current item, still true:** the **N19 pool is CLOSED** — the gate fired on live seats (#7700 refused by
-`architect` and `pm` as `too-big`); re-read the roster with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s, read-only)
-rather than trusting this line. The window seam is in `src/config.mjs` (`usableContextBudget`), a SEAM (D212).
+`architect` and `pm` as `too-big`); re-read it with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s, read-only). The
+window seam is in `src/config.mjs` (`usableContextBudget`), a SEAM (D212).
 
 **Run these first** (measured on this box; re-measure rather than trust):
 
@@ -143,10 +142,9 @@ rather than trusting this line. The window seam is in `src/config.mjs` (`usableC
 cd /home/chexxor/Git/Durian-Pi
 timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — prune plan now returns (0)
 timeout 120 node tools/landing-batch-plan.mjs --max 12                        # ~13 s — RE-RUN after every bin (pitfall 330)
-node cli.mjs worktree audit --json                                            # ~1 s — 123 worktrees now open
+node cli.mjs worktree audit --json                                            # ~1 s — 128 worktrees open, 133 refs, 93 clean / 40 conflicting
 node scripts/test.mjs --all --jobs 4                                          # ~155 s — the honest number is below
 grep ' PASS ' selfdev.sqlite.broker.log | tail -1; cat selfdev.sqlite.broker.json   # liveness is the last PASS line
-node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.8 s — every pool row + transitions
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.2 s — exit 1 if this file skips a shipped sha
 ```
@@ -154,40 +152,42 @@ node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.
 **Blocker:** the mechanical lane is **exhausted** — 46 refs landed, **40 still conflict with `main` and cannot be merged
 by rule**. Measured hunk by hunk (`node tools/conflict-hunk-shape.mjs --refs <held> --json .spike/hunk-shape.json`, 2 s):
 **175 hunks — 128 semantic, 34 paraphrase, 4 stale-number, 4 unionable, 2 append-collisions; zero of the 40 fully
-mechanical.** Seven have no semantic hunk at all and carry 23 ref-only lines a "main wins" rule would drop
-(`item-5301`, `item-5301-resolved`, `item-6173`, `item-6211`, `item-6343`, `item-6643`, `item-6664`);
-`tools/chain-resolve.mjs` refuses them with "anchor/edit not locatable" until the ruling above is granted. The other 33
-are an author re-cut per docs/runbooks/branch-cleanup.md Step 0b/0d, all 40 recorded row-by-row in
-`docs/DISPOSITIONS.md` ("Conflict-resolution pass, 2026-11-14") with the vanished lines and the exact command that lands
-them once re-cut. `item-7232` is the sharpest case: it merges cleanly but its failing-first test is red without
-`item-6556`'s `src/rig.mjs` change, which is itself conflicted — land the pair or neither. The census reports
-`needsLanding: 0`; the residue is the 40 held refs, not unlanded clean ones.
+mechanical.** Seven have no semantic hunk at all (`item-5301`, `item-5301-resolved`, `item-6173`, `item-6211`,
+`item-6343`, `item-6643`, `item-6664`) — reading them in full shows they are stale imports and provenance disputes, not
+wording (`docs/DISPOSITIONS.md` addendum below); `tools/chain-resolve.mjs` refuses them with "anchor/edit not locatable".
+The other 33 are an author re-cut per docs/runbooks/branch-cleanup.md Step 0b/0d, all 40 recorded row-by-row in
+`docs/DISPOSITIONS.md` ("Conflict-resolution pass, 2026-11-14"). `item-7232` is the sharpest case: it merges cleanly but
+its failing-first test is red without `item-6556`'s `src/rig.mjs` change, which is itself conflicted — land the pair or
+neither. The census reports `needsLanding: 0`; the residue is the 40 held refs, not unlanded clean ones.
 (2) **No pool migration is applied** — the tool stays a proposal. The dry-run's tranche names non-owner claimants for
 most proposed rows (105 of 165 at `00:2xZ`; re-run, the team keeps minting; list `.spike/pool-ownership-gaps.txt`).
 #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports `pool-dead-gate`).
 
-**The suite, with seconds.** At `28690eb8`: `--all --jobs 4` → **342/345 in 156.0 s** (`.spike/suite-at-HEAD.out`). The
-three red (`check`, `doc-count-drift`, `starter`) had ONE cause: a ledger row quoted a `check` rule count and
-`doc-count-drift` read the quotation as a live claim (the code declares 27). Eliding the number turned all three green;
-`--area toolchain` after the fix: **38/38 in 26.3 s**. The `--jobs 4` flake in
-`demo/restart-limit-behaviour.test.mjs` is contention-driven (`--jobs 2` is the reproducible green): a red at
-`--jobs 4` is not a defect — re-run the named test alone before chasing it.
+**The suite, with seconds.** At this pointer re-cut: `--all --jobs 4` → **346/346 in 152.0 s** (Linux Fedora 45,
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1); slowest `runbook-diagnose` 58.8 s, `clockin-digest` 24.3 s. At
+`28690eb8` it was 342/345; the three red (`check`, `doc-count-drift`, `starter`) had ONE cause — a ledger row quoted a
+`check` rule count and `doc-count-drift` read the quotation as a live claim (the code declares 27). Eliding the number
+turned all three green. The `--jobs 4` flake in `demo/restart-limit-behaviour.test.mjs` is contention-driven
+(`--jobs 2` is the reproducible green): a red at `--jobs 4` is not a defect — re-run the named test alone.
 
 **Known red:** `node demo/offline.mjs` exits **1** — `ASSERT FAIL: the fresh context should be short, got 7 messages`
 (pm's #6924) — recorded, not touched. `demo/priority-directive-scope.test.mjs` went red on a hardcoded `expiresAt`;
 **fixed** (time-relative), lesson pitfall 327.
 
-**Operator decisions owed.** (a) blocking the last 7 refs: may a delegate land the seven refs with no semantic hunk
-(`item-5301`, `item-5301-resolved`, `item-6173`, `item-6211`, `item-6343`, `item-6643`, `item-6664`) by taking **main's**
-wording and recording the 23 dropped ref-only lines in `docs/DISPOSITIONS.md`? `tools/chain-resolve.mjs` refuses to pick
-a side until that is ruled; if granted it becomes rule 8, gated by `scripts/land.mjs`. Recommendation: grant it — the
-lines are re-stated on main and the ledger keeps them verbatim. (b) pool, options in
+**Operator decisions owed.** (a) **Do not grant a blanket "main wins" rule for the seven wording-only refs**
+(`item-5301`, `item-5301-resolved`, `item-6173`, `item-6211`, `item-6343`, `item-6643`, `item-6664`). Read every
+hunk in full (`.spike/noE-full-hunks.txt`, 2 s): four of them are `cli.mjs` **import** lines naming symbols main
+no longer exports (`reapWorktrees`, `runControlSettings`, `progressSettings` — zero hits in `src/`), two are
+`verified_by: architect` vs `verified_by: impl` provenance plus a DECISIONS.md block, and only `item-6343` is a
+provably-superseded line pin. Recommendation: route all seven to `pm` as a re-cut; the decision the operator owns
+is whether the rig should mint a *union-import* rule (keep both sides, verify every symbol exists) rather than a
+side-picking one. (b) pool, options in
 `docs/reviews/2026-11-13-capability-ownership-ruling.md`: who may annotate `requires`; is `ownership` advisory or
 enforced at claim; `devtools` vs `code`; should `send_work` refuse an unadvertised `requires`; should a pool claim
 notify its author. `node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` has NO write path by design.
 
 
-**Traps this window** — `docs/SELFDEV.md` **330–340**: a landing plan is valid only against the HEAD it was computed on;
+**Traps this window** — `docs/SELFDEV.md` **330–342**: a landing plan is valid only against the HEAD it was computed on;
 `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved merge
 that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area mapping is
 not landable and only the gate catches it; a prune plan that omits `deferred` from the live set names a live seat's
