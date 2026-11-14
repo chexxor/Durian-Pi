@@ -9,7 +9,7 @@ from the vendor's own model card; every hardware number is measured on this box.
 ## Why the rig needs this at all
 
 `check` reports `single-model-rig` (fix-now) because all 12 seats resolve to `local/iq3_s`, a
-**Qwen3.8-Flash-Next** quant. D48/D119 want an author and its verifier to differ in *family*, because a shared
+**Qwen3.8-Flash-Next** quant. D134/D137/D166 want an author and its verifier to differ in *family*, because a shared
 blind spot is systemic. `src/checkup.mjs` compares resolved model **strings**, which cannot tell a different
 family from a different quant of the same one — so this is a documentation ruling, not something a test can
 settle (D134).
@@ -231,7 +231,7 @@ is just not a 16 GB-card / 34 GiB-RAM quant.
 
 FAQ: setup starts some models with `--tail-skip 6`, *"which skips a few low-ranked experts that are not in VRAM
 and moves its answers a little"*, and `STRATA_ROUTE_TAIL_SKIP=0` turns it off. For a seat whose entire job is not
-to be wrong, a routing shortcut that moves answers is exactly the D48/D119 concern — it must be off, and that
+to be wrong, a routing shortcut that moves answers is exactly the D134/D137/D166 concern — it must be off, and that
 belongs in the launch environment, not in a default.
 
 ## Engine/model trade the operator now has to pick

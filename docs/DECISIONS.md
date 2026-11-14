@@ -3911,6 +3911,18 @@ that drifts).
 (commit `e788668`). Implementation items are handed to `pm` (register M1–M7 and route F12/F11 to `lead`);
 the prerequisites `#2983` → `#2992` → `#2420`/`#2483` are built but unlanded. This entry is a decision
 record, not an implementation claim — no code change accompanies it.
+**Duplicate block retired (`scribe`, item #6326, 2026-11-11).** D115 through D120 had landed twice: the block
+above (the D115–D120 headings) and this one were byte-identical, entry for entry — verified by comparing the
+text between headings, six pairs, all identical. One entry per D-number is the rule, so this copy is removed
+and nothing is renumbered; the canonical entries above stand in their own words. This duplication is part of
+why the "D134/D137/D166" pin was unresolvable: a reader following a number found a void reservation, and a second
+copy of the same reservation, instead of the verifier-family rule (corrected in D257's provenance section).
+
+**Census at this edit** (`grep -o "^## D[0-9]+ —" docs/DECISIONS.md | sort | uniq -c | sort -rn`): D91 three
+times; D111, D112, D113, D114, D258 and D259 twice each, with **different bodies** under one number. Those are
+numbering collisions, not copy-paste, and resolving them is `pm`'s call, not docs housekeeping. Detection is
+a guard gap: neither `tools/doc-integrity-guard.mjs` nor `src/checkup.mjs` has a duplicate-heading rule, so the
+ledger can silently re-issue a number. Routed to `impl`.
 
 ## D121 — Local provider switched to Swift 1.5 on a DIFFERENT engine (operator-DIRECTED, 2026-10-20; recorded by scribe, item #3268; amended per lead #3280)
 
@@ -4518,7 +4530,8 @@ bought the run at the price of the invariant the rig verifies with. `node cli.mj
 immediately reports **`single-model-rig`, severity fix-now**: "all 12 seats resolve to local/iq3_s, so a shared
 blind spot is systemic; per-seat models are already supported". The server serves one model and
 `src/providers/local.mjs` builds one provider from one base URL, so the cross-family author/verifier rule
-(D48/D119) is unmeetable while the rig is single-model. That is a ruling to make, not a gap to paper over: an
+(D134/D137/D166; the rule `check` reports as `single-model-rig`, `src/checkup.mjs:81`) is unmeetable while the rig
+is single-model. That is a ruling to make, not a gap to paper over: an
 author seat and its verifier sharing a family is the blind spot the check names, and it is the same objection
 the memory follow-up report raises about testing a memory system with the model that wrote it.
 
@@ -8559,7 +8572,8 @@ instrument: `tools/model-probes/spend-cap-acceptance.mjs` — run it: `node tool
   weights test and puts two engines on a card already 91 % occupied, the configuration under which the kernel
   executed `strata-host` in the 2026-10-29 OOM incident.
 - **D-5025.2 — Therefore verification is binary, and both arms are named.** (a) the local seat model — honest but
-  same-family, `check` reports `single-model-rig` **fix-now**, and D48/D119 says a same-family verifier cannot
+  same-family, `check` reports `single-model-rig` **fix-now**, and the cross-family rule (D134/D137/D166;
+  `single-model-rig`, `src/checkup.mjs:81`) says a same-family verifier cannot
   confirm a defect (it reproduces the author's error and its agreeable verdict is worthless); or (b) **metered
   verification under D-5015's cap**, which is the operator's own ruling (D193). Option (c) — pointing verifier seats
   at the author model to clear the red — is rejected: it clears a signal by destroying what the signal was for.
@@ -9870,7 +9884,7 @@ owner before spending more verifier family.
 
 **Ruling 1 — the ecosystem gap is a product gap, so it goes on the base seam, not the extension plane.** The question "does Pi configuration reach a Durian-Pi seat?" was answered by measurement rather than argument, and the answer is **split**: the *substrate* is already pi's (`package.json` carries `pi-ai`, `pi-durable`, `pi-coding-agent@1.3.0`, `pi-tui`, `chord`; the seat harness is pi-durable's `Harness.open` at `cli.mjs:474`; the provider is pi-ai's `createProvider({id, baseUrl, api, auth:{apiKey:{resolve: ctx.env(…)}}})` at `cli.mjs:349-357`), but the *configuration* is a parallel plane: exactly one file imports the coding-agent package (`src/tui/durable/imports.mjs`), `SettingsManager`/`ModelRegistry` appear in exactly one file (`src/tui/durable/adapter.mjs`), and the seat's settings come from `DURIG_*` through `cli.mjs:487` (`streamSettings` at `src/config.mjs:317`, `compactionSettings` at `src/config.mjs:432`). Nothing in `~/.pi/agent/settings.json` or `~/.pi/agent/models.json` reaches a seat. Registered as **ROADMAP 332** with four named seams (S1 settings, S2 model registry, S3 credentials, S4 visibility + pin currency) and **331 as slice 1 of S1**, because 331 is the one seam half already measured end-to-end with a free probe. This is a **D212 base seam**, not a customization: a seat's config *input* is not an extension, and per D212 the fact that it cannot be expressed as an extension is evidence the base is missing the seam.
 
-**Ruling 2 — the drift between the two planes is already measurable, and it is not cosmetic.** Same model, two planes: the seat plane sets `DURIG_LOCAL_CONTEXT = 200000` (`durig.config.json:5`) while pi's registry says `strata/qwen3.8-flash-next-iq3_s contextWindow 204800, maxTokens 32768` and `strata-server/… 131072 / 24576` — **three context windows for one model name**, and that integer feeds the compaction threshold (331), the `compact` report's `declaredContextWindow` (`cli.mjs:1595`) and the spend math (141, 326). Thinking level is duplicated the same way (`defaultThinkingLevel: "medium"` in pi vs `"thinkingLevel": "high"` in `rig.selfdev.json`). The verifier family exists on **one** plane only — pi's `models.json` has no DeepInfra/`verifier` provider — so "just read pi's registry" would delete the cross-family author/verifier invariant `src/providers/local.mjs:9-34` exists to protect (D48/D119). And seat turns are invisible to pi's surfaces: `~/.pi/agent/sessions` holds 6 entries, 0 naming a seat worktree.
+**Ruling 2 — the drift between the two planes is already measurable, and it is not cosmetic.** Same model, two planes: the seat plane sets `DURIG_LOCAL_CONTEXT = 200000` (`durig.config.json:5`) while pi's registry says `strata/qwen3.8-flash-next-iq3_s contextWindow 204800, maxTokens 32768` and `strata-server/… 131072 / 24576` — **three context windows for one model name**, and that integer feeds the compaction threshold (331), the `compact` report's `declaredContextWindow` (`cli.mjs:1595`) and the spend math (141, 326). Thinking level is duplicated the same way (`defaultThinkingLevel: "medium"` in pi vs `"thinkingLevel": "high"` in `rig.selfdev.json`). The verifier family exists on **one** plane only — pi's `models.json` has no DeepInfra/`verifier` provider — so "just read pi's registry" would delete the cross-family author/verifier invariant `src/providers/local.mjs:9-34` exists to protect (D134/D137/D166). And seat turns are invisible to pi's surfaces: `~/.pi/agent/sessions` holds 6 entries, 0 naming a seat worktree.
 
 **Ruling 3 — no Windows seats for a long time. What that parks, and what it pointedly does not.** Parked: the Windows-side *observation* work — **#5278** (`qa`, "verify 311(ii) from a Windows host") stays `held` and is **no longer on the critical path**, and the Windows worktree-audit ask (**#5285**) is parked. Consequence for the roadmap: **311 must close as `verified-partial`** with the NTFS-junction half explicitly unverified, and the row must say which half is unverified rather than pretending Linux evidence covers it — that was already the operator's answer in D222, and this ruling makes it permanent rather than temporary. NOT parked, and arguably raised: the Linux-side seat gaps **186** ("seat personas hard-code the Windows shell") and **217** ("on Linux a seat has no shell at all: the seat shell is PowerShell by construction, and pi refuses PowerShell off Windows") — with no Windows seats coming, a Linux seat that cannot shell is the constraint's own precondition, not a side issue.
 
@@ -9885,7 +9899,7 @@ owner before spending more verifier family.
 
 **Method, so the coverage is auditable.** Read the upstream-read surface (runbook `competitor-review.md`), never a secondary report: **ten clones** read at their measured pins (`vendor/pi-main @ 2ec55d80` — note: **not** under `vendor/eval/`; `vendor/eval/{oh-my-pi 6f3fbc94, openhands 6354932e, codex d373d649, goose 775b3958, claude-code-docs 58d6da1e, cline 51f63e4f, crewai f3d0099d, pi-subagents 31208242, prime-agent 815e64b5}`; every HEAD re-measured with `git -C … rev-parse --short=8 HEAD` **in the same turn as this sentence**), plus two vendor docs (`spire` concepts, `litellm-models` proxy) **labelled `advertised-elsewhere`** and not credited as clone evidence. `node tools/vendor-pins.mjs --check` → **PIN CHECK PASS, 27 clones** (it also audits reviews: a review naming a present clone cites its HEAD and has a `docs/COMPETITORS.md` entry). Evidence: `docs/reviews/credentials-in-agent-teams-competitor-sweep-2026-11-07.md` (mechanisms M1–M12, coverage matrix, per-mechanism adopt/adapt/reject), decision rows in `docs/COMPETITORS.md`, options in `docs/reviews/credential-architecture-options-2026-11-07.md`, follow-up prompt in `docs/reviews/credentials-secret-brokerage-followup-research-prompt.md`.
 
-**Ruling 1 — the fork (ROADMAP 333) is NOT taken, and the research strengthens the objection to option (b) with a mechanism, not a vibe.** pi's resolver states the precedence (`vendor/pi-main/packages/ai/src/auth/resolve.ts:28-35`): *"A stored credential owns the provider: ambient/env is consulted only when nothing is stored. No silent env fallback after a failed refresh."* So if durian-pi read pi's store, `DURIG_VERIFIER_API_KEY` would be **ignored, not overridden** — a seat would authenticate as whatever the human logged in as, `selfdev.sqlite.spend.jsonl`'s `authKeyEnv` attribution would go false, and a rotation would stay invisible (326). The role→family guarantee (D48/D119) and the loopback-only `local` rule (325) both depend on durian-pi choosing the credential per **role**, which a shared store cannot express.
+**Ruling 1 — the fork (ROADMAP 333) is NOT taken, and the research strengthens the objection to option (b) with a mechanism, not a vibe.** pi's resolver states the precedence (`vendor/pi-main/packages/ai/src/auth/resolve.ts:28-35`): *"A stored credential owns the provider: ambient/env is consulted only when nothing is stored. No silent env fallback after a failed refresh."* So if durian-pi read pi's store, `DURIG_VERIFIER_API_KEY` would be **ignored, not overridden** — a seat would authenticate as whatever the human logged in as, `selfdev.sqlite.spend.jsonl`'s `authKeyEnv` attribution would go false, and a rotation would stay invisible (326). The role→family guarantee (D134/D137/D166) and the loopback-only `local` rule (325) both depend on durian-pi choosing the credential per **role**, which a shared store cannot express.
 
 **Ruling 2 — the measured hole is not the fork; it is reachability, and it exists today.** All 12 seats are conversations inside one broker process (`cli.mjs:474`, `cli.mjs:479`) and their shells are its children, same uid. `src/confine.mjs` strips credential-named env from the child env it builds (measured: 0 key-shaped names cross; canary `demo/confine.test.mjs` PASS 0.37 s), **but** a seat-shaped shell printed **92 env names from `/proc/<pid>/environ`, including `DURIG_VERIFIER_API_KEY` and `DURIG_LOCAL_API_KEY`**, and `refusalFor("cat /proc/$PPID/environ")` returned **no refusal** (probe: `.spike/delegate-20261107/envprobe/procfs-canary.mjs`, ~6 s, canary values, names only). Our value classifier would likely not report the leak either: `looksLikeSecret` (`src/config.mjs:73-82`) needs a known prefix **or** ≥40 chars **and** a digit (measured: 32-char alnum → `false`). **Therefore the current control is "a seat doesn't think to ask", which is not a control** — and it is fixable for $0 without waiting for the fork (rows **336**, **337**).
 
@@ -11320,6 +11334,22 @@ cross-family author/verifier decisions in the log are **D137** (`docs/DECISIONS.
 (`docs/DECISIONS.md:6363`), and the code-side split is `src/providers/local.mjs`, which `demo/deepinfra-catalog.test.mjs:81`
 calls "D166's cross-family author/verifier split". The ruling stands in its own words; the citation does not match it.
 Whoever owns the numbering should re-pin it, and no seat should read this entry as a reopen of D48 or D119.
+**A pin that was wrong, corrected (`scribe`, item #6326, 2026-11-11).** This row cited the suspended rule as
+**"D48/D119"**, and that pairing appeared in thirty places across the tree — `cli.mjs:453`, `src/providers/local.mjs:9`,
+`rig.selfdev.json`'s own `_readme`, ROADMAP, SELFDEV, COMPETITORS and eight review notes, as well as four places in
+this ledger. It is not the verifier-family rule: **D48** is *Recover the lost worktree, and make shared-tree safety
+structural*, and **D119** is a *void ADR-number reservation* whose heading appeared twice — six entries (D115–D120)
+had landed as a byte-identical duplicate block, now retired. The decisions that actually carry the cross-family
+author/verifier rule are **D134** (the second local provider — the split that was built), **D137** (a verifier that
+fails the seeded-bug gate is worse than no verifier) and **D166** (both local verifier candidates measured and
+rejected); **D214** restored the metered canary, and this entry records the suspension. The enforceable form is the
+`no-verifier-seat` and `single-model-rig` rules (`src/checkup.mjs:76,81`) over the `local`/`verifier` provider split
+in `src/providers/local.mjs`; `demo/deepinfra-catalog.test.mjs:81` still names it "D166's cross-family author/verifier
+split". Verify the sweep: `grep -rn "D48/D119" .` → 6 hits, four of them in `docs/NEXT-ARCHIVE.md` (a dated snapshot,
+deliberately left as written) and the two in this paragraph, quoting the bad pin in order to record it. **Cite the
+rule by its rule name and its code symbol, not by a number** — the ledger's line numbers drift: when the defect was
+first recorded here, D137 sat at `:4667` and D166 at `:6363`; at this edit they are `:4569` and `:6265`. The ruling itself is untouched, nothing is renumbered, and no
+seat should read this as a reopen of D48, D119, D134, D137 or D166.
 
 **Scope limit.** This entry opens **no** second-model acquisition row: GPU headroom is operator-owned. It does not re-open
 D48, D119, D137 or D166 — an entry that reads as a reopen invites a seat to start work that cannot run.
