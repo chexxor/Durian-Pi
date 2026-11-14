@@ -73,7 +73,9 @@ source file — use the `edit` tool or `cmd /c "git show <ref> > file"`; the enc
 are routed separately and give this rule teeth.
 
 **`git status --porcelain` IMMEDIATELY BEFORE the landing is BEST-EFFORT, not a guarantee — the LOCK is
-the serialisation.** The status check is a RACE, not a guard: measured `dirt=1`, then clean SECONDS later
+the serialisation.** The status check is a RACE, not a guard. The figures below are dated - they are
+measurements from **2026-10-21**, the pass that wrote this block (#4469), not live readings: measured
+`dirt=1`, then clean SECONDS later
 (the dirt was transient, written by another delegate mid-landing), with `main` moving twice underneath
 (`c7b6d30 → 9682817 → da01550`) under fresh landings from another seat. "CHECK STATUS, THEN LAND" HAS A
 WINDOW, and the window is however long it takes to type the landing command. **THE LOCK IS WHAT ACTUALLY
@@ -113,7 +115,8 @@ WORK. The `repo` field guarded against a TOOL THAT LIED, and that tool is FIXED;
 against a WORLD THAT MOVES, and it never stops moving. One cause could be removed; the other cannot.
 
 **The landing LOCK serialises landings — there is no operator-confirmation gate.** The protection against
-two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured:
+two delegates in one tree is the mechanical landing lock, not a human confirmation. Measured **2026-10-21**
+(the pass that retired the gate, #4431) - these are that day's numbers, not a live reading:
 `{ slots: 4, held: 4, waitedMs: 160062, liveHolders: 3 }` — a landing WAITED 160 seconds for a slot behind
 three live holders. Two delegates cannot merge into one tree simultaneously, because the tool will not let
 them. So: (1) DO NOT hold a landing for an operator to confirm no other delegate is landing — that is an
@@ -138,6 +141,14 @@ no markers in it. It fires only when #4011 AND #4142 both land: then that file W
 MUST BE KEPT, because section 2d (the linked-worktree / shared-root refusal, #4247) sits beside 2b/2c and
 the fixture sections and they assert different things. A resolution recorded as a step gets applied where it
 is not needed; recorded as a condition, it fires when it should.
+
+**State measured 2026-11-13 against main `2bfb9e43`: the trigger is spent, not pending.** Both named shas
+ARE now ancestors of `main` (`git merge-base --is-ancestor 5d9140f refs/heads/main` exits **0**; the same for
+`51a866b` exits **0**), and `demo/land-helper.test.mjs` carries NO unresolved markers (`node --check` exits
+**0**; the three `<<<<<<<` hits at lines 6, 290 and 309 are comment/fixture strings, not a mid-merge tree).
+So the condition never fired. Read it by the **shas**, not by row status: row #4142 is `cancelled`, and a
+cancelled row never reaches `done`, so a condition keyed on the ID can never be satisfied even when the
+artifact is on main - gate hygiene (#5085) in the shape of a sentence.
 
 **A STALE BRANCH CAN RE-INTRODUCE A CLEANUP.** When a landing is refused for a fault the author did not
 create, check whether the file is CLEAN on `main` and DIRTY on the branch — that is not a pre-existing wart
@@ -388,7 +399,7 @@ Do exactly this and you will not have to ask "stop or not?" or "why did --suite 
    writing the same commit reported 3 red in the seat root and 7 after a worktree-local `npm ci` — two of
    those were REAL content defects, one was an environment guard and five were dependency-version
    artefacts. A landing pass that treats the delta as noise will treat the real ones as noise too.
-#### ⚠ WHEN `main` IS ALREADY RED: the derived gate is the only lighter path — and proving on `main` is still required
+**⚠ WHEN `main` IS ALREADY RED: the derived gate is the only lighter path — and proving on `main` is still required**
 
 **What you can do while `main` carries known-red demos:** land with `node scripts/land.mjs <b1> … --db
 ./selfdev.sqlite --changed-suite` — the derived subset runs only the tests the change itself implies, so
@@ -438,6 +449,13 @@ something else entirely: the shared tree carries seats' in-flight work (100+ dir
 so it is neither `main` nor a candidate. A clean detached worktree is the only tree that answers the
 question. State which tree a verdict came from, or the verdict is not usable by anyone else — the same
 rule as the generated-artifact check above.
+
+**A TREE NAME IS NOT ENOUGH — NAME THE MOMENT TOO (#5819, from #5782).** The red set drifts by the hour,
+measured on the same suite: `demo/clockin-digest.test.mjs` failed at `37651f23` and passed at `4efce137`.
+A landing proof is therefore a triple: **tree + dependencySet + timestamp**. `node scripts/test.mjs --all`
+prints a PROVENANCE line carrying the tree and the dependency set; paste that line with the count, and
+stamp the run. Without the timestamp, two landers quoting "the suite is green" may both be telling the
+truth about different worlds, and the gate cannot tell which.
 
 5. Prune each landed ref (`git branch -d` refuses anything unmerged, so this is lossless):   ```bash
    git merge-base --is-ancestor <branch> main && git branch -d <branch>
