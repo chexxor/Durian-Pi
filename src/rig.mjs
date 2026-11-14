@@ -1263,29 +1263,31 @@ const Router = defineExtension({
 					// to the oldest item or the stalled-claim reveal: naming one item
 					// and silently claiming another would be a lie.
 					if (args.itemId !== undefined) {
-						const named = queue.items.find(
-							(it) =>
-								it.id === args.itemId &&
-								it.status === "queued" &&
-								(it.to === me || openPoolRow(it)),
-						);
-						if (!named) return null;
-						// A NAMED POOL CLAIM IS GATED, NOT ASSUMED (P1). The by-id path historically skipped `workable()`
-						// because an addressed row is a promise the author already made to this seat; a pool row carries
-						// no author-to-seat promise, so its capability SET and gates are the only thing deciding whether
-						// this seat may take it. That is the point of the pool: a seat that lacks `landing` must not get
-						// a `requires:landing` row and discover it at the end of the work.
-						if (openPoolRow(named)) {
-							const verdict = workable(named, me, { items: queue.items, capabilities, tierTokens: budget.tierTokens, usableWindow: budget.usableWindow });
-							if (!verdict.workable) {
-								// N19 row 5: a SIZE refusal is recorded on the row. Only a NAMED claim writes it: the wake
-							// selector runs this predicate every broker pass for every seat, and appending a transition per
-							// scan would dirty the 10.4 MB queue document for a row nobody actually tried to take (P7).
-								if (verdict.size?.gated) {
-									named.transitions.push({ at: new Date().toISOString(), event: "size-refused", by: me, reason: verdict.reason });
-								}
-								return { kind: "refused", id: named.id, reason: verdict.reason, from: named.from, pool: true, size: verdict.size ?? null };
+						// ROADMAP 371: BOTH DOORS USE ONE RULE. The by-id door used to ask only
+						// `id === itemId && status === "queued" && (to === me || pool)`, so a row gated on an
+						// OPEN, CANCELLED or PARKED prerequisite walked straight through while the no-id door
+						// refused the very same row via `workable()` (#2673/#2677). Two homes for a gate rule is
+						// a rule that drifts (#6112); the named claim now consults the SAME predicate, and an
+						// id that names nothing is a legible refusal rather than `NO_QUEUED_WORK` — naming one
+						// row and claiming another, or reading "blocked" as "empty", is what this closes.
+						const named = queue.items.find((it) => it.id === args.itemId);
+						if (!named) return { kind: "unknown", id: args.itemId };
+						if (named.status !== "queued" || !(named.to === me || openPoolRow(named))) {
+							return { kind: "not-claimable", id: named.id, status: named.status, to: named.to };
+						}
+						// A NAMED CLAIM IS GATED, NOT ASSUMED (P1, widened to addressed rows by ROADMAP 371). A pool
+						// row carries no author-to-seat promise, so its capability SET and gates decide everything;
+						// an addressed row carries a promise, but a promise on a row whose prerequisite was CANCELLED
+						// is not work — it is a dead gate the seat should see (see `deadGateIds`, #6215).
+						const verdict = workable(named, me, { items: queue.items, capabilities, tierTokens: budget.tierTokens, usableWindow: budget.usableWindow });
+						if (!verdict.workable) {
+							// N19 row 5: a SIZE refusal is recorded on the row, POOL rows only. Only a NAMED claim writes it:
+							// the wake selector runs this predicate every broker pass for every seat, and appending a
+							// transition per scan would dirty the 10.4 MB queue document for a row nobody tried to take (P7).
+							if (openPoolRow(named) && verdict.size?.gated) {
+								named.transitions.push({ at: new Date().toISOString(), event: "size-refused", by: me, reason: verdict.reason });
 							}
+							return { kind: "refused", id: named.id, reason: verdict.reason, from: named.from, pool: openPoolRow(named), size: verdict.size ?? null };
 						}
 						const at = new Date().toISOString();
 						if (named.pool === true) {
@@ -1408,15 +1410,36 @@ const Router = defineExtension({
 							"`unpause`. Work you ALREADY hold still completes: use complete_work / defer_work.",
 					);
 				}
-				// N19 row 4: a NAMED pool claim that fails the predicate is a REFUSAL THAT NAMES THE REASON, never a
-				// silent null. The reason is the SAME string the selection path reports (`requires:<caps>`,
+				// N19 row 4 / ROADMAP 371: a NAMED claim that fails the predicate is a REFUSAL THAT NAMES THE REASON,
+				// never a silent null. The reason is the SAME string the selection path reports (`requires:<caps>`,
 				// `gate-open:#<id>(<status>)`, `gate-cancelled:#<id>`), so the seat learns what to fix instead of
-				// re-trying the same id every pass.
+				// re-trying the same id every pass. The remedy line follows the reason class: a dead gate is fixed
+				// by closing the prerequisite, a capability gap by routing the row, an oversize row by splitting it.
 				if (found?.kind === "refused") {
 					const split = found.size?.gated ? ` ${splitInstruction({ id: found.id })}` : "";
+					const where = found.pool ? "is in the POOL" : "is addressed to you";
+					let remedy = "Ask pm to revise or release the row.";
+					if (found.reason?.startsWith("gate-")) remedy = "Close the prerequisite named above, or ask pm to re-gate the row.";
+					else if (found.reason?.startsWith("requires:")) remedy = "It demands a capability you do not advertise; ask pm to route it to a seat that does.";
 					return toolText(
-						`CLAIM_REFUSED: #${found.id} is in the POOL but you cannot claim it (${found.reason}). ` +
-							`It was sent by ${found.from}. Close the prerequisite, or ask pm to address it to a seat that can.` + split,
+						`CLAIM_REFUSED: #${found.id} ${where} but you cannot claim it (${found.reason}). ` +
+							`It was sent by ${found.from}. ${remedy}` + split,
+					);
+				}
+				// ROADMAP 371: an id that names NO ROW is a refusal with the id in it, not `NO_QUEUED_WORK`. A seat
+				// that typoed an id and gets "no queued work" retries forever; a seat that gets the id back named
+				// can go look it up.
+				if (found?.kind === "unknown") {
+
+					return toolText(
+						`UNKNOWN_ITEM: #${found.id} is not in the queue. claim_work with an itemId claims THAT row or ` +
+							`refuses with a reason — it never falls back to another row. Read the queue with \`queue\` or \`status\`.`
+					);
+				}
+				if (found?.kind === "not-claimable") {
+					return toolText(
+						`CLAIM_REFUSED: #${found.id} is \`${found.status}\`${found.to !== me ? ` and addressed to ${found.to}` : ""} — ` +
+							`a named claim never claims a different row. A \`held\` row is parked, not offered.`
 					);
 				}
 					// #4732: THIS BLOCK MUST PRECEDE `if (!found)`. `{ kind: "none", mine }` is TRUTHY, so `!found` is
