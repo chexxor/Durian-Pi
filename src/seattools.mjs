@@ -21,6 +21,7 @@ import { RigQueue, Seats } from "./rig.mjs";
 import { describeSeatRoot, resolveSeatRoot } from "./seatroot.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";
 import { READONLY_COMMANDS, runReadonlyCommand, READONLY_TIMEOUT_S } from "./readonlytool.mjs";
+import { executionMode } from "./executionmode.mjs";
 
 /** A tool result carrying only text (the shape `defineTool` accepts). */
 function result(text) {
@@ -33,6 +34,27 @@ function result(text) {
  * base ref is threaded through without a live broker (#1456): `base` is the tool's name for the
  * core's `ref`, and `undefined` falls back to the core's `HEAD` default.
  */
+/**
+ * #7158: the execution mode the GATE reports for a row. It calls the SAME function mint used
+ * (src/executionmode.mjs); when the row's recorded classification disagrees, the line says DRIFT
+ * out loud rather than quietly picking a side. Reported, not enforced: the mechanism that would
+ * actually skip a worktree (docs/WORK-ITEM-MODEL.md §4) is still open, so a branchless row still
+ * gets a tree today — the line is the first time the mode is visible to the seat and to a check.
+ */
+export function workspaceModeLine(row = {}) {
+	const mode = executionMode(row);
+	const minted = row?.executionMode;
+	const drift =
+		minted && (minted.mode !== mode.mode || minted.rule !== mode.rule)
+			? ` DRIFT: mint recorded ${minted.mode} (rule ${minted.rule ?? "none"}); the gate computes ${mode.mode} (rule ${mode.rule ?? "none"}).`
+			: "";
+	const grant =
+		mode.mode === "isolated"
+			? "This row needs its own tree, and one is provisioned."
+			: "No rule grants a tree. The rig still provisions one today (the §4 mechanism is open), so do not read the mode as a skipped worktree.";
+	return `Execution mode: ${mode.mode} (${mode.rule ? `rule ${mode.rule}: ${mode.why}` : mode.why}). ${grant}${drift}`;
+}
+
 export function prepareWorkspaceOptions({ source, itemId, seatName, base }) {
 	return { source, worktreeRoot: source, itemId, seatName, ref: base };
 }
@@ -130,21 +152,23 @@ const prepareWorkspace = defineTool({
 				return null;
 			}, context);
 			if (!me) return result("PREPARE_WORKSPACE_ERROR: this conversation is not a registered seat");
+			// The ROW, not just its id: the gate reports the row's execution mode (#7158).
+			// Plain values only: a document proxy that escapes the callback throws
+			// "Cannot use a settled overlay" once the commit settles.
 			const claimed = await api.commit(async (tx) => {
 				const queue = await tx.doc(RigQueue);
-				// Plain ids only: a document proxy that escapes the callback throws
-				// "Cannot use a settled overlay" once the commit settles.
 				return queue.items
 					.filter((it) => it.to === me && it.status === "claimed")
-					.map((it) => it.id);
+					.map((it) => ({ id: it.id, subject: it.subject, body: it.body, executionMode: it.executionMode }));
 			}, context);
+			const claimedIds = claimed.map((it) => it.id);
 			const itemId =
 				args.itemId !== undefined
-					? claimed.includes(args.itemId)
+					? claimedIds.includes(args.itemId)
 						? args.itemId
 						: null
-					: claimed.length > 0
-						? Math.max(...claimed)
+					: claimedIds.length > 0
+						? Math.max(...claimedIds)
 						: null;
 			if (itemId === null) {
 				return result(
@@ -175,7 +199,15 @@ const prepareWorkspace = defineTool({
 			// #3821 + main: main extracted the sentence into `workspaceReadyText`; #3821 adds the
 			// dependency note. Both survive by APPENDING the note to the extracted text rather than
 			// re-inlining the whole sentence — the function keeps its concern, the note keeps its own.
-			return result(workspaceReadyText(workspace, base) + (workspace.dependencyNote ?? ""));
+			// The mode line is appended, not inlined: `workspaceReadyText` keeps its concern
+			// (which tree am I in), the mode line keeps its own (#7158).
+			const row = claimed.find((it) => it.id === itemId) ?? { id: itemId };
+			return result(
+				workspaceReadyText(workspace, base) +
+					"\n" +
+					workspaceModeLine(row) +
+					(workspace.dependencyNote ?? ""),
+			);
 		} catch (err) {
 			return result(`PREPARE_WORKSPACE_ERROR: ${err && err.stack ? err.stack : String(err)}`);
 		}
