@@ -77,7 +77,7 @@ import {
 } from "./src/genlock.mjs";
 import { WakeScheduler, createWakeSignal } from "./src/scheduler.mjs";
 import { followCommits } from "./src/commitstream.mjs";
-import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent } from "./src/broker.mjs";
+import { applyPauseOp, auditWorktrees, brokerAlive, brokerHealth, cleanVerifyScratch, clearBrokerState, clearStopRequest, drivePass, intentInboxDir, intentResultDir, intentWaitBoundMs, logBrokerLine, pendingIntentCensus, pidAlive, readBrokerState, readStopRequest, runWakeLoop, stopRequestPath, writeBrokerState, writeStopRequest, writeIntent, reapWorktrees } from "./src/broker.mjs"
 import { optimizeInstruction } from "./src/optimizer.mjs";
 import { withStoreWriteRetry } from "./src/storewrite.mjs";
 import { createLiveRenderer, wrapProviderWithLiveView } from "./src/streamview.mjs";
@@ -3200,6 +3200,13 @@ async function cmdWorktreeAudit() {
     });
     const counts = {};
     for (const e of entries) counts[e.keepReason] = (counts[e.keepReason] ?? 0) + 1;
+    // `ok: true` USED TO MEAN "nothing to do" while `reapable` was non-empty, and that is the exact
+    // defect that let the leak run for three passes (15 -> 19 -> 16 -> 21 reapable, all reported,
+    // none consumed) (#5301). `ok` still answers the question the command was asked - did the audit
+    // run? - and the FINDING rides its own fields plus a non-zero exit, the same convention
+    // `check` and `format --check` use so a caller can gate on it without parsing prose.
+    const reapable = entries.filter((e) => e.keepReason === "reapable").length;
+    const clean = reapable === 0;
     out({
       ok: true,
       command: "worktree",
@@ -3208,13 +3215,78 @@ async function cmdWorktreeAudit() {
       repo: repoPath,
       total: entries.length,
       counts,
-      reapable: entries.filter((e) => e.keepReason === "reapable").length,
+      clean,
+      reapable,
       dirty: entries.filter((e) => e.keepReason === "dirty").length,
       locked: entries.filter((e) => e.keepReason === "locked").length,
+      // `stale` and `reapable` are NOT one population (they moved in OPPOSITE directions across
+      // passes: reapable 15->19->16->21 while stale 15->18), so they are counted and remedied
+      // separately: a stale registration is a ledger entry whose directory is gone and only
+      // `git worktree prune` clears it; a reapable tree is a live registration the reap verb
+      // removes. `clean` speaks ONLY to what this verb can act on.
+      remedy: clean
+        ? null
+        : `${reapable} tree(s) are reapable - run: node cli.mjs worktree reap --dry-run`,
       seatRoots,
       worktrees: entries,
     });
+    if (!clean) process.exitCode = 1;
   }
+}
+
+/**
+ * `worktree reap [--dry-run] [--main <ref>]` (#5301, ROADMAP 311 cut 2): the verb that CONSUMES
+ * `worktree audit`'s `reapable` set. It refuses a SOLE-CARRIER tree (gitignored content git cannot
+ * restore, or a branch a live queue row names as a carrier - keep-gate #5280) and names the branch,
+ * the item, the offending paths or row ids; and it reports the locked-over-TERMINAL-item trees as
+ * their OWN cause. Three causes, three messages - a single "skipped" line is what made the leak
+ * unreadable.
+ */
+async function cmdWorktreeReap(rest) {
+  const dryRun = rest.includes("--dry-run");
+  const mainAt = rest.indexOf("--main");
+  const mainRef = mainAt >= 0 ? rest[mainAt + 1] : "main";
+  if (mainAt >= 0 && (!mainRef || mainRef.startsWith("--"))) fail("worktree reap --main needs a ref (branch, tag or commit)");
+  const queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+  const seatRoots = await readData(DB_PATH, "roots", {}, (s) => readSeatRoots(s));
+  const LIVE = ["queued", "claimed", "deferred", "held"];
+  const liveItemIds = new Set(queueItems.filter((it) => LIVE.includes(it.status)).map((it) => it.id));
+  const terminalItemIds = new Set(queueItems.filter((it) => !LIVE.includes(it.status)).map((it) => it.id));
+  const statusById = new Map(queueItems.map((it) => [it.id, it.status]));
+  // The NON-TERMINAL rows are the carrier gates: a row still open that names a branch keeps that
+  // worktree, and resolving the row is what ends the keep (#5280).
+  const liveRows = queueItems
+    .filter((it) => LIVE.includes(it.status))
+    .map((it) => ({ id: it.id, status: it.status, subject: it.subject, body: it.body }));
+  const repoPath = dirname(resolve(DB_PATH));
+  const result = await reapWorktrees({
+    repoPath,
+    liveItemIds,
+    terminalItemIds,
+    statusById,
+    seatRoots: seatRoots.map((r) => r.cwd),
+    liveRows,
+    mainRef,
+    dryRun,
+  });
+  const ok = result.counts.removalFailed === 0;
+  out({
+    ok,
+    command: "worktree",
+    subcommand: "reap",
+    db: DB_PATH,
+    repo: repoPath,
+    mainRef,
+    ...result,
+    // Printed last so the three causes are the first thing a reader sees in the JSON.
+    summary:
+      `${result.counts.reaped} reaped` +
+      ` / ${result.counts.refusedSoleCarrier} refused-sole-carrier` +
+      ` / ${result.counts.lockedOverTerminalItem} locked-over-terminal-item` +
+      (dryRun ? ` (dry run: ${result.counts.pendingReap} would be reaped)` : "") +
+      (result.counts.removalFailed ? ` / ${result.counts.removalFailed} removal FAILED` : ""),
+  });
+  if (!ok) process.exitCode = 1;
 }
 
 /**
@@ -3765,6 +3837,8 @@ usages:
   node cli.mjs optimize <text>  rewrite a draft instruction via the optimizer
   node cli.mjs config          show effective settings and their source
   node cli.mjs worktree <path> [--source <dir>]   isolate a work item in its own checkout
+  node cli.mjs worktree audit                     read-only ledger of every registered worktree; exit 1 when the reapable count is non-empty (#5301)
+  node cli.mjs worktree reap [--dry-run] [--main <ref>]  consume the reapable set; REFUSE a sole-carrier tree (#5301)
   node cli.mjs format [--check] [-- <paths>]   format explicit files with the pinned prettier (--check = gate, no write)
 `;
 
@@ -3803,6 +3877,7 @@ try {
   }
   else if (cmd === "worktree") {
     if (rest[0] === "audit") await cmdWorktreeAudit();
+    else if (rest[0] === "reap") await cmdWorktreeReap(rest.slice(1));
     else if (rest[0] === "scratch" && rest[1] === "clean") await cmdWorktreeScratchClean();
     else if (rest[0] === "prune-branch") await cmdWorktreePruneBranch(rest[1]);
     else await cmdWorktree(rest);
