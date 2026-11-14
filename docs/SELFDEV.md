@@ -4362,12 +4362,19 @@ at `:743`). Re-measure every `path:line` before repeating it.
     that had never fired. Fixed in `src/driver.mjs` (`poolGatedSkipLine`): `pool-gated:<n> #<id>(<reason>)[ +N more]`,
     bounded at two rows, count first. Probe: `grep "pool-gated" <db>.broker.log | tail -3` — if the line has no `#`,
     you are reading an un-upgraded broker (it outlives the code on disk; restart it).
-326. **Control state read on a SECOND connection is stale while the broker owns the store.** Measured 2026-11-13:
-    `node cli.mjs pause "…"` was applied by the broker (`appliedBy: broker`, requestId `b9b9c156…`, audit
-    `allowed / operator-control-plane`) and `node cli.mjs status --json --local` then printed
-    `paused:false, pausedAt:null` — the `--local` path opens its own connection and sees a snapshot that predates the
-    broker's commit. The same verb had printed `paused:true, pausedBy:operator` minutes earlier for a different pause,
-    so the flapping is the READ, not the state. Trust the broker-applied `requestId` plus
-    `selfdev.sqlite.broker.audit.log`; read control through the broker (no `--local`) when you need the current value.
-    Related, same run: `up --refresh` REFUSES under a resident broker (`a second owner crashes the broker`), so a
-    roster write must happen broker-free — which is what "pause the fleet to change it" exists to make possible.
+326. **A control verb's RESULT is not the final STATE, and a `--local` control read is stale under a resident
+    broker.** Measured 2026-11-13/14: `cli.mjs pause` applied by the broker at `23:46:33.518Z` (requestId
+    `44a1d6c7…`), then `status --json --local` printed `paused:true, pausedBy:operator`; `cli.mjs unpause` at
+    `23:49:41.162Z` (`157fe026…`); a second `pause` at `23:50:48.607Z` (`b9b9c156…`) whose result said `paused:true`
+    while a `--local` read said `paused:false` — so I re-paused, believed the stale read, and **left the fleet PAUSED
+    for 29 minutes**. The audit log was the only thing that showed it. Rules: after ANY control verb, read
+    `selfdev.sqlite.broker.audit.log` tail AND the control doc through the broker (no `--local`), and reconcile them;
+    a `--local` read opens its own connection and can predate the broker's commit. Companion fact from the same run:
+    `up --refresh` REFUSES under a resident broker (`a second owner crashes the broker`), so a roster write must be
+    made broker-free.
+327. **A test fixture with a hardcoded future date is a time bomb.** `demo/priority-directive-scope.test.mjs` fixed
+    `expiresAt: "2026-11-13T23:59:00Z"`; the directive path correctly refuses "expiresAt must be in the future", the
+    tool result came back null, and the demo crashed reading `.result` — green yesterday, red forever after 23:59Z, and
+    it took the whole suite red at HEAD (336/337) while every other area stayed green. Any fixture whose meaning is
+    "a lease that has not lapsed" must be built from the clock it is read with (`Date.now() ± N`). The recorded full
+    suite time is only meaningful with the time it was run at.

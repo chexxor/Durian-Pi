@@ -35,29 +35,19 @@ in order:
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the number reconciliation; the live evidence)
 and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
-**Broker windows this session, each with the reason and the exit it replaced.** A window is a LEASE, never a daemon:
-every one tonight hit `--max-duration` and lingered in read-drain.
-1. `98022` START `17:32:55Z` — reason: no broker resident (replaced a `05:57:09Z` deadline exit, pid 3453151); EXIT
-   `19:11:54.118Z reason=deadline`.
-2. `311912` START `19:11:56.488Z` (keepalive) — reason: STRANDED (no pass 2350 s, 1 intent); froze past its deadline
-   (`lastPass 20:10:17Z`).
-3. `540123` START `20:42:21.398Z` — reason: 311912 alive-but-dead; `serve --stop` refused → `kill -TERM` → `resume` →
-   start. EXIT `21:32:41.503Z reason=deadline` (last PASS 89 @ `21:12:20.948Z`).
-4. `774849` START `21:34:01.725Z` — reason: 540123 froze past its 1800 s deadline; same fallback. EXIT
-   `22:13:24.335Z reason=deadline` (last PASS 297 @ `22:02:26.568Z`). On it, the live scheduler refused #7700 by name.
-5. `899525` START `22:13:26.113Z` (keepalive `--once`) — reason: 774849 stranded; replaced the exit above. **This is the
-   window a next session inherits.** Liveness is the last ` PASS ` line (pitfall 304), so read
-   `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` and `cat selfdev.sqlite.broker.json` BEFORE acting.
+**Broker windows this session — commanded bound, reason, and the exit it replaced.** A window is a LEASE:
+| pid | `--max-duration` | START → EXIT | actual | reason / replaced |
+|---|---|---|---|---|
+| 98022 | 3600 s | 17:32:55.451Z → 19:11:54.118Z | 5,939 s | no broker resident (replaced a 05:57:09Z deadline exit) |
+| 311912 | 3600 s (keepalive) | 19:11:56.490Z → 20:42:10.249Z | 5,414 s | STRANDED (no pass 2350 s, 1 intent) |
+| 540123 | 1800 s | 20:42:21.399Z → 21:32:41.503Z | 3,020 s | 311912 alive-but-dead; `serve --stop` refused → `kill -TERM` → `resume` |
+| 774849 | 1800 s | 21:34:01.725Z → 22:13:24.335Z | 2,363 s | 540123 froze past its deadline; same fallback |
+| 899525 | keepalive's own bound (NOT recorded by it) | 22:13:26.113Z → 00:10:24.944Z | 6,418 s | 774849 stranded; exited `reason=max-duration passes=335` |
 
-**Pause / unpause, measured (the tranche-2 quiescence constraint).** `cli.mjs pause` was applied BY THE BROKER at
-`23:46:33.518Z` (requestId `44a1d6c7…`, audit `allowed / operator-control-plane`) and `unpause` at `23:50:33Z`
-(`157fe026…`); `status --json --local` read `paused:true, pausedBy:operator` after the pause, but a later `--local`
-read returned `paused:false` while the broker said applied — **control state read on a second connection under a
-resident broker is stale; trust the broker's requestId + audit line.** `node cli.mjs up rig.selfdev.json --refresh`
-REFUSED under the resident broker (`up refuses to run while a resident broker is driving … pid 899525`), a guard in
-place since `c2fa6ee3` — so the roster size write that armed the gate CAN only have run broker-free, and today's first
-broker START is `17:32:55.451Z` with no earlier window, so the refresh preceded it. The store records no timestamp for
-that document write; this is the inference, stated as one.
+Every window was **commanded** ≤ 3600 s, and **windows 1–2 overran their command and lingered in read-drain** (the
+documented alive-but-dead shape) — that overshoot is a base defect, not a licence; the keepalive path records no
+commanded bound, which is a recording gap in that tool. Liveness is the last ` PASS ` line (pitfall 304), so read
+`grep ' PASS ' selfdev.sqlite.broker.log | tail -1` and `cat selfdev.sqlite.broker.json` BEFORE acting.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -83,7 +73,9 @@ minting): at `23:33Z` `pool {rows:5, pooled:5, open:3, claimed:2, sizeRefused:1,
 **#7722** (`small`, minted by `architect` at 23:2xZ — organic use, not asked for by this goal). Claimed and `done`: **#7667**
 (`pool-claimed by=advocate`) and **#7669** (`pool-claimed by=security`, 18:36:48.521Z) — both name
 `docs/DECISIONS.md`, which `ownership` gives to `advocate` ALONE, so security's claim is the milestone's cross-owner
-probe on a live row. Seats: 11 × 164320, auditor 12288; `tierTokens {3400,6100,6200,120000}`; gate limits 115023 / 8601,
+probe on a live row. `requires` carries no live annotation: **9 of 885 queued rows** have one and **0** rows have a
+`revised` transition with `requiresFrom/To` — every one was minted with it by `send_work` (the baseline's 7 was a
+smaller census). Seats: 11 × 164320, auditor 12288; `tierTokens {3400,6100,6200,120000}`; gate limits 115023 / 8601,
 so **only `project` can be refused**. `tierTokens` is ONE roster-level table read by `seatSizeBudget(seatsDoc,
 seatEntry)`; `usableWindow` is per seat.
 
@@ -105,13 +97,17 @@ node scripts/test.mjs --all --jobs 4                                        # 14
 
 **Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would
 make rows claimable by seats the `ownership` map does not cover: **104 of 164 proposed pool rows name a non-owner
-claimant** (src-tools-harness 85 + workflow-docs 19 = 104; 34 name no path; list `.spike/pool-ownership-gaps.txt`).
+claimant** (src-tools-harness 85 + workflow-docs 19 = 104 at `23:5xZ`; the tool re-read at `00:2xZ` says 105 of 165 —
+**re-run it, the team keeps minting**; list `.spike/pool-ownership-gaps.txt`).
 Consequence: **no migration applied** — the tool stays a proposal; decisions 1–2 are the operator's. (2) Nothing
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.
 
-**Known red, do not fix here (objective OUT):** `node demo/offline.mjs` exits **1** —
-`ASSERT FAIL: the fresh context should be short, got 7 messages` (pm's #6924). Recorded, not touched.
+**Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** —
+`ASSERT FAIL: the fresh context should be short, got 7 messages` (pm's #6924) — recorded, not touched.
+`demo/priority-directive-scope.test.mjs` went red at `23:59Z` because its fixture hardcoded
+`expiresAt: "2026-11-13T23:59:00Z"`; the path correctly refused a past expiry and the demo crashed on the null result.
+**Fixed** (time-relative fixture): the suite is reproducible again, and the lesson is pitfall 327.
 
 **Operator decisions owed** (options/pros/cons in `docs/reviews/2026-11-13-capability-ownership-ruling.md`): (5) who may
 annotate `requires` — author-or-`pm` as shipped, all coordinators, or a named `lead` exception; (1) is `ownership`

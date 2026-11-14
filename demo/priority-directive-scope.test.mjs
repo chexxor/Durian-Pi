@@ -34,8 +34,14 @@ import { orderCandidates } from "../src/workstrategy.mjs";
 import { planDirective, scopeMatches } from "../src/queueops.mjs";
 import { drainIntentInbox, readIntentResult, writeIntent } from "../src/broker.mjs";
 
-const AT = Date.parse("2026-11-12T18:00:00.000Z");
-const UNTIL = "2026-11-13T23:59:00.000Z";
+// TIME-RELATIVE ON PURPOSE. These were hardcoded ("2026-11-12T18:00:00Z" / "2026-11-13T23:59:00Z") and the
+// fixture went red the minute the wall clock passed the expiry: the directive path correctly refuses
+// "expiresAt must be in the future", the tool result is null, and the demo crashed reading `.result` — measured
+// 2026-11-14T00:0xZ, a test that was green yesterday and would be red forever after. A fixture whose meaning is
+// "a lease that has not lapsed" must be built from the clock it is read with.
+const NOW_MS = Date.now();
+const AT = NOW_MS - 6 * 3600 * 1000;
+const UNTIL = new Date(NOW_MS + 18 * 3600 * 1000).toISOString();
 const row = (id, to, subject, extra = {}) => ({ id: String(id), to, from: "pm", status: "queued", subject, transitions: [], ...extra });
 const ids = (rows) => rows.map((r) => r.id);
 
