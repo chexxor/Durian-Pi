@@ -38,7 +38,8 @@ range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts of this pointer
 | `11290f1e` | windows/pointer record: the green `--jobs 2` suite run and the two concurrency flakes |
 | `280d6ad3` | unpause verified by behaviour (#7722 claimed 6 min after it), fresh census, suite re-run |
 | `8f4a63ce` | the sha table becomes a TOOL-checked claim (`tools/pointer-sha-coverage.mjs` + test); the window lease; the bound recorded per window and the lease measurement |
-| *(this commit)* | the suite table above and the `328`/`329` pitfalls — exempt: it carries this file |
+| `313c525b` | the suite table with its seconds, the pointer cut back under the 200-line cap, pitfalls 328–329 |
+| *(this commit)* | records the re-leased window `1903310` — exempt: it carries this file |
 
 The two ordering defects this table had (the tool now catches both) were `36f57a36` before `517dc58d` and `7008d11d` before `35ff79f2`.
 
@@ -55,7 +56,8 @@ LEASE, and it is now leased from outside as well as inside (see the defect below
 | 899525 | **NOT recorded** (keepalive spawned it; the tool passes `--max-duration` but wrote no bound into its ledger, and this store keeps no tick for that window — the 3,600 s is the tool's DEFAULT, so it is INFERRED, not recorded) | none | 22:13:26.113Z → 00:10:24.944Z | 6,418 s | **OVERRAN**; exited `reason=max-duration passes=335` |
 | 1574499 | 1800 s | none | 00:22:11.251Z → 00:57:58.038Z | **2,146.8 s** | **OVERRAN** by 346.8 s and PARKED: last pass 00:49:21 frozen 8 min while `READ-DRAIN` kept serving; ended by `kill -TERM`, `EXIT reason=deadline` **5 s** later |
 | 1799704 | 600 s | `timeout --signal=TERM --kill-after=30 120` | 00:58:04.244Z → 01:00:09.236Z | **125.0 s** | **WITHIN the lease** — 120 s + a 5 s exit path; `STOP-REQUESTED source=signal` → `EXIT reason=deadline passes=-` |
-| 1806797 | 3600 s | `timeout --signal=TERM --kill-after=60 1800` | 01:01:21.405Z → open | — | leased from outside; `PASS 1 ms=1064 woke=pm,impl,qa,lead,advocate,scribe,devtools,auditor,security,qa2,architect` |
+| 1806797 | 3600 s | `timeout … 1800` | 01:01:21.405Z → 01:15:46.004Z | 864.6 s | ended by the operator's own TERM to re-lease (it was inside its lease); `PASS 1 ms=1064 woke=pm,impl,qa,lead,advocate,scribe,devtools,auditor,security,qa2,architect` — the fleet woke |
+| 1903310 | 7200 s | `timeout … 3600` | 01:15:55.288Z → open (ends ~02:15:55Z) | — | the window open at clock-out; `resume` ran first (exit 0) so the TERM cut no submission loose |
 
 **The defect, in code and in a measurement (this is why the earlier record's "bounded" claim was false).**
 `--max-duration` is checked at the TOP of the broker loop (`src/broker.mjs:2058`), so a pass in flight — or a pass that
@@ -74,10 +76,9 @@ DURIG_DB=./selfdev.sqlite nohup timeout --signal=TERM --kill-after=60 1800 \
 node cli.mjs resume                      # re-arms submissions the TERM cut (measured: 4 placed, run-cancelled)
 ```
 
-The window that opens at `01:01:21.405Z` uses exactly that line, so the rig cannot park on a pass again; the next
-start also reclaims the dead pid's slot leases (`src/broker.mjs:1481`; measured `generation_stale` 4 → **0**).
-Liveness is still the last ` PASS ` line (pitfall 304): `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` plus
-`cat selfdev.sqlite.broker.json`, BEFORE acting.
+The window open at clock-out is `1903310` (`01:15:55.288Z`, outer lease 3,600 s). Each window is opened inside
+`timeout --signal=TERM`, so the wall clock is bounded by the command that opened it.
+Liveness is the last ` PASS ` line (pitfall 304): `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` plus `cat selfdev.sqlite.broker.json`, BEFORE acting.
 
 **The fleet is UNPAUSED and was seen to DRIVE** (the 8th audit's one hard objection, so the evidence is spelled out).
 The audit read `paused:true, pausedAt:23:50:48.611Z` and was right: `23:46:33.518Z pause`, `23:49:41.162Z unpause`,
