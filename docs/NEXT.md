@@ -99,7 +99,8 @@ commit in the range `03bdbf4d..HEAD`, oldest first (the four that earlier cuts o
 | `16166492` | docs+tools: landing-pass pitfalls 330-333 and the… |
 | `dd47ef89` | the pointer rewrite: the landing pass, 20 refs landed, item-6959 held, suite 341/341 |
 | `f3f72792` | docs(NEXT): the sha table names every commit in 03bdbf4d..HEAD (92 rows, tool-verified) |
-| *(this commit)* | the pointer condensation to the 200-line cap — exempt: it carries this file |
+| `94eddcdd` | docs(NEXT): condense the pointer to 197 lines (the 200-line cap) + the previous carrier row |
+| *(this commit)* | docs(NEXT): suite numbers at HEAD, the pm route — exempt: it carries this file |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the reconciliation; the live evidence) and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 
@@ -123,13 +124,13 @@ fleet cannot do that, and the `01:01:21Z` window's `PASS 1 … woke=` names all 
 
 ## NEXT SESSION
 
-**Current item:** **the landing pass is CLOSED: `main` `03bdbf4d` → `82a3c51d` → `16166492` → `dd47ef89` → `f3f72792`, 20 refs landed, 1 held (#6959).**
+**Current item:** **the landing pass is CLOSED: `main` `03bdbf4d` → `82a3c51d` → `ab96bf0b` → `16166492` → `dd47ef89` → `f3f72792` → `94eddcdd`, 20 refs landed, 1 held (#6959), nothing pushed.**
 Each landed ref is proven two ways: `git merge-base --is-ancestor <ref> main` exit **0** and every `+` line of its
 branch-vs-base diff present on main (probe `.spike/landing-content-probe.mjs`, ~40 s: 1,087 lines for bin 1, 68 for
-the chain, 0 missing). Full suite at `82a3c51d`: `node scripts/test.mjs --all --jobs 4` → **341/341 in 136.8 s**
+the chain, 0 missing). Full suite at HEAD `94eddcdd`: `node scripts/test.mjs --all --jobs 4` → **341/341 in 135.7 s**
 (Linux Fedora 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1). One ref did NOT land: `item-6959` adds
 `demo/noop-wake-census.test.mjs` with no `demo/test-areas.json` row, so the derived gate refused it
-(`demo/compaction-acceptance-gate.test.mjs:117`) — routed to `pm`, ref kept.
+(`demo/compaction-acceptance-gate.test.mjs:117`) — routed to `pm` (`node intent.mjs pm --body-file .spike/landing-pass-route-pm.md`, requestId `f37cd65f-ee7f-4581-8298-887d9d2ca60b`, drained on the next broker window), ref kept.
 
 **Older current item, still true:** the **N19 pool is CLOSED** — usable, alive, gate fired on a live seat: `pm` minted
 **#7700** (`pool:true, tier:"project"`) and TWO real seats claimed it and were REFUSED (`by=architect` 22:04:21Z,
@@ -148,7 +149,7 @@ cd /home/chexxor/Git/Durian-Pi
 timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — the residue after the pass
 timeout 120 node tools/landing-batch-plan.mjs --max 12                        # ~13 s — RE-RUN after every bin (pitfall 330)
 node cli.mjs worktree audit --json                                            # ~1 s — 157 worktrees still open
-node scripts/test.mjs --all --jobs 4                                          # 136.8 s — 341/341 at 82a3c51d
+node scripts/test.mjs --all --jobs 4                                          # 135.7 s — 341/341 at HEAD 94eddcdd
 grep ' PASS ' selfdev.sqlite.broker.log | tail -1; cat selfdev.sqlite.broker.json   # liveness is the last PASS line
 node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.8 s — every pool row + transitions
 node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5       # 1.7-10 s — read-only denominator, balance line
@@ -157,15 +158,17 @@ node cli.mjs check rig.selfdev.json                                         # ~2
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.2 s — exit 1 if this file skips a shipped sha
 ```
 
-**Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would
-make rows claimable by seats the `ownership` map does not cover: **104 of 164 proposed pool rows name a non-owner
-claimant** (src-tools-harness 85 + workflow-docs 19 = 104 at `23:5xZ`; the tool re-read at `00:2xZ` says 105 of 165 —
-**re-run it, the team keeps minting**; list `.spike/pool-ownership-gaps.txt`).
+**Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the landing pass is closed (20 landed, 1 held,
+census `needsLanding: 0`), but 82 refs still conflict with `main` and are held for their authors to re-cut; the residue
+is routed to `pm` (requestId `f37cd65f`, spool `selfdev.sqlite.broker.inbox/0001794624001067-2163289-izsfo2.json`).
+(2) The dry-run shows the capability-clean tranche would make rows claimable by seats the `ownership` map does not
+cover: **104 of 164 proposed pool rows name a non-owner claimant** (src-tools-harness 85 + workflow-docs 19 at `23:5xZ`;
+re-read `00:2xZ` says 105 of 165 — **re-run it, the team keeps minting**; list `.spike/pool-ownership-gaps.txt`).
 Consequence: **no migration applied** — the tool stays a proposal; decisions 1–2 are the operator's. (2) Nothing
 build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"docs"` (`check` reports
 `pool-dead-gate`); the FIVE rulings below are owed.
 
-**The suite, with seconds.** 341 tests at `82a3c51d`: `--all --jobs 4` → **341/341 in 136.8 s** (`.spike/suite-final-jobs4.out`).
+**The suite, with seconds.** 341 tests at HEAD `94eddcdd`: `--all --jobs 4` → **341/341 in 135.7 s** (`.spike/suite-final-94eddcdd.out`).
 The `--jobs 4` flake in `demo/restart-limit-behaviour.test.mjs` is contention-driven and intermittent (337/338 once at
 `8f4a63ce`, absent in two earlier runs); `--jobs 2` is the reproducible green (**338/338 in 253.9 s**). A red at
 `--jobs 4` is not a defect in the change — re-run the named test alone before chasing it.
@@ -185,13 +188,11 @@ annotate the author's `peek_queue`, no notice row).
 `node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5` (1.7–10 s). Its first WRITE is not a tool run:
 once decisions 1–2 are ruled, `pm` annotates rows with `revise_work({itemId, requires})`, one `revised` transition each.
 
-**Traps this window** — `docs/SELFDEV.md` **330–333** (a landing plan is valid only against the HEAD it was computed
-on; `git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved
-merge that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area
-mapping is not landable and only the gate catches it). Older: **318–329** (the `seats` LIST vs DOCUMENT roster trap; `usableWindow: null`
-from `up`; "armed" ≠ "fired"; an unclaimable pool row; a count is not a trace; `check` auditing `./rig.json`; a
-`--local` control read staleness; a hardcoded future date in a fixture; **328** `--max-duration` bounds the loop, not
-the wall clock, so lease every window from outside; **329** a hand-written sha table skips a sha — run
-`tools/pointer-sha-coverage.mjs` instead of trusting the eyes).
+**Traps this window** — `docs/SELFDEV.md` **330–333** (a landing plan is valid only against the HEAD it was computed on;
+`git merge-tree` prints a tree oid on line 1 even when it CONFLICTS — the exit code is the verdict; a hand-resolved merge
+that drops the trailing newline is refused by the text-integrity gate; a branch adding a demo without an area mapping is
+not landable and only the gate catches it). Older **318–329**: `seats` LIST vs DOCUMENT roster; `usableWindow: null` from
+`up`; "armed" ≠ "fired"; a count is not a trace; `check` auditing `./rig.json`; `--local` control-read staleness;
+`--max-duration` bounds the loop not the wall clock; a hand-written sha table skips a sha — run the coverage tool.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
