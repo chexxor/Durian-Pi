@@ -71,11 +71,16 @@ try {
   // 3. The store leg is READ-ONLY: the schema version is read without creating, migrating or touching
   //    the file, and no -wal/-shm sidecar appears.
   const store = join(scratch, "plane-store.sqlite");
-  makeStore(store, 2);
+  // Built ONE version ABOVE whatever the resolved pi-durable actually supports: the "store newer than
+  // the code" case then exists in EVERY dependency plane. Hard-coding 2 assumed the resolved code
+  // supports 1, which is false on the pin (1.5.1 supports 2) - the assertion went red in the lander's
+  // scratch while passing in a tree on the older release. Measured 2026-11-14.
+  const newerThan = (plane.supportedSchema ?? 1) + 1;
+  makeStore(store, newerThan);
   const before = snapshot(store);
   const measured = await readDependencyPlane({ root: ROOT, db: store });
   const after = snapshot(store);
-  check("store schema version is read", () => assert.equal(measured.storeSchema, 2));
+  check("store schema version is read", () => assert.equal(measured.storeSchema, newerThan));
   check("a store newer than the resolved code is flagged as disagreeing", () => {
     assert.ok(measured.supportedSchema !== null, "the resolved pi-durable did not expose CURRENT_SQLITE_SCHEMA_VERSION");
     assert.equal(measured.schemaAgrees, measured.storeSchema <= measured.supportedSchema);
