@@ -143,9 +143,17 @@ async function crashLoop({ restartLimit, crashes }) {
 				if (live.run?.taskId === undefined) return false;
 				taskId = live.run.taskId;
 			 const rec = await harness.getTask(taskId, ctx);
-				return live.generation?.message !== undefined && rec?.state?.status === "running";
+				if (live.generation?.message !== undefined && rec?.state?.status === "running") {
+					// ROADMAP 375: the death is set AT the observation, not after `until` returns. The await
+					// gap in between is where the generation commits its terminal state, and the "crash" then
+					// lands on a run that already settled — measured 2026-11-14 (Linux, Fedora Linux 45,
+					// kernel 7.2.15-300.fc45.x86_64, node v24.22.1): 2 of 10 STANDALONE runs charged 4 restarts
+					// for 5 landed crashes, so the limit assertion went red with no code change.
+					flag.dead = true; // the host dies: no clean close, nothing more written
+					return true;
+				}
+				return false;
 			});
-			flag.dead = true; // the host dies: no clean close, nothing more written
 			if (reached) landed += 1;
 			else console.log(`  note  attempt ${attempts} never reached a running task: no restart charged, planting again`);
 		}
