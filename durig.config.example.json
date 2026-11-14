@@ -7,7 +7,8 @@
   "DURIG_MAX_CONCURRENT_SEATS": 1,
   "DURIG_WORK_STRATEGY": "oldest_first",
   "DURIG_OPTIMIZE": "off",
-  "DURIG_EXTENSIONS": "",
+  "_extensions_note": "The team's own verbs live on the extension plane (D212): extensions/self-merge.mjs gives a seat `landing_health` and `land_my_item`, and arms the `ready-ref-stale` check rule (SLA default 24 h, override DURIG_SELF_MERGE_SLA_HOURS). The base ships with NONE armed - copy this file and keep the two entries to run the team, drop them to run durian-core.",
+  "DURIG_EXTENSIONS": "extensions/self-merge.mjs",
   "DURIG_STREAM_TIMEOUT_MS": "",
   "DEEPINFRA_API_KEY": "put-your-key-here"
 }

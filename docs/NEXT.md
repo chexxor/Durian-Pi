@@ -7,14 +7,7 @@ commit is the one carrying this file (the restart-limit fixture fix ships in it)
 landing rule now D314)**, on top of the branch catch-up it closed: 36 conflicted refs dispositioned, no ref deleted,
 nothing pushed — and the seat-landing mechanism **proved on a live fleet**: seat `impl` ran `land_my_item` on its
 own branch and advanced local main (`item-1` `0470697b` → merge `07e0e76f`, derived gate 26/357, containment
-`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally re-measured at HEAD `a804f250`: of the 36 census refs, **13 are ancestors of `main`** (10 absorbed
-earlier + `item-6343`, `item-6435`, `item-7090` absorbed this pass), and `node tools/merge-containment-proof.mjs
---branch refs/heads/main --refs <all 36, comma-separated>` exits **1** with `refs: 36, refs_with_loss: 23` (2.0 s)
-— exit 1 is the correct verdict for a set that still has unlanded content; only an all-ancestor subset exits 0.
-The 23 non-ancestors each carry a dated `docs/DISPOSITIONS.md` row (19 with verbatim residue in
-`docs/evidence/2026-11-14-recut-residue/`); 7 of the 36 landed as `-recut` branches. Every unlanded ref was
-**attempted through `scripts/land.mjs --changed-suite`**; the exact refusal output is in that file's 2026-11-14
-"Landing attempts" section.
+`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally re-measured at HEAD `a9bc766f`: `node tools/self-merge-sla.mjs --json` (7.8 s, exit 0) counts **195 refs besides `main` — 141 landed, 49 conflicted, 5 gate-refused, stale 0, ledger coverage 54/54**; of the 36 census refs **13 are ancestors of `main`**. `node tools/merge-containment-proof.mjs --branch refs/heads/main --refs <all 36, comma-separated>` exits **1** with `refs: 36, refs_with_loss: 23` (2.0 s) — exit 1 is the correct verdict for a set that still has unlanded content; only an all-ancestor subset exits 0. Every ref whose `git merge-tree` exits 0 has been run through `scripts/land.mjs --changed-suite` at this HEAD; the verbatim refusals are in `docs/DISPOSITIONS.md` and `docs/evidence/2026-11-14-landing-attempts/verdicts.md`.
 Every commit in `8b5a19e1..HEAD`, oldest first:
 
 | sha | shipped |
@@ -69,6 +62,12 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `211075e9` | absorb `refs/heads/item-6343` — 182 added lines already verbatim in main, 0 lost, tree unchanged |
 | `78eb0c01` | absorb `refs/heads/item-6435` — 46 added lines, 0 lost, tree unchanged |
 | `a804f250` | absorb `refs/heads/item-7090` — 41 added lines, 0 lost, tree unchanged |
+| `9c5eaf05` | recut `item-6373` onto main with conflict blocks unioned by rule (R1–R6) — the branch later lands as `item-6373-recut-r2` |
+| `a707a047` | docs(catch-up): DISPOSITIONS "Landing attempts" with the verbatim gate refusals; ROADMAP 371 (by-id claim gate); SELFDEV pitfall 359 (a containment-proof exit code describes the SET, not a verdict); NEXT tally corrected |
+| `469ed339` | rule-merge `item-6373-recut` onto main — rerere resolution, `tools/recut-resolve.mjs` 0 files needing a human, containment proof 0 lost lines |
+| `a9bc766f` | merge: land `item-6373-recut-r2` onto main — derived gate 48/358 green; `item-6373` and `item-6373-recut` are both ancestors now |
+| `9de0bcc3` | tools(self-merge-sla): `gate-refused` / `scratch-chain` verdicts + `ledger_coverage`/`undocumented` + `--strict`, pinned by `demo/self-merge-sla.test.mjs` §5; `docs/evidence/2026-11-14-landing-attempts/verdicts.md` holds the verbatim refusals |
+| — | config template: `durig.config.example.json` now arms `extensions/self-merge.mjs` with a note that the base ships none (the team default is stated in the template, not only in the gitignored machine config) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
