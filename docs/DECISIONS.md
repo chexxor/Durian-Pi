@@ -12959,6 +12959,49 @@ estimate refuses real work and the refusal reads like an unlucky claim rather th
 capability, no queue row, no roster entry and no broker presence; it cannot claim, be woken, or be addressed, and no
 part of N19 may assume otherwise. It edits files and runs demos.
 
+**D### — the landing gate is a DELTA: "no NEW red", and an unmeasured baseline REFUSES (lead ruling #7269; recorded by scribe, item #7274, 2026-11-12).**
+
+**Mint note.** The heading carries a `D###` PLACEHOLDER on purpose — the landing pass derives the next FREE number by
+scanning this file at merge, per the minting convention already in this file (the notes at lines 3979 and 11419, which
+lead's ruling cites as #3077/#3075). Highest at this branch's fork point `9611c45d` is **D275**: re-derive at merge,
+do not assume D276.
+
+**The decision, in one line.** "Landing is safe" means **NO NEW RED**, not "the tree is green". The gate compares
+`RED(main)` with `RED(merged)` — two fresh runs, in the same pass — and refuses **iff the merge introduces a red that
+main did not already carry**.
+
+**The measurement that forced it.** Twelve refs merged cleanly and were refused because **main itself** was red: the
+clockin digest measured **20279 B** against its **20000 B** budget, while the merged tree measured **20244 B** — the
+candidate was **35 B better** than the tree it was refused against. The budget is in the code, read here at `9611c45d`:
+`scripts/clockin.mjs:46` `export const DIGEST_BUDGET_BYTES = 20000`, and `budgetVerdict()` at `scripts/clockin.mjs:378-384`
+makes over-budget a failure rather than a comment. **Labelled honestly:** the 20279 / 20244 figures are lead's
+measurement reported under #7269; this entry did NOT re-run the digest, so treat those two numbers as attributed, not
+re-verified here. An absolute gate measures the TREE; it cannot tell "this candidate is bad" from "this tree is already
+bad". A gate that cannot make that distinction is a stop sign, not a gate.
+
+**Why the delta is not weaker.** When main is green the two gates are **identical**. Its only added risk — permitting a
+landing onto a red main — is bounded by the fail-closed rule below.
+
+**Fail-closed: no baseline, no landing.** If the baseline run does not complete, the delta is **undefined** and the
+landing is **REFUSED**. This is the same rule as #4866 (a seat without an oracle may author, not close) and the same
+shape as #3575 (a cheap or cached signal may accept but must never decide): the baseline is **re-measured every landing,
+never read from a cached tally**.
+
+**Direction counts for budget-shaped reds.** An already-red budget test is tolerated only if the candidate does not move
+it the wrong way, and the report prints the number **before and after**.
+
+**Ruled vs. built, so a reader is not misled.** As of main `9611c45d` the comparison does not exist: `scripts/land.mjs`
+runs the gate in the detached scratch and `recordFailure()` (`scripts/land.mjs:885-897`) stops on the FIRST red with
+"main was NOT advanced" — it never measures main separately; `src/landinggate.mjs` only requires that a gate flag was
+passed (#6090). So this entry is the **rule**, not the implementation; the carrier row is **#7273**, and `docs/NEXT.md:146`
+already states the sequencing fact that the delta gate is not a prerequisite for landing while main is green.
+
+**Verify (run in the `item-7274` worktree off `main 9611c45d`; exit codes named).** `node tools/doc-integrity-guard.mjs`
+→ `VERDICT: 0 hard, 1 soft`, exit **0** (the 1 soft predates this entry). `grep -c "^\*\*D" docs/DECISIONS.md` → 247
+numbered `**D**` headings, exit **0** — the count is the census the landing pass can re-derive, not a reservation of a
+number. `node --check scripts/land.mjs` → exit **0** (no source was touched by this entry; the cited lines are read from
+the file, not modified).
+
 **D275 addendum — the five calls the build had to make (2026-11-13), recorded because each is a rule a reader cannot recover from the code alone.**
 (a) **Visibility is wider than eligibility.** Every OPEN pool row appears in every seat's `peek_queue`
 (`src/rig.mjs:2077`), even a row that seat cannot take. The spec's recommendation was the opposite; the build
