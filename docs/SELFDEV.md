@@ -4642,3 +4642,12 @@ at `:743`). Re-measure every `path:line` before repeating it.
     fixture's own sha is citable before the checks run, so a bad fixture fails loudly as a fixture, not as a rule.
     General rule: if a test derives a value from the environment, pin the environment or assert the derivation —
     never let a ~1 % flake ride in the suite, because the next session will read it as a real red.
+362. **A reaped scratch worktree leaves a directory the lander will not tolerate.** After a landing pass, an
+    empty `.land-scratch-<pid>` can remain at the repo root (it held a `.durig/clockin-deferred.txt`). It is in
+    `.gitignore`, so `git status` never shows it, and `git worktree list` does not list it — but `scripts/land.mjs`
+    refuses the next landing with `refusing to land: 1 STRAY worktree directory(ies) at the repo root`, exit 1,
+    **before** the gate runs. Measured 2026-11-14 at `9e3e2588` (Linux, Fedora Linux 45, kernel
+    `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): the first `land.mjs item-3747-recut-r2` attempt died on the
+    guard, the second (after `rm -rf .land-scratch-908905`) reached the gate and printed the real verdict. **Probe
+    before blaming the gate:** `ls -d .land-scratch-*` — 0.1 s. A landing that exits 1 is only a gate verdict if the
+    report's `error` field names `STOPPED: ... main was NOT advanced`; read the JSON, not the exit code.
