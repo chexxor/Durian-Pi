@@ -3031,6 +3031,33 @@ of this tactic, not an optional extra. Whether that is a standing **seat** (the 
 or a periodic duty on an existing seat (e.g. `scribe`) is the **operator's call** — new seats are the
 operator's grant, so `pm` escalates it rather than creating one.
 
+**Correction to D108 (architect, item #6643, 2026-11-11): the location named above does not exist.**
+`docs/notes/<topic>.md` has never been created — `ls docs/notes` fails, and `grep docs/notes` across
+`extensions/continuity.mjs`, `src/rig.mjs`, `src/confine.mjs` and `cli.mjs` returns **0** hits. Measured with
+`node tools/probes/note-location-6643.mjs` (exit 1, 5 findings, tree `item-6643`): of the ten `docs/<dir>/`
+literals asserted in `docs/DECISIONS.md` and `docs/reviews/architecture-note-contract-closeout-2026-11-09.md`,
+three name directories that do not exist (`docs/notes/` asserted 6 times, `docs/specs/` once, `docs/tools/`
+once). The consequence is not cosmetic: the closeout's section-4 probe 1 — "assert no seat tool writes to
+`docs/notes/`" — is satisfied by the absence of both the writer and the directory, so it is true in every
+possible world and can never fail. A row that reports PASS forever is not a check, and it lends the rest of
+that section a credibility it has not earned.
+
+**What the layer actually is.** (1) seat-mutable state: the store doc `durig.notes`, mirrored to
+`DURIG_NOTES_DIR` (`extensions/continuity.mjs:214`, called at `:350`, `:381`, `:417`); pinned by
+`demo/continuity-note.test.mjs` (exit 0). (2) durable cross-seat knowledge: the repo docs layer that already
+exists and is read daily — `docs/DECISIONS.md`, `docs/runbooks/`, `docs/reviews/`, `docs/incidents/`,
+`docs/evidence/`. The topic-file row is struck: creating `docs/notes/` would duplicate the ADR layer and add
+a writer nobody owns. If a topic layer is ever wanted it must arrive with an owner, a first file and a check
+that can fail — not a path in prose.
+
+**One D108 clause is now measurably unmet, and it is the important one.** The mirror default is
+`resolve(process.cwd(), ".durig", "notes")` (`extensions/continuity.mjs:75`) and no config file sets
+`DURIG_NOTES_DIR`, so a seat process whose cwd is its item worktree mirrors its note **inside** the worktree
+the harness reaps. Live it lands at the root only because the broker's cwd is the root — the shared location
+is an accident of process cwd, not a resolved absolute path. Fix: pin `DURIG_NOTES_DIR` to an absolute path in
+the config (the key is registered, `src/config.mjs:165`) and assert the resolved path is not inside an
+`item-<n>` directory. Falsifier: section C of the probe above.
+
 **Capture prompt (the improvement the operator asked for).** The seat instruction should read:
 _before you finish — or before a reset/compaction boundary — record what you learned that is not
 already written down; one line per fact: the question, the answer, and where it came from; a note
