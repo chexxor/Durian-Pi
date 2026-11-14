@@ -122,6 +122,17 @@ function git(cwd, argv) {
 	return { code: r.status ?? 1, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim() };
 }
 
+/** Where a suite entry actually lives. `scripts/test.mjs` and `tools/what-to-test.mjs` emit paths
+ * relative to the tree root ("demo/x.test.mjs", "tools/y-test.mjs"); a bare name is a demo. Prefixing
+ * EVERY entry with "demo/" makes a tools test unrunnable and the lander reports the branch red for a
+ * file that does not exist (measured 2026-11-14, landing chain landing-20261114-b1k, Linux Fedora 45,
+ * node v24.22.1): `Cannot find module .../demo/tools/pool-migrate-test.mjs`.
+ * The lander's own note says a MODULE_NOT_FOUND in the scratch is the instrument, not the branch -
+ * here it was the instrument in the literal sense. */
+function testFile(test) {
+	return /^(demo|tools|src|scripts)\//.test(test) ? test : join("demo", test);
+}
+
 function report(payload, code) {
 	console.log(JSON.stringify(payload, null, 2));
 	process.exit(code);
@@ -874,7 +885,7 @@ await (async () => {
 	/* ── helper: run a single test, return { test, exit } ── */
 	function runTest(test) {
 		return new Promise((resolve) => {
-			const child = spawn(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
+			const child = spawn(process.execPath, [testFile(test)], { cwd: scratch, encoding: "utf8" });
 			let stdout = "";
 			let stderr = "";
 			child.stdout.on("data", (d) => { stdout += d; });
@@ -950,7 +961,7 @@ await (async () => {
 
 	/* ── run serialized tests one at a time ── */
 	for (const test of serializedTests) {
-		const run = spawnSync(process.execPath, [join("demo", test)], { cwd: scratch, encoding: "utf8" });
+		const run = spawnSync(process.execPath, [testFile(test)], { cwd: scratch, encoding: "utf8" });
 		collectSkips(test, run.stdout);
 		suiteResults.push({ test, exit: run.status ?? 1 });
 		if ((run.status ?? 1) !== 0) {
