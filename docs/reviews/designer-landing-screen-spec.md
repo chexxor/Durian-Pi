@@ -130,8 +130,13 @@ row states.
 
 ## 2. The brief, numerically
 
-- cap by CELLS (never code units): 24 at 76–80, 16 at 51–75, 12 below (ladder in §4; every rung
-  measured: e.g. at 48 the full row renders 44 cells, brief `#74 merge …` - the clamp, not a demand, sizes the floor).
+- cap by CELLS (never code units): the rung is B(w) from §4 - `B(w) = w - 34 - (A(w) > 0 ? A(w) + 1 : 0)`,
+  with the brief's RESERVED rung R(w) = 24 @ w >= 72 | 16 @ 47..71 | 12 @ w <= 46, every term in TERMINAL
+  columns. THE OLD BANDS (24 at 76–80, 16 at 51–75, 12 below) ARE RETIRED: they belong to (b)'s
+  content-cell table, which §4 itself says ran four cells high against the code. Confirm against the
+  builder, not the prose: `briefCap` in `src/tui/client.mjs` (lines 100-102 at 9611c45d) reads
+  `if (width >= 72) return 24; if (width >= 47) return 16; return 12`. Every rung still measured: e.g. at 48
+  the full row renders 44 cells, brief `#74 merge …` - the clamp, not a demand, sizes the floor.
 - `#id` always shown, never truncated: `#74 `, `#1105 ` (id width = digits + 1; at the 40-content floor the clamp leaves 3 subject cells + the ellipsis - the id survives).
 - ellipsis: `…` appended when the field truncates; NO ellipsis for `—` (nothing to summarize).
 - the parked-seat brief reads the QUESTION, truncating to the same caps, with the source
@@ -165,15 +170,21 @@ has twice rewritten (#3483, ee495e7) - and the settled shape has moved once more
 (a), so the NAME RUNG becomes 10 and the freed cell is spent AFTER the name (the gap between the
 name and the queue column lives in the name field's own right-hand padding; there is no separate
 separator to remember, the padding edge IS the separator). Nothing in the absorption model changes;
-one fixed cell moves, and this section books its cost. Everything below is either MEASURED on the
-builder at this snapshot or DERIVED from that measurement plus the one named delta: when impl lands
-(a) the new numbers are SUBSTITUTIONS, not further investigations. Until then the shipped builder is
-still the (b) state, `node demo/tui-landing.test.mjs` (exit 0 at this snapshot, 37 checks) stays the
-acceptance reference, and the pins re-cut per the golden accounting below.
+one fixed cell moves, and this section books its cost. Everything below was MEASURED on the builder at
+this snapshot or DERIVED from that measurement plus the one named delta; the substitutions have landed.
+(a) IS IN MAIN: `git merge-base --is-ancestor 9129d333 main` -> exit 0, and the shipped builder carries it
+(`const LANDING_FIXED_WIDTH = 34`, src/tui/client.mjs line 84; `nameCol` pads/truncates to 10, line 242).
+The acceptance reference is `node demo/tui-landing.test.mjs`: 36 checks, exit 0, and the count is
+reproducible rather than remembered - `node demo/tui-landing.test.mjs | grep -c "  ok "` -> 36,
+measured at 9611c45d and re-measured on main's tip b454d1ea (both exit 0). The (b) snapshot this section
+was written against recorded 37. A bare number with no command
+beside it is the same failure docs/runbooks/land.md warns about for suite verdicts that do not name the
+tree. The pins re-cut per the golden accounting below.
 
 **The denominator, measured once and then trusted:** `renderSeatList` is handed the TERMINAL width -
 `renderTui` feeds it `getSize().width` untouched (src/tui/client.mjs) and the 80x24 golden pins rows
-of exactly 80 cells (measured: the 80x24 golden's brief is 30 cells = 80 - 33 - 17; the cap rungs
+of exactly 80 cells (measured: the 80x24 golden's brief is 29 cells = 80 - 34 - 17, cells 35..63 of the
+row, checked at 9611c45d and b454d1ea with `node demo/tui-golden.test.mjs`, exit 0; the cap rungs
 rise at exactly 72/47 TERMINAL columns, the landing floor is 44). The (b) section's two-denominator
 table - content cells with a `(terminal in parentheses)` column - is retired by this rewrite: its
 parenthetical column ran four cells high against the code it described, and its "handed `width - 4`"
@@ -257,9 +268,7 @@ it opens - A is the ROOM, the mask is the display.
 not (that reading is the #4233 mask, unchanged by (a)). One cell, one paint-rung, one substitution.
 
 **GOLDEN ACCOUNTING - the count, and the rule that catches a lying golden:** the acceptance
-reference is `node demo/tui-landing.test.mjs`: 37 checks, exit 0 at this snapshot (measured by
-counting the `ok` lines), of which exactly THREE pin a row LITERALLY (the 80x24 golden rows 1-3;
-the "pins the three seat rows" check above them asserts only the row COUNT). The name cell and the
+ The name cell and the
 fixed prefix sit LEFT of both the brief and the action cell in every pinned row, so a one-cell
 fixed-part change repaints every pinned string; the DERIVED projections impl re-pins at land time
 (verified arithmetic on the (b) builder with name 10 / fixed 34 / constant 35 only):
@@ -269,13 +278,14 @@ fixed-part change repaints every pinned string; the DERIVED projections impl re-
     "  ○ idle       advocate  0q       —                                             "
 
 (under the terminal-80 arithmetic the brief cap is DERIVED, so it reads w - 34 - 17 = 29: the fixed
-part took the cell, the brief keeps the books, nothing "absorbs" the (a) cell twice.) The other 34
+part took the cell, the brief keeps the books, nothing "absorbs" the (a) cell twice.) The other 33
 checks are presence-and-invariant assertions - state words, queue counts, substring content, the
 44/48-floor presence bounds, the 40..100 no-overflow sweep, NO_COLOR, selection, degrade - which
 the rung change does not touch by construction AND which must stay green; a red invariant after
-(a) lands is a regression no re-pin excuses. THE FALSIFIER: a pinned literal that does NOT move
-when the fixed part changes by one is not asserting the layout - query it at land time, do not
-silence it.
+(a) lands is a regression no re-pin excuses. THE FALSIFIER: a pinned row literal - inline in tui-landing.test.mjs or in
+`demo/__golden__/` - that does NOT move when the fixed part changes by one is not asserting the layout;
+query it at land time, do not silence it. Regenerating the goldens is a reviewed diff, not a hand edit:
+`UPDATE_GOLDEN=1 node demo/tui-golden.test.mjs`.
 
 ## 5. Selection affordance (unchanged; no redesign)
 
