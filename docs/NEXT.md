@@ -1,5 +1,6 @@
-**Last update:** 2026-11-13T23:5xZ (delegate). `HEAD` = the commit carrying this pointer (`git rev-parse --short HEAD`);
-every milestone object is in the sha table below. Ahead of `origin/main`, **nothing pushed** — the push grant is the
+**Last update:** 2026-11-14T00:36Z (delegate). The previous pointer commit is **`11290f1e`**; this file's own commit
+is named by `git log -1 --format=%h -- docs/NEXT.md` — a file cannot name the commit that contains it, which is the
+only reason the table below has no self-row. Every other milestone object is named by sha. Ahead of `origin/main`, **nothing pushed** — the push grant is the
 operator's.
 
 **Milestone this window worked** — **N19 "The Pool" (D275), made USABLE and PROVEN ALIVE.** One line per shipped object,
@@ -30,7 +31,7 @@ in order:
 | `06de1bba` | deleted the sentences that still DENIED the live firing (spec §13.4, D275 (m)) |
 | `18c7a3b8` | pool census re-read (5 pooled / 3 open; #7722 minted organically) |
 | `3fb50030` | pause/unpause evidence + refresh timing; pointer arithmetic (104 = 85+19) and shas |
-| `HEAD` | the commit carrying this pointer (`git rev-parse --short HEAD`) — the table cannot name itself |
+| `11290f1e` | the pointer before this one (the last sha the previous session left on `main`) |
 
 Read `docs/POOL-QUEUE-SPEC.md` **§13, §13.3b, §13.4** (code's own strings; the number reconciliation; the live evidence)
 and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
@@ -43,12 +44,22 @@ and `docs/reviews/2026-11-13-capability-ownership-ruling.md` (FIVE decisions).
 | 540123 | 1800 s | 20:42:21.399Z → 21:32:41.503Z | 3,020 s | 311912 alive-but-dead; `serve --stop` refused → `kill -TERM` → `resume` |
 | 774849 | 1800 s | 21:34:01.725Z → 22:13:24.335Z | 2,363 s | 540123 froze past its deadline; same fallback |
 | 899525 | keepalive's own bound (NOT recorded by it) | 22:13:26.113Z → 00:10:24.944Z | 6,418 s | 774849 stranded; exited `reason=max-duration passes=335` |
-| 1574499 | 1800 s | 00:22:11.251Z → (live at 00:29Z) | — | 899525's max-duration exit; started after the fleet was unpaused |
+| 1574499 | 1800 s | 00:22:11.251Z → (live at 00:36Z, pass 208, `woke=advocate`) | — | 899525's max-duration exit; started after the fleet was unpaused. **Expires ~00:52:11Z** — after that the rig has NO broker until a session restarts one (recipe below; `--no-probe`, the 20 s preflight false-blocks on local2) |
 
 Every window was **commanded** ≤ 3600 s, and **windows 1–2 overran their command and lingered in read-drain** (the
 documented alive-but-dead shape) — that overshoot is a base defect, not a licence; the keepalive path records no
 commanded bound, which is a recording gap in that tool. Liveness is the last ` PASS ` line (pitfall 304), so read
 `grep ' PASS ' selfdev.sqlite.broker.log | tail -1` and `cat selfdev.sqlite.broker.json` BEFORE acting.
+
+**The fleet is UNPAUSED and was seen to DRIVE** (this was the one objection the 8th audit raised that had to be
+closed, so the evidence is spelled out). The audit read `paused:true, pausedAt:23:50:48.611Z, pausedBy:operator` and
+was right: `23:46:33.518Z pause`, `23:49:41.162Z unpause`, `23:50:48.607Z pause`, nothing after — a second pause landed
+11 s after the unpause. Closed at **`00:19:28Z`** by `node cli.mjs unpause`; verified by a **broker** `status --json`
+read (not `--local`, whose second-connection staleness is pitfall 326): `control {paused:false, pausedAt:null,
+pausedBy:null}`. `paused:false` alone is a claim, so here is the behavioural proof: **`#7722` was minted by
+`architect` at `23:31:40.751Z` — INSIDE the pause — sat unclaimed for the whole pause, and carries
+`pool-claimed by=advocate` at `2026-11-14T00:25:35.756Z`**, a live pool claim 6 minutes after the unpause and none
+before it (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s). A paused fleet cannot produce that transition.
 
 **Host for every number below**, measured with the measurement: **Linux**, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, `git version 2.56.0` — probe:
@@ -68,11 +79,14 @@ complete_work(itemId: 7700, closedAs: "split", children: [...]) - a row nobody c
 queue problem.` Census: **`sizeRefused: 1`**. Corroborated by `demo/pool-gate-live-roster.test.mjs` (live roster) and
 `tools/pool-gate-live-probe.mjs` (byte-copy of the live store: impl and auditor each refused with `Split it: …`).
 
-**State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 0.8 s, read-only — re-read it, the team keeps
-minting): at `23:33Z` `pool {rows:5, pooled:5, open:3, claimed:2, sizeRefused:1, seatsWithoutWindow:[]}`. Open:
-**#7660** (`small`, `requires:"docs"`, no seat advertises it), **#7700** (`project`, refused twice, still open) and
-**#7722** (`small`, minted by `architect` at 23:2xZ — organic use, not asked for by this goal). Claimed and `done`: **#7667**
-(`pool-claimed by=advocate`) and **#7669** (`pool-claimed by=security`, 18:36:48.521Z) — both name
+**State the pool is in** (`node .spike/pool-rows.mjs ./selfdev.sqlite`, 1.2 s, read-only — re-read it, the team keeps
+minting): at `00:31Z` `pool {rows:5, pooled:5, open:2, claimed:3, ownerOfRecord:3, sizeRefused:1,
+seatsWithoutWindow:[]}`. Open: **#7660** (`small`, `requires:"docs"`, no seat advertises it) and **#7700**
+(`project`, refused twice, still open) — the pool is down to two unclaimable rows *by design*, which is the state the
+gate is supposed to produce. Claimed: **#7667**
+(`pool-claimed by=advocate` 18:35:43.701Z, `done` 21:28:24.564Z), **#7669** (`pool-claimed by=security`
+18:36:48.521Z, `done` 21:14:32.765Z) and **#7722** (`pool-claimed by=advocate` `00:25:35.756Z`, in flight — minted by
+`architect` at 23:31:40.751Z, organic use, not asked for by this goal). #7667 and #7669 both name
 `docs/DECISIONS.md`, which `ownership` gives to `advocate` ALONE, so security's claim is the milestone's cross-owner
 probe on a live row. `requires` carries no live annotation: **9 of 885 queued rows** have one and **0** rows have a
 `revised` transition with `requiresFrom/To` — every one was minted with it by `send_work` (the baseline's 7 was a
@@ -93,7 +107,7 @@ node .spike/pool-rows.mjs ./selfdev.sqlite                                  # 0.
 node tools/pool-migrate.mjs --dry-run --db ./selfdev.sqlite --limit 5       # 1.7-10 s — read-only denominator, balance line
 node tools/pool-gate-live-probe.mjs --db ./selfdev.sqlite                   # 7-19 s — the gate refusing the LIVE roster's seats
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
-node scripts/test.mjs --all --jobs 2                                        # 258 s — 337/337 at 0de543ae (jobs 4 flakes; see below)
+node scripts/test.mjs --all --jobs 2                                        # 245-258 s — 337/337 at 11290f1e (jobs 4 flakes; see below)
 ```
 
 **Blocker:** (1) **TRIGGERED, per the objective's blocker rule** — the dry-run shows the capability-clean tranche would
@@ -105,7 +119,9 @@ build-side waits: #7660 needs its author (`lead`) or `pm` to clear `requires:"do
 `pool-dead-gate`); the FIVE rulings below are owed.
 
 **Suite flake under `--jobs 4` (recorded, both green standalone twice):** `demo/restart-limit-behaviour.test.mjs` and
-`demo/compaction-guard-gate.test.mjs`. A `--jobs 2` run at `0de543ae` is **337/337 in 257.8 s**; the `--jobs 4` run is
+`demo/compaction-guard-gate.test.mjs`. A `--jobs 2` run at `0de543ae` is **337/337 in 257.8 s**, and re-run at
+`11290f1e` (this pointer's edit is docs-only) it is **337/337 in 245.1 s**, log `.spike/suite-2026-11-14T00-42Z.out`;
+the `--jobs 4` run is
 336/337 with one of those two. Re-run the named test alone before chasing it.
 
 **Known red, and one that WAS red:** `node demo/offline.mjs` exits **1** —
