@@ -1,11 +1,11 @@
 ---
 runbook: pi-pin-update
-symptom: "the pinned pi must move (an ordered update, or a tag we skipped becomes available); or a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned 0 hits and you are about to conclude something is absent upstream"
+symptom: "the pinned pi must move (an ordered update, or a tag we skipped becomes available); or a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned 0 hits and you are about to conclude something is absent upstream; or a seat's live progress is coarser than it used to be and its tool results only appear after the commit lands"
 writes: true
 precondition: "broker-stopped"
 last_verified: 2026-11-11
-verified_by: delegate (read-only half on #5089 2026-11-04; the WRITE half run end-to-end 2026-11-10, staged then reverted; the drift half re-measured read-only 2026-11-11); devtools (the read-only half on #5089 2026-11-04; the pin-ref check re-run 2026-11-11 on the landed #6061)
-evidence: "#5089 (the mint) and the read-only half of this procedure run ON that row, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1: `node scripts/sync-pi.mjs --check` exit 0 `drift=true` pin `2ec55d80` tip `707888ec`; `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` = **0 ahead / 515 behind** (the delta doc's 508 was already stale); `git -C vendor/pi-main fetch --tags origin` exit 0, tags `v1.2.0 v1.3.0 v1.4.0 v1.5.0`; pin and tip `migrations.ts` both carry exactly `version: 1, version: 2`; live `durable_schema = {singleton:1, version:2}` (read-only open); scratch-`/tmp`-DB gate: `status`/`queue`/`ps`/`show` exit 1, `cause:no_store`, `-wal`/`-shm` ABSENT; and the lockout itself - an un-linked worktree refused `selfdev.sqlite` (exit 1, \"schema version 2 is newer than supported version 1\") until `--sync` + `--link`, after which the same read exited 0. 2026-11-10, Linux Fedora 45 `7.2.15-300.fc45.x86_64` node v24.22.1 (the WRITE half, staged then reverted): `--update v1.5.1` → pin `dd30101c`, `refType: tag`; `--sync` 14 s / 10 packages (needs `pi-schema` FIRST in `packages`, else chord fails TS2307); `--link` 14 s / 10 linked; suite **93 PASS / 187 FAIL**; revert → **278/280 in 59.7 s**; migrations identical at both ends (`version: 1, 2`) so **nothing migrates**; backup `cmp` exit 0. Migration inventory: `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`, ROADMAP **353–357**. 2026-11-11, read-only, item-6200 in an item worktree at main `35001c3a`, dependencySet built-pin (v1.5.1 built + linked): `node scripts/sync-pi.mjs` exit 0, pin `dd30101cfc5b` tag `v1.5.1`, upstream tip `75ca6e7d0849`, **behind 90 / ahead 0**, `tagsBetween: []` - the tip carries NO tag, so a tip bump pins an unreleased commit; every pin package's `package.json` reads **1.5.2** at the tip vs 1.5.1 at the pin. The BUMP COST, measured in a throwaway scratch worktree whose copy of the pin named the tip (the shipped `pi-main.pin.json` was never edited, and nothing landed): `--sync --link` 36 s, 10 packages built, 10 linked, `dependencySet: built-pin`, and the full suite **300/300 exit 0 in 92.4 s** - the same 300/300 exit 0 as the pinned tree (89.7 s). Churn between pin and tip is concentrated in `apps/` (285 files, not in the pin set), `packages/chord` (91), `packages/durable` (52), `packages/coding-agent` (43); the exported symbols that changed there (`defineState`'s key type widened, `JoinPolicy` gaining `"any"`, `KeyedSlot`/`KeySource`/`RunEndTask` removed) appear in **0** durig files, and `documentState` is still present upstream at both ends - the migration `demo/pi-symbol-migration.test.mjs` pins is ours, not upstream's."}
+verified_by: delegate (read-only half on #5089 2026-11-04; the WRITE half run end-to-end 2026-11-10, staged then reverted; the drift half re-measured read-only 2026-11-11); devtools (the read-only half on #5089 2026-11-04; the pin-ref check re-run 2026-11-11 on the landed #6061); "delegate (read-only half on #5089 2026-11-04; the WRITE half run end-to-end 2026-11-10, staged then reverted); scribe (#6177, the seam section, 2026-11-10)"
+evidence: "#5089 (the mint) and the read-only half of this procedure run ON that row, Linux Fedora 44 `7.2.14-200.fc44.x86_64` node v24.22.1: `node scripts/sync-pi.mjs --check` exit 0 `drift=true` pin `2ec55d80` tip `707888ec`; `git -C vendor/pi-main rev-list --left-right --count <pin>...origin/main` = **0 ahead / 515 behind** (the delta doc's 508 was already stale); `git -C vendor/pi-main fetch --tags origin` exit 0, tags `v1.2.0 v1.3.0 v1.4.0 v1.5.0`; pin and tip `migrations.ts` both carry exactly `version: 1, version: 2`; live `durable_schema = {singleton:1, version:2}` (read-only open); scratch-`/tmp`-DB gate: `status`/`queue`/`ps`/`show` exit 1, `cause:no_store`, `-wal`/`-shm` ABSENT; and the lockout itself - an un-linked worktree refused `selfdev.sqlite` (exit 1, \"schema version 2 is newer than supported version 1\") until `--sync` + `--link`, after which the same read exited 0. 2026-11-10, Linux Fedora 45 `7.2.15-300.fc45.x86_64` node v24.22.1 (the WRITE half, staged then reverted): `--update v1.5.1` → pin `dd30101c`, `refType: tag`; `--sync` 14 s / 10 packages (needs `pi-schema` FIRST in `packages`, else chord fails TS2307); `--link` 14 s / 10 linked; suite **93 PASS / 187 FAIL**; revert → **278/280 in 59.7 s**; migrations identical at both ends (`version: 1, 2`) so **nothing migrates**; backup `cmp` exit 0. Migration inventory: `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`, ROADMAP **353–357**. 2026-11-11, read-only, item-6200 in an item worktree at main `35001c3a`, dependencySet built-pin (v1.5.1 built + linked): `node scripts/sync-pi.mjs` exit 0, pin `dd30101cfc5b` tag `v1.5.1`, upstream tip `75ca6e7d0849`, **behind 90 / ahead 0**, `tagsBetween: []` - the tip carries NO tag, so a tip bump pins an unreleased commit; every pin package's `package.json` reads **1.5.2** at the tip vs 1.5.1 at the pin. The BUMP COST, measured in a throwaway scratch worktree whose copy of the pin named the tip (the shipped `pi-main.pin.json` was never edited, and nothing landed): `--sync --link` 36 s, 10 packages built, 10 linked, `dependencySet: built-pin`, and the full suite **300/300 exit 0 in 92.4 s** - the same 300/300 exit 0 as the pinned tree (89.7 s). Churn between pin and tip is concentrated in `apps/` (285 files, not in the pin set), `packages/chord` (91), `packages/durable` (52), `packages/coding-agent` (43); the exported symbols that changed there (`defineState`'s key type widened, `JoinPolicy` gaining `"any"`, `KeyedSlot`/`KeySource`/`RunEndTask` removed) appear in **0** durig files, and `documentState` is still present upstream at both ends - the migration `demo/pi-symbol-migration.test.mjs` pins is ours, not upstream's."}; backup `cmp` exit 0. Migration inventory: `docs/reviews/pi-1.5.1-delta-review-2026-11-10.md`, ROADMAP **353–357**. #6177 (2026-11-10, `item-6177` worktree off `main f192f543`, node v24.22.1): seam section verified by `grep -c "observeCommits" src/commitstream.mjs` = 2 exit 0; `grep -c "watchDoc" src/livewatch.mjs` = 1 exit 0; `grep -o 'type: "[a-z_]*"' src/livewatch.mjs | sort -u` = 9 types, no `turn_end`, exit 0; `grep -n tool_execution_end src/tui/durable/adapter.mjs` = line 506 exit 0; `grep -n "commit cadence" docs/runbooks/README.md` exit 0; `node tools/doc-integrity-guard.mjs` exit 0. Seam-exercising demos in an UN-linked worktree: `node demo/inflight.test.mjs` exit 1 (8 checks, `updates=0`), `node demo/guard.test.mjs` exit 1 (13 checks) — the tree resolves released pi-durable **1.3.0**, which has no `watchDoc`/`observeCommits`. Re-verified 2026-11-11 in the `item-6177` worktree off `main f192f543` (node v24.22.1): every command in §Verify exits 0 (`observeCommits` = 2, `watchDoc` = 1, 10 `type:` matches / 9 event types, `tool_execution_end` at `src/tui/durable/adapter.mjs:506`, `grep -n "commit cadence" docs/runbooks/README.md` hit, `node tools/doc-integrity-guard.mjs` 0 hard 0 soft); each `path:line` in the seam section was re-read against this tree - `turn_end` and `run_end` share the case at `src/inflight.mjs:163-164`"}"
 check_rule: null
 ---
 
@@ -237,9 +237,78 @@ the degeneration guard; it defers to `lead` rather than being translated under p
 `merge-tree --write-tree` prediction), then **re-point seats before pruning** any worktree —
 `node tools/rig-portability-audit.mjs` (read-only, ~1 s) prints the seat→root map; SELFDEV pitfall 24.
 
+## The two in-flight seams the 1.5.1 move left in our source
+
+`watchEvents()` is gone at 1.5.1 and nothing replaced it one-for-one. Two modules in **our** tree now stand between
+upstream and the rig features that consumed the event stream: `src/commitstream.mjs` (`followCommits`) and
+`src/livewatch.mjs` (`watchLive`). They are **approximations**. Read this before writing a listener, before
+reporting "the seat is not streaming", and before blaming the guard for a coarse turn.
+
+### `src/commitstream.mjs` — `followCommits(harness, listener)`
+
+| | |
+|---|---|
+| **Guarantees** | `listener(publication, context)` runs for every **stored** commit. The publication shape `{ seq, changes }` is unchanged, so `scheduler.notify`, the wake loop and `cli.mjs watch` needed no change (`src/scheduler.mjs:7-8` says so outright). The return value is the unsubscribe the callers used to get from `subscribeCommits`, and `detach()` is idempotent — upstream `types.ts:1130`: "Idempotent: no `advance` or `end` follows it." |
+| **Does NOT guarantee** | **Cadence.** One publication per commit, and progress commits are *deferred* (`CommitPersistence`): "watches see each at once, and Storage gets them together, at the run's next phase boundary or after `persistWithinMs`" (vendor `packages/durable/src/harness/types.ts:604-606`). **Listener durability.** A throw inside `advance` is reported and the observer is **detached** — upstream `guardObserver`'s `fault` does exactly that (`vendor/.../session/session.ts:1789-1791`). One bad listener silently ends that stream; the next commit will not reach it. |
+
+### `src/livewatch.mjs` — `watchLive(harness, conversationId, context)`
+
+| | |
+|---|---|
+| **Guarantees** | A **read-attach** to one conversation's `pi.live` document (LiveDoc, `version: 3` — vendor `.../harness/live.ts:197). It writes nothing. It re-emits the shapes `src/inflight.mjs`, `src/guard.mjs` and `src/tui/durable/bridge.mjs` already speak: `run_start`, `turn_start`, `message_start`, `message_update` (a `text_delta` of whatever arrived since the last frame), `auto_retry_start`/`auto_retry_end`, `compaction_start`/`compaction_end`, `run_end`. |
+| **Does NOT guarantee** | Per-token deltas. **Turn boundaries**: `turn_start` is derived from `generation.attempt` (`src/livewatch.mjs:47-52`), so a multi-attempt run gets one `turn_start` per **attempt**, not per turn. **`turn_end` is never emitted** — the only types the module can emit are the nine above; `src/inflight.mjs:163-164` handles `turn_end` and `run_end` in the same case, so the watch's baseline resets at the end of the *run*, not of a turn. **Tool results are not in this stream at all**: `pi.live`'s `ToolSlot` carries `entry?: EntryId` — "Result entry once done" (vendor `.../harness/live.ts:41-42) — a pointer, not the text. Finished tool results reach the rig as committed `pi.tool-result` entries, translated by `src/tui/durable/adapter.mjs:495-507`. |
+
+**A listener expecting per-token commits will not get them.** There is no per-token stream in 1.5.1. The only
+in-flight signal is the committed throttled partial `pi.live.generation.message` (vendor
+`packages/durable/src/harness/live.ts:166`, "Committed throttled partial of the in-flight response"). Where to go
+instead:
+
+- **finer progress** → change **config**, not the seam: `settings.progress.partialIntervalMs` and
+  `outputIntervalMs` default to 100 ms, `persistWithinMs` to **1,000 ms** (vendor `.../harness/agent.ts:37-39`).
+  Making it smaller trades store writes for smoothness; put the value in config and name a demo that pins it.
+- **pre-commit visibility from a follower** → `src/readapi.mjs:359-362` `readLiveState()` is "the only place a
+  follower can see work before it commits" (ROADMAP 40c); `cli.mjs watch` and `log --follow` use it
+  (`cli.mjs:2652`). `src/driver.mjs:177-184` probes the same document through the raw storage handle, because a
+  bad read through the driving harness would close the whole session.
+- **tool output as it happens** → `pi.live`'s `tools` / `nestedTools` slots (vendor `.../harness/live.ts:176-180)
+  show the running round; the result itself is a committed entry.
+
+**What depends on the difference**
+
+| rig feature | where it reads the seam | what the approximation changes |
+|---|---|---|
+| TUI live progress | `src/tui/durable/adapter.mjs:418` attaches `watchLive`; the bridge translates the batches | streaming is coarser than the old `watchEvents` stream; `adapter.mjs:491` exists precisely to avoid double-rendering an assistant message already streamed from `pi.live` |
+| degeneration guard / in-flight watch | `src/inflight.mjs:146-166` | turn baselines are per **attempt**; a retry re-baselines the elapsed-time and streamed-char counters instead of accumulating across turns |
+| wake scheduler | `cli.mjs:2127` → `src/scheduler.mjs:86-88` → `isWakeRelevantCommit` (:45-56) | wake granularity is commits, and **progress commits do not wake**: `WAKE_DOC_KINDS` is `durig.queue`, `durig.seats` (:31), so `pi.live` writes are not wake-relevant; a 500 ms floor coalesces bursts (:59-61) |
+| spool draining / attention counts | `src/attention.mjs:84-89`, `src/degeneration.mjs:142`, `src/rigstory.mjs:44` | every count is taken from **committed** entries (`kind === "pi.tool-result"`), so a tool result is invisible to them until its commit lands |
+
 ## Verify
 
-A runbook is done only when this ran. The read-only half ran on **#5089, 2026-11-04**, Linux Fedora 44
+A runbook is done only when this ran. **The seam section above was verified on 2026-11-10 and re-run on
+2026-11-11 in the `item-6177` worktree off `main f192f543`** (Linux, node v24.22.1); every line below is that run's output:
+
+```bash
+# the seams exist, and each is the only place its API is attached in our source
+grep -c "observeCommits" src/commitstream.mjs        # 2 (one comment, one call) — exit 0
+grep -c "watchDoc"       src/livewatch.mjs          # 1 — exit 0
+# the in-flight seam cannot emit turn_end: the nine types it can emit are all there is
+grep -o 'type: "[a-z_]*"' src/livewatch.mjs | sort -u   # 10 matches; 9 event types (the 10th is the `text_delta` change type) — no `turn_end`, no tool event — exit 0
+grep -n "tool_execution_end" src/tui/durable/adapter.mjs | head -1   # :506 — exit 0
+# a seat finds this from the SYMPTOM index, not from a source comment
+grep -n "commit cadence" docs/runbooks/README.md     # exit 0 — the pi-pin-update row carries it
+node tools/doc-integrity-guard.mjs                   # exit 0 (index reachability + front matter)
+```
+
+**Dependency caveat, and it is the point of this runbook's Preconditions:** those greps are source-level and run
+anywhere. The demos that *exercise* the seams (`demo/inflight.test.mjs`, `demo/guard.test.mjs`) do **not** pass in
+an un-linked worktree: measured here, `node demo/inflight.test.mjs` → **8 checks failed, exit 1** (the live-driven
+checks report `updates=0`) and `node demo/guard.test.mjs` → **13 failed, exit 1**, because an un-linked tree
+resolves the released `@earendil-works/pi-durable` **1.3.0**, which has no `watchDoc`/`observeCommits` to attach to
+(`node -e 'const d=require("@earendil-works/pi-durable"); console.log(typeof d.watchLive)'` → `undefined`). Run
+those two after `--sync` + `--link` in the seat root, and never call a seam broken on the strength of a verdict
+from an un-linked tree.
+
+The read-only half of the pin procedure ran on **#5089, 2026-11-04**, Linux Fedora 44
 `7.2.14-200.fc44.x86_64`, node v24.22.1 — every number below is that run's:
 
 | step | command | result |
@@ -270,7 +339,12 @@ write half is verified by the stage it is first used in (#5095/#5096) — then b
   "8 pre-existing reds" is a claim nobody can check; "18 causes, four of them one storage error" is.
 - **A tool result shows `[redacted by durian-pi: secret-shaped value]`** because a 40-hex sha passed through it:
   print shas as 8-char prefixes (`${sha:0:8}`) or quote them in report text — [tool-result-redacted.md](tool-result-redacted.md).
-- Escalate a store that will not open under **either** build to [store-corruption-recovery.md](store-corruption-recovery.md).
+- **Live progress looks chopped, or a tool result shows up late.** That is the seam, not a defect: the in-flight
+  signal is `pi.live` at commit cadence (`persistWithinMs` default 1,000 ms), and finished tool results only exist
+  as committed `pi.tool-result` entries. See §"The two in-flight seams the 1.5.1 move left in our source" before
+  opening anything.
+- **A listener stops receiving events mid-run.** A throw in `advance` detaches the observer (upstream
+  `guardObserver`, vendor `.../session/session.ts:1789-1791`). Re-attach; do not assume the stream died upstream.
 
 ## Escalate to
 
