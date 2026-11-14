@@ -138,9 +138,12 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
 - **Verification recording:** the `check` provenance line reports "runbooks verified against rev X"
   (ROADMAP 86).
 - **Env-name fidelity (#5911, swept 2026-11-10 on tree `f192f543`):** every command in these runbooks must name
-  the variable **the entry point it invokes actually reads**. Measured in that tree: `cli.mjs` (`cli.mjs:155`),
+  the variable **the entry point it invokes actually reads**. Measured in that tree, and every one of those four
+  citations re-checked with `git show f192f543:<file>`: `cli.mjs` (`cli.mjs:155`),
   `intent.mjs` (`intent.mjs:105`) and `scripts/land.mjs` (`scripts/land.mjs:248`) read `DURIG_DB`; 
-  `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. A command
+  `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. **Those line
+  numbers have since moved**: re-measured 2026-11-11 on `main 35001c3a` they are `cli.mjs:161`, `intent.mjs:105`
+  (unchanged), `scripts/land.mjs:264` and `scripts/clockin.mjs:468`. A command
   carrying a name the entry point ignores is not a typo - it silently runs against the fallback store, which is how
   a wrong store gets read as a quiet rig. 31 command lines across 14 runbooks were corrected in that sweep; the
   machine-side surfacing is `tools/broker-serve.mjs:153` (`legacy-env-set`), and ROADMAP 191 is the un-built
@@ -229,6 +232,23 @@ Two more figures in that record do not survive measurement on main:
 
 **Revival rule for anyone quoting a runbook-health number:** the command, the ref, the date, and the
 seat that ran it. Without the ref, the number is not a baseline; it is a hint.
+- **Census and the machine-rule gap (#6336, measured 2026-11-11):** `git grep -n 'DURIAN_PI_DB'` on `main 35001c3a`
+  returned **128 lines in 38 files** before this item's edits; on the `item-6336` branch after them it returns
+  **137 lines in 37 files** - `docs/TUI-TESTING.md` is the only file cleared, and the extra lines are the docs naming
+  the inert spelling as a counterexample. 68 of the lines are the verbatim archive `docs/NEXT-ARCHIVE.md` (the
+  disposition header that flags the stale form lives on branch `item-6334`, #6334, not yet landed, and adds 5 more
+  matching lines there - a plain recount on that branch reads 73). Two live runbook commands still had it
+  (`docs/runbooks/attach-a-gate.md:45,91`, `docs/runbooks/verifier-leg-unfunded.md:62`) and now name `DURIG_DB`.
+  Everything left outside the archive is a dated record, a trap discussion, a demo fixture, or the code's own
+  exception at `scripts/clockin.mjs:468`.
+  **Nothing checks this class.** `node cli.mjs check rig.selfdev.json --json` exits 0 with 23 rules
+  (`RULES.length` in `src/checkup.mjs`; recount with `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`)
+  and none of them compares an env name printed in a doc with the entry point that doc names; `doc-integrity-guard`
+  tests env names nowhere. The only machine-side signal is `tools/broker-serve.mjs:153` (`legacy-env-set`), which
+  fires at broker start, not on a doc. The config file is stricter than the environment: a `DURIAN_PI_*` key in
+  `durig.config.json` makes `node cli.mjs config` **exit 1** naming it (`src/config.mjs`, the #5071
+  accepted-and-ignored class) - a probe run in this worktree printed `unknown config-file key(s): DURIAN_PI_DB,
+  DURIAN_PI_PROVIDER`. The machine-side guard is routed to `impl` as #6821 (2026-11-11); the naming decision is ROADMAP 191.
 
 ## Agent execution (from the research report)
 

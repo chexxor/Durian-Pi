@@ -3332,14 +3332,27 @@ store (single writer, survives a machine move), not in loose files next to the w
 
 **191. One config spelling, one mechanism, and a demo that proves the docs match the code** — measured on this
 box: the rename is **half-applied and points in opposite directions by entry point**. `src/config.mjs`
-(`CONFIG_KEYS`, used by `cli.mjs:142`) reads only `DURIG_DB` / `DURIG_SEAT_ROOT`, so `DURIAN_PI_DB=… node
-cli.mjs status` silently opens an empty `./rig.sqlite`; `scripts/clockin.mjs:236` accepts `DURIAN_PI_DB`
-**first**, then `DURIG_DB`; and `tui.mjs:42-43` treats `DURIG_TUI_DB` as the *deprecated alias* of
+(`CONFIG_KEYS`, used by `cli.mjs:161` — the row was written against `cli.mjs:142` and `scripts/clockin.mjs:236`,
+re-pinned 2026-11-11 on `main 35001c3a`) reads only `DURIG_DB` / `DURIG_SEAT_ROOT`, so `DURIAN_PI_DB=… node
+cli.mjs status` silently opens an empty `./rig.sqlite`; `scripts/clockin.mjs:468` accepts `DURIAN_PI_DB`
+**first**, then `DURIG_DB`; and `tui.mjs:42-47` treats `DURIG_TUI_DB` as the *deprecated alias* of
 `DURIAN_PI_TUI_DB` (D103) — the reverse precedence. `docs/FEATURES.md` documents 18 `DURIAN_PI_*` names,
 `docs/DELEGATE-CLOCKIN.md` says either works. Depends on: none. Measure: a single alias resolver with one
 documented precedence, plus a failing-first demo asserting that **every environment name printed in the docs is
 honored by the entry point the doc names** — the class of defect is docs teaching a variable the code ignores,
-which is undetectable by reading either side. Note for whoever takes it: the delegate's own `AGENTS.md` clock-in
+which is undetectable by reading either side. **Recorded 2026-11-11 by the docs pass (#6336):** the census —
+`git grep -n 'DURIAN_PI_DB'` on `main 35001c3a` returned **128 lines in 38 files** before the sweep and **137 lines
+in 37 files** on the `item-6336` branch after it; 68 of those lines are the verbatim archive `docs/NEXT-ARCHIVE.md`
+(the disposition header that flags the stale form sits on branch `item-6334`, #6334, not yet landed, and adds 5 more
+matching lines there). Every remaining occurrence outside the archive is a counterexample inside a discriminating
+probe, a dated record, a demo fixture, or the code's own exception at `scripts/clockin.mjs:468`. And **nothing enforces this class**: `cli.mjs check` runs
+23 rules (`RULES.length` in `src/checkup.mjs`) and none compares an env name printed in a doc with the entry point
+that doc names; `tools/doc-integrity-guard.mjs` checks counts, dates and citations but never an env name. The
+machine-side guard is routed to `impl` as #6821 (2026-11-11). One asymmetry the resolver has to settle: an unknown **environment** name
+is silently ignored, while an unknown key in `durig.config.json` **fails** — measured in the `item-6336` worktree,
+`node cli.mjs config` exits 1 with `unknown config-file key(s): DURIAN_PI_DB, DURIAN_PI_PROVIDER … no code reads
+these, so they are silently ignored (the #5071 accepted-and-ignored class)`.
+Note for whoever takes it: the delegate's own `AGENTS.md` clock-in
 line carried the wrong spelling for multiple sessions, which is how an empty store gets mistaken for a quiet rig.
 
 **192. The rig's compaction policy is not configurable, and its default threshold sits ~8k below a hard 400**

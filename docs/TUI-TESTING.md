@@ -38,8 +38,9 @@ a small, dependency-free harness with a screen buffer and golden frames, then la
 - **No new runtime dependency for tiers 1–3.** They use `node:assert`-style checks and `node:fs` only.
 - **Golden files are committed** under `demo/__golden__/` and reviewed like code; a diff is the review.
 - **Deterministic**: fixed fixtures, fixed term sizes, fixed `uptime`, no `Date.now()` in goldens.
-- **Hermetic**: the TUI tests never open the store or a harness (D11), so they need no `DURIAN_PI_DB` and do
-  not contend with a live broker.
+- **Hermetic**: the TUI tests never open the store or a harness (D11), so they need no store variable at all -
+  neither `DURIG_DB` (what `cli.mjs` reads, `cli.mjs:161`) nor the TUI's own `DURIAN_PI_TUI_DB` (`tui.mjs:46-47`) -
+  and do not contend with a live broker.
 - **One entry point**: `npm run test:tui` runs every `demo/tui-*.test.mjs` plus
   `demo/sanitize.test.mjs` and reports a pass/fail count, so regression runs are one command.
 

@@ -144,8 +144,12 @@ Everything below was verified against the real store, not asserted from intent.
 
 - Working directory: `durian-pi/`. Default provider `deepinfra` (needs
   `DEEPINFRA_API_KEY`); offline mode needs nothing (`DURIAN_PI_PROVIDER=faux`).
-- `DURIAN_PI_DB` selects the store; without it the default is `./rig.sqlite`. Use
-  `node cli.mjs config` to see what is actually in effect.
+- **The store is `DURIG_DB`** (default `./rig.sqlite`); `DURIAN_PI_DB` is inert for `cli.mjs`. Re-measured
+  2026-11-11 on `main 35001c3a`: `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` and
+  `DURIG_DB=./nope-b.sqlite node cli.mjs status` → `"db": "…/nope-b.sqlite"`, both exit 1 `cause: no_store`. The
+  one entry point that still reads `DURIAN_PI_DB` is `scripts/clockin.mjs:468`, and it takes it first. Use
+  `node cli.mjs config` to see what is actually in effect (a config file key the code does not read now **fails**
+  that command with `unknown config-file key(s)`, exit 1).
 - Dependency state: `node_modules` is **linked to pinned pi `main`** (`--link`),
   pin `42705224`, drift `false`, all 39 demos passing on it. A fresh clone is on
   the 1.1.0 releases; re-run `node scripts/sync-pi.mjs --sync --link` to
