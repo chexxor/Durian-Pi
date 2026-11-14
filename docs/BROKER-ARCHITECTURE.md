@@ -78,7 +78,7 @@ by resources and whose actors are expensive and stateful.
    writer changes the file, may return incorrect results or `SQLITE_CORRUPT`; and even a plain
    `readOnly` reader can pin the WAL and stall the owner's checkpoint if it is long-lived. So a reader
    must be short-lived, and the durable design is to **serve reads through the owner's own harness**
-   (D111) rather than open a second connection — see `docs/reviews/daemon-harness-architecture-followup-review.md`.
+   (D111b) rather than open a second connection — see `docs/reviews/daemon-harness-architecture-followup-review.md`.
 2. **Expensive, resource-bounded actors.** A run holds a generation slot and a paid provider stream;
    `DURIAN_PI_MAX_CONCURRENT_SEATS` is *durian-pi's* cost/GPU/provider bound. pi-durable's "Many conversations
    at once" imposes no such limit — you could run far more seats if they were free.

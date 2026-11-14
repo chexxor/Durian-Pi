@@ -50,7 +50,7 @@ instance (`#2630`), which under §4.1 as written still has no trigger, no `revie
 
 ## 1. Measured baseline (this is what the design must cover)
 
-All numbers below are from a **broker-served** read (D111): `DURIG_DB=./selfdev.sqlite node cli.mjs queue`
+All numbers below are from a **broker-served** read (D111b): `DURIG_DB=./selfdev.sqlite node cli.mjs queue`
 — never a second opener. The snapshot is 10,412,547 bytes.
 
 | Fact | Value | Source |
@@ -246,7 +246,7 @@ Three of these decide several findings:
    close`. But `driver.mjs` is a pure module over plain data: `selectWakes` is a pure function of
    `{seats, items, …}` (`src/driver.mjs:38-72`) and `driveOnce` submits *wakes to conversations*, not
    queue writes (`src/driver.mjs:138-183`). Giving it a `RigQueue` mutation would create a store write
-   path outside the broker's single connection (D111/D112), or force the propagation to re-read the
+   path outside the broker's single connection (D111b/D112b), or force the propagation to re-read the
    document.
 2. **Where it must go.** The natural atomic site is the commit that *closes* the item — `complete_work`
    (`src/rig.mjs:545-585`) and `cancel_work` (`src/rig.mjs:856-877`) already run inside `api.commit`, and
@@ -465,7 +465,7 @@ Three of these decide several findings:
    takes `queueItems` (`src/checkup.mjs:301`, `:595`), and `check` is a read verb — adding five rules
    there is correct and cannot write. But note the asymmetry: **the check rule is a regression test for
    the invariant, not a watchdog** — it fires only when someone runs `check`; the *watchdog* is the
-   attention kind, which `status`/`watch` derive read-only (D111-safe). Say which is which in §7. The
+   attention kind, which `status`/`watch` derive read-only (D111b-safe). Say which is which in §7. The
    kinds themselves need a queue-scope home (F9).
 7. **Schema migration — the hazard is the backfill, not the volume.** 2,988 legacy items are not the
    problem (lazy migration is right); the problem is that `blockedBy`/`kind`/`roadmap` have **never
@@ -513,7 +513,7 @@ Three of these decide several findings:
 
 | Probe | Command | Result |
 |---|---|---|
-| **P1** ✅ | `DURIG_DB=./selfdev.sqlite node cli.mjs queue` → histogram / age / class counts (broker-served, D111) | 2,988 items; 188 non-terminal; held 160 (median 15.9 h, 49 >24 h); 60 gate-less; 9 roadmap-gated; 37 chained; 59 orphan candidates; snapshot 10,412,547 B |
+| **P1** ✅ | `DURIG_DB=./selfdev.sqlite node cli.mjs queue` → histogram / age / class counts (broker-served, D111b) | 2,988 items; 188 non-terminal; held 160 (median 15.9 h, 49 >24 h); 60 gate-less; 9 roadmap-gated; 37 chained; 59 orphan candidates; snapshot 10,412,547 B |
 | **P2** ✅ | field-presence over the same snapshot | `blockedBy`/`kind`/`roadmap`/`requires`/`block` present on **0** items; `heldReason` on 96 |
 | **P3** ✅ | held rows whose cited queue gates are all terminal, with subject class | 59 rows; classes: landing-list 41 / backlog 36 / do-not-start 20 / registered 16 / other 28 … |
 | **P4** ✅ | `node demo/held-item.test.mjs` and `node demo/blocked.test.mjs` | exit 0 / exit 0 (baseline the change must keep green) |
