@@ -10027,7 +10027,7 @@ on relaunch**.
 fix(shell-availability): the broker preflight asks the registry, never vendored text (#4977)`** in worktree `item-4977`, and
 the delegate verified in that worktree that the `BLOCK seat-shell-availability` is now a `NOTE`. The row was still `claimed`
 at clock-out and **nothing is landed**.
-**Next command:** `node cli.mjs land item-4977 --merge --into main` — run from `/home/chexxor/Git/Durian-Pi`, **only after
+**Next command:** `node cli.mjs land item-4977 --merge --into main` **[STALE FORM, corrected 2026-11-12 by #5002: `cli.mjs` has no `land` verb — `node cli.mjs land …` exits 2 with the generic usage blob; the instrument is `node scripts/land.mjs item-4977 --db ./selfdev.sqlite --suite`. The line is kept verbatim as written.]** — run from `/home/chexxor/Git/Durian-Pi`, **only after
 the operator names that landing** (§1). If the send died in the meantime, read `.spike/fix-20261102/send-devtools2.out`
 first and re-brief the `complete` leg only — the commit already exists.
 **Blocker:** the landing grant is the operator's and was not given this session; and behind it, the `qa` verify leg (`#4974`)
@@ -10103,7 +10103,7 @@ demo (`demo/next-pointer.test.mjs`).
 ## 1. Land `#4977` — ASK FIRST (the operator has NOT granted this one)
 
 - The standing grant covered `#4966` only, which is already landed. Ask, then:
-  `node cli.mjs land item-4977 --merge --into main` — run from `/home/chexxor/Git/Durian-Pi`; expect the doc conflict above.
+  `node cli.mjs land item-4977 --merge --into main` **[STALE FORM, #5002: no such `cli.mjs` verb — the instrument is `node scripts/land.mjs item-4977 --db ./selfdev.sqlite --suite`; see `docs/runbooks/land.md`.]** — run from `/home/chexxor/Git/Durian-Pi`; expect the doc conflict above.
 - Prove it after: `node tools/broker-serve.mjs --status --db ./selfdev.sqlite --show-queue --limit 20 --json 2>/dev/null |
   node tools/parse-broker-status.mjs --check=admit` and confirm `seat-shell-availability` is a NOTE. **That is the gate on
   the operator's `--start` decision (`#4970` HALF A)** — until it lands on `main`, every `send` stays a second store writer.
