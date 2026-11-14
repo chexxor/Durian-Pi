@@ -19,8 +19,10 @@
 //      live state" is a GAP (reported).
 //   5. `cli.mjs` verbs are validated against the CLI's OWN usage text — derived, not
 //      hand-listed — so a renamed verb cannot stay trusted in prose.
-//   6. Runbooks from which CI executes NOTHING are pinned by name, so a new runbook
-//      cannot quietly join the unexecuted set.
+//   6. Runbooks from which CI executes NOTHING are DERIVED, not pinned by name: each one must
+//      be refused by a structural rule of the fixture (live state, a network endpoint, a host
+//      shell, an unfilled placeholder). Any other refusal is a defect, so a new runbook cannot
+//      quietly join the unexecuted set without the harness saying why.
 //
 // FAILING-FIRST: before this test, `node cli.mjs frobnicate` in a runbook was prose nobody
 // ran (the CLI answers with exit 2). The negative controls are exactly that shape.
@@ -57,38 +59,35 @@ import {
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const RUNBOOKS = join(ROOT, "docs", "runbooks");
 
-/** Runbooks CI cannot execute a single command from. Pinned by name: CI fails if a
- *  runbook joins this list, or one leaves it without a runnable command. */
-const NOTHING_EXECUTED = [
-  "block-shape-refused.md",
-  "broker-safe-change.md",
-  // Added when this runbook landed: its four Diagnose lines name live-state files the
-  // throwaway fixture cannot contain (.spike/acceptance-seed/acceptance-snapshot.sqlite) and
-  // start with `cd`, which the read-only allowlist refuses. Measured DIAG_DEBUG output, 2026-11-10.
-  "compaction-acceptance-measure.md",
-  "constitution-amendment.md",
-  "docs-encoding-mojibake.md",
-  "format-before-commit.md",
-  "git-form-refusal.md",
-  "compaction-eval.md",
-  "harness-compaction-guard.md",
-  "in-turn-read-hangs.md",
-  "local-provider-down.md",
-  "prepare-workspace-etarget.md",
-  "session-start-cost.md",
-  "spend-cap-tripped.md",
-  // Added when this runbook landed: its probe takes a live network endpoint
-  // (--base=https://api.deepinfra.com/v1/openai), which the allowlist refuses, and its second
-  // line needs the live store. Measured DIAG_DEBUG output, 2026-11-10.
-  "verifier-leg-unfunded.md",
-  "prepare-workspace-refused.md",
-  "research-request.md",
-  "store-corruption-recovery.md",
-  "store-probe-identity.md",
-  "verifier-model-server.md",
-  "verifier-serving-headroom.md",
-  "workspace-move.md",
-  "write-corruption-recovery.md",
+/** A runbook CI cannot execute is legitimate only when EVERY one of its Diagnose lines is
+ *  refused by a rule the throwaway fixture structurally cannot satisfy. These are the reasons
+ *  `src/runbookdiagnose.mjs` actually emits; any refusal outside them is rot, not coverage.
+ *  Derived on purpose — a hand-pinned name list goes stale the moment a runbook lands. Measured
+ *  2026-11-14 (Linux, Fedora Linux 45, 7.2.15-300.fc45.x86_64, node v24.22.1): two refs each
+ *  carrying their own copy of the list unioned into a 23-name superset over a 12-name reality,
+ *  and the gate reded for runbooks nobody touched. */
+const STRUCTURAL_REFUSAL_REASONS = [
+  // The line is not a command at all.
+  /^comment$/,
+  /^empty (line|segment|block)$/,
+  /continues onto the next line/,
+  /multi-line shell control flow/,
+  /a fragment of a multi-line command/,
+  // The throwaway fixture structurally cannot satisfy the line.
+  /fixture/,                 // the throwaway rig cannot contain this live state
+  /allowlist/,               // the harness's read-only allowlist refuses the verb
+  /placeholder/,             // an unfilled <placeholder> the fixture has no value for
+  /glob/,                    // a glob the fixture cannot guarantee
+  /not in the tree/,         // a path the runbook names that does not exist
+  /available on this box/,   // a binary this host does not have
+  /live network/,            // a real endpoint
+  /process write/,           // kill/pkill — a write, not a read
+  /host-specific shell/,     // PowerShell/cmd constructs
+  /read-only (verb|subcommand)/,
+  /writes unless/,           // a verb that reads only with a flag the line omits
+  /re-runs a suite test/,
+  /runs inline code/,
+  /empty block/,
 ];
 
 // Eight runbooks were in this list until #6369 (2026-11-11): compaction-eval, harness-compaction-guard,
@@ -403,10 +402,18 @@ const executed = [...executedByFile.values()].reduce((a, b) => a + b, 0);
 assert.ok(runbooks.length >= 40, `expected the runbook set, found ${runbooks.length}`);
 assert.ok(executed >= 25, `the harness executed only ${executed} Diagnose commands — coverage is too thin`);
 assert.ok(problems.length === 0, `Diagnose commands that do not work:\n${problems.slice(0, 25).join("\n")}`);
-assert.ok(
-  neverExecuted.join(",") === NOTHING_EXECUTED.join(","),
-  `the "nothing executed" set changed: expected ${NOTHING_EXECUTED.join(", ")}, found ${neverExecuted.join(", ")}`,
-);
+for (const file of neverExecuted) {
+  const gs = gaps.filter((g) => g.file === file);
+  assert.ok(
+    gs.length > 0,
+    `${file}: CI executed nothing and the harness recorded no gap for it — a runbook with no Diagnose commands is not coverage`,
+  );
+  const unexplained = gs.filter((g) => !STRUCTURAL_REFUSAL_REASONS.some((r) => r.test(g.reason)));
+  assert.ok(
+    unexplained.length === 0,
+    `${file}: every Diagnose line is refused for a reason outside the structural set: ${unexplained.map((g) => `${g.line.slice(0, 60)} — ${g.reason}`).join(" | ")}`,
+  );
+}
 
 if (process.env.DIAG_DEBUG) gaps.forEach((g) => console.log(`GAP ${g.file} :: ${g.line.slice(0,80)} :: ${g.reason}`));
 console.log(
