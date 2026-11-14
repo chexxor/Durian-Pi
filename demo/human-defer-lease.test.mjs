@@ -31,7 +31,7 @@ const deferred = (id, extra = {}) => ({
 });
 const seats = { lead: { conversationId: 21 }, impl: { conversationId: 9 } };
 const wakeFor = (items, opts = {}) =>
-  selectWakes({ seats, items, pendingConvIds: new Set(), busySeats: new Set(), stoppedConvIds: new Set(), paused: false, ...opts });
+  selectWakes({ seats, items, pendingConvIds: new Set(), busySeats: new Set(), stoppedConvIds: new Set(), paused: false, now: NOW, ...opts });
 
 console.log("=== 1. A PARK ON THE OPERATOR NEEDS A CLOCK ===");
 {
@@ -104,6 +104,24 @@ console.log("\n=== 3. LEAD IS WOKEN, ONCE, AND ONLY WHEN THE SET CHANGES ===");
   assert.ok(wakeFor(escalated, { parkedChanged: pendingChanged }).find((w) => w.name === "lead"), "and the SAME set still escalates once lead is free — the suppressed pass did not spend the signature");
   assert.equal(wakeFor(escalated, { stoppedConvIds: new Set([21]) }).find((w) => w.name === "lead"), undefined, "a stopped lead is not woken");
   console.log("  ok   escalation wakes lead once per changed set; empty/inside-clock/paused/busy/pending/stopped do not");
+}
+
+console.log("\n=== 4. THE CENSUS READS THE CALLER'S CLOCK, NOT THE WALL (ROADMAP 375) ===");
+{
+  // WHY THIS SECTION EXISTS. This demo went red three days after it shipped with no code change: `selectWakes`
+  // called `escalations(items)` with no clock, so the wall clock decided. The fixture park's lease was
+  // 2026-11-14T20:30:00Z, and on 2026-11-14 the real clock had already passed it, so "a park inside its clock
+  // does not wake lead" became false. A gate that turns red on a calendar is a gate that refuses landings for
+  // no reason, so the clock is now a named argument of the wake selection.
+  const row = deferred(9, { deferLease: { resumeBy: inDays(2) } });
+  assert.equal(wakeFor([row]).find((w) => w.name === "lead"), undefined, "at the named clock the lease is alive: lead sleeps");
+  assert.ok(wakeFor([row], { now: NOW + 3 * 86_400_000 }).find((w) => w.name === "lead"), "the SAME row, three days later on the caller's clock: the lease has lapsed and lead is woken");
+  assert.equal(escalations([row], NOW).count, 0, "the wake and the census are the SAME predicate at the same clock");
+  assert.equal(escalations([row], NOW + 3 * 86_400_000).count, 1, "and they agree at the later clock too");
+  // Anti-vacuity for the default: no live caller changes behaviour, because the default clock is still now().
+  const farFuture = deferred(10, { deferLease: { resumeBy: new Date(Date.now() + 30 * 86_400_000).toISOString() } });
+  assert.equal(wakeFor([farFuture]).find((w) => w.name === "lead"), undefined, "with no clock supplied the wall clock still decides (live behaviour unchanged)");
+  console.log("  ok   the clock is the caller's; two clocks on one row give two verdicts; the default is still the wall clock");
 }
 
 console.log("\nHUMAN-DEFER-LEASE PASS — a park on the operator has a 5-day clock, and the clock running out hands the decision to lead");

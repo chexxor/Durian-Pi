@@ -151,6 +151,13 @@ export function selectWakes({
   // the old behaviour so callers and existing demos are unaffected.
   parkedChanged = null,
   onParked = () => {},
+  // ROADMAP 375: the escalation census is a FUNCTION OF A CLOCK. `escalations(rows, now)` takes one, and a
+  // caller that wants to reason about "is this park past its lease" must say WHICH now — otherwise the wall
+  // clock decides silently, and a fixture dated yesterday reads as lapsed today. `selectWakes` was calling
+  // `escalations(items)` with no clock, which made `demo/human-defer-lease.test.mjs` go red three days after
+  // it shipped for a reason no code change caused (SELFDEV pitfall). Default stays `Date.now()`: live callers
+  // are unchanged; tests and any replay of a past state can supply their own.
+  now = Date.now(),
 }) {
   const wakes = [];
   // THE ESCALATION PATH (operator ruling 2026-11-12T20:2xZ): a park on the human operator is a LEASE, and when
@@ -161,7 +168,7 @@ export function selectWakes({
   // The wake is DEDUPED on the escalation signAPture (same rule as a parked seat, #5740): a wake that carries no
   // new information would dirty the scheduler and sustain the loop. `lead` is woken only if it is a real seat,
   // not pending, not busy and not stopped — the ordinary guards apply, the escalation is just a new REASON.
-  const escalationCensus = escalations(items ?? []);
+  const escalationCensus = escalations(items ?? [], now);
   const escalationSig = escalationSignature(escalationCensus.rows);
   for (const [name, seat] of Object.entries(seats ?? {})) {
     const convId = seat.conversationId;
