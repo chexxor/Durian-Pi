@@ -7,9 +7,14 @@ commit is the one carrying this file (the restart-limit fixture fix ships in it)
 landing rule now D314)**, on top of the branch catch-up it closed: 36 conflicted refs dispositioned, no ref deleted,
 nothing pushed — and the seat-landing mechanism **proved on a live fleet**: seat `impl` ran `land_my_item` on its
 own branch and advanced local main (`item-1` `0470697b` → merge `07e0e76f`, derived gate 26/357, containment
-`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally at HEAD `c608e5b4`: of the 36 census
-refs, 10 are ancestors of `main` with 0 loss, 26 are not ancestors and each carries a dated `docs/DISPOSITIONS.md`
-row (19 with verbatim residue in `docs/evidence/2026-11-14-recut-residue/`); 5 of the 36 landed as `-recut` branches.
+`refs_with_loss: 0`, `git merge-base --is-ancestor` exit 0). Catch-up tally re-measured at HEAD `a804f250`: of the 36 census refs, **13 are ancestors of `main`** (10 absorbed
+earlier + `item-6343`, `item-6435`, `item-7090` absorbed this pass), and `node tools/merge-containment-proof.mjs
+--branch refs/heads/main --refs <all 36, comma-separated>` exits **1** with `refs: 36, refs_with_loss: 23` (2.0 s)
+— exit 1 is the correct verdict for a set that still has unlanded content; only an all-ancestor subset exits 0.
+The 23 non-ancestors each carry a dated `docs/DISPOSITIONS.md` row (19 with verbatim residue in
+`docs/evidence/2026-11-14-recut-residue/`); 7 of the 36 landed as `-recut` branches. Every unlanded ref was
+**attempted through `scripts/land.mjs --changed-suite`**; the exact refusal output is in that file's 2026-11-14
+"Landing attempts" section.
 Every commit in `8b5a19e1..HEAD`, oldest first:
 
 | sha | shipped |
@@ -58,6 +63,12 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `3deb580d` | docs(NEXT): the live seat-landing proof, the gate-rig trap, and this window's rows (pointer churn squashed) |
 | `10ca88ee` | docs(SELFDEV) pitfall 356 + docs(NEXT) row in order — the commit that carried this file at the time, now named because it is no longer HEAD |
 | `b968b166` | docs: the D314 live seat-landing addendum, SELFDEV pitfall 357 (the local provider now needs a credential), the final suite tally, and the `wip/seat-prompt-files` KEEP-HELD correction |
+| `aa5c4284` | tools(pointer-sha-coverage): read `docs/NEXT-ARCHIVE.md` so a range past the pointer cut closes (ROADMAP 370, pitfall 358), pinned by the tool's own test |
+| `90dd5ff2` | merge: land `item-7448-recut` onto main — derived gate green, containment 0 lost lines |
+| `04b92e94` | merge: land `item-6344-recut` onto main — derived gate 47/358 green |
+| `211075e9` | absorb `refs/heads/item-6343` — 182 added lines already verbatim in main, 0 lost, tree unchanged |
+| `78eb0c01` | absorb `refs/heads/item-6435` — 46 added lines, 0 lost, tree unchanged |
+| `a804f250` | absorb `refs/heads/item-7090` — 41 added lines, 0 lost, tree unchanged |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM

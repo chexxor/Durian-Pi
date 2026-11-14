@@ -4607,6 +4607,14 @@ at `:743`). Re-measure every `path:line` before repeating it.
     **~3 ms** with `provider_auth` — the symptom reads as "the seat is broken", not "the environment is missing".
     `local2` at `192.168.1.52:8080` 401s as well; `DEEPINFRA_API_KEY` unset → `verifier/*` seats fail as `no_model`.
     Before blaming a seat, run `node tools/keycheck.mjs --level=auth --family=LOCAL` → `auth: complete`.
+359. **An audit tool's exit code describes the SET you gave it, not the quality of your work.**
+    `node tools/merge-containment-proof.mjs --branch refs/heads/main --refs <the 36 census refs>` exits **1**
+    (measured 2026-11-14: `refs: 36, refs_with_loss: 23`, 2.0 s) because 23 of them still have lines main does not
+    have — that IS the finding. Quoting it as "the 36-ref proof exits 0" is false, and an auditor will catch it.
+    Two traps in the same family: `--refs` is **comma-separated** (space-separated silently checks only the first
+    ref — this session measured `refs: 1` when it meant 5), and `git merge-tree --write-tree` exit 0 means "no
+    textual conflict", never "safe to land": three refs that merged cleanly were refused by the derived gate in the
+    same hour (`docs/DISPOSITIONS.md`, 2026-11-14 "Landing attempts").
 358. **A pointer-coverage audit that reads only the live pointer reports false holes.** `docs/NEXT.md` is cut at
     its 200-line cap and the older blocks move VERBATIM to `docs/NEXT-ARCHIVE.md`. Measured 2026-11-14 before the
     fix: `node tools/pointer-sha-coverage.mjs --base 03bdbf4d` → **265 hole(s)** over 379 commits, while
