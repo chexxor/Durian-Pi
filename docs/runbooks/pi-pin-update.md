@@ -58,7 +58,8 @@ Blast radius: every seat, the broker, the TUI, the degeneration guard, and the s
 - **Name the store with `DURIG_DB`, never `DURIAN_PI_DB`.** Re-measured 2026-11-10 in worktree
   `item-5911` @ `f192f543` (Linux, node v24.22.1): with **both** set the CLI opened the `DURIG_DB` path; with
   **only** `DURIAN_PI_DB` set it opened the fallback `./rig.sqlite` (exit 1, `cause: no_store`). Only
-  `scripts/clockin.mjs:379` honours the old name, and it takes it **first**; `CONFIG_KEYS`
+  `scripts/clockin.mjs:468` honours the old name, and it takes it **first** (measured as `:379` in `f192f543`;
+  re-pinned 2026-11-11 on `main 35001c3a`); `CONFIG_KEYS`
   (`src/config.mjs:116-219`) carries 39 keys, none of them `DURIAN_PI_DB`. The stale literal used to sit in
   **16 runbook files / 31 command lines**, including `_template.md` — swept by #5911 on 2026-11-10, so the only
   `DURIAN_PI_DB` mentions left under `docs/runbooks/` are this row's own trap discussion. Copying one of those

@@ -144,6 +144,12 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   `scripts/clockin.mjs:379` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. **Those line
   numbers have since moved**: re-measured 2026-11-11 on `main 35001c3a` they are `cli.mjs:161`, `intent.mjs:105`
   (unchanged), `scripts/land.mjs:264` and `scripts/clockin.mjs:468`. A command
+  the variable **the entry point it invokes actually reads**. Re-pinned 2026-11-11 on `main 35001c3a`: `cli.mjs`
+  (`cli.mjs:161`), `intent.mjs` (`intent.mjs:105`) and `scripts/land.mjs` (`scripts/land.mjs:264`) read `DURIG_DB`;
+  `scripts/clockin.mjs:468` is the only entry point that accepts `DURIAN_PI_DB`, and it takes it first. (The
+  2026-11-10 pins — `cli.mjs:155`, `scripts/land.mjs:248`, `scripts/clockin.mjs:379` — were exact in tree
+  `f192f543`; `git show f192f543:cli.mjs | sed -n '155p'` still shows the `DB_PATH` line, so the numbers moved,
+  the finding did not.) A command
   carrying a name the entry point ignores is not a typo - it silently runs against the fallback store, which is how
   a wrong store gets read as a quiet rig. 31 command lines across 14 runbooks were corrected in that sweep; the
   machine-side surfacing is `tools/broker-serve.mjs:153` (`legacy-env-set`), and ROADMAP 191 is the un-built
@@ -333,6 +339,7 @@ seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 | [block-shape-refused.md](block-shape-refused.md) | a `send_work` carrying `block` dies naming a remedy (`may only carry queue constraints` / `must look like RM-<n>` / `reviewBy is mandatory for reason …`); you are parking a row and need the **reason → constraint-kind pairing** (`dependency` carries ONLY `queue` gates; a roadmap gate is `roadmap-gate` + an `RM-<n>` ref); or a batch of sends landed except one and you need to know that a refused send writes NOTHING and must be re-sent whole | no |
 | [attach-a-gate.md](attach-a-gate.md) | you know a row must wait on another row, but you are neither its sender nor its recipient, and every way of writing that gate is refused or silently dropped (`revise_work` with `blockedBy` drops the whole call, including the body edit riding in it) | no |
 | [intent-stuck-in-inbox.md](intent-stuck-in-inbox.md) | a spooled intent never lands; the pass reports `dead=N` but the payload is still in `<db>.broker.inbox`; a command vanishes with no verdict and no diagnostic | no |
+| [notice-row-vs-work-row.md](notice-row-vs-work-row.md) | a queue row whose subject starts `CANCELLED #<id>:` or `DONE #<id>:` was claimed, or the queue reads a cancelled item as done | no |
 | [leaked-secret.md](leaked-secret.md) | an API key/token/private key/password sits in a commit, log, or the store | no |
 | [prepare-workspace-etarget.md](prepare-workspace-etarget.md) | `prepare_workspace` fails: `npm ci --prefer-offline ... ETARGET notarget` for an `@earendil-works/*` pin | no |
 | [security-trust-boundary-review.md](security-trust-boundary-review.md) | a dependency/execution surface/egress/write path/boundary is about to land — run the review method before the code | no |
