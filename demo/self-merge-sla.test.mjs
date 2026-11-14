@@ -160,7 +160,7 @@ console.log("\n=== 5. a landing the chokepoint already REFUSED is not 'ready wor
 /* The ledger is the tool's only record of an attempted-but-refused landing. Without this verdict a session
  * reading `ready` re-runs the same refused lander. Coverage is measured the same way: an unlanded ref with no
  * dated row in docs/DISPOSITIONS.md is `undocumented`, and --strict makes that an exit 1. */
-const ledger = "| 2026-11-14 | `item-101` | **KEEP-HELD** | STOPPED: demo/whatever.test.mjs failed in the scratch worktree (exit 1) — main was NOT advanced | #101 |\n| 2026-11-14 | `landing-20261114-b1` | scratch chain | merge-tree exit 1 | catch-up |\n";
+const ledger = "| 2026-11-14 | `item-101` | **KEEP-HELD** | `scripts/land.mjs item-101 --changed-suite` exit **1**: STOPPED: demo/whatever.test.mjs failed in the scratch worktree (exit 1) — main was NOT advanced | #101 |\n| 2026-11-14 | `item-106` | **KEEP-HELD** | needs judgement — the derived gate refuses it | #106 |\n| 2026-11-14 | `landing-20261114-b1` | scratch chain | merge-tree exit 1 | catch-up |\n";
 const withLedger = landingHealth({ repo, slaHours: 24, itemStatus: status, ledger });
 const v101 = withLedger.rows.find((x) => x.ref === "item-101").verdict;
 assert.equal(v101, "gate-refused", "a clean merge the lander already refused is classified gate-refused, not ready");
@@ -168,10 +168,19 @@ assert.ok(!withLedger.rows.find((x) => x.ref === "item-101").stale, "a gate-refu
 assert.ok(withLedger.rows.find((x) => x.ref === "item-102").dispositioned === false, "an unlanded ref with no row is NOT dispositioned");
 assert.ok(withLedger.undocumented.includes("item-102"), "and it shows up in the coverage gap the tool reports");
 assert.equal(withLedger.unlanded, 6, "six unlanded refs in the fixture (item-103 is an ancestor of main)");
-assert.equal(withLedger.ledger_coverage, "1/6", "coverage is counted, not asserted");
+assert.equal(withLedger.ledger_coverage, "2/6", "coverage is counted, not asserted");
+/* A `gate-refused` label is only as good as the row behind it: one quotes the lander's exit code, the other
+ * is a feeling. --strict fails on the second kind. */
+const r101 = withLedger.rows.find((x) => x.ref === "item-101");
+const r106 = withLedger.rows.find((x) => x.ref === "item-106");
+assert.equal(r106.verdict, "gate-refused", "a KEEP-HELD row moves a clean, queue-done ref out of 'ready'");
+assert.equal(r106.attempt_logged, false, "a row that only says 'needs judgement' is NOT a recorded lander attempt");
+assert.equal(r101.attempt_logged, true, "a row quoting scripts/land.mjs and its exit 1 IS");
+assert.equal(withLedger.gate_refused_proven, 1, `proven attempts are counted: ${withLedger.gate_refused_proven}`);
+assert.deepEqual(withLedger.gate_refused_unproven, ["item-106"], "and the unproven ones are named");
 const chain = withLedger.rows.find((x) => x.ref === "item-104").verdict;
 assert.ok(chain !== undefined, "chain classification does not disturb the other verdicts");
-console.log(`  ok   item-101=${v101}, coverage=${withLedger.ledger_coverage}, undocumented=[${withLedger.undocumented.join(", ")}]`);
+console.log(`  ok   item-101=${v101} attempt_logged=${r101.attempt_logged}, item-106=${r106.verdict} attempt_logged=${r106.attempt_logged}, coverage=${withLedger.ledger_coverage}, undocumented=[${withLedger.undocumented.join(", ")}]`);
 
 rmSync(repo, { recursive: true, force: true });
 console.log("\nSELF-MERGE SLA OK");

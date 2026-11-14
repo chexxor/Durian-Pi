@@ -123,11 +123,15 @@ export function landingHealth({
 	 * come from the ledger text, so the tool never needs a second source of truth.
 	 * last_verified: 2026-11-14, `node demo/self-merge-sla.test.mjs` exit 0. */
 	const ledgerRows = new Set();
-	const gateRefused = new Set();
+	const gateRefused = new Map(); // ref -> true when the row also records the lander run and its exit code
 	for (const m of (ledger || "").matchAll(/`([A-Za-z0-9_\/()+.:-]+)`/g)) ledgerRows.add(m[1]);
 	for (const line of (ledger || "").split("\n")) {
 		if (!/main was NOT advanced|the derived gate refuses|KEEP-HELD/.test(line)) continue;
-		for (const m of line.matchAll(/`([A-Za-z0-9_\/()+.:-]+)`/g)) gateRefused.add(m[1]);
+		/* An attempt is only evidence if the row quotes the lander's own refusal WITH its exit code. "needs
+		 * judgement" is a feeling; `scripts/land.mjs ... exit 1 ... main was NOT advanced` is a measurement.
+		 * last_verified: 2026-11-14, `node demo/self-merge-sla.test.mjs` exit 0. */
+		const attemptLogged = /main was NOT advanced/.test(line) && /exit\s*\*{0,2}\s*1\b/.test(line);
+		for (const m of line.matchAll(/`([A-Za-z0-9_\/()+.:-]+)`/g)) gateRefused.set(m[1], attemptLogged);
 	}
 
 	const rows = [];
@@ -191,6 +195,7 @@ export function landingHealth({
 			ref,
 			verdict,
 			stale,
+			attempt_logged: verdict === "gate-refused" ? (gateRefused.get(shortName) ?? false) : null,
 			age_s: age,
 			age_h: age === null ? null : +(age / 3600).toFixed(1),
 			queue_status: status,
@@ -206,6 +211,9 @@ export function landingHealth({
 	for (const r of rows) counts[r.verdict] = (counts[r.verdict] || 0) + 1;
 	const unlanded = rows.filter((r) => r.verdict !== "landed");
 	const undocumented = unlanded.filter((r) => !r.dispositioned).map((r) => r.ref.replace("refs/heads/", ""));
+	/* A `gate-refused` verdict that no row proves is an assertion, not a finding: it means nobody ran the
+	 * lander, so "a rule cannot merge it" has not been established. */
+	const unattempted = rows.filter((r) => r.verdict === "gate-refused" && !r.attempt_logged).map((r) => r.ref.replace("refs/heads/", ""));
 
 	return {
 		ok: stale.length === 0,
@@ -223,6 +231,8 @@ export function landingHealth({
 		unlanded: unlanded.length,
 		ledger_coverage: `${unlanded.length - undocumented.length}/${unlanded.length}`,
 		undocumented,
+		gate_refused_proven: (counts["gate-refused"] ?? 0) - unattempted.length,
+		gate_refused_unproven: unattempted,
 		stale_rows: stale,
 		rows,
 		elapsed_s: +((Date.now() - started) / 1000).toFixed(1),
@@ -272,10 +282,13 @@ if (isMain) {
 	}
 	const result = landingHealth({ repo, db, slaHours, refs, itemStatus: queue.status, storeReason: queue.reason, ledger });
 	console.log(JSON.stringify(result, null, argv.includes("--json") ? 2 : 0));
-	if (argv.includes("--strict") && result.undocumented.length) {
+	if (argv.includes("--strict") && (result.undocumented.length || result.gate_refused_unproven.length)) {
 		console.error(
-			`self-merge SLA (--strict): ${result.undocumented.length} unlanded ref(s) have NO dated row in docs/DISPOSITIONS.md: ` +
-			result.undocumented.slice(0, 20).join(", ") + (result.undocumented.length > 20 ? " …" : ""),
+		`self-merge SLA (--strict): ${result.undocumented.length} unlanded ref(s) have NO dated row in docs/DISPOSITIONS.md: ` +
+			result.undocumented.slice(0, 20).join(", ") + (result.undocumented.length > 20 ? " …" : "") +
+			(result.gate_refused_unproven.length
+				? `\n${result.gate_refused_unproven.length} gate-refused ref(s) have a row that does NOT quote a scripts/land.mjs attempt with its exit code: ` + result.gate_refused_unproven.join(", ")
+				: ""),
 		);
 		result.exit = 1;
 	}

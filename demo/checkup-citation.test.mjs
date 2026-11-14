@@ -61,10 +61,19 @@ const check = (label, cond, detail = "") => {
 
 	const dir = mkdtempSync(join(tmpdir(), "durig-citation-"));
 	try {
-		const git = (...args) => execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+		/* Deterministic fixture. An unpinned git clock makes the fixture's OWN sha random, and the extractor only
+		 * counts a hex run carrying BOTH a digit and a letter (a pure-letter or all-digit run is a date-like token,
+		 * not a sha). An all-digit 9-char prefix — ~0.65% of runs — is invisible to it, so the fixture reads as a
+		 * failed citation check rather than a broken fixture. Measured 2026-11-14 (Linux Fedora 45, git 2.56.0):
+		 * one such flake in a 358-test full suite; 8 consecutive direct runs passed. */
+		const git = (...args) => execFileSync("git", args, {
+			cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+			env: { ...process.env, GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z", GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z" },
+		});
 		git("init", "-q");
 		git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "real commit");
 		const real = git("rev-parse", "HEAD").trim();
+		check("fixture sanity: the fixture's own sha is a citable 9-char prefix", extractCitedShas(real.slice(0, 9)).length === 1, `real=${real}`);
 		const fake = "0c6fd7665";
 		const items = [
 			{ id: 1, status: "held", subject: `gated on ${fake}`, body: "" },

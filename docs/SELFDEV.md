@@ -4622,3 +4622,23 @@ at `:743`). Re-measure every `path:line` before repeating it.
     as named and applies the landing-merge coverage rule to them too; `--no-archive` is the escape hatch. Re-run
     evidence: `--base 03bdbf4d` → 379 commits, 43 + 140 rows, 229 covered, exit 0, 0.4 s. **Read the pointer as
     two files** before calling a commit un-named.
+360. **"The gate refused it" is a claim until the row quotes the lander.** The completion audit caught five refs
+    labelled ready by the instrument, never landed, with only a "needs judgement" row behind them. `git merge-tree`
+    exit 0 proves nothing about the derived gate (pitfall 359), and a KEEP-HELD row without the lander's exit code
+    proves nothing either. **Fix in place (2026-11-14):** `tools/self-merge-sla.mjs` now reads the ledger line and
+    records `attempt_logged` — true only when the row quotes `main was NOT advanced` **and** an `exit 1` — reports
+    `gate_refused_proven` / `gate_refused_unproven`, and `--strict` exits 1 if any gate-refused ref has no such
+    row. Measured at HEAD `d9928edb` (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git
+    2.56.0): `node tools/self-merge-sla.mjs --json --strict` → `refs: 195`, `counts {conflicted: 49, landed: 141,
+    gate-refused: 5}`, `gate_refused_proven: 5`, `gate_refused_unproven: []`, exit 0, 7.5 s. Pinned by
+    `node demo/self-merge-sla.test.mjs` §5 (0.5 s): a KEEP-HELD row that says only "needs judgement" →
+    `attempt_logged false`; one quoting `scripts/land.mjs … exit 1 … main was NOT advanced` → `true`.
+361. **A fixture that invents its own git sha is random, and random fixtures read as defects.**
+    `demo/checkup-citation.test.mjs` created a throwaway repo, took `git rev-parse HEAD` and asserted the citation
+    reader resolved it. The reader only counts a hex run carrying **both a digit and a letter** (a pure-letter run is
+    a date, not a sha), so an all-digit 9-char prefix — about **0.65 %** of runs — produces no record and the check
+    fails. Full suite at `d9928edb`: **357/358 passed in 205.9 s**, the one failure exactly this; eight consecutive
+    direct runs passed. **Fix in place:** pin `GIT_AUTHOR_DATE` / `GIT_COMMITTER_DATE` in the fixture and assert the
+    fixture's own sha is citable before the checks run, so a bad fixture fails loudly as a fixture, not as a rule.
+    General rule: if a test derives a value from the environment, pin the environment or assert the derivation —
+    never let a ~1 % flake ride in the suite, because the next session will read it as a real red.
