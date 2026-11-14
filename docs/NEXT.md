@@ -22,7 +22,9 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `054da8d3` | docs(NEXT): the pointer paragraphs restored in full (Blocker, decisions owed, known red, archive link) and the duplicated broker-window paragraph dropped — 102 lines, cap 200 |
 | `80a87fca` | docs(NEXT): the `3a8bce52` row |
 | `230ee8dd` | docs(NEXT): the `054da8d3` row, so the audit closes on its carrier |
-| `80a87fca` | docs(NEXT): the `3a8bce52` row, so the pointer audit closes on the carrier |
+| `7b417971` | docs(NEXT): the `80a87fca` row — the audit names every range commit except its own carrier |
+| `0e46df03` | docs(NEXT): rows for the two pointer-fix commits (`230ee8dd`, `80a87fca`) |
+| `352b5fcb` | docs(NEXT): the pointer-fix rows in commit order (`80a87fca` before `230ee8dd`) — the audit reported an ordering defect |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
