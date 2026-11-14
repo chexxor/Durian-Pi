@@ -89,7 +89,8 @@ import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs"
 import { readCommitMessages } from "./src/commitmsg.mjs";
 import { readCitations } from "./src/citation.mjs";
 import { readDocCountClaims } from "./src/doccounts.mjs";
-import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs";
+import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs"
+import { readDependencyPlane } from "./src/depplane.mjs"
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
@@ -3763,6 +3764,13 @@ async function cmdCheck(rigFile, human, rest = []) {
   // claims only - not the file bodies), and null when docs/ cannot be read, which the rule reports
   // as UNKNOWN rather than as a pass.
   const docCounts = readDocCountClaims({ root: process.cwd() });
+  // #6374: WHICH pi this code actually runs. `readDependencyPlane` measures the resolved package, the
+  // pin and the store's schema version (the store is opened READ-ONLY, so this cannot migrate or take
+  // the broker's write lock); it never throws, so a leg that cannot be measured is reported as unknown
+  // rather than as a pass. The root is the checkout the code lives in, not cwd: a scaffold in /tmp can
+  // be the cwd while the imports still resolve from the checkout. The measurement is handed to auditRig
+  // as plain data, keeping that function fs-free.
+  const dependencyPlane = await readDependencyPlane({ db: DB_PATH });
   const result = auditRig({
     rig: rigFile,
     spec,
@@ -3778,6 +3786,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     sharedTreeLinked,
     contextBySeat,
     docCounts,
+    dependencyPlane,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {

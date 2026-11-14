@@ -206,6 +206,11 @@ export const RULES = [
     severity: "fix-now",
     what: "a doc states a count of a set the code declares, and the declaration does not match it (#6155)",
   },
+  {
+    id: "pi-dependency-plane",
+    severity: "fix-now",
+    what: "the pi this tree resolves, the pin it claims, and the store's schema version do not agree - a suite total from one dependency plane is not a total from another (#6374)",
+  },
 ];
 
 /** #6155: the sets whose SIZE is declared in code, so a doc may cite a number a machine can re-check.
@@ -496,9 +501,10 @@ export function runbookFrontMatterProblems(runbook) {
  *   rule reports UNKNOWN, never a false pass (#6155).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null }) {
   const findings = [];
   const skipped = [];
+  let plane = null; // #6374: the measured dependency plane, echoed in the result so the human output can print it
   const add = (id, subject, detail, fix) =>
     findings.push({ id, severity: SEVERITY_OF.get(id), subject, detail, fix });
 
@@ -1203,6 +1209,56 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     }
   }
 
+  // 13. #6374: WHICH pi this tree actually runs. The measurement is taken by the caller
+  //     (src/depplane.mjs) and handed over as plain data, so auditRig still touches no fs. This rule
+  //     REPORTS and never decides: severity is fix-now, so it can never fail a run (D24), and its only
+  //     job is to make the mismatch visible before a seat draws a conclusion from a green produced in a
+  //     different dependency plane. Measured this session: the seat root resolves the VENDORED build of
+  //     the pinned tag (1.5.1) while an item worktree installs the lockfile's released 1.3.0, and suite
+  //     totals of 282/283 came out of trees resolving different versions of the same library.
+  if (!dependencyPlane) {
+    skipped.push({
+      id: "pi-dependency-plane",
+      why: "no dependency plane was measured for this tree, so which pi it runs is unknown",
+      unknown: true,
+    });
+  } else {
+    plane = dependencyPlane;
+    if (dependencyPlane.resolved === null) {
+      add(
+        "pi-dependency-plane",
+        dependencyPlane.package,
+        `nothing is installed at ${dependencyPlane.resolvedPath}, so this tree resolves no pi at all and any suite verdict from it is meaningless`,
+        "npm ci (or npm install) in this tree; then node scripts/sync-pi.mjs --check to see what it resolves against the pin",
+      );
+    } else if (dependencyPlane.pinVersion === null) {
+      skipped.push({
+        id: "pi-dependency-plane",
+        why: `the pin names no version ref (${dependencyPlane.pinSha ?? "no sha"}), so the resolved ${dependencyPlane.resolved} cannot be compared with it`,
+        unknown: true,
+      });
+    } else if (!dependencyPlane.versionAgrees) {
+      add(
+        "pi-dependency-plane",
+        `${rig} resolves ${dependencyPlane.resolved}, the pin says ${dependencyPlane.pinVersion}`,
+        `this tree resolves ${dependencyPlane.resolved} ${dependencyPlane.resolvedVia ? `(${dependencyPlane.resolvedVia})` : ""} while pi-main.pin.json is pinned to ${dependencyPlane.pinRef ?? dependencyPlane.pinSha} (pinned ${dependencyPlane.pinnedAt}); a suite total from here is not a total from a tree on the pin`,
+        `declare ${dependencyPlane.package} at ${dependencyPlane.pinVersion} in package.json and run npm install (#6373), or in this worktree: node scripts/sync-pi.mjs --sync && node scripts/sync-pi.mjs --link; node scripts/sync-pi.mjs --check prints the declaredPlane verdict`,
+      );
+    }
+    if (
+      dependencyPlane.storeSchema !== null &&
+      dependencyPlane.supportedSchema !== null &&
+      dependencyPlane.storeSchema > dependencyPlane.supportedSchema
+    ) {
+      add(
+        "pi-dependency-plane",
+        `${dependencyPlane.db} schema ${dependencyPlane.storeSchema} vs supported ${dependencyPlane.supportedSchema}`,
+        `the store is at durable_schema.version ${dependencyPlane.storeSchema} and the pi-durable this tree resolves (${dependencyPlane.resolved}) supports ${dependencyPlane.supportedSchema}; every harness-path open here refuses it with "Durable SQLite schema version ${dependencyPlane.storeSchema} is newer than supported version ${dependencyPlane.supportedSchema}" (read-only reads still work - src/readclient.mjs opens read-only first)`,
+        `move this tree onto the pin's release: node scripts/sync-pi.mjs --sync && node scripts/sync-pi.mjs --link, or declare ${dependencyPlane.package} at ${dependencyPlane.pinVersion ?? "the pinned version"} and npm install (#6373)`,
+      );
+    }
+  }
+
   const summary = { error: 0, "fix-now": 0, total: findings.length };
   for (const f of findings) summary[f.severity] += 1;
   const checks = RULES.map((r) => {
@@ -1213,7 +1269,7 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     return { id: r.id, status, found, ...(skip ? { why: skip.why } : {}) };
   });
   const pass = summary.error === 0;
-  return { findings, checks, summary, pass, exitCode: pass ? 0 : 1 };
+  return { findings, checks, summary, pass, exitCode: pass ? 0 : 1, plane };
 }
 
 const GLYPH = { error: "✗", "fix-now": "!" };
@@ -1234,6 +1290,9 @@ export function formatCheck(result, { rigDisplay = "rig", color = false, width =
   lines.push(
     paint("dim", `declared sets: ${DECLARED_COUNTS.rules} rules (src/checkup.mjs RULES) · ${DECLARED_COUNTS.measures} measures (src/metrics.mjs MEASURES)`),
   );
+  // #6374: the plane is the measured object; the human line is its `line` field. Printing the object
+  // would read as `[object Object]`, i.e. a fact nobody can act on.
+  if (result.plane) lines.push(paint("dim", `dependency plane: ${result.plane.line ?? result.plane}`));
   if (result.findings.length === 0) {
     lines.push("");
     lines.push(`${paint("green", "✓")} no findings — every check the rig can answer passes`);

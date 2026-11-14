@@ -13,6 +13,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditRig, formatCheck, VERIFIER_TERMS } from "../src/checkup.mjs";
+import { readDependencyPlane } from "../src/depplane.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "durig-check-"));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
@@ -115,6 +116,28 @@ try {
     // the doc-count rule RUNS and passes here. Omitting it reports UNKNOWN (nothing was judged) - the
     // distinction is pinned in demo/doc-count-drift.test.mjs.
     docCounts: [],
+    // #6374: a dependency plane measured ON the pin, so the dependency rule RUNS and passes here.
+    // Omitting it reports UNKNOWN (nothing was judged), which would break the assertion below that
+    // every rule ran; the unknown-vs-pass distinction is pinned in demo/depplane.test.mjs.
+    dependencyPlane: {
+      package: "@earendil-works/pi-durable",
+      resolved: "1.5.1",
+      resolvedVia: "vendored build (sync-pi --link)",
+      resolvedPath: "vendor/pi-main/packages/durable/package.json",
+      pinRef: "v1.5.1",
+      pinSha: "dd30101c",
+      pinnedAt: "2026-11-10T06:49:26.320Z",
+      pinVersion: "1.5.1",
+      versionAgrees: true,
+      storeSchema: 1,
+      storeSchemaWhy: null,
+      supportedSchema: 1,
+      supportedVia: "CURRENT_SQLITE_SCHEMA_VERSION from the resolved package",
+      supportedMigrations: [1, 2],
+      schemaAgrees: true,
+      db: "selfdev.sqlite",
+      line: "pi-durable 1.5.1 (vendored build) · pin v1.5.1 · store schema 1 vs supported 1",
+    },
   });
   assert.deepEqual(ids(hardened), [], `hardened rig has no findings; got ${ids(hardened).join(", ")}`);
   assert.equal(hardened.exitCode, 0);
@@ -341,7 +364,21 @@ try {
   assert.equal(naivePayload.command, "check");
   assert.equal(naivePayload.pass, false);
   assert.equal(naivePayload.store, "read", "the store is named in the contract");
-  assert.deepEqual(ids(naivePayload), ids(naive), "CLI findings match the pure audit");
+  // #6374: the CLI measures the dependency plane of the tree it is RUNNING in; this fixture's temp dir
+  // has no node_modules and no pin, so it legitimately reports "nothing installed" while the pure
+  // audit was handed no plane data. Measured here rather than assumed: the CLI must report the same
+  // version the module reads. Everything except that rule must still match.
+  const fixturePlane = await readDependencyPlane({ root: dir, db: naiveDb });
+  assert.equal(fixturePlane.resolved, null, `the fixture dir resolves ${fixturePlane.resolved}, expected nothing`);
+  // The CLI measures the CHECKOUT its own code lives in, not the fixture dir (#6374): the payload must
+  // carry that measurement, and a FINDING rides with it only when the measured plane disagrees.
+  assert.ok(naivePayload.plane && naivePayload.plane.line, "the CLI did not report the plane it measured");
+  assert.ok(naivePayload.checks.some((c) => c.id === "pi-dependency-plane"), "the plane rule is in the report");
+  assert.deepEqual(
+    ids(naivePayload).filter((id) => id !== "pi-dependency-plane"),
+    ids(naive),
+    "CLI findings match the pure audit apart from the measured dependency plane",
+  );
   assert.equal(checkNaive.stderr, "", "the JSON contract owns stdout; nothing leaks to stderr");
 
   const hardPath = join(dir, "hardened.rig.json");
