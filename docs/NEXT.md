@@ -112,7 +112,9 @@ closure is prose")**: 46 refs landed by rule, 40 held. Every commit in `03bdbf4d
 | `3d07f9f5` | docs(pointer): the suite number at this HEAD, the POOL-QUEUE-SPEC pointer folded into the pool row |
 | `1a60386b` | docs(SELFDEV+NEXT): pitfall 343 (DECISIONS.md D265/D266 collide; `tools/probes/adr-number-collisions.mjs` exit 1), pitfall 342, suite 346/346 in 154.6 s |
 | `e6aad7a5` | merge: land landing-20261114-docsonly onto main — `item-6537`, `item-6549` union-resolved by rule, containment proven 0 loss, docs area 8/8 |
-| *(this commit)* | docs(SELFDEV+NEXT): pitfalls 339–343 — the seven hunks read in full, the patch-lane measurement, the DECISIONS.md number collisions — exempt: it carries this file |
+| `f2959764` | tools+docs: `chain-resolve` rules 8–9 (import union + link proof, provenance union), classes `I`/`P` + `--with-text` in `conflict-hunk-shape`, DISPOSITIONS correction, pitfall 344 — check 15/15 in 5.6 s, suite 346/346 in 151.6 s |
+| `8b5a19e1` | merge: land landing-20261114-c10 onto main — `item-6173` (seat restart limit 3 at the `openHarness` seam) + `item-6238` (pi-pin / unlinked-deps runbooks), containment proven 0 loss, suite 347/347 in 153.9 s |
+| *(this commit)* | docs(NEXT): the two rows above — exempt, a file cannot name the commit that carries it |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the broker
 loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open every window as `nohup timeout --signal=TERM
@@ -126,13 +128,17 @@ the last ` PASS ` line (pitfall 304), never the pid.
 
 ## NEXT SESSION
 
-**Current item:** **the conflict pass — 46 refs landed by rule with a containment proof, 40 held for a re-cut, nothing
-pushed.** Instruments, in the suite: `node tools/conflict-resolvability.mjs --json .spike/r.json` (3.2 s),
-`node tools/chain-resolve.mjs --branch landing-X --refs a,b` (8.8 s / 43 refs), `node tools/conflict-hunk-shape.mjs
---refs <held> --json .spike/hunk-shape.json` (2 s), `node tools/merge-containment-proof.mjs --branch landing-X --refs
-a,b` (0.2 s). Each landed ref is proven: `git merge-base --is-ancestor <ref> main` exit **0** plus every `+` line of its
-branch-vs-base diff present on main. One ref did NOT land: `item-6959` adds `demo/noop-wake-census.test.mjs` with no
-`demo/test-areas.json` row, so the derived gate refused it — routed to `pm`, ref kept.
+**Current item:** **the conflict pass — 36 conflicted refs as of main `8b5a19e1` are now closed out: 19 are ancestors
+of `main` with `tools/merge-containment-proof.mjs` reporting 0 loss, 17 are dispositioned with their verbatim residue
+recorded, nothing pushed, no ref deleted (R-B #3270).** As of main `af86fefe`:
+- **5 landed through `scripts/land.mjs`** (`item-6343`, `item-6374`, `item-6435`, `item-6664`, `item-7090`) —
+  `node scripts/land.mjs item-6343-recut item-6374-recut item-6435-recut item-6664-recut item-7090-recut --db ./selfdev.sqlite --changed-suite` → `ok:true`, derived gate 73/354 green, main `1751a3c2`.
+- **9 absorbed** (`item-5002`, `item-6177`, `item-6268`, `item-6314`, `item-6326`, `item-6336`, `item-6562`, `item-6643`, `item-7158`; `item-7448` came along as an ancestor of 7158) — every line they added is already in main verbatim, so the merge takes main's tree. Instrument: `node tools/absorb-refs.mjs --refs a,b` (10 refs, 1.5 s); proof it changed nothing: `git diff --quiet refs/heads/main 1751a3c2` exit 0.
+- **17 held** with a row in `docs/DISPOSITIONS.md` and the verbatim hunk in `docs/evidence/2026-11-14-recut-residue/<ref>-residue.txt`; regenerate with `node tools/disposition-rows.mjs --refs a,b --out docs/DISPOSITIONS.md` (19 refs, 3.0 s). `item-7018` is flagged byte-equivalent to `item-6184` — resolve once.
+
+**Two things the next session must not re-derive:** (a) an R5 "both sides" union of two evolutionary versions of the *same* statement is a **regression**, not a merge — `item-6374` landed a duplicate assertion and a stale "24 rules" doc line that the gate caught; always land with `--changed-suite`. (b) `item-3570`'s recut is blocked by a real defect, not a merge conflict: the harness rejects `revise_work` with `blockedBy: unknown field` even though `src/rig.mjs` lists `blockedBy` in the tool's `parameters` (probe: `node .spike/probe-3570.mjs`).
+
+**Not started — the second half of this goal:** the seat **self-merge seam** on the extension plane (D212; the seam to grow is `scripts/land.mjs`'s #4247 shared-root guard, which refuses a landing run from an item worktree), an SLA instrument that names ready-but-unlanded refs, a `cli.mjs check` rule that goes red on a stale ready ref, and a `fauxProvider` demo proving a seat's own item becomes an ancestor of main.
 
 **Older current item, still true:** the **N19 pool is CLOSED** — the gate fired on live seats (#7700 refused by
 `architect` and `pm` as `too-big`); re-read it with `node .spike/pool-rows.mjs ./selfdev.sqlite` (1.2 s, read-only). Read
@@ -143,10 +149,11 @@ decisions) before touching the pool; the window seam is in `src/config.mjs` (`us
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-timeout 200 node tools/branch-census.mjs --json > .spike/census.json          # ~35 s — prune plan now returns (0)
-timeout 120 node tools/landing-batch-plan.mjs --max 12                        # ~13 s — RE-RUN after every bin (pitfall 330)
-node cli.mjs worktree audit --json                                            # ~1 s — 128 worktrees open, 133 refs, 93 clean / 40 conflicting
-node scripts/test.mjs --all --jobs 4                                          # ~152 s — the honest number is below
+timeout 120 node tools/conflict-blocks.mjs --census                       # ~0.4 s — every recut worktree still marked
+node tools/absorb-refs.mjs --dry-run --refs <the refs whose proof says 0 loss>   # ~0.15 s/ref
+node cli.mjs worktree audit --json                                            # ~1 s
+node scripts/land.mjs <branch> --db ./selfdev.sqlite --changed-suite         # ~80-106 s — the gate, not a suggestion
+timeout 320 node scripts/test.mjs --all --jobs 4                            # ~121-152 s
 node cli.mjs check rig.selfdev.json                                         # ~20 s — MUST name the rig: bare `check` audits ./rig.json
 node tools/pointer-sha-coverage.mjs --base 03bdbf4d                         # 0.2 s — exit 1 if this file skips a shipped sha
 ```
