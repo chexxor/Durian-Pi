@@ -544,12 +544,11 @@ async function openHarness({ resume = true, live = null, enforceSeatRoot = false
       // work. See `streamSettings` and `compactionSettings` for why each one matters.
       // `restartLimit` is set HERE and nowhere else (#6173 / ROADMAP 355 C): pi-durable's default is 5 and
       // an unconfigured seat silently runs it. One seam, one value — see `runControlSettings`.
-      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG) },
       // `progress` is here because 1.5.x defers partial answers and running tool output to storage within
       // `persistWithinMs` (upstream default 1,000 ms), and a `subscribeCommits` listener only sees those
       // commits once stored. The rig PINS that value rather than inheriting it — see `progressSettings`
       // (#6211, lead ruling from #6172) for why 1,000 ms and why not 0.
-      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...progressSettings(CFG) },
+      settings: { ...streamSettings(CFG), ...compactionSettings(CFG), ...runControlSettings(CFG), ...progressSettings(CFG) },
     },
     BACKGROUND_CONTEXT,
   );
