@@ -12892,6 +12892,16 @@ runbooks refer to them.
   **reversible**; deleting a ref is a separate act requiring the author or the operator (the same rule the ledger
   records as R-B, #3270). This is what makes cancel-by-default safe: we are declining to spend attention, not
   destroying work.
+  **Addendum (2026-11-14, delegate prune pass, operator request "clean up the branches and worktrees that are safe
+  to remove"):** deleting a ref remains a separate act, and it is licensed only when the ref carries **nothing that
+  is not already on `main`** — `git merge-base --is-ancestor <ref> main` exit 0 **at the moment of deletion**, no
+  uncommitted tracked change in its worktree, not a seat root, not locked, and **no KEEP row** in
+  `docs/DISPOSITIONS.md`. The gate is a tool, not a judgement call: `tools/branch-prune.mjs` re-checks ancestry per
+  ref, uses `git worktree remove` without `--force` and `git branch -d` without `-D`, refuses while `MERGE_HEAD`
+  exists, and exits 1 when the plan and live git disagree. Measured 2026-11-14 (Linux, Fedora Linux 45 (Forty Five),
+  kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): 120 refs / 61 worktrees removed, refs 219 → 99,
+  worktrees 155 → 94, `main` unmoved, 0 forced, nothing pushed. A ref that is **not** an ancestor is dispositioned,
+  never deleted — that half of R-B is unchanged.
 - **R-C — before cancelling, the AUTHOR runs an equivalence probe against main.** Three outcomes: patch-equivalent →
   cancel, record "already on main"; unique but no live purpose → cancel, record the sha as recoverable; unique with a
   live purpose → route to the owning item. Equivalence is never inferred from a branch name. (See R-I for what the

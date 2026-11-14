@@ -36,7 +36,15 @@ procedure.
 
 **Step 0a — run the census, not a `git branch` loop.** `timeout 240 node tools/branch-census.mjs --plan`
 (`tools/branch-census.mjs`) joins `worktree audit`, the queue, per-ref git facts and **this ledger**, then
-prints the tally and the exact prune commands. Measured 2026-11-11 at `e01e9256` (Linux, Fedora Linux 45,
+prints the tally and the exact prune commands. To EXECUTE that plan in one bounded call use
+`timeout 300 node tools/branch-prune.mjs --db ./selfdev.sqlite` (add `--reap-worktrees` to release only the
+trees the audit calls `reapable` — terminal, unlocked, clean — while leaving every ref in place) (2026-11-14, Linux, Fedora Linux 45, kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): it re-runs the census, then per ref re-checks
+`git merge-base --is-ancestor` **at delete time**, does `git worktree remove` without `--force` and
+`git branch -d` without `-D`, prints a `git branch <name> <sha>` recovery line for every ref it removed, and
+writes that log to `.spike/prune-log.txt`. **Exit 1 means the plan and live git disagree** (a planned ref is no
+longer an ancestor, or a removal failed) — a pass that deleted nothing never exits 0. Pinned by
+`demo/branch-prune.test.mjs` (**0.21 s**, fixture repo, no store, no model). Measured 2026-11-11 at `e01e9256` (Linux, Fedora Linux 45,
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0): 77 refs / 69 worktrees in ~25-35 s, plan = 1.
 It encodes two things a hand-rolled loop gets wrong: (i) it **will not plan a delete for a ref with a KEEP
 row in `docs/DISPOSITIONS.md`** — a reverted merge is an ancestor of `main`, so `git branch -d` deletes a
@@ -170,8 +178,8 @@ Confirm the two safety facts before touching anything: `main` HEAD sha, and a cl
    **Read the lock flag from `git worktree list`'s TERSE output** (`<path> <sha> [<branch>] locked`), not
    from `--porcelain`: there `locked` is its own line AFTER `branch`, so a naive parse attributes it to
    the following tree (2026-10-19: it reported all 22 merged worktrees as locked).
-2. Delete **merged + free** refs. `-d` refuses anything unmerged or still checked out, so it cannot
-   lose work:
+2. Delete **merged + free** refs — or let `tools/branch-prune.mjs` do the loop (step 0a). `-d` refuses anything
+   unmerged or still checked out, so it cannot lose work:
    ```bash
    git branch -d $(cat merged.txt | comm -23 - held.txt)
    ```
@@ -444,3 +452,15 @@ same head returns **prune plan (0)**: everything git can safely release is relea
 no git verb can touch it: **82** refs carry work that is not on `main` (author re-cut), **19** are dirty with seat
 residue, **8** are seat roots, **6** belong to live queue rows, **2** are mid-run locks, **11** are ruled KEEP in the
 ledger, and the census flags **49** refs with **no ledger row at all** — the record gap, not the cleanup job.
+
+2026-11-14 (delegate prune + reap pass, operator request "clean up the branches and worktrees that are safe to
+remove", **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0,
+`main` `a23961dc` unmoved, nothing pushed, zero `--force`, zero `-D`): refs **219 → 99** (120 branches deleted, each
+re-gated on a live `git merge-base --is-ancestor <ref> main` exit 0 at the moment of deletion), registered
+worktrees **155 → 94 → 40**. The 21 trees `cli.mjs worktree audit` called `reapable` were released with
+`node tools/branch-prune.mjs --reap-worktrees` (**39.4 s**, 0 refusals, refs untouched), and the 32 `.spike/`
+scratch trees of the landing/re-cut passes were released after moving their `node_modules` symlinks to
+`.spike/quarantine-20261114/` — **1 refused and kept**: `.spike/ins-6101`, still holding uncommitted conflict
+markers (`UU cli.mjs`, `UU src/rig.mjs`, `UU demo/test-areas.json`). Final audit: `total 40, clean true, reapable 0,
+dirty 13, locked 3` (9 seat roots, 12 live item trees, 3 locked, 13 dirty, 3 non-item) — that is the floor, not a
+missed pass. Post-state census: prune plan **0**, unaccounted **0**, needs-a-landing-decision **0** in **7.7 s**.

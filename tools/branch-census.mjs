@@ -257,12 +257,20 @@ if (flag("--md")) {
 	process.exit(0);
 }
 
+// Addendum 2026-11-14 (delegate, measured at main a23961dc, Linux, Fedora Linux 45, kernel
+// 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0, 99 refs / 94 worktrees, 7.8 s): two readability defects
+// in the human-readable branch. (1) It passed the line array to console.log as ONE argument, so the census
+// printed a JS array literal instead of lines. (2) `verdict` carries the verbatim DISPOSITIONS ruling — one
+// row is ~600 characters — so every tally line was a paragraph. The table now truncates the verdict to 80
+// characters; the full text is still in --json, which is what the next pass reads.
 console.log(
 	flag("--json")
 		? JSON.stringify(out, null, 1)
 		: [
 				`branch census @ ${out.head} — ${out.refs} refs, ${out.worktrees} worktrees`,
-				...Object.entries(out.tally).sort((a, b) => b[1] - a[1]).map(([k, v]) => `  ${v}  ${k}`),
+				...Object.entries(out.tally)
+					.sort((a, b) => b[1] - a[1])
+					.map(([k, v]) => `  ${v}  ${k.length > 80 ? k.slice(0, 80) + "…" : k}`),
 				"",
 				`prune plan (${plan.length}) — refs whose work is provably on main:`,
 				...plan.slice(0, flag("--plan") ? plan.length : 12).map((p) => `  ${p.command}`),
@@ -272,5 +280,5 @@ console.log(
 				"",
 				`needs a landing decision (${needsLanding.length}) — unmerged, clean, item terminal:`,
 				...(flag("--plan") ? needsLanding : needsLanding.slice(0, 15)).map((r) => `  ${r.ref}  ahead=${r.ahead}  item=${r.item ?? "-"}  status=${r.status ?? "no row"}`),
-			],
+			].join("\n"),
 );

@@ -568,7 +568,7 @@ Measured, host Linux / Fedora Linux 45 / kernel `7.2.15-300.fc45.x86_64` / node 
 | state | refs | evidence |
 |---|---|---|
 | **LANDED** (main `1a60386b` → `e6aad7a5`) | `item-6537`, `item-6549` | `node scripts/land.mjs landing-20261114-docsonly --db ./selfdev.sqlite --changed-suite --docs-only` exit 0; `git merge-base --is-ancestor refs/heads/item-6537 refs/heads/main` exit 0 (same for 6549); `tools/merge-containment-proof.mjs --branch refs/heads/main --refs item-6537,item-6549` → `refs_with_loss 0`; `node scripts/test.mjs --area docs` 8/8 in 60.9 s |
-| **CHAIN-READY, gate red — held** | `item-6173`, `item-6238` | `node tools/chain-resolve.mjs --branch landing-20261114-c9 --refs item-6173,item-6238,item-6537,item-6549` merged 4, containment 0 loss; `scripts/land.mjs --suite` refused at `demo/stop.test.mjs` (exit 1), which **passes** (exit 0) run directly in `.spike/chain-landing-20261114-c9` with the root's `node_modules` symlinked — the red is not yet attributed |
+| **CHAIN-READY, gate red — held** | `item-6173`, `item-6238` | `node tools/chain-resolve.mjs --branch landing-20261114-c9 --refs item-6173,item-6238,item-6537,item-6549` merged 4, containment 0 loss; `scripts/land.mjs --suite` refused at `demo/stop.test.mjs` (exit 1), which **passes** (exit 0) run directly in `.spike/chain-landing-20261114-c9` with the root's `node_modules` symlinked — the red is not yet attributed. (Path note, 2026-11-14: that scratch tree was released by `tools/branch-prune.mjs --reap-worktrees`; recreate it with `git worktree add .spike/chain-landing-20261114-c9 landing-20261114-c9` before running the probe. The ref `landing-20261114-c9` is still present — only the tree is gone.) |
 | **HELD — the branch's own demo fails** | `item-7232` | `scripts/land.mjs` STOPPED: `demo/by-id-claim-gate.test.mjs` (added by this ref) fails 12 checks on the merged tree — it asserts a by-id claim is refused on an open/cancelled/held gate and main claims it. Needs a re-cut, not a merge |
 | **HELD — a dependency decision, not a merge** | `item-6373` | merges by rule, but its diff bumps **every** vendor pin in `package.json` (`pi-durable ^1.3.0` → `1.5.1`, plus chord/pi-ai/pi-coding-agent/pi-tui) and rewrites `scripts/sync-pi.mjs` |
 | **still refused by rule** | the other 33 | `node tools/chain-resolve.mjs … --refs <all 40>` → 6 merged, 34 refused; the reason is printed per ref, overwhelmingly "anchor/edit not locatable in the current file" — two seats rewrote the same line |
@@ -705,3 +705,54 @@ Each is provably empty: `git rev-list --count refs/heads/main..refs/heads/<alias
 `main`'s tree, so the SLA counts them `landed` with 0 lost lines. They are **dispositioned, not deleted**; pruning
 them is a separate decision that needs `tools/branch-census.mjs` and the ancestor test, and the tool that makes them
 should say so in its own output (SELFDEV pitfall 363).
+
+## Prune pass 2026-11-14 (delegate, operator request "clean up the branches and worktrees that are safe to remove")
+
+**Decision recorded here, not the ref existence** (rule R-B #3270): a ref whose commits are **already on `main`**
+has nothing to disposition — its work landed. A ref that is *not* an ancestor of `main` was **kept with a reason**,
+never deleted, and every such ref is named above or in the tables before it.
+
+Measured, at HEAD `a23961dc` (host: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node
+v24.22.1, git 2.56.0; `main` **unmoved** by the prune, tracked tree clean, nothing pushed):
+
+```bash
+DURIG_DB=./selfdev.sqlite node tools/branch-census.mjs --json      # 7.7 s, exit 0
+git for-each-ref refs/heads | wc -l                                # 100  (main + 99)
+git worktree list | wc -l                                          # 94
+```
+
+| before | after | removed by |
+|---|---:|---|
+| 219 refs | 99 refs | 120 branches deleted, each re-gated on `git merge-base --is-ancestor <ref> main` **at delete time**, `git branch -d` only (never `-D`) |
+| 155 worktrees | 94 worktrees | 61 worktrees removed, `git worktree remove` with **no `--force`**, 0 refusals |
+
+Of the 120, **24 were the zero-commit `landing-20261114-*-recut` aliases** `tools/ref-recut.mjs` minted in the
+previous window (SELFDEV pitfall 363): each had `git rev-list --count refs/heads/main..refs/heads/<alias>` = `0`
+and a tree identical to `main`'s, so deleting them loses nothing. **The `landing-20261114-*` chain snapshots
+(26 refs, including `b3a` and `c2`) were NOT pruned**: `git merge-base --is-ancestor <ref> main` exits **1** for
+all 26, and `git merge-tree --write-tree refs/heads/main refs/heads/landing-20261114-c3` exits **1**
+(`CONFLICT (content): Merge conflict in docs/DECISIONS.md`). The rule keeps them — they are the re-cut inputs the
+authors still need.
+
+**What remains, and why no git verb can touch it** (post-pass census, exit 0, 7.7 s): 35 refs conflict with `main`,
+25 are dirty with uncommitted tracked work, 8 are seat roots, 6 belong to live queue rows, 3 are locked mid-run,
+22 are ruled KEEP in this ledger — **99 kept refs, prune plan (0), unaccounted refs (0), refs needing a landing
+decision (0)**. (The SLA's `conflicted: 49` is wider than the census's 35: the census classifies a dirty, locked,
+seat-root or live-item tree before it looks at merge shape, and the SLA counts every ref whose `merge-tree` conflicts
+with `main`, including the 26 chain snapshots.)
+**Worktrees, the same pass.** After the branch prune the rig's own audit still reported **21 `reapable`** trees
+(terminal item, unlocked, zero uncommitted tracked change). `node tools/branch-prune.mjs --reap-worktrees` released
+all 21 in **39.4 s**, 0 refusals, **no ref touched** — the refs stay, so each tree is re-creatable with
+`git worktree add <path> <ref>`. Then the 32 `.spike/` scratch trees from the landing/re-cut passes (26
+`chain-landing-20261114-*`, `fftest`, `r2-6373`, `r2b-3747`, `r2b-6373`, `scratch-b3a`, `try-3570`) were released
+after moving their `node_modules` symlinks to `.spike/quarantine-20261114/` — **1 REFUSED and kept:**
+`.spike/ins-6101`, which holds uncommitted conflict markers (`UU cli.mjs`, `UU src/rig.mjs`, `UU demo/test-areas.json`)
+from the re-cut pass; its owner's work is not gone, so the tree stays. **Registered worktrees 94 → 40** (audit:
+9 seat roots, 12 live item trees, 3 locked, 13 dirty, 3 non-item). Two docs still quote a released tree by path — `docs/DISPOSITIONS.md:571` (`…-c9`) and `docs/SELFDEV.md:4578`
+(`…-c11`) — both are dated measurements, not live paths. Any of them is re-created in one command:
+`git worktree add .spike/chain-landing-20261114-c9 landing-20261114-c9` (the ref was never deleted).
+
+Re-measure rather than trust: `node tools/self-merge-sla.mjs --json --strict` now prints `refs: 99`,
+`counts {conflicted: 49, landed: 45, gate-refused: 5}`, `ledger_coverage 54/54`, `gate_refused_proven: 5`,
+`gate_refused_unproven: []`, `stale: 0`, exit 0. The instrument is `tools/branch-prune.mjs` (the loop that ran
+this pass), pinned by `demo/branch-prune.test.mjs`.

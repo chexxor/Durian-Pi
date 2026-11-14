@@ -4660,3 +4660,41 @@ at `:743`). Re-measure every `path:line` before repeating it.
     They are harmless (`self-merge-sla` counts them `landed`, 0 lost lines) but they inflate every "how many branches
     are open?" number. **Probe:** `git for-each-ref --format='%(refname:short) %(objectname)' refs/heads | awk -v h="$(git rev-parse refs/heads/main)" '$2==h && $1 ~ /-recut$/ {print $1}'`. Prune only with
     `tools/branch-census.mjs` plus the ancestor test, never by name pattern.
+    **Addendum 2026-11-14 (delegate prune pass, same host):** the 24 aliases were removed the same day — each
+    was an ancestor of `main` with `git rev-list --count refs/heads/main..refs/heads/<alias>` = `0` and a tree
+    identical to `main`'s, so `git branch -d` accepted it and nothing was lost. Refs 219 → 99.
+    **Fix owed to the tool:** `ref-recut.mjs` should delete its own alias when the replay needs a human, or
+    never create it before the replay is known clean.
+
+## Operational pitfalls (delegate branch/worktree prune pass 2026-11-14 — numbered 364-367, continuing from 363; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, git 2.56.0)
+
+364. **`spawnSync` returns `.status`, not `.code` — a wrong check deletes nothing and reports success.** The
+    first prune runner used `if (r.code !== 0) skip`, and `r.code` is `undefined` on a `spawnSync` result, so
+    the condition is true for **every** ref: 120 refs "skipped", 0 deleted, **exit 0**, and a clean-looking
+    summary line. A silent no-op that looks like a pass is worse than a crash, because the next session quotes
+    it as evidence. **Fix in place:** `tools/branch-prune.mjs` reads `.status`, prints `branches deleted / worktrees
+    removed / skipped / failed`, and **exits 1 whenever the plan and live git disagree** — a run that planned N
+    and deleted 0 can never exit 0. Pinned by `node demo/branch-prune.test.mjs` (0.21 s, git fixture, no store,
+    no model): asserts exactly one ancestor branch deleted, an unlanded ref skipped, a snapshot-named ref kept,
+    a locked worktree left whole, `main` byte-identical, and CLI exit 1 on a plan the gate cannot honour.
+    General rule: any tool that reports "N things done" must **count the things it actually did**, and a demo
+    must assert the count, not the exit code.
+365. **A file named `--refs` at the repo root is a probe signature, not repo content.** An untracked 133-byte
+    JSON `{"head":"a23961dc…","refs":0}` sat at the root; it came from invoking a probe as
+    `… --refs <list>` where the argument parser treated the flag as an output path. It is gitignored-adjacent
+    (untracked, so `git status --short` shows it) and it is invisible to `git worktree list`, so it survives
+    every hygiene pass until someone looks. **Probe:** `ls -d -- --refs .land-scratch-*` before clocking out.
+    Instrument rule: a tool that takes `--refs <list>` must consume the next argv slot, never write to a token
+    that starts with `-`, and the delegate's own `git status` check is the place this class of artifact is
+    caught.
+366. **A census that prints a paragraph per ref is a census nobody reads.** `tools/branch-census.mjs`'s
+    human-readable branch passed its line array to `console.log` as one argument, so the output was a JS array
+    literal; and because `verdict` embeds the **verbatim** `docs/DISPOSITIONS.md` ruling (one row is ~600
+    characters), every tally line was a paragraph. **Fixed in place** (measured at `a23961dc`, 99 refs / 94
+    worktrees, **7.7 s**): the lines are joined and the table verdict is truncated to 80 characters — the full
+    text stays in `--json`, which is what the prune tool and the next pass actually read.
+367. **A full-suite red can be contention, not a defect — reproduce it in its own area before routing it.**
+    Measured at this window's tip (host above): `node scripts/test.mjs --all --jobs 4` → **358/359 in 192.4 s**, the sole
+    failure `demo/restart-limit-behaviour.test.mjs`; the same file run alone exits **0**, and
+    `node scripts/test.mjs --area rig --jobs 4` → **95/95 in 25.2 s**. The identical code was 359/359 earlier in the
+    same window. Quote the area number, not just the suite number.

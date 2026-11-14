@@ -28,7 +28,8 @@ prefixes the current branch with `*`, so a naive `split(" ")[0]` invents a ref n
 
 **Measured** 2026-11-11 at `e01e9256` (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node
 v24.22.1, git 2.56.0): 77 refs / 69 worktrees → 43 clean-unmerged-terminal, 10 seat roots, 7 dirty,
-7 conflicting, 9 ruled-kept by the ledger, 1 locked, 1 no-queue-row.
+7 conflicting, 9 ruled-kept by the ledger, 1 locked, 1 no-queue-row. Re-measured 2026-11-14 at
+`a23961dc` (same host): **99 refs / 94 worktrees in 7.7 s**, prune plan 0, unaccounted 0.
 
 ## 2. The verdict rule (what the tool encodes)
 
@@ -60,6 +61,18 @@ merge-tree comparison to `main`'s tree answers the second question — *does thi
 all?* (2026-11-11: **0** of the 43 were redundant, so every one carries content `main` does not have).
 
 ## 3. Prune
+
+**One verb, not a hand-loop:** `timeout 300 node tools/branch-prune.mjs --db ./selfdev.sqlite`
+(measured 2026-11-14 at `a23961dc`, Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node
+v24.22.1, git 2.56.0: **8.4 s** `--dry-run`, exit 0). It runs the census, then per ref re-checks
+`git merge-base --is-ancestor` **at delete time**, removes the worktree without `--force`, deletes the
+branch with `-d`, refuses while `MERGE_HEAD` exists, never touches `snapshot|archive|pre-split|backup|selfdev-<n>`
+names, and prints a `git branch <name> <sha>` recovery line per delete (log `.spike/prune-log.txt`).
+**Exit 1 = the plan and live git disagree**; a pass that deleted nothing cannot exit 0 — that is the fix
+for the `spawnSync` `.status` vs `.code` silent no-op (pitfall 364, pinned by `demo/branch-prune.test.mjs`,
+0.21 s). The 2026-11-14 pass: 120 branches + 61 worktrees removed, 0 failures, refs 219 → 99.
+
+The same steps by hand, if you are in a shell without the tool:
 
 ```bash
 git worktree remove <path>        # never --force
