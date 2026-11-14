@@ -3,9 +3,9 @@ runbook: attach-a-gate
 symptom: "I know a row must wait on another row, but I am not the sender or the recipient of it, and every way of writing that constraint is refused or silently dropped"
 writes: false                    # the procedure routes rows; it never opens a Harness or a store
 precondition: "none"
-last_verified: 2026-11-10
+last_verified: 2026-11-11
 verified_by: architect
-evidence: "item #6225; `node tools/probes/revise-authority-boundary.mjs` exit 0 in worktree item-6185 @ f192f543; `node demo/queue-held-gates.test.mjs` exit 0 (42 held rows with NO recorded gate in the fixture)"
+evidence: "item #6782; `node tools/probes/gate-authority-census-6782.mjs <dump>` exit 1 (63 dead-gate rows, 95 parked-gate rows, 0 gated/ungated events) at HEAD 35001c3a; `node tools/probes/gate-write-surface.mjs` exit 0; `node tools/probes/gate-reference-validation.mjs` exit 0"
 check_rule: null                 # nothing re-tests gate reachability after the fact — see Evidence
 ---
 
@@ -72,6 +72,12 @@ Gate hygiene, whichever route you take:
 - never gate two rows on each other. `normalizeBlockedBy` (`src/rig.mjs:355-380`) checks shape only —
   no existence check, no cycle check. A cycle starves both rows with no exit.
 
+## If the gate is already there and must come off
+
+Measured on the live store (read seam: `DURIG_DB=selfdev.sqlite node cli.mjs queue --no-body > dump.json`, then `node tools/probes/gate-authority-census-6782.mjs dump.json` → exit 1): of 378 gated rows, **156** are gated on a target that can never resolve — 63 on a `cancelled` row, 95 on a row that is `held` or `deferred`. Today no verb can clear any of them: `blockedBy` is written at mint and never un-written (`tools/probes/gate-write-surface.mjs`, exit 0, 0 removal sites), and no row carries a `gated`/`ungated` event (0 of 6,877). The rule the fleet is moving to (`docs/reviews/architecture-gate-authority-6782.md`, amending D261): a **party** may clear a gate id when the target is terminal-cancelled, or when the target is parked with **no authored block** and its `reviewBy` is absent or past. Removing a live, authored gate is still a scope ruling for `lead`, and every removal writes `{event: "ungated", by, id, reason, at}`.
+
+Until that verb exists, the honest move is: mint a row addressed to the party who can clear it, saying which id and why. Do not cancel the dependent to make the gate disappear — that is the terminal recovery this ruling exists to replace.
+
 ## Verify
 
 The boundary this runbook describes is pinned by a probe:
@@ -92,6 +98,15 @@ DURIG_DB=./selfdev.sqlite node cli.mjs show <new-row-id>
 ```
 
 Expected: `blockedBy=<ids>` present, not a sentence in the body.
+
+The stuck-gate census, if you need the fleet-wide picture:
+
+```bash
+DURIG_DB=./selfdev.sqlite node cli.mjs queue --no-body > /tmp/queue-dump.json
+node tools/probes/gate-authority-census-6782.mjs /tmp/queue-dump.json
+```
+
+Expected today: exit 1 with the two gaps (no gate-edit verb; `legacyBlock` invents resolver "pm"). It goes GREEN only when a `gate_work` verb exists, the rig writes an `ungated` event, and the pm-inference line is gone from `src/queue-lifecycle.mjs:256`.
 
 ## If it fails
 

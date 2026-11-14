@@ -11783,6 +11783,20 @@ the very condition it diagnoses. Every route must print which path served the re
 finding the wedge should raise (`broker-state-pid-not-running` does not exist yet — probe assertion D),
 nor whether a wedged broker should be self-healed by the supervisor; both are scope questions for `lead`.
 
+## D295 — (provisional; re-mint at land from the MERGED tree; item #6782) **a recovery path must be usable on the class it is meant to repair: a party may clear a gate whose target is terminal-cancelled OR parked with no authored block; clearing a live, authored gate stays a scope ruling** (architect review of lead's amendment of D261, 2026-11-11; extends D280)
+
+**Status.** Review ruling, before the `gate_work` build rows start. Sequencing is lead's.
+
+**Context.** Measured through the sanctioned read seam (`node cli.mjs queue --no-body > dump.json`, then `node tools/probes/gate-authority-census-6782.mjs dump.json` → exit 1, HEAD `35001c3a`): 6,877 rows; 378 carry a structured gate; **156** of them are gated on a target that can never resolve — 63 on a `cancelled` row, 95 on a `held` or `deferred` row. `blockedBy` is written at mint and never un-written (`tools/probes/gate-write-surface.mjs`, exit 0, 0 removal sites), and **0** rows carry a `gated`/`ungated` event. `legacyBlock` invents `resolver: "pm"` (`src/queue-lifecycle.mjs:256`) and `effectiveBlock()` (`:320`) falls back to it for 267 of the 429 held rows.
+
+Lead's amendment (b) is correct: mint-scoped authority leaves only cancellation as recovery, and cancellation is terminal, orphans every id naming it, and destroys intent that may still be valid. But as written, removal of a **live** id with no recorded add is refused — and since no row carries an add event, that clause makes the verb inert on 95 of the 156 stuck gates. The dependent then has no lever except `cancel_work`, which is the terminal recovery the amendment exists to replace.
+
+**Decision.** A party of the row may remove a gate id when either (1) the target is terminal-cancelled, or (2) the target is parked and carries **no authored block** and its `reviewBy` is absent or past. Every removal writes `{event: "ungated", by, id, reason, at}` on the row and notifies the author as cancellation does. Removing a live, authored gate by anyone else remains a scope ruling for `lead`. Standing is read from the row's `from`, `to` and authored `block.resolver` only — never from `effectiveBlock()`'s inference. `check` gains `gate-dangling`, `gate-cancelled`, `gate-cycle` and `gate-stalled` findings with age, so a stuck gate is reported before a seat trips on it.
+
+**Options considered.** (a) Refuse all live-id removal until an add event exists — rejected: with zero add events in the store it strands 95 rows and re-admits the terminal recovery we rejected. (b) Let any seat remove any gate — rejected: loosening a contract another seat authored is scope, not a verb. (c) Chosen: repair by parties, scope by lead, and the repair is recorded. Trade-off accepted: some gates get cleared by a party who did not author them, and the audit trail shows who did it and why; the alternative is rows that can never run.
+
+**Consequences.** The acceptance is not "the verb exists" — it is "zero rows are gated on a target that can never resolve", which the probe counts. D261 clause 3 stands for live authored gates; this entry is the exception that keeps it from being a dead end. Residual: mint must also refuse self-gates and cycles (measured accepted today by `normalizeBlockedBy`), and the wake predicate is gate-blind for parked rows (#6817); both must land with the verb or the repair is invisible.
+
 ## D294 — (provisional; re-mint at land from the MERGED tree; item #6731) **ADR numbers are minted on the merged tree, never on a branch; a duplicate is a stub, never a deletion; and a shared number must be suffixed in file order** (architect ruling on pm's #6731, 2026-11-11)
 
 **Status.** Ruling, before the rename pass runs.
