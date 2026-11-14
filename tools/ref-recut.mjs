@@ -18,6 +18,12 @@
 //   node tools/ref-recut.mjs --refs item-3570,item-6116            # plan + apply, report
 //   node tools/ref-recut.mjs --refs item-3570 --commit              # commit a clean replay
 //   node tools/ref-recut.mjs --refs item-3570 --json .spike/recut.json
+//   node tools/ref-recut.mjs --refs item-3570 --refresh             # RE-CUT against the CURRENT main:
+//   a -recut branch made off an older main is stale the moment main moves. --refresh moves an existing
+//   recut worktree's branch to current main (reset when it has no commits of its own, merge when it does)
+//   and replays the patch, so the conflict set is measured against the tree you are about to land on.
+//   Measured 2026-11-14: 26 refs refreshed in 12.2 s on Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64,
+//   node v24.22.1, git 2.56.0.
 // Then fix the markers it lists in the printed worktree, run
 // tools/merge-containment-proof.mjs --branch refs/heads/<ref>-recut --refs <ref>, and land with
 // scripts/land.mjs <ref>-recut --db ./selfdev.sqlite --changed-suite.
@@ -35,6 +41,7 @@ import { join, resolve } from "node:path";
 const flags = process.argv.slice(2);
 const refArg = flags.find((f) => f.startsWith("--refs=")) ?? (flags[0] === "--refs" ? flags[1] : null);
 const doCommit = flags.includes("--commit");
+const doRefresh = flags.includes("--refresh");
 const jsonOut = flags.find((f) => f.startsWith("--json="))?.split("=")[1] ?? null;
 const mainRef = flags.find((f) => f.startsWith("--main="))?.split("=")[1] ?? "refs/heads/main";
 const spikeDir = flags.find((f) => f.startsWith("--spike="))?.split("=")[1] ?? ".spike";
@@ -57,6 +64,7 @@ const t0 = Date.now();
 const rows = [];
 
 for (const ref of refs) {
+	let refresh = null;
 	const head = git(repoRoot, ["rev-parse", ref]);
 	if (!head.ok) { rows.push({ ref, error: "ref does not exist" }); continue; }
 	const base = git(repoRoot, ["merge-base", mainRef, head.out]);
@@ -69,6 +77,19 @@ for (const ref of refs) {
 	if (!existsSync(wt)) {
 		const add = git(repoRoot, ["worktree", "add", wt, "-b", branch, mainRef]);
 		if (!add.ok) { rows.push({ ref, error: "worktree add failed: " + add.err }); continue; }
+	} else if (doRefresh) {
+		// How much of the recut is already decided? Zero commits -> the branch is just an old checkout,
+		// so a hard reset onto main loses nothing. Commits exist -> someone (chain-resolve or a human)
+		// already resolved hunks there, so merge main in instead of throwing that work away.
+		const ahead = Number(git(repoRoot, ["rev-list", "--count", `${mainRef}..${branch}`]).out || "0");
+		if (ahead === 0) {
+			const r = git(wt, ["reset", "--hard", mainRef]);
+			if (!r.ok) { rows.push({ ref, error: "refresh reset failed: " + r.err }); continue; }
+			refresh = `reset onto ${mainRef} (0 own commits)`;
+		} else {
+			const m = git(wt, ["merge", "--no-edit", mainRef]);
+			refresh = m.ok ? `merged main in, ${ahead} own commit(s) kept` : `main merge left markers (${ahead} own commit(s); ${m.err.split("\n")[0]})`;
+		}
 	}
 
 	const diff = spawnSync("git", ["diff", base.out, head.out], { cwd: repoRoot, encoding: "utf8" });
@@ -106,6 +127,7 @@ for (const ref of refs) {
 		branch,
 		worktree: wt,
 		base: base.out.slice(0, 12),
+		refresh,
 		changed: changed.length,
 		addedLines,
 		appliedCleanly: applied.ok,
@@ -121,7 +143,7 @@ if (jsonOut) writeFileSync(resolve(repoRoot, jsonOut), JSON.stringify(report, nu
 for (const r of report.rows) {
 	if (r.error) { console.log(`REPLAY-FAILED ${r.ref} :: ${r.error}`); continue; }
 	const tag = r.conflicted.length === 0 && r.syntax.length === 0 ? "CLEAN" : "NEEDS-HUMAN";
-	console.log(`${tag} ${r.ref} -> ${r.branch}  worktree=${r.worktree}  changed=${r.changed} added=${r.addedLines}${r.conflicted.length ? "  markers: " + r.conflicted.join(", ") : ""}${r.syntax.length ? "  syntax: " + r.syntax.map((s) => s.file).join(", ") : ""}`);
+	console.log(`${tag} ${r.ref} -> ${r.branch}  worktree=${r.worktree}  changed=${r.changed} added=${r.addedLines}${r.refresh ? "  refresh=" + r.refresh : ""}${r.conflicted.length ? "  markers: " + r.conflicted.join(", ") : ""}${r.syntax.length ? "  syntax: " + r.syntax.map((s) => s.file).join(", ") : ""}`);
 }
 const humanNeeded = report.rows.filter((r) => r.error || r.conflicted.length || r.syntax.length).length;
 console.log(`ref-recut: ${report.refs} ref(s) in ${report.elapsed_s} s; ${report.refs - humanNeeded} replayed clean, ${humanNeeded} need a re-cut decision (markers are left in the worktree, nothing was committed as resolved).`);
