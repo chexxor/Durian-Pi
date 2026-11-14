@@ -12,12 +12,15 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { readDependencyPlane, pinVersion } from "../src/depplane.mjs";
 import { auditRig, formatCheck, RULES } from "../src/checkup.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+// The scratch lives in THIS tree (gitignored). A fresh worktree - the lander's scratch, an item
+// worktree - has no .scratch/ yet, so create it: mkdtempSync does not create the parent.
+mkdirSync(join(ROOT, ".scratch"), { recursive: true });
 const scratch = mkdtempSync(join(ROOT, ".scratch", "depplane-"));
 const spec = () => ({ version: 2, seats: [{ name: "alpha", role: "Implementer (author)", capabilities: ["testing"] }] });
 const ids = (r) => r.findings.map((f) => f.id);
