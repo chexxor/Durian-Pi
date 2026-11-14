@@ -75,6 +75,8 @@ this, re-checked 2026-11-11 on `main 35001c3a`) resolves `CFG.DURIG_DB ?? "./rig
 run in this tree: `DURIAN_PI_DB=./nope-a.sqlite node cli.mjs status` → `"db": "…/rig.sqlite"` (exit 1,
 `cause: no_store`), `DURIG_DB=./nope-b.sqlite node cli.mjs status` → `"db": "…/nope-b.sqlite"` (honored).
 The one entry point that still takes the old name is `scripts/clockin.mjs:468` (379 at that tree), which tries `DURIAN_PI_DB`
+2026-11-10 at `src/config.mjs:116-219`) lists only `DURIG_*` keys, and `cli.mjs:161` resolves `CFG.DURIG_DB ?? "./rig.sqlite"` (re-pinned 2026-11-11 on `main 35001c3a`; it was `cli.mjs:155` in the measured tree `f192f543`) — so a copied
+The one entry point that still takes the old name is `scripts/clockin.mjs:468`, which tries `DURIAN_PI_DB`
 first, then `DURIG_DB`, default `./selfdev.sqlite`.
 
 ```bash

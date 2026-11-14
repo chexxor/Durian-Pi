@@ -32,6 +32,9 @@ Name the store with the variable **the entry point you are invoking actually rea
 `intent.mjs` read `DURIG_DB` (`cli.mjs:161`, `intent.mjs:105`, `src/config.mjs` `CONFIG_KEYS`); the one entry
 point that also accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:468` (379 on tree `f192f543`, where this template was
 written), and it takes it first. A command carrying a
+point that also accepts `DURIAN_PI_DB` is `scripts/clockin.mjs:468`, and it takes it first. Re-pinned 2026-11-11
+on `main 35001c3a` — these line numbers drift with the code, so check them before quoting (`grep -n 'CFG.DURIG_DB'
+cli.mjs`). A command carrying a
 name the entry point ignores is not a harmless typo - it silently opens the fallback store (#5911, ROADMAP 191).
 And name the FILE: a relative store path resolves against the cwd (`cli.mjs:161`), and an item worktree holds no
 store at all (`git ls-files | grep -c sqlite` -> `0`, `.gitignore:2`), so either state "run this from the shared
