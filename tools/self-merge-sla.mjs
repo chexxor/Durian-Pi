@@ -118,6 +118,18 @@ export function landingHealth({
 	for (const area of manifest.areas ? Object.keys(manifest.areas) : []) for (const f of filesForArea(manifest, area)) areaOf.set(f, area);
 	const tests = discoverTests(repo);
 
+	/* Which refs the LEDGER names, and which of those rows record a landing the rig's own chokepoint
+	 * REFUSED (scripts/land.mjs prints "main was NOT advanced" when the derived gate is red). Both sets
+	 * come from the ledger text, so the tool never needs a second source of truth.
+	 * last_verified: 2026-11-14, `node demo/self-merge-sla.test.mjs` exit 0. */
+	const ledgerRows = new Set();
+	const gateRefused = new Set();
+	for (const m of (ledger || "").matchAll(/`([A-Za-z0-9_\/()+.:-]+)`/g)) ledgerRows.add(m[1]);
+	for (const line of (ledger || "").split("\n")) {
+		if (!/main was NOT advanced|the derived gate refuses|KEEP-HELD/.test(line)) continue;
+		for (const m of line.matchAll(/`([A-Za-z0-9_\/()+.:-]+)`/g)) gateRefused.add(m[1]);
+	}
+
 	const rows = [];
 	for (const { ref, when } of listed) {
 		// `refs/heads/<name>` wherever a REV is read: a live item worktree at the repo root is a DIRECTORY
@@ -142,10 +154,19 @@ export function landingHealth({
 		const itemId = Number((ref.match(/(\d+)/) || [])[0] ?? null);
 		const status = itemId !== null ? itemStatus?.get(itemId) ?? "no-row" : "no-row";
 
+		/* Addendum 2026-11-14 (delegate, after the catch-up audit): a clean merge-tree is NOT a landing
+		 * verdict, and the ledger is where a refused landing is recorded. A ref the lander already tried and
+		 * REFUSED is not "ready work waiting for a seat" - it is a held ref waiting for an implementation.
+		 * Calling it `ready` makes the next session re-run the same refused landing. So the ledger is read
+		 * into the verdict, and every unlanded ref is checked for a dated row (coverage). */
+		const shortName = rev.replace("refs/heads/", "");
+		const hasRow = ledgerRows.has(shortName);
 		let verdict;
 		if (mtCode === 1) verdict = "conflicted";
 		else if (markers.code === 0) verdict = "poisoned-committed-markers";
 		else if (refTree === mainTree) verdict = "no-op-ref";
+		else if (gateRefused.has(shortName)) verdict = "gate-refused";
+		else if (/^landing-\d{8}-/.test(shortName)) verdict = "scratch-chain";
 		else if (status === "done") verdict = "ready";
 		else if (status === "no-row") verdict = "ready-unverified";
 		else verdict = "in-flight";
@@ -173,7 +194,8 @@ export function landingHealth({
 			age_s: age,
 			age_h: age === null ? null : +(age / 3600).toFixed(1),
 			queue_status: status,
-			ruled: ledger && ledger.includes(ref) ? "DISPOSITIONS row" : null,
+			dispositioned: hasRow,
+			ruled: hasRow ? "DISPOSITIONS row" : null,
 			gate: { changedPaths: changedPaths.length, derivedTests: selected.length, areas: [...new Set(selected.map((t) => areaOf.get(t)).filter(Boolean))] },
 			land_command: `node scripts/land.mjs ${ref} --repo ${repo} --db ${db} --changed-suite`,
 		});
@@ -182,6 +204,8 @@ export function landingHealth({
 	const stale = rows.filter((r) => r.stale).sort((a, b) => (b.age_s ?? 0) - (a.age_s ?? 0));
 	const counts = {};
 	for (const r of rows) counts[r.verdict] = (counts[r.verdict] || 0) + 1;
+	const unlanded = rows.filter((r) => r.verdict !== "landed");
+	const undocumented = unlanded.filter((r) => !r.dispositioned).map((r) => r.ref.replace("refs/heads/", ""));
 
 	return {
 		ok: stale.length === 0,
@@ -196,6 +220,9 @@ export function landingHealth({
 		stale: stale.length,
 		oldest: stale[0] ?? null,
 		unlanded_verified: counts.ready ?? 0,
+		unlanded: unlanded.length,
+		ledger_coverage: `${unlanded.length - undocumented.length}/${unlanded.length}`,
+		undocumented,
 		stale_rows: stale,
 		rows,
 		elapsed_s: +((Date.now() - started) / 1000).toFixed(1),
@@ -245,6 +272,13 @@ if (isMain) {
 	}
 	const result = landingHealth({ repo, db, slaHours, refs, itemStatus: queue.status, storeReason: queue.reason, ledger });
 	console.log(JSON.stringify(result, null, argv.includes("--json") ? 2 : 0));
+	if (argv.includes("--strict") && result.undocumented.length) {
+		console.error(
+			`self-merge SLA (--strict): ${result.undocumented.length} unlanded ref(s) have NO dated row in docs/DISPOSITIONS.md: ` +
+			result.undocumented.slice(0, 20).join(", ") + (result.undocumented.length > 20 ? " …" : ""),
+		);
+		result.exit = 1;
+	}
 	if (result.stale > 0) {
 		console.error(
 			`self-merge SLA: ${result.stale} ready ref(s) past ${slaHours} h (oldest: ${result.oldest.ref}, ${result.oldest.age_h} h). ` +

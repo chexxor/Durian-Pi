@@ -629,3 +629,48 @@ added lines absent from `main`**, each with a dated row above or in the earlier 
 Running `node tools/merge-containment-proof.mjs --branch refs/heads/main --refs <all 36, comma-separated>` exits
 **1** by design: exit 0 means *no ref lost lines*, and 23 of them still do. Only a subset of ancestors exits 0 —
 reading "exit 0 on the 36-ref set" as the catch-up's proof is wrong.
+
+## Close-out census: every ref NOT an ancestor of `main`, at HEAD `a9bc766f` (2026-11-14, delegate, goal mwg3lsdp-waokdl)
+
+The audit's objection was specific: a ref the instrument called `ready` had no landing attempt on record. So the
+census was re-run against the tree the landing would actually land on, and **every** ref the rule can merge went
+through `scripts/land.mjs` again at this HEAD. Commands (host: **Linux**, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
+
+```bash
+node .spike/non-ancestors.mjs                                    # 54 refs where is-ancestor exits 1
+node .spike/classify.mjs <those 54>                              # 5 merge-tree exit 0, 49 merge-tree exit 1
+node tools/merge-containment-proof.mjs --branch refs/heads/main --refs <all 54> --json
+# -> {"refs":54,"refs_with_loss":54,"elapsed_s":"22.3"}, exit 1  => none of them is absorbable
+```
+
+**The five rule-mergeable refs, re-attempted at this HEAD** (verbatim verdicts and gate sizes are in
+[`docs/evidence/2026-11-14-landing-attempts/verdicts.md`](../evidence/2026-11-14-landing-attempts/verdicts.md)):
+
+| date | ref | verdict | evidence | citing item |
+|---|---|---|---|---|
+| 2026-11-14 | `item-6373-recut`, `item-6373-recut-r2` | **LAND** — main `a707a047` → `a9bc766f`; BOTH refs are now ancestors (`git merge-base --is-ancestor` exit 0 for each) | the only conflict was `docs/runbooks/pi-pin-update.md`; git's recorded rerere resolution applied, `tools/recut-resolve.mjs` reported `0 file(s) resolved by rule, 0 left marked for a human`, and `node tools/merge-containment-proof.mjs --branch refs/heads/item-6373-recut-r2 --refs refs/heads/item-6373-recut` → `refs_with_loss: 0`, exit 0; `scripts/land.mjs item-6373-recut-r2 --changed-suite` exit 0, derived gate 48/358, areas NOT RUN [readapi] | #6373 |
+| 2026-11-14 | `item-3747-recut-r2` | **KEEP-HELD — merged by rule, refused by the gate** | `tools/recut-resolve.mjs` resolved the single conflict `demo/test-areas.json` by rule `R5 BOTH` and the file parses (`JSON.parse` ok); containment proof for `item-3747-recut` against `item-3747-recut-r2` → `refs_with_loss: 0`. `scripts/land.mjs item-3747-recut-r2 --changed-suite` exit **1**: `STOPPED: demo/check.test.mjs failed in the scratch worktree (exit 1) — main was NOT advanced` — the merged docs add two `doc-count-drift` findings the demo's expected-findings list does not carry. Refs kept. **What closes it:** reconcile the doc-count findings, then land the r2 branch. | #3747 |
+| 2026-11-14 | `item-3570-recut` | **KEEP-HELD** (re-attempted at this HEAD) | `scripts/land.mjs` exit 1, derived gate 166/359: `STOPPED: demo/compaction-acceptance-gate.test.mjs failed ... main was NOT advanced`. Mapping the added demo in `demo/test-areas.json` — the provable lossless edit — was tried in a scratch worktree off the merge result; the ref's own demo is then red on two assertions (`prose in a gate is REFUSED at the schema boundary`, `a stranger cannot write a gate on a row it is not party to`). See the evidence file. | #3570 |
+| 2026-11-14 | `item-7232-recut`, `landing-20261114-b3a`, `landing-20261114-c2` | **KEEP-HELD** (re-attempted at this HEAD) | each exit 1 with `STOPPED: demo/by-id-claim-gate.test.mjs failed in the scratch worktree (exit 1) — main was NOT advanced`; derived gates 31/359, 52/359, 31/359. Registered as ROADMAP **371**. | #7232 / #6579 / #7184 |
+
+**The 24 chain snapshots and `ff-test` — what they are, and why they are not unlanded work.** Every
+`landing-20261114-*` ref is a *scratch chain*: a run of rule-merges made against `main` at the time of the pass, kept
+as the audit trail of that pass. Each still re-conflicts with current `main` (`git merge-tree` exit 1), so the rule
+cannot merge it; the work it carried is dispositioned ref-by-ref above. To re-land one, re-cut its author refs with
+`tools/ref-recut.mjs --refresh`, never merge the chain.
+
+| chain ref | own commits vs `main` | author refs it carries |
+|---|---|---|
+| `landing-20261114-b1`, `landing-20261114-b1b`, `landing-20261114-b1c`, `landing-20261114-b1d`, `landing-20261114-b1e`, `landing-20261114-b1f`, `landing-20261114-b1g`, `landing-20261114-b1h`, `landing-20261114-b1i`, `landing-20261114-b1j`, `landing-20261114-b1k`, `landing-20261114-b1l`, `landing-20261114-b1m`, `ff-test` | 14–16 | `item-5002-recut`, `item-5301-resolved-recut`, `item-6177-recut`, `item-6211-recut`, `item-6268-recut`, `item-6314-recut`, `item-6326-recut`, `item-6330-recut`, `item-6336-recut`, `item-6374-recut`, `item-6435-recut`, `item-6562-recut`, `item-6643-recut`, `item-6664-recut`, `item-7158-recut` |
+| `landing-20261114-b2a`, `landing-20261114-r1`, `landing-20261114-r2`, `landing-20261114-r3` | 18–20 | the 15 above plus `item-6373-recut`, `item-7232-recut` |
+| `landing-20261114-c3`, `landing-20261114-c5`, `landing-20261114-c6`, `landing-20261114-c7`, `landing-20261114-c8`, `landing-20261114-c9`, `landing-20261114-c12` | 4–11 | the pre-recut refs of the same pass: `item-4821`, `item-6173`, `item-6238`, `item-6373`, `item-6537`, `item-6549`, `item-7232`, `item-7272`, `item-7702` |
+
+**Coverage, stated so the next session can check it rather than trust it.** `node tools/self-merge-sla.mjs --json`
+prints `ledger_coverage` and `undocumented` alongside the verdicts; `--strict` exits 1 if any unlanded ref has no
+dated row here. A ref whose landing the chokepoint already refused is now classified `gate-refused`, not `ready`,
+so the same refused landing is not re-run by the next session.
+
+**No ref was deleted** (rule R-B #3270): `node tools/self-merge-sla.mjs --json` at `a9bc766f` counts **195 refs
+besides `main`** — 141 landed, 49 conflicted, 5 gate-refused, `stale: 0`, `ledger_coverage 54/54`, `undocumented: []`,
+exit 0, 7.8 s. Every unlanded ref is named above or in the tables before it.

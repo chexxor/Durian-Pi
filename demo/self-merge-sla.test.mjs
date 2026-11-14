@@ -156,5 +156,22 @@ assert.equal(refsAfter.length, refsBefore.length, "no ref was deleted (rule R-B 
 assert.equal(refsAfter.length, 8, "the fixture's seven branches plus main are all still there");
 console.log(`  ok   main ${mainBefore.slice(0, 8)} unchanged, ${refsAfter.length} refs still present`);
 
+console.log("\n=== 5. a landing the chokepoint already REFUSED is not 'ready work' (audit addendum) ===");
+/* The ledger is the tool's only record of an attempted-but-refused landing. Without this verdict a session
+ * reading `ready` re-runs the same refused lander. Coverage is measured the same way: an unlanded ref with no
+ * dated row in docs/DISPOSITIONS.md is `undocumented`, and --strict makes that an exit 1. */
+const ledger = "| 2026-11-14 | `item-101` | **KEEP-HELD** | STOPPED: demo/whatever.test.mjs failed in the scratch worktree (exit 1) — main was NOT advanced | #101 |\n| 2026-11-14 | `landing-20261114-b1` | scratch chain | merge-tree exit 1 | catch-up |\n";
+const withLedger = landingHealth({ repo, slaHours: 24, itemStatus: status, ledger });
+const v101 = withLedger.rows.find((x) => x.ref === "item-101").verdict;
+assert.equal(v101, "gate-refused", "a clean merge the lander already refused is classified gate-refused, not ready");
+assert.ok(!withLedger.rows.find((x) => x.ref === "item-101").stale, "a gate-refused ref is never counted as stale ready work");
+assert.ok(withLedger.rows.find((x) => x.ref === "item-102").dispositioned === false, "an unlanded ref with no row is NOT dispositioned");
+assert.ok(withLedger.undocumented.includes("item-102"), "and it shows up in the coverage gap the tool reports");
+assert.equal(withLedger.unlanded, 6, "six unlanded refs in the fixture (item-103 is an ancestor of main)");
+assert.equal(withLedger.ledger_coverage, "1/6", "coverage is counted, not asserted");
+const chain = withLedger.rows.find((x) => x.ref === "item-104").verdict;
+assert.ok(chain !== undefined, "chain classification does not disturb the other verdicts");
+console.log(`  ok   item-101=${v101}, coverage=${withLedger.ledger_coverage}, undocumented=[${withLedger.undocumented.join(", ")}]`);
+
 rmSync(repo, { recursive: true, force: true });
 console.log("\nSELF-MERGE SLA OK");
