@@ -20,7 +20,7 @@ import { authorEnv, verifierEnv, NON_INTERACTIVE_GIT } from "./confine.mjs";
 import { RigQueue, Seats } from "./rig.mjs";
 import { describeSeatRoot, resolveSeatRoot } from "./seatroot.mjs";
 import { prepareSeatWorkspace } from "./worktree.mjs";
-import { READONLY_COMMANDS, runReadonlyCommand, READONLY_TIMEOUT_S } from "./readonlytool.mjs";
+import { READONLY_COMMANDS, runReadonlyCommand, READONLY_TIMEOUT_S } from "./readonlytool.mjs"
 import { executionMode } from "./executionmode.mjs";
 
 /** A tool result carrying only text (the shape `defineTool` accepts). */
