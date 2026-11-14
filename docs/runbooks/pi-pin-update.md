@@ -1,6 +1,6 @@
 ---
 runbook: pi-pin-update
-symptom: "the pinned pi must move (an ordered update, or a tag we skipped becomes available); or a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or a `git grep` over `vendor/pi-main` returned 0 hits and you are about to conclude something is absent upstream"
+symptom: "the pinned pi must move (an ordered update, or a tag we skipped becomes available); or a fresh worktree refuses the live store with `Durable SQLite schema version 2 is newer than supported version 1`; or `check` reports `pi-dependency-plane` and you do not know which pi the tree you are standing in actually resolves; or a `git grep` over `vendor/pi-main` returned 0 hits and you are about to conclude something is absent upstream"
 writes: true
 precondition: "broker-stopped"
 last_verified: 2026-11-11
@@ -96,6 +96,29 @@ answers **`v1.5.1`** today (measured 2026-11-11: the vendored clone is deep -
 measured 2026-11-04, before #6061 named the ref); if it does, the stamped version is the `package.json`
 version at the pin sha. `sync-pi` writes the label for you when a tag points exactly at the sha - see the
 behind/ahead row below.
+
+### Which pi is THIS tree running? (#6374)
+
+`sync-pi --check` compares the pin to **upstream**; it never says what the tree you are standing in resolves. Ask
+the tree directly — `check` measures the resolved package, the pin and the store's schema version, and prints them
+as one line:
+
+```bash
+node cli.mjs check rig.selfdev.json --human          # … dependency plane: pi-durable <version> (<graph>) · pin <ref> sha <sha> pinned <date> · store schema N vs supported M
+node cli.mjs check rig.selfdev.json --json | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).plane.line))'
+```
+
+Measured 2026-11-11 in the item-6374 worktree (node v24.22.1), exit 0:
+`dependency plane: pi-durable 1.3.0 (released package (lockfile)) · pin v1.5.1 sha dd30101c pinned 2026-11-10T06:49:26.320Z · store schema (unreadable) vs supported 1 [no store at …/rig.sqlite]` — the tree resolves the lockfile's released 1.3.0 while the pin is `v1.5.1`.
+
+That gap is not cosmetic. `node scripts/suite.mjs --jobs 12` in that un-linked tree returned **279 pass / 20 fail**
+(broker and TUI demos failing inside `pi-durable/dist`), while `node demo/tui-durable-boot.test.mjs` run in the
+seat root, which resolves the vendored build of the pin, exits 0. So a suite total carries its plane: quote the
+plane line with the number, or the number means nothing.
+
+The rule is `pi-dependency-plane`, severity **fix-now** — it reports, it does not gate (`check` still exits 0), and
+when the plane cannot be measured the rule reports UNKNOWN with a reason rather than a pass. An un-linked worktree
+is fixed by `node scripts/sync-pi.mjs --sync && node scripts/sync-pi.mjs --link` (step 4/5 below).
 
 ## Do
 

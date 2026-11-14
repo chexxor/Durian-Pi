@@ -93,12 +93,19 @@ done
 
 **Healthy (state C) prints `linked=0` with a target under `vendor/pi-main/packages/durable`, `built=0`,
 and a hash that MATCHES the other tree's.** Any `linked=1` means that tree measures the lockfile graph.
-
 **THE TRAP (#5217): do NOT diagnose by version.** Measured 2026-11-06: `package.json` reports **1.3.0 in
 both graphs** - the npm release and the pinned build carry the same version number while their
 `dist/index.js` differ byte-for-byte (`4cee4286b156…` linked vs `467d9cf6b27c…` lockfile). "Same version"
 is NOT parity; compare **link state and artifact hash**. A version-only diagnose passes silently on the
 broken tree, which is exactly the failure mode this entry exists to stop.
+
+`check` now prints the plane as a first read (#6374, the `pi-dependency-plane` rule):
+
+```bash
+node cli.mjs check rig.selfdev.json --human   # … dependency plane: pi-durable <version> (<graph>) · pin <ref> · store schema N vs supported M
+```
+
+Measured 2026-11-11 in the item-6374 worktree: `dependency plane: pi-durable 1.3.0 (released package (lockfile)) · pin v1.5.1 sha dd30101c · store schema (unreadable) vs supported 1`, exit 0. Read it as "which graph this tree resolves, and whether its version matches the pin's declared one" — the `via` field is the link state; the version is NOT a parity proof (see the trap above). Severity is fix-now, so it reports and never gates; when the plane cannot be measured the rule says UNKNOWN rather than passing.
 
 **`sync-pi`'s own report DOES tell you the state (#5400, fixed 2026-11-07).** It used to print
 `"buildTree": null, "built": [], "linked": null` even in a fully built AND linked tree, because those
