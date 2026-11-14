@@ -273,7 +273,7 @@ Per row it records every cited token, its object type, `git merge-base --is-ance
 exit code (0 = ancestor), membership in `git rev-list refs/heads/main`, the commit subject of the cited
 commit, its `blockedBy` gates and their states, and whether the row is itself a gate for another row.
 
-Three rules the sweep must honour, and the measurement behind each:
+Four rules the sweep must honour, and the measurement behind each:
 
 1. **Ancestors are not artifacts.** For a commit sha, being an ancestor of main is landing. For a
    *branch tip* it is not: it proves the commits are in main's history, not that a generated file named
@@ -290,6 +290,17 @@ Three rules the sweep must honour, and the measurement behind each:
    `git cat-file -t` says it is an object, and the landing claim rests only on commits. The probe prints
    both counts (`auditFloorVariantClosable` 140 vs 146 by resolution) so the difference is visible
    rather than silently changing the number.
+
+4. **Reachability survives a revert; the artifact does not.** A merge sha stays an ancestor of main forever, so
+   the audit counts a LANDING row as "already on main" even after a revert removed its content. Measured 2026-11-13
+   by qa on main `5b8e364` (119 non-terminal LANDING rows, `node tools/queue-drain-audit.mjs` exit 0): 104 rows pass
+   a per-file content probe, 14 do not. Two are pure reverts (rows 7469 for item-6064, 7471 for item-6066):
+   `git cat-file -e refs/heads/main:docs/runbooks/compaction-policy-refused.md` exit 128, and
+   `git grep -c "declaredContextWindow now reads" refs/heads/main -- docs/runbooks/context-over-window.md` exit 1.
+   Two more (rows 7427, 7476) name a path the row itself deleted when the instrument moved to
+   `tools/compaction-acceptance.mjs`. Before releasing a LANDING row: `git diff --name-only <sha> <sha-first-parent>`,
+   then `git cat-file -e refs/heads/main:<file>` for each file - exit 128 means the close would be false.
+   Row-by-row lists: `docs/reviews/landing-close-audit-2026-11-13.md`.
 
 Run against main `a7c9ab0` on 2026-11-12 by qa, exit **0**.
 
