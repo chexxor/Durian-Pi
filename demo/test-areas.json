@@ -343,6 +343,7 @@
       "demo/format.test.mjs",
       "demo/gate-clean-scorer.test.mjs",
       "demo/genlock-hardening.test.mjs",
+      "demo/genlock-lander-liveness.test.mjs",
       "demo/genlock-monotonic.test.mjs",
       "demo/genlock-owner-state.test.mjs",
       "demo/genlock-priority.test.mjs",

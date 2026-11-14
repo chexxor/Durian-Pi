@@ -507,6 +507,25 @@ The helper's pre-flight, in code (the enforcement chokepoint):
 - **genlock**: it probes `<db>.genlock.*` beside the store with `node:fs` only (no provider stack). A slot
   whose JSON names an **ALIVE** pid blocks (signal `0`; only `ESRCH` means gone — `EPERM` means alive but
   unsignalable). A partial/unreadable slot is **not** evidence of a live run and does not block.
+- **#5020 — THE PROBE AND THE LEASE LAYER NOW SHARE ONE RULE, and what the lander actually checks.**
+  `scripts/land.mjs` used to carry its own copy of the liveness test (`typeof holder.pid === "number" &&
+  pidAlive(holder.pid)`) while `src/genlock.mjs` used the shared `ownerState` rule from
+  `src/genlockreserve.mjs`. On one input those two disagree: a slot record whose owner cannot be named.
+  The lease layer would not steal it (the cap held); the lander counted it as FREE and reported
+  `liveHolders: 0` beside a lease the rig was honouring. The lander now calls `liveGenerationHolders(db)`
+  (src/genlockreserve.mjs) — the same scan and the same rule — and the report carries each holder's
+  `state` (`alive` or `unknown`) so a refusal can say WHY a slot blocks, not only THAT it does.
+  MEASURED 2026-11-13 on branch item-5020: `node demo/genlock-lander-liveness.test.mjs` exit 0 — four
+  lease states (live pid, confirmed-dead pid, owner-less record, torn record) counted identically by the
+  lander probe and the lease layer, one slot MUTATED and both surfaces moved together, and the lander's
+  `acquireAllSlotsSync` claim timed out against a live holder and succeeded once it released.
+  **THE ROW'S PREMISE, CORRECTED BY MEASUREMENT:** a generation driven by the deprecated
+  `cli.mjs send` path is NOT unleased — `buildModels()` wraps every provider (faux, metered, `local/*`)
+  with `wrapProviderWithSlots` whenever `DURIG_MAX_CONCURRENT_SEATS` is finite, and the demo ran a real
+  `cli.mjs send` against a scratch store and found `<sendrig.sqlite>.genlock.0` naming seat `impl` while
+  the generation was in flight, gone when it finished. So the guard already covers the non-broker path;
+  what was missing was the assertion, and the divergence above. `send` is NOT removed here (#2599/#1585
+  hold retirement). Verify: `node demo/genlock-lander-liveness.test.mjs` (exit 0).
 - **owner state, #6182**: a lease whose record names NO usable owner (pid missing, null, `NaN`, 0, negative
   or a string) is treated as **ALIVE**, not dead — only ESRCH releases a lease. It still ages out past
   `RESERVATION_STALE_MS` (660,000 ms) with a `GENLOCK WARNING: … UNRESOLVABLE owner … admits a second
