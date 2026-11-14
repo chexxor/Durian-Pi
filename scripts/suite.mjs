@@ -29,7 +29,11 @@ const DEFAULT_JOBS = 8;
 const MAX_JOBS = 32;
 // A demo that hangs must not wedge the whole pool. 300s is far above the slowest real
 // demo (~30s); the kill is reported as a failure, never silently swallowed.
-const TEST_TIMEOUT_MS = 300_000;
+// Override with DURIG_SUITE_TIMEOUT_MS (the fixture demos need a short one).
+const TEST_TIMEOUT_MS = Number(process.env.DURIG_SUITE_TIMEOUT_MS ?? 300_000);
+// After the child exits, how long we let the captured stderr keep flowing before we
+// commit the verdict. The verdict itself never waits for the pipe to CLOSE.
+const STDERR_GRACE_MS = 250;
 
 const root = process.cwd();
 const demoDir = join(root, "demo");
@@ -67,7 +71,16 @@ function resolveJobs(argv) {
   return jobs;
 }
 
-/** Run one demo; never rejects, so one bad child cannot abort the pool. */
+/** Run one demo; never rejects, so one bad child cannot abort the pool.
+ *
+ * THE VERDICT COMES FROM THE EXIT CODE, NOT FROM `close` (#6268, the follow-up to #6104).
+ * `close` fires when the child's stdio streams close, and a stream stays open as long as
+ * ANY writer holds it: a demo that spawns a child and does not reap it leaves the pipe's
+ * write end alive. Measured on this tree, base `e01e9256`: a fixture that printed PASS and
+ * exited 0 with a detached 30 s grandchild took the runner **30.1 s** to report it, and with
+ * a linger longer than TEST_TIMEOUT_MS the same green demo is reported as a timeout FAILURE.
+ * So the exit event decides pass/fail, stderr is given a short grace to flush so an
+ * environmental marker is not lost, and nothing waits for the pipe. */
 function runOne(test) {
   return new Promise((resolve) => {
     const testTemp = tempFor(test);
@@ -79,6 +92,12 @@ function runOne(test) {
     });
     let stderr = "";
     let timedOut = false;
+    let settled = false;
+    const finish = (exitCode, signal, extraStderr = "") => {
+      if (settled) return;
+      settled = true;
+      resolve({ test, exitCode, signal, stderr: stderr + extraStderr, timedOut });
+    };
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString("utf8");
     });
@@ -86,18 +105,33 @@ function runOne(test) {
       timedOut = true;
       child.kill("SIGKILL");
     }, TEST_TIMEOUT_MS);
+    // Backstop: if neither `exit` nor `error` ever arrives, do not hang the pool and do not
+    // silently drop the row - report it as a failure with the reason.
+    const backstop = setTimeout(() => {
+      finish(null, null, `\nsuite: the runner never got a verdict from this demo (no exit event within ${TEST_TIMEOUT_MS + STDERR_GRACE_MS}ms)`);
+    }, TEST_TIMEOUT_MS + STDERR_GRACE_MS * 4);
+    child.on("exit", (code, signal) => {
+      clearTimeout(timer);
+      clearTimeout(backstop);
+      if (timedOut) {
+        // The signal is NULL on purpose: WE killed it. Reporting SIGKILL here makes
+        // classifyDemoResult read it as an OS abort (SIGKILL is in ENVIRONMENTAL_SIGNALS for
+        // the OOM/commit-starvation shape), and a demo that simply HUNG would be reported as
+        // "environmentally blocked" instead of a failure. The runner's own comment above says
+        // the kill is reported as a failure, never silently swallowed; the code now matches.
+        finish(124, null, `\nsuite: timed out after ${TEST_TIMEOUT_MS}ms`);
+        return;
+      }
+      const grace = setTimeout(() => finish(code, signal), STDERR_GRACE_MS);
+      child.stderr.once("end", () => {
+        clearTimeout(grace);
+        finish(code, signal);
+      });
+    });
     child.once("error", (error) => {
       clearTimeout(timer);
-      resolve({ test, exitCode: null, signal: null, stderr: `${stderr}\nsuite: spawn failed: ${error.message}` });
-    });
-    child.once("close", (code, signal) => {
-      clearTimeout(timer);
-      resolve({
-        test,
-        exitCode: timedOut ? 124 : code,
-        signal,
-        stderr: timedOut ? `${stderr}\nsuite: timed out after ${TEST_TIMEOUT_MS}ms` : stderr,
-      });
+      clearTimeout(backstop);
+      finish(null, null, `${stderr}\nsuite: spawn failed: ${error.message}`);
     });
   });
 }
@@ -114,7 +148,9 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: Math.min(jobs, tests.length) }, worker));
 
-const rows = results.filter(Boolean);
+const rows = results.map((row, index) =>
+  row ?? { test: tests[index], exitCode: null, signal: null, stderr: "suite: the runner recorded no result for this demo", timedOut: false },
+);
 for (const row of rows) {
   const cls = classifyDemoResult(row);
   if (cls.kind !== "pass") {
