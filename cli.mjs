@@ -59,6 +59,7 @@ import {
   Router,
   Seats,
   applyInstructionFiles,
+  edgeProblems,
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
@@ -720,6 +721,21 @@ async function cmdUp(rigFile, refresh = false, { serve = false, dryRun = false }
     }
   }
   const spec = JSON.parse(await readFile(rigFile, "utf8"));
+  // #368: validate the org chart BEFORE anything is written. A link without its `maySendTo` array is not a
+  // restrictive edge, it is a store the gate cannot read — and until now it was stored anyway, so every send
+  // through it died as a TypeError inside a seat turn. `edgeProblems` is the SAME predicate the gate uses,
+  // so "malformed" cannot mean two things in two places.
+  if (spec.edges !== undefined) {
+    const edgeIssues = edgeProblems(spec.edges);
+    if (edgeIssues.length > 0) {
+      fail(
+        new Error(
+          `${rigFile}: ${edgeIssues.length} malformed org edge(s): ${edgeIssues.map((p) => `${p.where} - ${p.why}`).join("; ")}. ` +
+            "Remedy: give every link a \"maySendTo\" array (an empty array is legal and grants nothing). Nothing was written.",
+        ),
+      );
+    }
+  }
   // A spec carries its constitution either inline (what the OpenRig converter
   // emits, since the text it read has no file on disk beside the spec) or as a
   // path. Reading only `constitution` silently dropped the text for every

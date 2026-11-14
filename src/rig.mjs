@@ -111,6 +111,38 @@ export const RigControl = defineDoc({
  *    What IS still checked is the author: a pool row must have a real seat as its `from`, because P5 makes
  *    `from` the party the DONE notice returns to.
  */
+
+/**
+ * #368: ONE definition of "this org link is malformed", shared by the write side (`cli.mjs up`, which
+ * refuses to store it) and the read side (`assertSendAllowed`, which refuses the send). Two copies of this
+ * rule is exactly the drift the rig keeps paying for, so the predicate lives next to the doc it judges.
+ *
+ * The distinction that matters: `maySendTo: []` is a DECISION (this seat is granted nothing) and is legal;
+ * a missing or non-array `maySendTo` is a BROKEN STORE, and a broken store must never read as "allowed".
+ * Returns [] when the doc is well-formed, otherwise one problem per link, each naming the link.
+ */
+export function edgeProblems(edges) {
+	if (!Array.isArray(edges)) {
+		return [{ where: "edges", why: `"edges" is not an array (got ${JSON.stringify(edges) ?? "undefined"})`}];
+	}
+	const problems = [];
+	for (const [i, link] of edges.entries()) {
+		if (!link || typeof link.from !== "string" || link.from === "") {
+			problems.push({ where: `edges[${i}]`, why: `no "from" seat name (got ${JSON.stringify(link ?? null)})` });
+			continue;
+		}
+		if (!Array.isArray(link.maySendTo)) {
+			problems.push({
+				where: `edges[${i}] (from "${link.from}")`,
+				why: link.maySendTo === undefined
+					? `"maySendTo" is missing, so the link grants nothing but nobody can see that`
+					: `"maySendTo" is not an array (got ${JSON.stringify(link.maySendTo)})`,
+			});
+		}
+	}
+	return problems;
+}
+
 export async function assertSendAllowed(tx, from, to, requires) {
 	const needed = requiredCapabilities(requires);
 	if (to === null) {
@@ -121,14 +153,28 @@ export async function assertSendAllowed(tx, from, to, requires) {
 	}
 	const targetId = await seatId(tx, to);
 	const edges = await tx.doc(Edges);
+	// #368, fail-closed: before this the gate read `link.maySendTo.includes(to)` on a link with no array
+	// and threw a TypeError inside the seat's turn. A seat cannot self-correct from a crash - it cannot
+	// tell "forbidden route" from "broken store" - so the malformed link is refused BY NAME, and the whole
+	// doc is suspect: nothing is granted to anyone while the org chart itself is unreadable.
+	const problems = edgeProblems(edges.edges);
+	if (problems.length > 0) {
+		const mine = problems.find((p) => p.where.includes(`"${from}"`)) ?? problems[0];
+		throw new Error(
+			`org edge malformed: ${mine.where} - ${mine.why}. ` +
+			`The gate fails closed, so ${from} -> ${to} is refused${problems.length > 1 ? ` (${problems.length} malformed link(s) in the doc)` : ""}. ` +
+			`Remedy: give every link a "maySendTo" array (an empty array is legal and grants nothing), then re-run: node cli.mjs up <rigfile> --refresh`,
+		);
+	}
 	if (edges.edges.length > 0) {
 		const link = edges.edges.find((e) => e.from === from);
-		if (!link || !link.maySendTo.includes(to)) {
+		if (!link) throw new Error(`no org edge grants ${from} any send target`);
+		if (!link.maySendTo.includes(to)) {
 			throw new Error(
-				link
+				link.maySendTo.length > 0
 					? `org edge forbids ${from} -> ${to}; allowed: ${link.maySendTo.join(", ")}`
-					: `no org edge grants ${from} any send target`,
-			);
+					: `org edge forbids ${from} -> ${to}; allowed: none (the link grants ${from} no recipients)`,
+				);
 		}
 	}
 	if (needed.length > 0) {

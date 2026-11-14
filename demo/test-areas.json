@@ -42,6 +42,7 @@
       "demo/restart-limit-seam.test.mjs",
       "demo/constitution.test.mjs",
       "demo/continuity-note.test.mjs",
+      "demo/edge-fail-closed.test.mjs",
       "demo/entrypoint-execution.test.mjs",
       "demo/gate-cancel-refusal.test.mjs",
       "demo/context-over-window.test.mjs",
