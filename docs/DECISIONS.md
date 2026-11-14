@@ -11992,6 +11992,156 @@ operational facts recorded in `docs/SELFDEV.md` 281: a mutating spool intent doe
 `broker-serve --start` refuses on a dirty live tree (`BLOCK live-tree-dirty`), so the rig-file edit must be committed before
 the broker can start again.
 
+---
+
+## D276 — Backlog disposition, and the one principle underneath it: an unlanded branch is a claim on attention, not a store of value; CANCEL is the default and is reversible, CONTENT — not ancestry — is the test, a stack may not land ahead of its base, a number minted in an unlanded branch is a claim to be re-checked at land — and where a cheap signal stands in for an expensive fact, the signal may ACCEPT but must never DECIDE (lead ruling #3265, amended #3338/#3354, carried live by #3410; the principle and its twin from #3575/#4058; recorded by `scribe`, items #3271/#3575, 2026-11-12)
+
+**Mint note (#3075/#3186 discipline).** `D###` is a placeholder on purpose; the landing pass derives the next FREE
+number by scanning this file at merge. Highest at this branch's fork point `90c63124` is **D266** — re-derive, do not
+assume 267. Per #3186 the entry lands from the landing pass, never as an independent side-branch entry. Complements,
+does not replace, #3252.
+
+### The principle: a cheap signal may ACCEPT, but it must never DECIDE
+
+When a cheap signal stands in for an expensive fact, the signal is allowed to say *proceed* — it is never allowed to
+say *the fact is X*. Everything below is one instance of this, which is why #3575 registers it as the head of the
+entry rather than a seventh convention: a reader who has the principle can derive the rule at the moment they meet it,
+instead of carrying six unrelated ones.
+
+| Cheap signal | The fact it stands in for | What breaks when it is allowed to decide | Where the check lives |
+|---|---|---|---|
+| commit reachability (`git merge-base --is-ancestor`) | content on `main` | a squash-shaped landing is byte-identical on main while ancestry says no (`security-item-1475` @`7cf5a34` vs union tip `e3abbca`) — work is reported unlanded and re-landed | `scripts/land.mjs:479-487`: ancestry is a FAST PATH (`contains-base` / `already-landed` / `neither` → fall through to the merge), never a refusal |
+| patch-id (`git cherry`) | whether a branch's content is already main's | an add/add branch that adds a whole file reports "unique" even when the blob is identical (`architect-item-3005` @`0827b39`, blob `0a26921ef6…` on both sides) — the branch is routed as live work, or re-landed as an add onto a file that is already there | blob identity at path is the verdict, patch-id secondary: `docs/DISPOSITIONS.md` §"The probe method", `docs/runbooks/branch-cleanup.md` step 0 |
+| test coverage | proof | a test that reaches a branch without forcing the condition it guards proves nothing — the bounded-drain case whose `waitForIdle` resolved instantly | force the condition: the guard is shown FAILING on planted damage |
+| a title | the spec | #2826's title named four things, its body carried seven; the three unnamed ones fell out of a split made from the title | read the body; a split enumerates from the body |
+| green tests | the defect is fixed | pm's formulation, quoted: "a verified fix proves it does what it says, not that it addresses the mechanism that produced the observed failures. Landing something green that leaves the defect in place is the most expensive outcome available, because it looks solved." | a defect-fix verify confirms the **mechanism** — the `originCallId` check decides whether #3192's dedup key matches the mechanism that produced the duplicates |
+| a reported state | the actual state | `revise` reporting "unchanged", `held: true` silently downgrading to `queued`, cancel reasons never reaching the sender, a delivery snapshot stale after a revise (#3236, #3435 class) | read the state back, not the report |
+
+**The producing-side twin (#4058): a degraded source must degrade to UNKNOWN, never to EMPTY or PERMISSIVE.** An empty
+result is indistinguishable from a real empty result, so it makes *absence look like evidence*, and the default must
+follow the **cost of being wrong**. Same error, opposite ends of the same wire: an unknown treated as a fact.
+
+| Degraded source | The permissive default that must not be taken | What it authorises | Where it is |
+|---|---|---|---|
+| liveness probe | "dead" when the OS cannot tell | a second writer into the store | `src/broker.mjs:2444-2447` — "FAIL-SAFE (#3398): dead ONLY on ESRCH … unknown ⇒ ALIVE"; same rule `src/genlock.mjs:77-79` |
+| `listWorktrees` | `[]` when git itself failed | the delete the check exists to prevent | `src/worktree.mjs:1385` ("`strict: true` — a caller that DECIDES on the result. A failure THROWS"), used at `:930` and `:1004`; `node demo/worktree-list-failure.test.mjs` exit **0** (2026-11-12) |
+| keyboard bindings | "all free" when the binding list is unknown | binding over `ctrl+]`, measured as already bound to `tui.editor.jumpForward` — the operator finds it by being unable to leave a session | `src/tui/durable/launch.mjs:63, 96` |
+| a CANCELLED gate | released | the dependent reads as blocked while being permanently dead (starved) | `src/rig.mjs:296, 339` — `gate-cancelled:#<id>` |
+
+The counter-example that makes it a rule rather than a style: the seat-label retirement, where the honest answer *was*
+"unknown, so say both". The default followed the cost there too — a wrong label meant a wrong audit, so the label was
+widened instead of guessed.
+
+### The rules that follow from it
+
+**Trigger.** lead's ruling #3265 was asked to dispose "the leftover unlanded set: 9 unclassified clean branches" and
+to settle who owns the rest. The cost of an unlanded branch is not storage — it is attention: it reappears in every
+inventory, every landing list and every conflict report, and the tax compounds with each pass.
+
+**The rules, as ruled.** Numbered as the ruling numbered them; the letters are how `docs/DISPOSITIONS.md` and the
+runbooks refer to them.
+
+- **R-A — the default disposition of an unlanded, clean branch is CANCEL.** The burden of proof is on KEEPING: keep
+  only where a **named live item** needs the content; no named item → cancel. "A branch is not a store of value; a
+  commit reachable by sha is."
+- **R-B — CANCEL cancels the LANDING CLAIM, never the ref.** The commit stays reachable by sha, so cancellation is
+  **reversible**; deleting a ref is a separate act requiring the author or the operator (the same rule the ledger
+  records as R-B, #3270). This is what makes cancel-by-default safe: we are declining to spend attention, not
+  destroying work.
+- **R-C — before cancelling, the AUTHOR runs an equivalence probe against main.** Three outcomes: patch-equivalent →
+  cancel, record "already on main"; unique but no live purpose → cancel, record the sha as recoverable; unique with a
+  live purpose → route to the owning item. Equivalence is never inferred from a branch name. (See R-I for what the
+  probe actually is.)
+- **R-D — the author's seat owns its own rebase.** Never cross-assign a branch to another seat, however convenient.
+  If the author seat is inactive or retired, the landing claim is cancelled with the sha recorded — authorship is not
+  transferred. Worked case: `item-5094` @ `e173f397` — #5175 could not name the author, `docs/DECISIONS.md` and
+  `docs/NEXT-ARCHIVE.md` proved it was `devtools`, so the rebase-then-land belongs to `devtools`, not to impl's pass.
+- **R-E — no sha pins in verify items** (ratified 2026-10-20). Shape: the rebase item requires the author to report
+  new tips in its completion; the verify item is gated on the **rebase item id** (`blockedBy`); the verify runs against
+  whatever tips were reported; the landing entry is issued only after a fresh verify. **The pin moves, it does not
+  vanish**: the verify's completion records the tips it actually verified in `evidence.artifact`, the landing entry
+  takes its sha from that evidence rather than from the branch at land time, and the landing path aborts when the tip
+  disagrees with the evidence. A completion that cannot be re-checked is not evidence (ROADMAP 48 / W2) — deleting the
+  pin from the body without pinning the evidence replaces stale pins with unfalsifiable verifies, which is worse.
+- **R-F — a landing entry's gate names the work items that must close first, never itself.** A landing entry gated on
+  its own id is a defect, not a cycle to untangle (source: #2824, the entry for `impl-item-2483`, gated on #2824).
+- **R-G — verification reports are evidence, not product.** A `VERIFICATION-*.md` artifact never lands as a doc; its
+  content belongs in the completing verify item's evidence/notes (source: `qa-item-3147` @`3a89076`,
+  `qa-item-3151` @`b7c0795`).
+- **R-H — stack order is a landing invariant.** A stacked branch may not land before its base. A branch built on
+  another branch legitimately CARRIES its base's commits — that is what stacking means, not contamination, and it must
+  not be "fixed". The defect is proposing the **dependent** for landing while its base is unlanded and unverified:
+  landing it alone carries the base's work to main through the wrong seat's branch, without the base author's verify,
+  which destroys verification integrity and defeats R-D. Order: the base lands through its own author's path with its
+  own verify; the dependent is rebased onto the new main, which drops the duplicate commit; the dependent then lands
+  and is verified on its own delta. **A landing entry for a stacked branch names its base.** A landing entry is a
+  claim about a specific tip against a specific main, so an entry already terminal is never revived after main moves —
+  issue a new entry.
+- **R-I — for docs-only and add/add-shaped branches the probe is BLOB IDENTITY AT PATH**: `git rev-parse <tip>:<path>`
+  against `git rev-parse main:<path>`, or an empty `git diff main:<path> <tip>:<path>`, with `git cherry`/patch-id as a
+  **secondary** signal only. Patch-id **under-reports on add/add rebases**: a branch that adds a whole file is not
+  patch-equivalent to the landed commit that added a delta on top of an earlier version, even when the resulting blob
+  is identical; run patch-id literally and it reports "unique", so the branch is routed as live work or re-landed as an
+  add that resolves against a file already present. This entry is **normative** for the probe; `docs/DISPOSITIONS.md`
+  and the runbooks apply it and cite it rather than becoming a second authority.
+- **R-J — a minted D-number in an unlanded branch is a claim, not a fact.** The landing step re-verifies that a minted
+  number is still the next FREE number at the moment of landing and re-mints if anything landed in between. A union
+  branch inserting several entries is checked for monotonic order **as a whole**, not entry by entry (trigger:
+  `scribe-item-3268`'s branch carried a minted D121 while the union branch #3343 also inserted D115–D120).
+
+**The principle underneath R-C, R-E and R-I: content is the invariant, ancestry is a proxy.** The evidence pin is a
+CONTENT invariant — what lands must be what was verified — and it is the first table's first row applied at two
+lifecycle points. Ancestry is only a proxy for content, and squash-shaped
+landings break the proxy: an artifact can sit on main byte-identically while `git merge-base --is-ancestor` reports it
+is not an ancestor (`security-item-1475` @`7cf5a34` against union tip `e3abbca` — true by content, false by ancestry).
+Decision procedure:
+
+1. the evidence artifact **is** an ancestor of the tip → proceed. FAST PATH, not the test.
+2. it is **not** an ancestor → do NOT abort on that ground; compare **per-file content** of the landing set, tip vs
+   evidence artifact; equal → proceed (the squash-shaped / already-carried case).
+3. content differs → **ABORT**, naming both shas and the differing paths.
+
+Reachability is demoted from TEST to FAST PATH; ignoring it entirely is explicitly rejected, because that discards the
+protection the pin exists for. R-C's probe ("is this branch already on main?") and the evidence-pin abort ("does what
+I am landing match what I verified?") are **the same test at two lifecycle points** — disposition time and land time —
+both content-based, neither ancestry-based.
+
+**Refinement of R-A: a citation in a landed document is a live need — for the REFERENT, not the branch.** (1) If the
+branch *is* the cited artifact (same path, clean, docs-only) it satisfies the need and lands. (2) If the branch merely
+*contains* the cited artifact among other changes, **split it**: land the referent, dispose of the remainder under R-A.
+(3) If the cited artifact is already on main **by content**, the citation is not dangling and the branch cancels under
+R-A. This closes the loophole that any branch could become un-cancellable by being cited: only the cited path
+qualifies, and extra content is split off rather than riding along. The discriminator for whether a REVIEW belongs on
+main at all is **ADJUDICATION**: a review whose findings were adopted into a landed document is part of that decision's
+record and lands; a review nobody adjudicated is an opinion with no consumer and cancels. The alternative remedy —
+editing a landed document to delete the citation and describe an absence — is rejected: it edits main to record a gap
+and destroys the audit trail of an adjudicated decision. Worked case: `advocate-item-2985` @`7387716`, cited by path in
+landed proposal v2 `defbc34` §12 with its CR-1..CR-8 adjudicated in §13 (lead #3351). **Transfer note:** R-G does NOT
+transfer to reviews — an `evidence` field needs a completing queue item and a review has none; adjudication is the
+transferable discriminator.
+
+**One correction recorded so it is not re-raised.** `architect-item-2700`'s primary cancellation ground is
+content-equivalence (its DECISIONS body landed as D113 via #2744); the hardcoded `+## D114 —` line was corroborative
+only.
+
+**What is already built, and where it is proven.** `scripts/land.mjs:479-487` treats ancestry as a **fast path**
+(`contains-base` → land, `already-landed` → re-run, `neither` → fall through to the merge rather than refuse), and
+`demo/land-helper.test.mjs:278-284` asserts exactly that: *"a STALE branch is NOT refused on ancestry — it reaches the
+merge"* — `node demo/land-helper.test.mjs` exit **0** on 2026-11-12. `docs/DISPOSITIONS.md` §"The probe method" carries
+the blob-identity probe as data, `docs/runbooks/branch-cleanup.md` step 0 states it as procedure ("blob identity at
+path, patch-id secondary, **content wins**"), and `docs/runbooks/land.md` §"Stacked (unlanded) base — every entry NAMES
+its base" is R-H in operational form.
+
+**Named, not papered over.** R-J has no instrument: nothing re-derives the next free D-number at land time, so a
+placeholder is minted by hand and can collide — the same class R-J describes. The carrier mechanism this ruling had to
+travel through is itself a defect the rig has not fixed: `revise_work` refuses a HELD item (#3236) and a COMPLETED
+item's body is not readable through the queue tools, so *a carrier that completes takes its payload with it* — that is
+why #3410 exists and is instructed not to close until #3271 absorbs it. Both halves were raised with `pm` against
+#3236 as of this entry; neither is built.
+
+**Status.** RATIFIED by lead at #3265, amended at #3338/#3354/#3410, and recorded here by `scribe` at #3271. The
+number is minted by the landing pass in issue order.
+
 **D273 — a park on the operator is a LEASE, and when it lapses `lead` decides (2026-11-12T20:2xZ).** Decided by the
 operator, on the delegate's recommendation "lead decides, pm routes, with a 5-day lease". The measurement that forced it:
 **493 rows carried `deferredTo: "human"`** — 32% of the non-terminal queue, median age 5 days, oldest 23, and **84 of them

@@ -58,6 +58,10 @@ A runbook whose `Verify` has **never** run carries `last_verified: unverified` (
 7. **Small and stable.** Link out to the design doc; move any growing `Background` to the design doc.
 8. **Ownership.** The delegate owns operator-surface runbooks; the team owns seat-runbooks; `scribe`
    keeps them true to the code like any other doc.
+9. **A health total names its tree.** Any count taken from `demo/runbook-diagnose.test.mjs` (or any other
+   instrument) is quotable only with the ref it was measured on - `main @ <sha>`, date, measurer. A
+   branch-tip measurement is **not** a baseline: it can be arithmetically correct and still describe a
+   tree that does not exist downstream. See *Runbook-health baseline* below.
 9. **Host scope is written, not assumed.** Every command block says which shell it needs. Do not
    translate a PowerShell-only block into a POSIX one you have not run: a Windows-only read with its
    host named is a true document, a guessed equivalent is an unverified claim. Where both halves exist,
@@ -158,6 +162,64 @@ contradict. The **claim** is wrong when they disagree — never "fix" the rig to
   after the #5911 sweep — which is the rot a hand sweep cannot prevent. The rule judges TEXT only; a shell that still
   carries the dead name at runtime is a different check (`tools/broker-serve.mjs`'s `legacy-env-set`, which is a NOTE
   and does not affect its exit code).
+
+## Runbook-health baseline (`demo/runbook-diagnose.test.mjs`)
+
+**Run the instrument, then name the tree.** `node demo/runbook-diagnose.test.mjs` (exit 0 = pass) prints
+one PASS line with every headline number; record it together with `git rev-parse --short main`.
+
+Baseline on **`main` @ `9655e761`**, measured 2026-11-12 by `scribe` (item #6595), exit 0:
+
+| Measure | Value | Where it comes from |
+|---|---|---|
+| Runbooks counted | 59 | `docs/runbooks/*.md` minus `README.md` and `_template.md` (`demo/runbook-diagnose.test.mjs:134`) |
+| `## Diagnose` command lines | 221 | the PASS line |
+| Lines CI **executes** (exit 0; a `--json` line must parse) | 73 | the PASS line |
+| Gaps reported (classified, not executed) | 160 | the PASS line |
+| Runbooks CI executes **nothing** from | 22 | pinned by name in `NOTHING_EXECUTED` (`demo/runbook-diagnose.test.mjs:62`) |
+
+Gap classes on that same tree, read from the demo's grouped `gap reasons` section (printed once), which
+sums to 160:
+
+| Class | Count |
+|---|---|
+| a token not in the harness's read-only allowlist | 52 |
+| a file the throwaway fixture cannot contain (`selfdev.sqlite.broker.json`, `.spike/acceptance-seed/…sqlite`, …) | 28 |
+| host-specific shell command | 14 |
+| unfilled `<placeholder>` (12 with no fixture value + 2 placeholder-or-glob) | 14 |
+| runs inline code, not a script in the tree | 13 |
+| a glob the fixture cannot guarantee | 11 |
+| a git subcommand the harness refuses | 7 |
+| a path named in prose that is not in the tree | 6 |
+| a `cli.mjs` verb that is not read-only | 4 |
+| a ref the fixture does not contain | 3 |
+| empty segment - a line the parser cannot read as a command | 3 |
+| needs a live network endpoint | 2 |
+| `--json` printed nothing against the fixture store | 1 |
+
+### The figures on record before this entry were a branch state
+
+"**54 runbooks, 198 Diagnose command lines, 92 executed, 116 gaps, 17 never-executable**" reproduces
+exactly at `item-6330` @ `4696b656` - that tip's own demo prints those numbers and exits 0 - but
+`git merge-base --is-ancestor 4696b656 main` exits **1**: it is not on main. So those totals are a
+branch state, not the baseline.
+
+They are also not the same measure. That branch's PASS line reads "92 executed (exit 0 **or a verdict
+the command itself returned**; any `--json` output parsed)"; main's reads "73 executed (exit 0, `--json`
+parseable)". A pass criterion that accepts a non-zero verdict counts lines main refuses to count.
+
+Two more figures in that record do not survive measurement on main:
+
+- **"26 inline `node -e`, 28 host shell, 22 globs"** is exactly **2x** main's single-print counts
+  (13, 14, 11). Cause: `DIAG_DEBUG=1` prints the gap list twice - `grep -c "^GAP"` gives 320 while the
+  PASS line reports 160 gaps (`demo/runbook-diagnose.test.mjs:258` and `:326`). Tally classes from the
+  grouped `gap reasons` section, never from the `GAP` lines.
+- **"fixture-absence 308"** is not reproducible on main. The fixture-absence family - files the
+  throwaway rig cannot contain (28) + refs it does not have (3) + unfilled placeholders (14) - is **45**
+  gap lines of the 160. If you see 308 quoted, ask for the tree and the command.
+
+**Revival rule for anyone quoting a runbook-health number:** the command, the ref, the date, and the
+seat that ran it. Without the ref, the number is not a baseline; it is a hint.
 
 ## Agent execution (from the research report)
 
@@ -317,4 +379,3 @@ New runbooks start from [`_template.md`](_template.md). Proposed machinery: ROAD
 (`runbook-stale`/`runbook-unverified` check rules, mandatory front-matter, the hard write guard, a
 `--dry-run`, executable `Diagnose` blocks, verification provenance, a gated agent runtime, the daemon
 runbook).
-
