@@ -17,6 +17,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `fc4e3730` | **ROADMAP 374 residual** — `branch-prune --retire-ruled` reads `docs/DISPOSITIONS.md` verdicts (last row wins, specificity-matched) instead of a typed regex; bundle-verify guard unchanged; `demo/branch-prune.test.mjs` §15 |
 | `2dfce088` | **ROADMAP 375** — `selectWakes` takes a named `now`; the human-defer-lease demo drives a fixture clock and pins the seam (same row, two clocks, two verdicts) — the suite was red on a calendar, not a defect |
 | `1f1a881c` | **ROADMAP 375** — the restart-limit crash fixture dies AT the observation, not one await after it: 10 standalone runs 2 red → 10 runs 0 red (14 s wall); full suite 361/361 in 192.3 s |
+| `be71da98` | **docs close-out** — ROADMAP 371/368/373/374 amended in place with measured costs + new row 375; SELFDEV pitfalls 374-377; a DISPOSITIONS row for `item-7232-recut` showing `--retire-ruled` planning it and the bundle guard refusing to delete it without `--bundle-dir` |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -72,3 +73,31 @@ await after the observation — **2 of 10 standalone runs** red, 0 of 10 after t
 is a hypothesis until the file has run 10 times alone (~15 s). Slowest: `runbook-diagnose` 87.1 s = 45 % of the
 suite. Areas: `--area rig` **97/97 in 27.6 s**, `--area worktree` **28/28 in 8.8 s**, `--area docs` **8/8 in 87.8 s**.
 Host for every number: Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+**Blocker:** four things, in order. (1) **The production 12-seat fleet is not woken** — the broker is down and
+`--start` refuses without the operator's `--yes-pm-wakes` grant. The seat self-merge was proven end to end on a
+two-seat scratch rig (`.spike/fleet-proof/`, seats on `local/qwen3.8-flash-next-q2_0`, declared $0): wake to merge in
+~40 s. (1b) **Every seat run needs the local model credential in the broker environment** — `127.0.0.1:8080` answers
+401 to the loopback placeholder; start with `node --env-file="$HOME/.config/durig/env" cli.mjs serve`
+(`docs/runbooks/local-provider-down.md` Do 0). (2) **17 refs still need a seat's semantic judgement** — rows in
+`docs/DISPOSITIONS.md`, verbatim hunks in `docs/evidence/2026-11-14-recut-residue/`. (3) `cli.mjs check` exits 1 on
+one `error` finding, `pool-dead-gate` #7660 (198 findings, `{fix-now: 197, error: 1}`, 14.3 s); the older claim that
+this makes `demo/depplane.test.mjs` red is **false** — it passes, exit 0. (4) `item-3570`'s recut is blocked by a
+real defect: the harness rejects `revise_work` with `blockedBy: unknown field` although `src/rig.mjs` lists it
+(probe `node .spike/probe-3570.mjs`).
+
+**Not to re-derive.** (a) An R5 union of two evolutionary versions of the *same* statement is a regression — always
+land with `--changed-suite` (pitfall 347). (b) A fixture with absolute dates is a time bomb (pitfall 348; ROADMAP
+375 is that trap arriving twice in one window). (c) "Can any branch be cleaned up?" is a 9 s
+`node tools/branch-prune.mjs --dry-run --db ./selfdev.sqlite`, not a hand-loop (pitfall 364), and a ref that only
+*conflicts* with `main` is never in that plan (pitfall 370).
+
+**Operator decisions owed.** (a) Grant or refuse waking the fleet for the live seat proof. (b) `item-6373` vendor pin
+1.3.0 → 1.5.1 is a grant decision. (c) Whether to retire `item-7232-recut` for real:
+`node tools/branch-prune.mjs --retire-ruled --bundle-dir .spike/quarantine-<date>/bundles` — bundle-verified,
+`git update-ref -d`, never `-D`. (d) Pool options in `docs/reviews/2026-11-13-capability-ownership-ruling.md`.
+
+**Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
+recorded, not touched.
+
+Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
+
