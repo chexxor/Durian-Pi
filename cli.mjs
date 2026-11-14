@@ -461,7 +461,7 @@ function buildModels(live = null) {
   // when it is registered, so a seat model "local/<id>" uses the author server and "verifier/<id>" uses the
   // verifier server while every other seat keeps the default provider. TWO servers is the point, not an
   // accident: an author and its verifier cannot share a blind spot only if they are different families
-  // (D48/D119, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
+  // (D134/D137/D166, ROADMAP 189), and the family ruling lives in docs/DECISIONS.md rather than here.
   // #5488 — THE GENERATION-SLOT GATE APPLIES HERE TOO, and this block is the whole fix.
   // `DURIG_MAX_CONCURRENT_SEATS` is documented (src/config.mjs; docs/SELFDEV.md's review recipe) as the key that
   // makes "seats queue in durig rather than inside the model". It did not: the faux branch and the metered
