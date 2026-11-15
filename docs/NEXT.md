@@ -43,6 +43,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `c37f583a` | demo pins that a CAP refusal is **recorded**, not only refused (task-5's literal clause): `demo/notice-not-work.test.mjs` §10 asserts `kind: "burst"`, the cap/window/knob named in the record, the ledger bounded at 100, and no row minted — whole demo still 0.365 s exit 0; ROADMAP 378 amended in place; the `--jobs 4` run there came back 361/363 and exposed the clock-in digest over budget (pitfall 392) |
 | `2ec49b52` | docs consolidation forced by a REAL gate failure: the clock-in digest reached 20,354 B over its declared 20,000 B budget (pitfall 392), so this window's sweep-procedure block and its long suite-tally paragraph moved VERBATIM into `docs/NEXT-ARCHIVE.md` and the pointer keeps facts + one-line measurements; `node demo/clockin-digest.test.mjs` then green standalone (27.5 s, exit 0, entry point 18,367 B against the 20,000 B cap) |
 | `44736311` | **the readapi-area pin and the measured RED (task-2 and task-3's literal clauses)** — `demo/status-view-bound.test.mjs` gains section C2 (three `queued` non-work rows appended to the 400-row fixture; `queueCensusOf.shape` asserted to name them: `notice 2` / `registration 1` / `work` unchanged at 300 / `queuedWork` unchanged at 50 / `noticeQueued 2` / `awaitingOperator 250`, plus the sum identity and the empty-store edge — demo 2.36 s exit 0, `--area readapi` 7/7 in 6.1 s); ROADMAP 376 now records the red as NUMBERS — a 5-check probe over `workable()` archived from `93e0044a` (= `8bd56720^`) reads **RED: 4 failing checks, exit 1, 0.13 s**, the same file against HEAD reads **GREEN: exit 0, 0.15 s**, the trees proven different by grepping the rule (0 vs 1); `docs/failing-first-recipe.md` gains the archive-from-parent form and the probe-placement trap; pitfall 393; full suite **363/363 in 202.8 s exit 0** at this tree |
+| `78d82057` | docs(NEXT): the pointer rows for `2ec49b52` and `44736311` in commit order (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` → exit 0, 0 holes, 0 ordering defects at the pre-B tree) and the suite tally re-measured at `44736311` (363/363 in 202.8 s exit 0); `docs/failing-first-recipe.md` gains the ADDENDUM for the archive-from-parent red proof and the probe-placement rule |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -57,7 +58,9 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 ## NEXT SESSION
 
 **Current item:** the **queue-backlog tranche is shipped, gated, AND the sweep has run** — all eight goal tasks are
-contract-satisfied (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
+contract-satisfied, and the two clauses that were prose before are now NUMBERS: task-2's red-first is a measured run
+(**RED 4 failing checks / exit 1 / 0.13 s** at `93e0044a` = `8bd56720^`, **GREEN exit 0 / 0.15 s** at HEAD), and task-3's
+readapi-area pin is section C2 of `demo/status-view-bound.test.mjs` (**2.36 s exit 0**, `--area readapi` **7/7 in 6.1 s**) (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
 **379** registrations → ledger + `registration-as-work`, **380** the `queue-pressure` gate, `tools/queue-pressure.mjs` and the `src/fleetledger.mjs` seam that makes the finding QUOTE the tool's verdict,
 task-4's broker-window re-measure below). `cli.mjs check rig.selfdev.json --json` now exits **1** with **2 errors**:
 **`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +718/7 d) and **`pool-dead-gate`** (#7660 queued
@@ -72,6 +75,8 @@ cd /home/chexxor/Git/Durian-Pi
 DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 2.1 s, exit 1 — the census, the per-DAY rate, the band verdict, and the plan pm runs
 node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
 node demo/notice-not-work.test.mjs                        # 0.45 s, exit 0 — notices are not work, the mint gate, the ack plan
+node demo/status-view-bound.test.mjs                       # 2.4 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
+node scripts/test.mjs --area readapi                       # 6.1 s, 7/7 — the AREA task-3 names; the pin lives here
 node demo/queue-pressure.test.mjs                         # 12.1 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor
 node scripts/test.mjs --area check                        # 37.5 s, 18/18 — the new rule plus doc-count-drift and starter
 node scripts/test.mjs --area rig                          # 25.5 s, 98/98
@@ -81,30 +86,11 @@ node tools/broker-serve.mjs --status                      # 24 s SOURCED — pro
 timeout 560 node scripts/test.mjs --all --jobs 4          # see the Suite tally line below
 ```
 
-**The sweep RAN in this window** (facts; the procedure and the before/after numbers live in `docs/DECISIONS.md` D315
-addendum, ROADMAP 376-380 and this pointer's archive): live rows **1656 → 1200**, notices **461 → 5** (only the 5 `claimed`
-remain, per `census.skippedClaimed`), via pm's `acknowledge-notices` intent drained through a 300 s broker lease (`node
-intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm`, requestId `f4cdad9d…`).
-`registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`), so the 16 `queued` registrations are pm's routing
-decision, not a verb. A lease is NOT side-effect-free: it minted one item branch + one worktree (branches 54 → 55, worktrees
-28 → 29) and left one `[read]` intent pending — run `tools/branch-census.mjs` after any lease. Credentials live OUT OF TREE
-in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386),
-and the local provider is priced 0 in/0 out, so the sweep cost ~$0.
+**The sweep RAN in this window** (the full procedure and the before/after numbers live in `docs/DECISIONS.md` D315 addenda 1-2, ROADMAP 376 and this pointer's archive): pm's `acknowledge-notices` intent drained through a bounded 300 s broker lease, live rows **1656 → 1200**, notices **461 → 5** (the 5 `claimed` left alone per `census.skippedClaimed`), ~$0 spend (the local provider is priced 0 in / 0 out). A lease is NOT side-effect-free: it minted one item branch + one worktree and left one `[read]` intent pending — run `tools/branch-census.mjs` after any lease. Credentials live OUT OF TREE in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386); `registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`).
 
-**Suite tally (363 members):** GREEN full runs, each named by its own artifact PROVENANCE line — **363/363 in 202.8 s, exit 0** at
-`44736311` (`.spike/suite-44736311.out`, the NEWEST full run, the tree carrying the readapi pin); **363/363 in 197.9 s** at
-`2ec49b52`; **363/363 in 196.7 s** at `df0c891f`; 363/363 in 201.6 s at `28fa2c5f`; 363/363 in 193.7 s at `8e39f105`; 363/363 in
-224.0 s at `fd5e3316`; 363/363 in 219.3 s at `8bd56720`. Do NOT CITE the two runs at HEAD `93e0044a` (362/363, 360/363) or the
-361/363 at `c37f583a` as tallies — a `--jobs 4` load flake (`demo/restart-limit-behaviour.test.mjs` green ALONE, 1.39 s, pitfall
-352/377) and a REAL failure, the clock-in digest at 20,354 B over its declared 20,000 B budget (pitfall 392: `## NEXT SESSION`
-feeds the digest VERBATIM; ROADMAP 289's size gate; fixed by consolidation into `docs/NEXT-ARCHIVE.md`, and `node demo/clockin-digest.test.mjs`
-is then green standalone — 27.5 s, exit 0, entry point 18,367 B against the 20,000 B cap). Areas after the seam and the readapi
-pin: `check` 18/18, `rig` 98/98 in 18.1 s, `readapi` 7/7 in 6.1 s.
+**Suite tally (363 members):** GREEN full runs, newest first, each named by its own artifact PROVENANCE line — **363/363 in 202.8 s, exit 0** at `44736311` (`.spike/suite-44736311.out`, the tree carrying the readapi-area pin); **363/363 in 197.9 s** at `2ec49b52`; **363/363 in 196.7 s** at `df0c891f`; older green runs (`28fa2c5f`, `8e39f105`, `fd5e3316`, `8bd56720`) are recorded VERBATIM in `docs/NEXT-ARCHIVE.md`. NOT tallies: the two runs at `93e0044a` (362/363, 360/363) and the 361/363 at `c37f583a` — a `--jobs 4` load flake (`demo/restart-limit-behaviour.test.mjs` green ALONE 1.39 s, pitfall 352/377) and the REAL clock-in digest failure at 20,354 B over its 20,000 B budget (pitfall 392, fixed by consolidation; `node demo/clockin-digest.test.mjs` is then green standalone, 27.5 s exit 0). Areas after the seam and the readapi pin: `check` 18/18, `rig` 98/98 in 18.1 s, `readapi` 7/7 in 6.1 s. **No full-suite run exists at the docs-only pointer commits after `44736311`** — those are gated by `demo/next-pointer.test.mjs`, `tools/pointer-sha-coverage.mjs`, `tools/doc-integrity-guard.mjs` and `demo/clockin-digest.test.mjs`.
 
-**State the team is in:** the tranche is **landed in the shared tree** (`main` = this pointer's own commit, over `0b9e4e5e` (the `fleetledger` seam) over `8e39f105`, `cc4769ec`, `6fff4560` and the six docs close-outs
-`b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`, `1fd8134a`, `6fff4560` over `8bd56720`, whose 28 explicit paths carry the
-tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledger.mjs`, `src/checkup.mjs`, `cli.mjs`, `tools/backlog-burn.mjs`, `demo/queue-pressure.test.mjs`; nothing pushed) and **the sweep is DONE in the store**: notices 461 → 5 (only the 5 `claimed` remain, deliberately),
-171 registrations still parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3) and 1024 open work rows still out of band. Row owners: none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
+**State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above (`78d82057`, `44736311`, `2ec49b52`, `c37f583a`, … `8bd56720`, whose 28 explicit paths carry the tranche; the seam commit `0b9e4e5e` carries 5); **nothing pushed** (the push grant is the operator's) and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the residuals below.
 
 **Blocker:** none for the sweep — it ran (pitfall 386: the credentials were already on-box in `~/.config/durig/env`, the rig never sources them, and an **unsourced** preflight is what made it look blocked). The residual is a **TRUE band failure**, not an outage: `node tools/backlog-burn.mjs` (0.049 s, exit 0) reads the fleet LEDGER whose newest snapshot is dated **2026-11-13T22:13:03.207Z** and prints `390 rows closed, +166 open rows in the window -> backlog GROWING` over a 2,258-min window, while the store-wide rate is **+719 over 7 d** — the `queue-pressure` finding now prints BOTH, the ledger one inside quotes with its window and `newest snapshot 2,116 min before this measurement: the ledger stops being appended while the broker is down` (pitfall 390: the gap is an outage of the LEDGER, not of the fleet). Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (2.2 s, exit 1) rather than quote either; pitfall 383.
 

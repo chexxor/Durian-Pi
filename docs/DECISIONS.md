@@ -13507,3 +13507,24 @@ Two durable facts this window adds to D315, both measured on Linux, Fedora Linux
    is gitignored and stops being appended while the broker is down, so the quote ships WITH its window and that caveat —
    a stale window is a caveat, never a contradiction of the store-wide +719/7 d. Pinned by the equality assertion in
    `demo/queue-pressure.test.mjs` (same fixture text through both surfaces, sentences compared as strings).
+
+4. **A contract's literal wording decides WHERE a pin lives, and a RED has to be a NUMBER (task-2 and task-3, closed 2026-11-15).**
+   Two places the goal's sentences were read as prose rather than as obligations, and both were closed the same way — move the
+   evidence, not the claim:
+   - task-3 says the demo is "pinned in the **readapi** area". The split was pinned in `rig` (`demo/notice-not-work.test.mjs`) and
+     `check` (`demo/queue-pressure.test.mjs`) but not in `readapi`, so the area list in `demo/test-areas.json` did not cover the
+     sentence. What shipped: section **C2** of `demo/status-view-bound.test.mjs` (in that area's list) appends three `queued` non-work
+     rows to the 400-row fixture and asserts `queueCensusOf.shape` NAMES them — `notice 2`, `registration 1`, `work` unchanged at 300,
+     `queuedWork` unchanged at 50, `noticeQueued 2`, `awaitingOperator 250`, the sum identity, and the empty-store edge. Measured: demo
+     **2.36 s exit 0**, `node scripts/test.mjs --area readapi` **7/7 in 6.1 s**. The "one derivation, no second spelling" half was
+     verified by grep, not by eye: `queueCensusOf` exists once (`src/readapi.mjs:326`, calling `src/queueclass.mjs queueShape`) and is
+     only CALLED elsewhere (`cli.mjs:1460`, `cli.mjs:3432`, this demo).
+   - task-2 says "Red-first demo per `docs/failing-first-recipe.md`". The row said "red-first" with no number, and the scratch the demo
+     header names (`.spike/redfirst`) is **not** a pre-change tree: it was archived from a working tree that already carried the fix, so
+     re-running it today dies on a missing module (exit 1, **0.175 s**) — a crash that reads like the contract it was meant to expose.
+     The decision is to archive from the COMMIT before the landing commit (`git archive $(git rev-parse <landing>^) src`) and to PROVE the
+     trees differ (`grep -c '<the rule the change adds>'` → **0** vs **1**). Measured with the 5-check probe over `workable()`: **RED at
+     `93e0044a` — 4 failing checks, exit 1, 0.13 s**; **GREEN at `2ec49b52` — exit 0, 0.15 s**. The record now carries the numbers, `docs/failing-first-recipe.md`
+     carries the archive-from-parent form and the probe-placement rule (a probe must sit where the test's `../src` import resolves, i.e.
+     one directory deeper than the scratch root), and `docs/SELFDEV.md` pitfall 393 carries the trap. **Never fix a red-first claim by
+     softening the word \"red\" — the number is the deliverable.**

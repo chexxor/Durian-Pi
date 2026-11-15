@@ -15121,3 +15121,38 @@ this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `
 0 `FAILED` lines** (`.spike/suite-final-6fff4560.out`, PROVENANCE `tree=6fff4560`) — that is the full-suite gate the
 completion auditor should read, taken after the sweep and after every doc close-out. **Re-verified with the `fleetledger` seam in the tree:** `timeout 520 node scripts/test.mjs --all --jobs 4` at HEAD `8e39f105` (the working tree carried `src/fleetledger.mjs` + the `checkup`/`cli`/`backlog-burn`/demo edits) → **363/363 in 193.7 s, exit 0** (`.spike/suite-quote-all.out`, PROVENANCE `tree=8e39f105`) — the member count stays 363 because no test member was added, only assertions inside existing demos. **Green at the tree this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `df0c891f` → **363/363 in 196.7 s, exit 0, 0 `FAILED` lines** (`.spike/suite-final-df0c891f.out`, PROVENANCE `tree=df0c891f`) — the docs close-outs move no test member, so 363 stays 363 while the wall clock drifts 193.7 → 201.6 → 196.7 s with store load and `--jobs 4`.
 ```
+
+
+## Cut from the pointer 2026-11-15 (queue-backlog resumed window, the suite-tally paragraph) — verbatim
+
+```
+**Suite tally (363 members):** GREEN full runs, each named by its own artifact PROVENANCE line — **363/363 in 202.8 s, exit 0** at
+`44736311` (`.spike/suite-44736311.out`, the NEWEST full run, the tree carrying the readapi pin); **363/363 in 197.9 s** at
+`2ec49b52`; **363/363 in 196.7 s** at `df0c891f`; 363/363 in 201.6 s at `28fa2c5f`; 363/363 in 193.7 s at `8e39f105`; 363/363 in
+224.0 s at `fd5e3316`; 363/363 in 219.3 s at `8bd56720`. Do NOT CITE the two runs at HEAD `93e0044a` (362/363, 360/363) or the
+361/363 at `c37f583a` as tallies — a `--jobs 4` load flake (`demo/restart-limit-behaviour.test.mjs` green ALONE, 1.39 s, pitfall
+352/377) and a REAL failure, the clock-in digest at 20,354 B over its declared 20,000 B budget (pitfall 392: `## NEXT SESSION`
+feeds the digest VERBATIM; ROADMAP 289's size gate; fixed by consolidation into `docs/NEXT-ARCHIVE.md`, and `node demo/clockin-digest.test.mjs`
+is then green standalone — 27.5 s, exit 0, entry point 18,367 B against the 20,000 B cap). Areas after the seam and the readapi
+pin: `check` 18/18, `rig` 98/98 in 18.1 s, `readapi` 7/7 in 6.1 s.
+```
+
+
+## Cut from the pointer 2026-11-15 (queue-backlog resumed window, compressed for the clock-in digest) — verbatim
+
+```
+**The sweep RAN in this window** (facts; the procedure and the before/after numbers live in `docs/DECISIONS.md` D315
+addendum, ROADMAP 376-380 and this pointer's archive): live rows **1656 → 1200**, notices **461 → 5** (only the 5 `claimed`
+remain, per `census.skippedClaimed`), via pm's `acknowledge-notices` intent drained through a 300 s broker lease (`node
+intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm`, requestId `f4cdad9d…`).
+`registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`), so the 16 `queued` registrations are pm's routing
+decision, not a verb. A lease is NOT side-effect-free: it minted one item branch + one worktree (branches 54 → 55, worktrees
+28 → 29) and left one `[read]` intent pending — run `tools/branch-census.mjs` after any lease. Credentials live OUT OF TREE
+in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386),
+and the local provider is priced 0 in/0 out, so the sweep cost ~$0.
+
+**State the team is in:** the tranche is **landed in the shared tree** (`main` = this pointer's own commit, over `78d82057` (the pointer rows + the recipe addendum), over `44736311` (the readapi-area pin + the measured RED), over `2ec49b52` (the digest consolidation) over `c37f583a`, `4919c660`, `df0c891f`, `28fa2c5f`, `0b9e4e5e` (the `fleetledger` seam) over `8e39f105`, `cc4769ec`, `6fff4560` and the six docs close-outs
+`b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`, `1fd8134a`, `6fff4560` over `8bd56720`, whose 28 explicit paths carry the
+tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledger.mjs`, `src/checkup.mjs`, `cli.mjs`, `tools/backlog-burn.mjs`, `demo/queue-pressure.test.mjs`; nothing pushed) and **the sweep is DONE in the store**: notices 461 → 5 (only the 5 `claimed` remain, deliberately),
+171 registrations still parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3) and 1024 open work rows still out of band. Row owners: none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
+```
