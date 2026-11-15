@@ -22,7 +22,9 @@
 //      it never says whether the cap that fired is sized to the fleet. Replay the mints THIS STORE recorded
 //      inside the window through the shipped rules (`mintGate`'s precedence: duplicate, then burst, then lineage;
 //      notices and parked rows exempt) and count what each rule WOULD have refused. Measured 2026-11-15 on this
-//      rig: the burst cap (100/seat/7 d) would have refused 506 of 1,153 real work mints (43.9%) — at this fleet's
+//      rig: the burst cap (100/seat/7 d) would have refused 506 of 1,153 real work mints (43.9%) — WINDOW-RELATIVE,
+//      the pair slides by the MINUTE (two calls minutes apart read 519/1,147 then 516/1,144, and 523/1,153 in an
+//      earlier window: see docs/runbooks/session-start-cost.md §35); at this fleet's
 //      fan-out rate 100 is not a pathological-fan-out stop, it is a halt on real work; the lineage rule refused
 //      6 (0.5%), i.e. it is priced. A cap nobody can price is the same class of lie as a limit nobody reads.
 //
@@ -43,7 +45,7 @@
 //
 // Measured cost, re-run before quoting: 1.3-2.0 s against the live store (the queue read is the whole cost; the
 // `mintRefusals` census adds ~436 B to that read, not a second read); 0.5-0.9 s against a snapshot capture;
-// 2.6-3.3 s with `--price-budget` (the bodies-carrying read is 1.3 s / ~32 MB of it). Host it was first measured
+// 2.6-3.4 s with `--price-budget` (the bodies-carrying read is 1.3 s / ~32 MB of it). Host it was first measured
 // on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. `last_verified:
 // 2026-11-15` by
 // `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (exit 1 — the store IS out of band, which is the
