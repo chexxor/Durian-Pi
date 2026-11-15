@@ -15333,3 +15333,58 @@ operator's ratified goal; a longer or unbounded lease is the operator's grant to
 | `9eedeb3a` | docs(NEXT): the pointer names `93e0044a` and `8bd56720` in commit order so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits 0 (it was that commit's exempt carrier) |
 | `b08d1aa9` | docs close-out (resumed window): NEXT.md's suite tally corrected to artifact PROVENANCE — the cited `363/363 in 192.0 s` matched NO artifact; the green run is `suite-final-c.out` **363/363 in 219.3 s at tree `8bd56720`**, the earlier `362/363 in 199.3 s` and `360/363 in 191.4 s` at tree `93e0044a` are not a tally — plus provider 401 evidence re-probed and SELFDEV pitfalls 384-385 |
 | `5a739a94` | docs(NEXT): the pointer names `9eedeb3a` in commit order — the audit reported one hole there (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` at this commit → `1 hole: b08d1aa9`, exit **1**); it is exit 0 only from the commit that names `b08d1aa9` and this one |
+
+
+## 2026-11-15T23:3xZ — two pointer PARAGRAPHS moved VERBATIM out of the `## NEXT SESSION` slice of `docs/NEXT.md` (pitfall 392: the slice is what the clock-in digest reads; the pointer pays its 20,000 B byte budget, the archive pays none). Cut by line index from the live file, never retyped: the `**Suite tally rule:**` paragraph and the superseded `**Blocker:**` paragraph (the pointer now carries the two measured residual faces in its place, and the provider-channel account lives in full in `docs/runbooks/session-start-cost.md` §40, `docs/runbooks/local-provider-down.md`'s 2026-11-15 state, and SELFDEV pitfall 402).
+
+### The `**Suite tally rule:**` paragraph, verbatim
+
+**Suite tally rule:** a full-suite tally is quoted ONLY from an artifact whose own PROVENANCE line names the tree it ran on; the concrete numbers sit beside the command in the `Run these first` block, and every superseded tally is kept VERBATIM in `docs/NEXT-ARCHIVE.md` under a dated heading — the newest numbers are the ones beside the command that pays them, never restated here.
+
+### The superseded `**Blocker:**` paragraph, verbatim
+
+**Blocker:** none for the sweep — it ran. The residual is a **TRUE band failure**, not an outage: the fleet LEDGER
+stopped being appended on 2026-11-13 while the broker was down, so `tools/backlog-burn.mjs` (0.05 s, exit 0) quotes a
+stale window and `cli.mjs check` quotes the same sentence inside its finding; the store-wide rate is +695 over 7 d.
+Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (1.9 s, exit 1) rather than quote either;
+pitfall 383, and the `<N>`-min age is wall-clock relative, never a constant (pitfall 398). Full paragraph moved VERBATIM
+to `docs/NEXT-ARCHIVE.md` (pitfall 392: the clock-in digest reads this slice, so the prose lives out of it); the rate there
+(+719/7 d) has slid to **+695 over 7 d at `ef21d221c`** — the window is anchored to the wall clock.
+
+
+### 2026-11-15T23:3xZb — three more slices of the `## NEXT SESSION` prose moved VERBATIM out of `docs/NEXT.md` (the clock-in digest read the slice at 20,861 B of its 20,000 B budget; pitfall 392 pays the budget by MOVING, and the archive never pays it). Cut by index from the live file, never retyped; the pointer keeps the facts and the incantations.
+
+**The runbook index, verbatim:**
+
+**Runbook index for these numbers:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`; §34 the mint-refusal ledger read; **§35 the cap’s PRICE**; §36 the knob CURVE; **§37 a cost is ambiguous without its flags**; **§38 the digest's byte budget is a budget to read before the edit, not after the failure**; **§39 a docs commit owes per-area tallies at its own tree, not a suite tally** — full wording lives in the runbook, never in this slice.
+
+**The `State the team is in` tail, verbatim:**
+
+**What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` (1.6-3.8 s) writes the rows for every `MISSING` hole **and** the row the coming commit owes **and permutes table rows that sit out of commit order**, then re-audits (`docs/runbooks/delegate-doc-hygiene.md` names the flag trap that made a false green look like a close) — then the residuals below.
+
+**The four broker-start refusal rules, verbatim (the line they were cut out of):**
+
+Proof, not inference: `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** in 8.4 s — `A start would be refused: provider-DURIG_LOCAL_-model-absent, provider-verifier-refuses-inference, provider-DURIG_LOCAL2_-unreachable, provider-local2-completion-failed` 
+
+
+### 2026-11-15T23:4xZ — three pointer LINES tightened/moved out of the `## NEXT SESSION` slice of `docs/NEXT.md`; the superseded wording kept VERBATIM here (the slice read 20,479 B of its 20,000 B budget; pitfall 392 pays bytes by MOVING, and the archive is not in the clock-in digest at all). Each replacement keeps the fact, the command, and the owner of the decision; nothing was deleted to make a gate green.
+
+**Superseded line (verbatim):**
+
+**Suite tally rule:** quote a full-suite tally ONLY from an artifact whose own PROVENANCE line names the tree it ran on (`docs/runbooks/session-start-cost.md` §39); the concrete numbers sit beside the command in the `Run these first` block above, and every superseded tally lives VERBATIM in `docs/NEXT-ARCHIVE.md` under a dated heading.
+
+
+**Superseded line (verbatim):**
+
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`, §34 the mint-refusal read, §35 the cap’s PRICE, §36 the knob CURVE, §37 costs name their flags, §38 the byte budget, §39 per-area tallies, **§40 whether a broker window is possible at all** — full wording of the index VERBATIM in `docs/NEXT-ARCHIVE.md`.
+
+
+**Superseded line (verbatim):**
+
+**(2) the fleet CHANNEL is REFUSED, so no broker window exists:** the ledger stopped being appended, `tools/backlog-burn.mjs` (0.04 s, exit 0) quotes a window whose newest snapshot is `<N>` min old (2,941 at this commit), and `tools/queue-pressure.mjs` prints `mint refusals: 0 in 7 d (burst 0, lineage 0, duplicate 0) of 0 on the ledger` — a **measured zero about the READ path, not proof the fan-out budget fires** (the write path is only exercised in a window).
+
+
+**Superseded line (verbatim):**
+
+Proof, not inference: `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** in 8.4 s naming FOUR refusal rules (their exact names, costs and owners are in SELFDEV pitfall 402 and `docs/runbooks/session-start-cost.md` §40) — funding the meter, pinning the model the local server actually advertises, and the LAN box are the operator's (pitfall 402, §40, `docs/runbooks/local-provider-down.md`'s 2026-11-15 state). Full wording of both faces VERBATIM in `docs/NEXT-ARCHIVE.md`.
+

@@ -490,3 +490,35 @@ node cli.mjs status                                   # attention kinds today: d
 On 2026-11-11 neither the preflight nor attention reported a credential refusal, so the rows parked on 2026-11-10 are
 parked on a condition that is not present. Un-park them in the order you want work to happen, one seat at a time -
 `resume_work` is per row, and a seat wakes for each row it takes back.
+
+## 2026-11-15: state 10 — the port ANSWERS, the model it ADVERTISES is not the model the config names, and the metered family's BALANCE is empty (three refusal families up at once)
+
+Measured 2026-11-15 on this box (Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git
+2.56.0), with the rig's own keys sourced (`set -a; . "$HOME/.config/durig/env"; set +a`) — the keys are NOT the problem,
+the meter and the model id are:
+
+```bash
+node tools/broker-serve.mjs --status              # SOURCED 24.9 s, exit 0, 4 blocking / 5 noted
+node tools/broker-serve.mjs --start --dry-run     # SOURCED 8.4 s, exit 1: START would be REFUSED (the same block list --start dies on)
+```
+
+| The preflight's words | What it is | What it is NOT |
+|---|---|---|
+| `BLOCK provider-DURIG_LOCAL_-model-absent: http://127.0.0.1:8080/v1 advertises [qwen3.8-flash-next-coder-iq1_m] but the config names 'qwen3.8-flash-next-q2_0'` | the server is UP and `local: completes` in the same read — the DRIFT is in the listing, not the inference | a down server. llama.cpp reroutes an unknown id (`docs/DECISIONS.md:10547-10548` measured request `…-iq3_s` → response `"model":"…-q2_0"`), so a seat asking for the stale id would ANSWER on an UNDECLARED model; only the preflight sees it, because `src/providers/local.mjs` registers exactly one row named by `<PREFIX>MODEL` |
+| `BLOCK provider-verifier-refuses-inference: verifier answers /v1/models but refused a 1-token completion — HTTP 402: You need positive balance to do inference … the store shows this shape 18,309 times` | the metered family's BALANCE is empty. Answers at `/v1/models` are not balance (`docs/SELFDEV.md:947`) | a missing key — the key resolved (`DURIG_VERIFIER_API_KEY: set (32 chars, from env)`) |
+| `BLOCK provider-DURIG_LOCAL2_-unreachable` + `BLOCK provider-local2-completion-failed` (`EHOSTUNREACH` on `192.168.1.52:8080`) | the LAN box is not reachable from this one — its own section above (`Reaching the same server from ANOTHER computer`) is the procedure for that state | the local box being dead: `:8080` answers and completes throughout this read |
+
+**The decision this state forces is not the delegate's.** `--start --dry-run` refuses, so the delegate's honest report is
+`a broker lease is REFUSED: <the four rules>` — it did not force past the preflight, and the fixes are an operator's
+FUNDING (top up the metered endpoint), an operator's PROVIDER MOVE (load the model the config names, or re-point
+`DURIG_LOCAL_MODEL` and the seats together — `:37` in this runbook says restoring provider values in `rig.selfdev.json`
+is an OPERATOR call, lead R1, and a seat doing it is a second seat-authored provider move), and an operator's hardware
+check on the LAN box. Nothing here is a code change: the knobs are `DURIG_LOCAL_MODEL` in `durig.config.json` and the
+seat model strings in `rig.selfdev.json`.
+
+**What it costs the queue instruments while it stands** (the same window's readings, so the two are comparable):
+`tools/backlog-burn.mjs` 0.04 s exit 0 still prints a verdict, but from a ledger whose newest snapshot is **2,941 min**
+old — the ledger stops being appended while no broker runs; and `tools/queue-pressure.mjs` 1.5 s exit 1 prints
+`mint refusals: 0 in 7 d (burst 0, lineage 0, duplicate 0) of 0 on the ledger`, a **measured zero** about the READ path,
+not proof the fan-out budget fires. Homes for that read: `docs/runbooks/session-start-cost.md` §40 and SELFDEV pitfall
+402.

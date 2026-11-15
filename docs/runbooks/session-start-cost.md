@@ -1071,3 +1071,37 @@ command that printed it, `--jobs 4` on every area run:
 pitfall 384's lie unless the artifact's PROVENANCE names the tree the commit ships on, and the suite is the wrong
 loop for a docs change anyway — it is 1.6× the carrier areas and re-verifies nothing they do not. State the per-area
 tallies, each with its PROVENANCE tree, and say explicitly when no full-suite run names the current tree.
+
+## 40. IS A BROKER WINDOW EVEN POSSIBLE? — one SOURCED dry-run names the refusals in 8.4 s, and the zero it leaves behind is not a verdict (2026-11-15, delegate at `ad35570d3`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — host measured in the same command as every number here)
+
+Before anyone commissions a lease — including the shortest one — one read says whether a window could run at all. It
+is the SAME preflight `--start` runs, without the spawn, so it is read-only and cheap:
+
+```bash
+set -a; . "$HOME/.config/durig/env"; set +a          # keys are the rig's own file, mode 0600, out of tree
+node tools/broker-serve.mjs --status                 # SOURCED 24.9 s, exit 0, 4 blocking / 5 noted (0.9 s UNSOURCED at `ef21d221c` — §37: the cost names its flags AND its sourcing)
+node tools/broker-serve.mjs --start --dry-run        # SOURCED 8.4 s, exit 1 — `DRY RUN — no process started. A start would be refused: provider-DURIG_LOCAL_-model-absent, provider-verifier-refuses-inference, provider-DURIG_LOCAL2_-unreachable, provider-local2-completion-failed`
+node tools/stranded-inbox.mjs selfdev.sqlite         # spool shape: 0 pending intent(s), 90 DEAD-LETTER(s) at this window
+```
+
+What each leg costs and what it answers, in one call at `ad35570d3`:
+
+| Read | Cost | The question it answers |
+|---|---|---|
+| `broker-serve.mjs --status` SOURCED | 24.9 s | is a seat turn possible at all? provider reachability, advertised models, and **one real completion per provider**, plus the spool depth and the genlock slots |
+| `broker-serve.mjs --start --dry-run` SOURCED | 8.4 s | would `--start` REFUSE, and by which rule? exit 1 with the block list; the identical block list `--start` would die on is printed as `START REFUSED` |
+| `tools/stranded-inbox.mjs <db>` | 0.22 s | is there an intent to drain? at this window `inbox=0 drainStranded=0 resultFiles=2` — NOTHING spooled, so a lease would deliver no intent, and `progressAgeS=53499` says the pass loop has been idle since the last run exited |
+
+**Read it before the lease, not after.** Every queue instrument in this goal degrades silently while the channel is
+refused: `tools/backlog-burn.mjs` (0.04 s, exit 0) quotes a ledger window whose newest snapshot ages by the minute
+(**2,941 min** at `ad35570d3`), and `tools/queue-pressure.mjs` prints `mint refusals: 0 in 7 d (burst 0, lineage 0,
+duplicate 0) of 0 on the ledger`. A ZERO from a dark channel is a measured fact about the READ, not proof the fan-out
+budget fires — the read path is pinned by `demo/queue-pressure.test.mjs` and `demo/notice-not-work.test.mjs` §10, the
+write path is only exercised in a window. Say which one you have.
+
+**Who fixes a refusal, and what the fix is not.** The block list decomposes by owner, and none of it is a code change:
+an empty meter on a metered family (`answers /v1/models … refused a 1-token completion — HTTP 402: You need positive
+balance`) is the operator's funding; a `model-absent` block on a server that COMPLETES is the operator's provider move
+(`docs/runbooks/local-provider-down.md:37` — restoring provider values in `rig.selfdev.json` is an OPERATOR call, lead
+R1); an EHOSTUNREACH LAN box is the operator's hardware. The delegate's honest report is `a lease is REFUSED`, with the
+refusal line quoted, not a lease forced past the preflight.
