@@ -341,6 +341,19 @@ kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. Re-measure rather than
 0). The `--order` legs are pinned by fixtures, not by the live pointer: the live table had 0 ordering
 defects at that commit, so the reorder is proven only on the throwaway repo.
 
+**THE CAP, AND THE TWO REDS ONE BREACH CAUSES (measured 2026-11-15 at `76b1298f`).** A `docs/NEXT.md` over its
+200-line cap turns **two** areas red from **one** cause: `node tools/doc-integrity-guard.mjs` exits **1** with a single
+`HARD POINTER` finding (`docs/NEXT.md counts 202 lines (split("\n")); the cap is 200, i.e. `wc -l` <= 199`), and that
+exit 1 also makes `demo/doc-integrity-ledger.test.mjs` FAIL in the **check** area on its "the guard is red exactly when
+the real ledger has collisions or unnumbered headings" leg — while the ledger itself prints **0 D-number collision(s),
+0 unnumbered heading(s)**. So the ledger chase is a dead end: read the guard's `HARD POINTER` line first, and fix the
+cap the way the guard names. Move the OLDEST **table rows** out to `docs/NEXT-ARCHIVE.md` under a dated heading, VERBATIM,
+and PROVE the cut in the same commit: `head(post) + moved + tail(post)` is byte-identical to `git show <pre-cut sha>:docs/NEXT.md`
+(measured this window: 8 rows / 2,086 B, proof byte-identical over a 60,988-char file; `demo/next-pointer.test.mjs` then PASS
+exit 0, 0.04 s; `--area docs` **8/8** and `--area check` **18/18** green, both `--jobs 4`). A cut of the pointer's PROSE instead
+pays the clock-in digest (pitfall 392); a cut of table rows pays **ZERO** digest bytes because the rows sit above the
+`## NEXT SESSION` slice — that is the cheaper shape when the file is long and the slice is not.
+
 ## If it fails
 
 Nothing here writes, so there is nothing to roll back except your own edits: `git checkout -- <path>` restores a doc you
