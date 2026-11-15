@@ -977,3 +977,22 @@ waiting". When quoting a read cost, write the state with it: `1.5 s (broker down
 
 **Never do:** re-measure a read cost and overwrite the old number in a row. Keep both numbers and name which shape
 each is, or the drift becomes indistinguishable from a regression — which is exactly how 377's `10.9 s` came to look.
+
+**ADDENDUM (2026-11-15 at `af281f2d5`, delegate; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
+node v24.22.1, git 2.56.0): a `scripts/test.mjs` area cost is only meaningful beside its `--jobs` flag — a third shape
+of the same trap, and the pointer had already written it.** Same tree, same suite, unchanged store, measured in one
+window: `node scripts/test.mjs --area check` → **18/18 in 9.4 s** at the harness default (`scripts/test.mjs --list`
+usage line: `--jobs <n>` default **8**); `node scripts/test.mjs --area rig --jobs 4` → **98/98 in 24.8 s**; `node
+scripts/test.mjs --area docs --jobs 4` → **8/8 in 64.7 s**; `node scripts/test.mjs --area readapi` → **7/7 in 5.9 s**.
+`docs/NEXT.md` quoted the same areas as **check 25.9 s, rig 15.7 s, readapi 5.3 s** with **no flag recorded at all** —
+a 2.7× swing on `check` that is fully explained by the flag (4 jobs is slower than 8), not by the suite. So:
+
+- **write the flag with the number**, or an area cost is ambiguous by construction: `check 18/18 in 9.4 s (default 8)`,
+  `rig 98/98 in 24.8 s (--jobs 4)`. The inference that the quoted 25.9 s ran at `--jobs 4` is *inferred* from the
+  slower-job shape, not recorded — which is exactly the defect this addendum names.
+- **compare a cost only against the identical command line**, flag included, and re-measure rather than subtract:
+  the drift that is a flag is not a regression, and a doc that quotes one bare number makes the two indistinguishable.
+- **the same shape applies to broker-state reads:** `cli.mjs watch --once --human` re-measured **1.331 s** at
+  `af281f2d5` against this section's own **1.515 s** at `fbe129ab5` — both broker-down, 12 % apart on an unchanged
+  store (rows 7742 / live 1200 identical). A shape label (`1.3-1.5 s, broker down`) is the durable claim; the exact
+  decimal is a measurement, not a fact about the rig.
