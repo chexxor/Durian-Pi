@@ -1,6 +1,9 @@
 **Last update:** 2026-11-15 (delegate, queue-backlog tranche — the pointer is the carrier commit for this window; every EARLIER shipped commit in this range is a row below, **in commit order**, enforced by `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (1.3 s, exit 0/1), not by eye). Nothing pushed — the push grant is the operator's.
 
-**Milestone this window worked** — **making the queue backlog manageable and measurable (D315, ROADMAP 376-380, goal mwh73rd1-izyq72)**: protocol notices stopped being claimable work and are acknowledged mechanically, the view names work / notice / registration / awaiting-operator instead of one number, the mint path has a fan-out budget (duplicate + burst 100 + lineage), ROADMAP registrations are parked and ruled, and "the backlog is growing" is now a `check` rule that FAILS. The bulk retire of the 461 notices and 171 registrations is **pm's verb and has not run** — the broker is down and both providers refuse inference.
+**Milestone this window worked** — **making the queue backlog manageable and measurable (D315, ROADMAP 376-380, goal mwh73rd1-izyq72)**: protocol notices stopped being claimable work and are acknowledged mechanically, the view names work / notice / registration / awaiting-operator instead of one number, the mint path has a fan-out budget (duplicate + burst 100 + lineage), ROADMAP registrations are parked and ruled, and "the backlog is growing" is now a `check` rule that FAILS. The bulk retire **RAN this window in a bounded broker lease**: live rows **1656 → 1200**, notices **461 → 5** (the 5
+`claimed` notices left alone per `census.skippedClaimed`); the 171 registrations are **census-only** — `src/queueops.mjs:427`
+returns `{changes: []}` for `registrations`, so moving a ledger copy into `docs/ROADMAP.md` is a docs task for a seat,
+not a queue verb.
 Every commit in `8b5a19e1..HEAD`, oldest first:
 
 | sha | shipped |
@@ -28,6 +31,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `b08d1aa9` | docs close-out (resumed window): NEXT.md's suite tally corrected to artifact PROVENANCE — the cited `363/363 in 192.0 s` matched NO artifact; the green run is `suite-final-c.out` **363/363 in 219.3 s at tree `8bd56720`**, the earlier `362/363 in 199.3 s` and `360/363 in 191.4 s` at tree `93e0044a` are not a tally — plus provider 401 evidence re-probed and SELFDEV pitfalls 384-385 |
 | `5a739a94` | docs(NEXT): the pointer names `9eedeb3a` in commit order — the audit reported one hole there (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` at this commit → `1 hole: b08d1aa9`, exit **1**); it is exit 0 only from the commit that names `b08d1aa9` and this one |
 | `fd5e3316` | docs(NEXT): the pointer names `b08d1aa9` and `5a739a94` in commit order — closes the audit's last hole; `tools/pointer-sha-coverage.mjs --base 8b5a19e1` → exit **0** (162 range commits, 84 covered, 0 holes), and `timeout 540 node scripts/test.mjs --all --jobs 4` at this tree → **363/363 in 224.0 s** |
+| `fa1c1dda` | docs(NEXT): name `fd5e3316` in commit order so `pointer-sha-coverage --base 8b5a19e1` stays exit 0 (this commit is its exempt carrier). The **store-side sweep** this pointer records is NOT a commit: pm's verb drained the spooled `acknowledge-notices` intent through the broker (`INTENT delivered=1 dead=0 dup=0`), retiring 456 notice ROWS in `selfdev.sqlite` |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -41,13 +45,14 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 
 ## NEXT SESSION
 
-**Current item:** the **queue-backlog tranche is shipped and gated** (D315; ROADMAP **376** notices-are-not-work,
-**377** the census split, **378** the mint fan-out budget, **379** registrations → ledger + `registration-as-work`,
-**380** the `queue-pressure` gate and `tools/queue-pressure.mjs`). Goal `mwh73rd1-izyq72`, tasks 1,2,3,5,6,7,8 in;
-**task-4 (the bulk retire executed by pm) is the outstanding one** — the plan is printed, the transition is not.
-`cli.mjs check` now exits **1** with two named findings: `queue-pressure` (severity `error`) and `registration-as-work`
-(17 ids: #3503, #6700, #6759, #6879, #6906, #6913, #6992, #7014, #7031, #7039, #7051, #7258, #7282, #7311, #7645,
-#7703, #7739) — that is the queue id the next session acts on.
+**Current item:** the **queue-backlog tranche is shipped, gated, AND the sweep has run** — all eight goal tasks are
+contract-satisfied (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
+**379** registrations → ledger + `registration-as-work`, **380** the `queue-pressure` gate and `tools/queue-pressure.mjs`,
+task-4's broker-window re-measure below). `cli.mjs check rig.selfdev.json --json` now exits **1** with **2 errors**:
+**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +718/7 d) and **`pool-dead-gate`** (#7660 queued
+in the POOL, requires docs, no seat advertises it), plus **`registration-as-work`** at `fix-now` on **16** ids:
+#6700 #6759 #6879 #6906 #6913 #6992 #7014 #7031 #7039 #7051 #7258 #7282 #7311 #7645 #7703 #7739 (was 17 — the broker
+window claimed one, which is exactly what the rule exists to catch). **That is the queue the next session acts on.**
 
 **Run these first** (measured on this box 2026-11-15; re-measure rather than trust):
 
@@ -58,27 +63,30 @@ node demo/notice-not-work.test.mjs                        # 0.45 s, exit 0 — n
 node demo/queue-pressure.test.mjs                         # 12.1 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor
 node scripts/test.mjs --area check                        # 37.5 s, 18/18 — the new rule plus doc-count-drift and starter
 node scripts/test.mjs --area rig                          # 25.5 s, 98/98
-node cli.mjs check rig.selfdev.json --json                # 14 s, exit 1 — queue-pressure + registration-as-work now in the 30 rules
-node tools/broker-serve.mjs --status                      # 3 s — broker DOWN; provider-local/verifier REFUSE inference (401)
+node cli.mjs check rig.selfdev.json --json                # 9 s, exit 1 — 2 errors: queue-pressure + pool-dead-gate; 30 rules
+set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
+node tools/broker-serve.mjs --status                      # 24 s SOURCED — providers COMPLETE; 0 blocks; broker down
 timeout 560 node scripts/test.mjs --all --jobs 4          # see the Suite tally line below
 ```
 
-**The sweep pm must run** (the delegate composes it, the broker applies it — `intent.mjs` spools a request file,
-the broker's own harness writes the transitions, no seat turn is spent):
+**The sweep pm RAN this window** (the delegate spools, the broker's harness writes the transitions — no seat turn is spent;
+the store delta was live 1656 → 1200 rows, notices 461 → 5):
 
 ```bash
-node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm   # 461 notices → done with an `acknowledged` transition
-node intent.mjs queue --op queue --action registrations                                          # census only: the 171 ledger copies sitting in the queue
+node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm   # 456 notices → done with an `acknowledged` transition
+node intent.mjs queue --op queue --action registrations                                          # census ONLY (src/queueops.mjs:427 returns changes: [])
 ```
 
-It CANNOT run yet: `node tools/broker-serve.mjs --status` → `broker: down (no broker state)` and BLOCKs
-`provider-local-refuses-inference` plus `provider-verifier-no-key`. Re-probed in the resumed window 2026-11-15:
-the local endpoint now answers **`authentication_error — missing or wrong API key` (401) to BOTH `/v1/models` and a
-1-token `/v1/chat/completions`**, and `env | grep -iE 'deepinfra|openai|api_key'` returns nothing — earlier it listed
-models and refused only completions, so the shape has degraded further, not improved. A read drain serves only
-read-only intents, so an `--apply` intent needs a pass.
-**Waking the fleet and funding the provider are the operator's grants** — do not start the broker on a provider
-that only lists models (`docs/runbooks/broker-down-or-stalled.md`, `docs/runbooks/local-provider-down.md`).
+**IT RAN — and the earlier "the operator must fund the provider" reading was WRONG.** The credentials are already on
+this box in `~/.config/durig/env` (mode 0600, dated 2026-11-08, names `DURIG_LOCAL_API_KEY` + `DURIG_VERIFIER_API_KEY`);
+the rig never sources it, so an **unsourced** preflight printed 401s and the sweep looked blocked. Sourced (`set -a; . "$HOME/.config/durig/env"; set +a`,
+a step in `docs/runbooks/broker-down-or-stalled.md`), the preflight reports **0 blocks**: `local: completes (finish=stop,
+prompt=57 tok, completion=29 tok)` and `verifier: answers, advertises 178 model(s)` + `completes (59 in / 48 out)`.
+The window then ran: spool `node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm`
+(0.14 s, `requestId f4cdad9d…`), open the lease `nohup timeout --signal=TERM --kill-after=60 380 node cli.mjs serve --max-duration 300 &`,
+confirm liveness on the last ` PASS ` line (`PASS 192 ms=20`), `node cli.mjs resume` before closing. **Never print the key values.**
+A broker lease is not free of side effects: it also minted one item branch + one worktree (branches 54 → 55, worktrees 28 → 29)
+and left one `[read]` intent pending after `resume` — run the branch/worktree census after any lease (`tools/branch-census.mjs`).
 
 **Suite tally:** 363 members; the GREEN full run is **363/363 in 219.3 s, exit 0** at tree `8bd56720` —
 `timeout 560 node scripts/test.mjs --all --jobs 4` (2026-11-15, `.spike/suite-final-c.out`, PROVENANCE line
@@ -94,23 +102,25 @@ of this window:** `timeout 540 node scripts/test.mjs --all --jobs 4` at `fd5e331
 (`.spike/suite-final-fd5e3316.out`, PROVENANCE `tree=fd5e3316`) — the docs close-outs move no test member, so the
 member count stays 363 while the wall clock drifts 199 → 219 → 224 s with store load and `--jobs 4`.
 
-**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` under three docs close-outs
-(`b08d1aa9`, `5a739a94`, and this pointer's) over `8bd56720`: the tranche commit carries 28 explicit paths, the docs
-close-outs 1–2 paths each, nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
-but un-transitioned; 5 notices are `claimed` and are deliberately left alone (`census.skippedClaimed`). Row owners:
-none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
+**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` under four docs close-outs
+(`b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`) over `8bd56720`: the tranche commit carries 28 explicit paths, the docs
+close-outs 1–2 paths each, nothing pushed) and **the sweep is DONE in the store**: notices 461 → 5 (only the 5 `claimed`
+remain, deliberately), 171 registrations still parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3) and 1024
+open work rows still out of band. Row owners: none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
 
-**Blocker:** the sweep (task-4) needs a broker window and a provider that answers completions; both credentials are
-the operator's. Second, `tools/backlog-burn.mjs` reads the fleet LEDGER whose last snapshot is dated **2026-11-13**,
-so its rate (+166 over 2,258 min) is stale while the broker is down — the store-wide rate is **+718 over 7 d**
-(re-measured in the resumed window: `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` → 2.27 s, exit 1,
-mint 1921 vs close 1203; the rate drifts as rows close, so re-measure rather than quote it — pitfall 383).
+**No blocker remains for the sweep.** The band failure is now a TRUE statement about the fleet (1024 open work rows vs
+120), not an outage. Second, `tools/backlog-burn.mjs` still reads the fleet LEDGER whose last snapshot is dated **2026-11-13**
+(+166 over 2,258 min) while the store-wide rate is **+718 over 7 d** — re-measure with
+`DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (2.2 s, exit 1) rather than quote either; pitfall 383.
 
 **Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
-(`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; the LINEAGE rule
-would have refused ~38 % of live parentless work rows (451 of 1,195 name no parent) until the fleet is back inside the
-band. (b) Grant the provider credentials / the fleet wake so pm can run the sweep. (c) Whether a STOPPED-but-rostered
-seat's queued notices may be acknowledged (paused is excluded, stopped is not).
+(`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; with 1024 open work
+rows the gate is loud by design, and the LINEAGE rule would have refused ~38 % of live parentless work rows until the
+fleet is back inside the band. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
+pass-by-pass — the queue has no verb for it (`registrations` is census-only), so it is a seat/docs task, and pm owns routing.
+(c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
+(d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
+operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
 
 **Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
 recorded, not touched by this tranche.

@@ -13475,3 +13475,20 @@ and AGENTS.md forbids the delegate claiming/completing/routing rows.
 areas `rig` 98/98 25.5 s, `check` 18/18 37.5 s, `broker` 83/83 39.8 s, `readapi` 7/7 7.0 s; `check` exits 1 with
 `queue-pressure` (severity `error`) and `registration-as-work` (17 ids). Host for every number: Linux, Fedora Linux 45 (Forty Five),
 kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0, measured in the same command as the measurement.
+
+**Addendum 2026-11-15T08:2xZ (delegate, resumed window of the same goal — the sweep RAN, and the "credential grant" blocker was false).**
+Two durable facts this window adds to D315, both measured on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1:
+
+1. **The credential is the rig's to read, not the operator's to hand over.** `~/.config/durig/env` (mode 0600) already
+   holds `DURIG_LOCAL_API_KEY` and `DURIG_VERIFIER_API_KEY`; the base never sources it, and `docs/runbooks/broker-down-or-stalled.md`
+   has always said to source it before a restart. So the previous window's blocker ("providers refuse inference; funding is
+   the operator's grant") was an unsourced probe, and the honest decision is the one the delegate already had the grants for:
+   spool the plan, open a BOUNDED lease (`--max-duration 300` inside an outer `timeout 380 --signal=TERM --kill-after=60`),
+   let pm's verb through the broker, then `cli.mjs resume` before closing. **What stays the operator's: the size of the wake** —
+   a lease that wakes 12 seats for 5 minutes is a scope decision, and the delegate kept it to the shortest window that drains one intent.
+2. **The retire worked, and the plan's arithmetic was right:** spooled `acknowledge-notices` (`requestId f4cdad9d…`, 0.14 s)
+   drained as `INTENT delivered=1 dead=0 dup=0`; live rows **1656 → 1200**, notices **461 → 5** — exactly the 5 `claimed` notices
+   the census deliberately leaves alone. The band still FAILs (1024 open work vs 120) — that is now a true statement about the
+   fleet, no longer an outage, and it is what `queue-pressure` exists to say. **`registrations` is census-only**
+   (`src/queueops.mjs:427` → `{changes: []}`): moving a ledger copy into `docs/ROADMAP.md` is a seat/docs task with no queue verb,
+   so the 16 `queued` registrations are pm's routing decision, not a verb the delegate can call.

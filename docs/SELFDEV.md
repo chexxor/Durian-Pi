@@ -4843,3 +4843,28 @@ at `:743`). Re-measure every `path:line` before repeating it.
     auditor's ground truth on this rig is the DOCS, not the checkbox: `docs/NEXT.md` must name which tasks are in and
     which one is outstanding, with the command that verifies each. If `update_goal` IS exposed, call it once when
     every contract is satisfied — never piecemeal, and never while a task is still open (task gate).
+
+## Operational pitfalls (delegate queue-backlog sweep, resumed window 2026-11-15 — numbered 386-388, continuing from 385; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+386. **"The provider refuses inference, so the operator must fund it" was a sourcing artifact, not an outage.** An
+    UNSOURCED `node tools/broker-serve.mjs --status` printed `authentication_error — missing or wrong API key` (401) for
+    both `/v1/models` and a 1-token completion, and `env | grep -iE 'deepinfra|openai|api_key'` was empty — so the previous
+    window parked the sweep behind a credential grant. The credential was already on the box: **`~/.config/durig/env`**
+    (mode 0600, 1055 B, dated 2026-11-08) names `DURIG_LOCAL_API_KEY` and `DURIG_VERIFIER_API_KEY`; the rig never sources
+    it. Sourced with the runbook's own step (`set -a; . "$HOME/.config/durig/env"; set +a`), the same preflight (24.5 s)
+    reported **0 blocks**: `local: completes (finish=stop, prompt=57 tok, completion=29 tok)` and
+    `verifier: answers, advertises 178 model(s)` + `completes (finish=stop, 59 in / 48 out)`. **Rule: source that file
+    before any provider probe or broker start, and NEVER print the values** — `grep -oE '^[A-Z_]+'` names keys without
+    echoing them. The symptom to grep for is a 401 with an empty process env.
+387. **A broker lease is a store mutation, not a read.** The 5-minute lease (`nohup timeout --signal=TERM --kill-after=60
+    380 node cli.mjs serve --max-duration 300 &`) retired 456 notice rows (live 1656 → 1200, notices 461 → 5), minted one
+    item branch + one worktree (branches 54 → 55, worktrees 28 → 29), advanced the queue one registration into `claimed`
+    (so `registration-as-work` went 17 ids → 16), and after `node cli.mjs resume` left one `[read]` intent pending in the
+    inbox. Dead-letters stayed at 90 (`ls selfdev.sqlite.broker.inbox.error | wc -l` = 180 = 90 `.error.json` + 90
+    `.error.json.reason` pairs — **divide by two before reporting a dead-letter count**). Liveness was the last
+    ` PASS ` line (`PASS 192 ms=20 woke=-`), and the `EXIT … reason=deadline passes=-` line stayed untrustworthy (pitfall 304/ROADMAP 328).
+388. **`cli.mjs check` and `cli.mjs check rig.selfdev.json` are different measurements.** Unqualified, the `queue-pressure`
+    finding printed `a band of 20 (10/seat x 2 seats), over by 1004`; with the live rig file it printed `a band of 120
+    (10/seat x 12 seats), over by 904` on the SAME store the SAME minute. The band denominator is the roster in the rig
+    file, so quoting a band or an over-by without the rig argument is a wrong number, in the same family as the `DURIG_DB`
+    trap: the flag you forgot changes the denominator, not the answer.
