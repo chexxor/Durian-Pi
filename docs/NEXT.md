@@ -108,6 +108,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `553ee2134` | docs(NEXT): the cadence row for f331274f, and the suite tally re-pointed to the run measured AT that tree — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 553ee2134`) |
 | `c9fde60fd` | docs(NEXT+ARCHIVE): the cadence row for 553ee2134, and the archive home for the superseded suite tally — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s c9fde60fd`) |
 | `2df624a2d` | docs(NEXT): the cadence row for c9fde60fd — pitfall 384's chase, paid by the closer in ONE call — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 2df624a2d`) |
+| `4193a97cd` | docs(runbooks): the mint-cap KNOB CURVE — 20 bounded calls in 65.9 s — and the cadence row for 2df624a2 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 4193a97cd`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -167,7 +168,9 @@ rows the gate is loud by design, and the caps are now **PRICED** (`--price-budge
 mints = 45.4 % would have been refused — burst 506, lineage 6, duplicate 11; six seats above the 100/seat cap, impl
 567 to scribe 154), so a `DURIG_MINT_BURST_CAP` above 567 stops the burst rule refusing REAL work at this fleet's own
 rate; the LINEAGE rule is priced at 0.5 % of in-window mints, not the old ~38 % recollection (451 of 1,195 LIVE rows
-name no parent, but only 6 of 1,153 in-window MINTS lack it — the recollection was wrong by two orders of magnitude). (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
+name no parent, but only 6 of 1,153 in-window MINTS lack it — the recollection was wrong by two orders of magnitude). The
+full curve (windows 3/7/14/30 d × caps 100–600, 20 calls in 65.9 s) is runbook §36: the knee at 7 d is between 300 and 500,
+and the WINDOW is as much of the price as the CAP is. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
 pass-by-pass — the queue has no verb for it (`registrations` is census-only), so it is a seat/docs task, and pm owns routing.
 (c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
 (d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
