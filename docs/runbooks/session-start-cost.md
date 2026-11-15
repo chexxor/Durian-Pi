@@ -795,3 +795,27 @@ ahead, 0 unlandable). `--pairwise` adds the O(n²) conflict-pair diagnostics if 
 
 **What it does not tell you:** whether a seat has actually run those commands. `main` moving is the only evidence;
 the queue rows for landing passes can sit `queued` for hours while the broker is healthy.
+
+
+## 29. IS THE BACKLOG GROWING — two reads, 2.2 s, and `check` already QUOTES the second one (2026-11-15, D315/ROADMAP 380; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+The operator's complaint "the queue is overwhelming" now has THREE cheap answers, and only the first is a census:
+
+```bash
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 2.109 s, exit 1 — split, ages, per-DAY rate, band verdict, plan for pm
+node tools/backlog-burn.mjs                              # 0.049 s, exit 0 — the fleet LEDGER's own burn-rate verdict
+DURIG_DB=./selfdev.sqlite node cli.mjs check rig.selfdev.json --json 2>/dev/null | grep -o queue-pressure   # 6.1 s, exit 1 — the same two numbers, side by side
+```
+
+Read the numbers in that order: the census answers "how much is there, and is it per-DAY mint outpacing close"
+(measured 2026-11-15: `net +719 (273.71/d minted, 171/d closed, 102.71/d net): GROWING` over 7 d, band 120 vs 1024 open work);
+`backlog-burn` answers "what did the fleet record while it was running" — it reads the JSONL ledger, NOT the store, so
+its window ends at the newest snapshot (`2026-11-13T22:13:03.207Z` there, 2,136 min before the check that quoted it).
+**The gap is an outage of the LEDGER, not of the fleet** (pitfall 390 in `docs/SELFDEV.md`): `tools/broker-keepalive.mjs`
+appends only while the broker runs, so a down broker stops the time series and the quote keeps its window and its
+staleness caveat in the finding. Do not "reconcile" the two by editing either number; do not quote one without the other
+while the broker is down.
+
+**What it does not tell you:** whether the band is the problem or the plan is. The band FAIL is a decision for the
+operator (the knobs `DURIG_BAND_PER_SEAT` / `DURIG_MINT_BURST_CAP` / `DURIG_PRESSURE_WINDOW_DAYS` in `src/config.mjs`);
+the census's `plan for pm` line is the verb that retires non-work rows, and pm applies it, not the delegate (AGENTS.md).

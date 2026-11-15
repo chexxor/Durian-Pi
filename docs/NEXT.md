@@ -37,6 +37,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `cc4769ec` | docs(NEXT): the suite tally corrected to the GREEN full run **at `6fff4560`** (363/363 in 196.1 s, artifact PROVENANCE `tree=6fff4560`) — that commit's exempt carrier |
 | `8e39f105` | **the census answers the RATE question per DAY (task-1's literal wording)** — `src/queueclass.mjs` `burnRate` returns `perDay {minted, closed, netOpen}` and `tools/queue-pressure.mjs` prints it: ONE derivation, both surfaces; the census line reads `mint 1916 (1153 work, 763 notice) vs close 1197 (770 work, 427 notice) -> net +719 (273.71/d minted, 171/d closed, 102.71/d net): GROWING` (1.82 s); `demo/queue-pressure.test.mjs` 8.0 s PASS, `--area rig` 98/98 in 25.2 s, `--area check` 18/18 in 35.8 s |
 | `0b9e4e5e` | **the `queue-pressure` finding now QUOTES the fleet ledger's own verdict (task-7's literal clause)** — `src/fleetledger.mjs` is the ONE derivation of `rows closed / open rows / GROWING` over the JSONL `tools/broker-keepalive.mjs:272` appends: `tools/backlog-burn.mjs` prints `v.verdictLine`, `src/checkup.mjs` quotes it verbatim with its window plus the stale-window caveat, and `demo/queue-pressure.test.mjs` pushes the SAME fixture text through both and asserts the sentences are EQUAL (the #5047 pair-of-spellings defect in prose form); `auditRig` stays fs-free — `cli.mjs`'s `check` verb does the bounded read (newest 4 MiB, truncation reported) and hands it as data; full suite 363/363 in 193.7 s exit 0 |
+| `28fa2c5f` | docs close-out: NEXT.md gains the rows that closed the coverage hole (`cc4769ec`, `8e39f105`, `0b9e4e5e`) so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits **0** (170 range commits, 0 holes — this commit is its exempt carrier); ROADMAP 380 amended with the quote clause, SELFDEV pitfalls 390/391, D315 addendum 3; full suite re-measured **363/363 in 201.6 s exit 0** at this tree (`.spike/suite-final-28fa2c5f.out`, PROVENANCE `tree=28fa2c5f`) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -63,7 +64,8 @@ window claimed one, which is exactly what the rule exists to catch). **That is t
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 2.2 s, exit 1 — the census, the band verdict, and the plan pm runs
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 2.1 s, exit 1 — the census, the per-DAY rate, the band verdict, and the plan pm runs
+node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
 node demo/notice-not-work.test.mjs                        # 0.45 s, exit 0 — notices are not work, the mint gate, the ack plan
 node demo/queue-pressure.test.mjs                         # 12.1 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor
 node scripts/test.mjs --area check                        # 37.5 s, 18/18 — the new rule plus doc-count-drift and starter
@@ -125,6 +127,8 @@ pass-by-pass — the queue has no verb for it (`registrations` is census-only), 
 (c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
 (d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
 operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
+
+**The rate question, in 2.2 s:** `docs/runbooks/session-start-cost.md` §29 — census (`tools/queue-pressure.mjs`, per-DAY rate) then ledger (`tools/backlog-burn.mjs`), and `cli.mjs check` prints both, the ledger one inside quotes with its window and the staleness caveat.
 
 **Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
 recorded, not touched by this tranche.
