@@ -59,6 +59,12 @@ const sqlite = await openNodeSqliteStorage(dbPath);
 const registry = createRegistry();
 registry.install(Router);
 const harness = await Harness.open(sqlite, { models, registry }, ctx);
+// The fixture builds 60 rows across 4 seats, which puts the synthetic fleet past the fleet band the mint gate
+// (mintGate, src/rig.mjs) enforces — the gate would refuse the 41st row. The knobs are raised for the fixture and
+// restored immediately, so the read-side assertions below still run against the declared numbers. The gate is
+// pinned by demo/notice-not-work.test.mjs, not here.
+process.env.DURIG_BAND_PER_SEAT = String(ROWS);
+process.env.DURIG_MINT_BURST_CAP = String(ROWS);
 await harness.commit(
   async (tx) => {
     for (let i = 1; i <= SEATS.length; i += 1) await registerSeat(tx, SEATS[i - 1], 100 + i, "worker");
@@ -78,6 +84,8 @@ await harness.commit(
   ctx,
 );
 await harness.close(ctx);
+delete process.env.DURIG_BAND_PER_SEAT;
+delete process.env.DURIG_MINT_BURST_CAP;
 await sqlite.close(ctx); // a child CLI cannot open the store while this process holds it
 
 const cli = (argv) => {

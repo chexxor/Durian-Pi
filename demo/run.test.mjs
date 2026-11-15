@@ -97,8 +97,9 @@ await harness.commit(async (tx) => {
 		{ from: "pm", maySendTo: ["worker"] },
 		{ from: "worker", maySendTo: ["pm"] },
 	];
-	// #1 is real work for worker; completing it enqueues DONE #2 to pm, which the
-	// driver must then wake pm for — the closure the old code left stranded.
+	// #1 is real work for worker; completing it enqueues DONE #2 to pm, which the driver must close WITHOUT
+	// waking pm — a notice is an acknowledgement, not work. pm is given no scripted turn at all: if the sweep
+	// did not exist, the notice would stay queued and the assertions below would fail.
 	await enqueueItem(tx, "pm", "worker", "Build the widget", "details");
 }, ctx);
 
@@ -106,14 +107,11 @@ const seats = (await harness.snapshot(Seats, undefined, ctx)).seats;
 const queueItems = async () => (await harness.snapshot(RigQueue, undefined, ctx)).items;
 const item = async (id) => (await queueItems()).find((it) => it.id === id);
 
-// worker: claim #1, complete it. pm: claim the DONE #2, acknowledge it.
+// Only worker is scripted: the DONE notice must close with no seat turn of pm's.
 faux.setResponses([
 	fauxAssistantMessage([fauxToolCall("claim_work", {})], { stopReason: "toolUse" }),
 	fauxAssistantMessage([fauxToolCall("complete_work", { itemId: 1, resultSummary: "built it" })], { stopReason: "toolUse" }),
 	fauxAssistantMessage(fauxText("done")),
-	fauxAssistantMessage([fauxToolCall("claim_work", {})], { stopReason: "toolUse" }),
-	fauxAssistantMessage([fauxToolCall("complete_work", { itemId: 2, resultSummary: "acknowledged" })], { stopReason: "toolUse" }),
-	fauxAssistantMessage(fauxText("ok")),
 ]);
 
 const pass = async () =>
@@ -130,9 +128,19 @@ assert.equal(await pass(), 1, "pass 1 wakes worker: it has work and nothing adva
 await harness.waitForIdle(ctx);
 assert.equal((await item(1)).status, "done", "the woken seat did the work without an external send");
 
-assert.equal(await pass(), 1, "pass 2 wakes pm for the DONE notice worker produced (the closure)");
-await harness.waitForIdle(ctx);
-assert.equal((await item(2)).status, "done", "the sender is woken to close the loop");
+// A NOTICE IS NOT WORK (ROADMAP 39's unshipped half): pass 2 must not wake pm for the DONE notice, and
+// closing it costs no seat turn — the driver's sweep acknowledges it in the pass, so the loop still reaches
+// quiescence two passes earlier than the old code needed.
+assert.equal(await pass(), 0, "pass 2 wakes nobody: the DONE notice worker produced is an acknowledgement, not work");
+assert.equal((await item(2)).status, "done", "the notice is closed anyway — the sweep acknowledges it, no seat turn");
+assert.ok(
+	(await item(2)).transitions.some((t) => t.event === "acknowledged"),
+	"and the closure is on the audit trail as an acknowledgement, not a claim or a completion",
+);
+assert.ok(
+	!(await item(2)).transitions.some((t) => t.event === "claimed"),
+	"and the notice was never claimed, so no seat spent a turn on an acknowledgement",
+);
 assert.ok(
 	(await queueItems()).every((it) => it.status === "done" || it.status === "deferred"),
 	"the DONE-of-DONE loop does not start: completing a notice enqueues nothing (item 39)",

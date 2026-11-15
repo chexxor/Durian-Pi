@@ -16,7 +16,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { seatHasReadTool, seatIsCoordinator } from "./seattools.mjs";
-import { DEFAULT_TIER_TOKENS } from "./config.mjs";
+import { DEFAULT_BAND_PER_SEAT, DEFAULT_MINT_BURST_CAP, DEFAULT_PRESSURE_WINDOW_DAYS, DEFAULT_TIER_TOKENS, queuePressureSettings } from "./config.mjs";
+// THE ROW CLASSIFICATION lives in its own dependency-free module (src/queueclass.mjs) because `check`,
+// `status`, `watch`, the driver and tools/queue-pressure.mjs all need the SAME predicate. Re-exported here so
+// every importer that reached `isNoticeItem` through rig.mjs keeps working (the `verifierrole.mjs` pattern).
+import { bandVerdict, isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, mintedBySeat, queueShape, REGISTRATION_RE } from "./queueclass.mjs";
+export { isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, REGISTRATION_RE };
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { validateHumanDefer } from "./deferlease.mjs"
 import { executionModeRecord } from "./executionmode.mjs";
@@ -269,7 +274,152 @@ export async function seatId(tx, name) {
 	return seat.conversationId;
 }
 
-/** Register a seat inside an existing transaction (caller owns the commit). */
+/**
+ * THE MINT GATE — the fan-out budget, at the ONE write path (operator request 2026-11-15).
+ *
+ * WHY HERE AND NOT IN `send_work`: `enqueueItem` is the only path that creates a queue row (notices,
+ * follow-ups, pool rows, registrations all come through it), so a rule kept anywhere else is a rule that
+ * can be bypassed — the same reasoning as #6215's dead-gate refusal and `normalizeBlock`'s park validation.
+ *
+ * THREE MECHANICAL RULES, each with a refusal that names the number and the remedy: (a) the DUPLICATE: the
+ * same seat asked for the same normalised subject twice is the same task minted twice, refused outright
+ * (band-independent — a duplicate is a defect in the mint, not a fleet out of slack); (b) the BURST: a seat
+ * that has already been sent `mintBurstCap` rows inside the pressure window may not be sent another
+ * (default 100, `DURIG_MINT_BURST_CAP`) — pathological fan-out is stopped at the write path; (c) the LINEAGE
+ * rule: when the FLEET is already past its band (`bandPerSeat` x seats, default 10 x seats, `DURIG_BAND_PER_SEAT`)
+ * a new row must name its lineage — a `ROADMAP <n>`, a `#<id>` of a row that exists, a `blockedBy` gate, or an
+ * artifact path — because parentless fan-out is what turns a queue into a ledger. — but only when NEITHER side is tiered. The live store carried 28 such
+ * (to,subject) groups across 57 rows on 2026-11-15: two open rows that ask one seat for one subject are the
+ * same task minted twice, and whichever is claimed first leaves the other to be re-claimed or re-minted. A
+ * TIERED duplicate stays allowed and recorded as `duplicateOf`, because the tier ratchet (#60) latches a
+ * chain by re-sending the same base subject — refusing that is refusing a documented feature.
+ *
+ * WHY THE LINEAGE RULE IS FLEET-WIDE AND NOT PER-SEAT: measured on this rig (2026-11-15,
+ * `node tools/queue-pressure.mjs`), impl alone holds 438 open rows. A per-seat trigger at 10 rows would stop
+ * every mint to every seat the day it shipped — a gate that halts the team is not a budget, it is a outage. The
+ * fleet band is the number the operator set; the gate fires against the same number the `check` rule reports.
+ *
+ * Pure (no store, no clock) so a demo proves it with a plain array.
+ */
+const NORMALIZE_SUBJECT = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const LINEAGE_RE = /\bROADMAP\s+\d+\b|#[a-z0-9][a-z0-9-]*\b|\b(?:src|demo|docs|tools|scripts|extensions)\/[\w./-]+\b|\b[a-f0-9]{7,40}\b/i;
+
+export function lineageOf(item = {}) {
+	const text = `${item.subject ?? ""} ${item.body ?? ""}`;
+	const match = LINEAGE_RE.exec(text);
+	if (!match) return null;
+	return { kind: /roadmap/i.test(match[0]) ? "roadmap" : /#/.test(match[0]) ? "item" : /[a-f0-9]{7,40}/i.test(match[0]) && !/[\/]/.test(match[0]) ? "commit" : "artifact", named: match[0] };
+}
+
+export function mintGate(queueItems = [], { to, subject, body = "", notice = false, held = false, tier = null, blockedBy = null, mintBurstCap = DEFAULT_MINT_BURST_CAP, bandPerSeat = DEFAULT_BAND_PER_SEAT, windowDays = DEFAULT_PRESSURE_WINDOW_DAYS, seats = null, now = Date.now() } = {}) {
+	// A NOTICE is an acknowledgement, not work: it is never subject to the work budget, and suppressing it is
+	// the other half of what ROADMAP 39 named (notice-of-notice suppression shipped; non-claimability did not).
+	// A PARKED (`held: true`) row is outside the mint budget for the same reason the refusal names: it is
+	// unclaimable and un-waking, so it cannot worsen the claim lane. `check` still counts it as open work —
+	// parking moves pressure OUT of the lane, it does not hide it.
+	if (notice || held) return { ok: true, refusal: null, open: 0, burst: 0, lineage: null, duplicateOf: null, fleet: null };
+	const shape = queueShape(queueItems);
+	const openWork = (queueItems ?? []).filter((it) => !isTerminalItem(it) && !isNoticeItem(it) && !isRegistrationItem(it));
+	const forSeat = openWork.filter((it) => it.to === to);
+	// The fleet band needs the roster: a fleet-sized budget is meaningless without the fleet, and a caller that
+	// cannot say how many seats it has is not judged against the band (the other two rules still apply). `enqueueItem`
+	// and the `send_work` handler both read the Seats doc and pass the count.
+	const band = seats === null || seats <= 0 ? null : bandVerdict(shape, { perSeat: bandPerSeat, seats });
+	const burst = mintedBySeat(queueItems, { windowDays, now })?.[to] ?? 0;
+	const norm = NORMALIZE_SUBJECT(subject);
+	const duplicate = forSeat.find((it) => NORMALIZE_SUBJECT(it.subject) === norm);
+	// A DUPLICATE IS REFUSED BEFORE EITHER BUDGET IS CONSULTED. Two open rows that ask the same seat for the
+	// same normalized subject are not fan-out — they are the same task minted twice, and the live store carried
+	// 28 such (to,subject) groups across 57 rows on 2026-11-15. Refusing at the mint is band-independent: a
+	// duplicate is a defect in the mint, not a fleet out of slack, and it is only countable if the mint itself
+	// says no (the caller records the verdict; see `recordMintRefusal`). A TIERED duplicate is the exception:
+	// one side being tiered means this is the ratchet re-sending the base subject to latch the chain.
+	if (duplicate && !(duplicate.tier ?? null) && !(tier ?? null)) {
+		return {
+			ok: false,
+			refusal: `send_work refused: ${to} already holds an open row #${duplicate.id} with the same subject "${subject}". Close or cancel #${duplicate.id} first, add the detail that makes this a different task, or route to the seat that owns the rest of the chain.`,
+			open: forSeat.length,
+			burst,
+			duplicateOf: duplicate.id,
+			lineage: lineageOf({ subject, body }),
+			fleet: band,
+		};
+	}
+	// THE BURST, not the standing count: measured 2026-11-15 on this rig, `impl` already holds 439 open rows,
+	// so a gate on the standing count refuses the next mint to `impl` on the day it ships — an outage, not a
+	// budget. The burst is measured over the SAME window the `check` rule reports (DURIG_PRESSURE_WINDOW_DAYS),
+	// so the gate and the view cannot disagree about what "growing" means.
+	if (burst >= mintBurstCap) {
+		return {
+			ok: false,
+			refusal: `send_work refused: ${to} has already been sent ${burst} rows inside the ${windowDays}-day pressure window and the mint-burst cap is ${mintBurstCap} (DURIG_MINT_BURST_CAP). This is fan-out outrunning the fleet: close the rows already on the lane, park the rest (send it with held: true), or route to a seat with slack. Raising the cap is an operator decision, not a seat's.`,
+			open: forSeat.length,
+			burst,
+			windowDays,
+			lineage: null,
+			duplicateOf: duplicate?.id ?? null,
+			fleet: band,
+		};
+	}
+	const lineage = lineageOf({ subject, body }) || (blockedBy?.length ? { kind: "gate", named: blockedBy.join(",") } : null);
+	if (!lineage && band && !band.inside) {
+		return {
+			ok: false,
+			refusal: `send_work refused: the fleet already holds ${band.open} open work rows against a band of ${band.limit} (${band.perSeat}/seat x ${band.seats} seats, DURIG_BAND_PER_SEAT), so a new row must name its lineage — a ROADMAP item, the parent #<id>, a blockedBy gate, or the artifact it changes. Parentless fan-out is how a queue becomes a ledger.`,
+			open: forSeat.length,
+			burst,
+			windowDays,
+			band,
+			lineage: null,
+			duplicateOf: duplicate?.id ?? null,
+			fleet: band,
+		};
+	}
+	return { ok: true, refusal: null, open: forSeat.length, burst, windowDays, lineage, duplicateOf: duplicate?.id ?? null, fleet: band };
+}
+
+/**
+ * RECORD A MINT REFUSAL (operator request 2026-11-15).
+ *
+ * WHY A LEDGER AND NOT JUST THE ERROR TEXT: a gate that only prints is a gate nobody can measure. The seat
+ * that got refused sees the sentence once; three days later nobody can say whether the fan-out budget is
+ * biting, on which seat, and for which reason - and an unmeasured limit gets quietly raised (the inert-key
+ * class, ROADMAP 272). `enqueueItem` cannot write this itself: its refusal THROWS, and a throwing
+ * `api.commit` rolls the transaction back, so anything written in the same commit is lost. The caller writes
+ * it in its own commit, after the rollback, which is also why the record is a transition-shaped event
+ * (`{at, event, by, reason}`) rather than a queue row - there is no row to attach it to, and minting one
+ * would defeat the cap.
+ *
+ * Bounded to the last 100 refusals: the ledger is a signal, not a second queue.
+ */
+export async function recordMintRefusal(api, context, { by, to, subject, gate }) {
+	try {
+		await api.commit(async (tx) => {
+			const queue = await tx.doc(RigQueue);
+			// ONE top-level assignment, not `push` on a nested array: the doc proxy persists an assigned value,
+			// and `(queue.mintRefusals ??= []).push(...)` mutates a detached copy (measured with
+			// .spike/ledger-probe.mjs — the commit reads back `[]`). Bounded to the last 100 so the ledger is a
+			// signal, not a second queue.
+			queue.mintRefusals = [...(queue.mintRefusals ?? []), {
+				at: new Date().toISOString(),
+				event: "mint-refused",
+				by,
+				to: to ?? null,
+				subject: String(subject ?? "").slice(0, 120),
+				kind: gate.duplicateOf ? "duplicate" : gate.band ? "lineage" : "burst",
+				reason: gate.refusal,
+			}].slice(-100);
+			}, context);
+		return true;
+	} catch {
+		// Bookkeeping must never mask the refusal itself.
+		return false;
+	}
+}
+
+/**
+ * Register a seat inside an existing transaction (caller owns the commit).
+ */
 export async function registerSeat(tx, name, conversationId, role) {
 	const seats = await tx.doc(Seats);
 	if (seats.seats[name]) throw new Error(`seat already registered: ${name}`);
@@ -334,35 +484,9 @@ export async function cancelItem(tx, { item, me, reason }) {
 	return { noticeId, other, message };
 }
 
-export function isDoneNotice(item) {
-	if (typeof item?.notice === "boolean") return item.notice;
-	return /^DONE #\d+: /.test(String(item?.subject ?? ""));
-}
-
-/**
- * A CANCELLATION notice (#3470): the message `cancel_work` now sends the OTHER PARTY, so a
- * cancellation no longer looks like an item that silently vanished.
- */
-export function isCancellationNotice(item) {
-	if (typeof item?.notice === "boolean") return item.notice;
-	return /^CANCELLED #\d+: /.test(String(item?.subject ?? ""));
-}
-
-/**
- * Is this item a NOTICE of any kind (a DONE ack or a CANCELLATION)? A notice must never
- * spawn another notice, or every terminal transition begets a hop and the chain grows
- * without bound (ROADMAP 39). Both terminal tools consult this instead of their own shape,
- * so a cancellation of a cancellation cannot loop.
- */
-export function isNoticeItem(item) {
-	// THE STRUCTURAL FLAG WINS (#3739). The subject-prefix fallback exists only for flag-less
-	// items that predate the flag; letting it override a structural non-notice is how a WORK item
-	// whose free-text subject happens to start "DONE #123: " got cancelled without notifying
-	// anyone, while the tool told the caller the item "is itself a notice". Subjects are free
-	// text, so the prefix cannot be the authority - only a missing flag can defer to it.
-	if (typeof item?.notice === "boolean") return item.notice;
-	return /^(?:DONE|CANCELLED) #\d+: /.test(String(item?.subject ?? ""));
-}
+// `isDoneNotice`, `isCancellationNotice` and `isNoticeItem` are re-exported from src/queueclass.mjs above.
+// They used to live here; moving them is what lets the driver, `check`, the watch view and the tool read ONE
+// predicate. Behaviour is unchanged, including the structural-flag-wins rule (#3739).
 
 /**
  * A terminal item is finished either way: `done` (the work happened) or
@@ -622,6 +746,11 @@ export function seatSizeBudget(seatsDoc, seatEntry) {
  */
 export function workable(item, seat, { items = [], capabilities = [], tierTokens = DEFAULT_TIER_TOKENS, usableWindow = null } = {}) {
 	if (!item) return { workable: false, reason: "missing-item" };
+	// A NOTICE IS NOT WORK (ROADMAP 39's unshipped half, operator request 2026-11-15). A DONE/CANCELLED
+	// acknowledgement carries no deliverable; before this rule a seat could claim one and burn a turn on it.
+	// Measured on this rig before the change: 461 live notices, 322 of them `queued`, 321 of those passing
+	// `workable()` — `node tools/queue-pressure.mjs`.
+	if (isNoticeItem(item)) return { workable: false, reason: "notice-not-work" };
 	if (item.status !== "queued") return { workable: false, reason: `not-queued:${item.status}` };
 	const missing = requiredCapabilities(item.requires).filter((cap) => !capabilities.includes(cap));
 	if (missing.length > 0) {
@@ -828,6 +957,34 @@ export async function enqueueItem(
 		);
 	}
 	const id = queue.nextId++;
+	// THE MINT GATE (operator request 2026-11-15). `queue.items` is read BEFORE the push, so the gate sees the
+	// queue as it was at the moment of minting — the same array `selectNextWork` will read.
+	const pressure = queuePressureSettings();
+	const roster = await tx.doc(Seats);
+	const gate = mintGate(queue.items, {
+		to,
+		subject,
+		body,
+		notice,
+		held,
+		tier,
+		blockedBy,
+		mintBurstCap: pressure.mintBurstCap,
+		bandPerSeat: pressure.bandPerSeat,
+		windowDays: pressure.windowDays,
+		seats: Object.keys(roster?.seats ?? {}).length,
+	});
+	if (!gate.ok) {
+		const refused = new Error(gate.refusal);
+		// Carry the verdict so the caller can RECORD it, not just print it (see `recordMintRefusal`).
+		refused.mintGate = gate;
+		throw refused;
+	}
+	// A "REGISTERED / BACKLOG / TRIGGER-GATED, DO NOT START" subject is a ROADMAP ledger copy parked in the
+	// queue, not startable work. Record it structurally and create it HELD, so it can never occupy a working
+	// seat's oldest-first claim slot (the same reasoning as #1885's hygiene directive for held rows).
+	const registration = !notice && isRegistrationItem({ subject, notice });
+	const mintHeld = held || registration;
 	// N19 row 3: `requires` is a SET (P2), and the shape is decided by `storeRequires`, shared with
 	// `revise_work` so the two writers cannot disagree.
 	const gateRequires = storeRequires(requires);
@@ -843,6 +1000,13 @@ export async function enqueueItem(
 		optimizedVia,
 		// A protocol notice (a DONE ack), not work: completing it enqueues nothing.
 		notice,
+		// THE KIND OF ROW, structural (src/queueclass.mjs), so the census never has to re-derive it from prose.
+		...(registration ? { registration: true } : {}),
+		// THE LINEAGE the mint gate found (a ROADMAP item, a parent #<id>, an artifact path or a commit). Absent
+		// = parentless, which the census counts as an orphan rather than pretending it is linked.
+		...(gate.lineage ? { lineage: gate.lineage } : {}),
+		// A same-seat, same-subject row already exists: RECORD it rather than refuse the mint (the tier ratchet
+		// latches a chain by re-sending the base subject), so `check` can report the duplicate by id.
 		// #7158: the EXECUTION MODE, computed at intake by the same function the gate calls
 		// (src/executionmode.mjs), so "what the row was minted as" and "what the gate needs" are
 		// one rule rather than two. Compact on purpose: mode + rule + the reason, not the signal dump.
@@ -871,8 +1035,8 @@ export async function enqueueItem(
 		// unclaimable and does NOT wake the recipient: a "registered, do not start"
 		// backlog row must not occupy a working seat's oldest-first claim slot.
 		// `release_work` restores it to queued when it should become claimable.
-		status: held ? "held" : "queued",
-		transitions: [{ at: new Date().toISOString(), event: held ? "held" : "queued", by: from }],
+		status: mintHeld ? "held" : "queued",
+		transitions: [{ at: new Date().toISOString(), event: mintHeld ? "held" : "queued", by: from }],
 	};
 	// #6150: a parked row RECORDS what its park is, from structure (gate ids, an authored block), so a
 	// fleet metric filters on the field instead of reading prose. It is written BEFORE the push because
@@ -1225,6 +1389,34 @@ const Router = defineExtension({
 					// The park is validated BEFORE the commit, so a malformed block is a legible refusal and
 					// never a half-written item (same discipline as the gate above).
 					const park = args.block ? normalizeBlock(args.block) : null;
+					// THE FAN-OUT GATE IS READ BEFORE THE COMMIT. `enqueueItem` still gates every write path (the
+					// backstop for notices, splits and any future caller), but a refusal raised INSIDE a commit rolls
+					// the transaction back, and a nested commit opened from the catch of a rolled-back one never
+					// settles (measured: the ledger write hung and never landed). Checking here is what lets the
+					// refusal be RECORDED - a gate that only prints a sentence to one seat is a gate nobody can
+					// measure, and an unmeasured limit is eventually quietly raised (the inert-key class, ROADMAP 272).
+					const queueNow = await api.snapshot(RigQueue, undefined, context);
+					const pressure = queuePressureSettings();
+					// The band is per seat, so the gate needs the roster — the fleet band is 10/seat x N seats, and a
+					// gate that assumed 0 seats would refuse every parentless mint on day one (a fleet-sized budget is
+					// meaningless without the fleet). `enqueueItem` reads the same doc from inside its commit.
+					const rosterNow = await api.snapshot(Seats, undefined, context);
+					const mintVerdict = mintGate(queueNow?.items ?? [], {
+						to: args.to ?? null,
+						subject: args.subject,
+						body,
+						held: args.held === true,
+						tier: args.tier,
+						blockedBy: gate,
+						mintBurstCap: pressure.mintBurstCap,
+						bandPerSeat: pressure.bandPerSeat,
+						windowDays: pressure.windowDays,
+						seats: Object.keys(rosterNow?.seats ?? {}).length,
+					});
+					if (!mintVerdict.ok) {
+						await recordMintRefusal(api, context, { by: me, to: args.to ?? null, subject: args.subject, gate: mintVerdict });
+						return toolText(`SEND_WORK_REFUSED: ${mintVerdict.refusal}`);
+					}
 					const id = await api.commit(async (tx) => {
 						// `to` is null exactly when the row is pooled; assertSendAllowed skips the org edge and the
 						// per-seat capability check for a pool row and still validates the author (row 2).

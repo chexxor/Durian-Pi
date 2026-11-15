@@ -105,7 +105,7 @@ try {
 	// Build enough items to blow past the 2000-char inline limit.
 	await harness.commit(async (tx) => {
 		for (let i = 0; i < 40; i++) {
-			await enqueueItem(tx, "boss", "other", `filler ${i} ${"x".repeat(120)}`, "body");
+			await enqueueItem(tx, "boss", "other", `filler ${i} ${"x".repeat(120)}`, "src/peekqueue-filler.mjs");
 		}
 	}, ctx);
 	const big = await drivePeek({ all: true });
@@ -134,6 +134,21 @@ try {
 	const allFiles = fs.readdirSync(join(dir, "seat-workspace", ".durig"));
 	assert.ok(allFiles.some((f) => f.startsWith("queue-") && f.endsWith(".md")),
 		`full queue was written to disk for completeness; files: ${allFiles}`);
+
+	// THE MINT GATE is visible here too: a parentless row into a fleet already past its band is refused at the
+	// write path, so a flood of unlabelled rows cannot keep growing the queue (the flood above had to name an
+	// artifact to exist at all).
+	let refused = "";
+	try {
+		await harness.commit(async (tx) => {
+			await enqueueItem(tx, "boss", "other", "one more unlabelled row", "nothing names its parent");
+		}, ctx);
+	} catch (error) {
+		refused = error?.message ?? String(error);
+	}
+	assert.ok(/must name its lineage/.test(refused), `a parentless mint into an out-of-band fleet is refused: ${refused.slice(0, 200)}`);
+	const floodCount = (await harness.snapshot(RigQueue, undefined, ctx)).items.length;
+	assert.ok(floodCount <= 45, `and the refused row was not written: ${floodCount} rows total`);
 
 	console.log(
 		"PEEKQUEUE TEST PASS (default is the seat's own non-terminal work; all=true is team-wide; over-threshold returns bounded inline view with counts + item lines)",

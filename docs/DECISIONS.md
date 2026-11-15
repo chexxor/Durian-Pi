@@ -13428,3 +13428,50 @@ kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. **What this does not
 attempts on that rig failed for a reason the ruling did not anticipate: the gate scratch has no `durig.config.json`,
 so the gate ran with zero armed extensions and `ready-ref-stale` was not in the rule set (pitfall 355, ROADMAP 369);
 `scripts/land.mjs` now supplies the landing repo's `DURIG_EXTENSIONS` to every gate child and reports `gateRig`.
+
+## D315 — The queue is measured as WORK vs NOTICE vs LEDGER, and a mint budget gates the WRITE, not the STORE (2026-11-15, delegate, goal mwh73rd1-izyq72)
+
+**The decision.** Three separate calls were made while making the backlog manageable, and each is recorded with
+its number and its WHY because the number is a knob and the shape is not:
+
+1. **A notice is not work, and closing one costs no seat turn.** A `DONE #N:` / `CANCELLED #N:` row is an
+   acknowledgement the recipient already has. Measured 2026-11-15 (`DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`):
+   461 live notices, 322 of them `queued`, **321 of those passed `workable()`** — a seat could spend a real turn
+   to re-read an ack. The choice is the mechanical transition (`acknowledged`, written by the driver on the pass
+   that reads the roster) over a seat-tool contract, because the alternative costs 461 seat turns to close rows
+   that contain no work. **Closed ≠ deleted:** the row keeps its subject, its `about` parent id and its reason
+   transition, so `cli.mjs events` still answers "who was told what, and when". ROADMAP 39 named this exact pair
+   of fixes and only one of them had shipped — the decision was already the team's, the enforcement was missing.
+   The sweep covers **the whole roster** (queued status only, skipped while paused), not only woken seats: measured,
+   most notice recipients had nothing else to do, so a notice acknowledged only when its seat happens to wake is
+   acknowledged by accident. A `claimed` notice is **skipped** by the bulk plan and named in `census.skippedClaimed`
+   — `planCancel` already owns the "never touch a row in flight" rule and five notices were `claimed` in the live
+   census (`noticeByStatus {"deferred":126,"held":8,"queued":322,"claimed":5}`).
+2. **The fan-out budget is a WINDOW BURST (cap 100), not a standing open-row count.** The standing-count draft
+   was measured to be an outage: `impl` already holds **439** open rows, so a cap on open rows refuses the next
+   mint to `impl` on the day it ships and every seat stops working. A burst gate stops fan-out WHILE IT IS
+   HAPPENING (rows SENT to one seat whose first `queued` transition is inside the pressure window) and says
+   nothing about backlog that has merely aged — the aged backlog is what the `check` rule reports, where the
+   operator can read the number and decide. Knobs: `DURIG_MINT_BURST_CAP` (100), `DURIG_BAND_PER_SEAT` (10),
+   `DURIG_PRESSURE_WINDOW_DAYS` (7), all declared in `src/config.mjs` with the refusal naming the knob it would
+   need. Duplicate mints are refused outright (band-independent) but only when **neither side is tiered**, because
+   the tier ratchet (#60) latches a chain by re-sending the base subject and a tiered duplicate must still record
+   `duplicateOf`.
+3. **`queue-pressure` FAILs on out-of-band OR net growth ≥ ONE FULL FLEET BAND.** `growthFloor = band.limit = perSeat × seats`.
+   The first spelling, `netOpen > 0`, fired on a clean 4-row fixture (2 mints, no close = +1) and made
+   `demo/check-pool-gate.test.mjs` red for a reason no seat could name — a measurement becomes a nuisance when it
+   has no floor. A band of growth per window means the queue grew at the rate the fleet was built to hold, so
+   within one window the rig is out of band by the same arithmetic that made the band meaningful.
+
+**What is NOT decided here, and stays the operator's:** the numbers themselves. On this rig the LINEAGE rule
+would refuse ~38 % of live parentless work rows (451 of 1,195 name no parent) until the fleet is back inside the
+band; the fleet-wide gate is deliberately fleet-wide, not per-seat, because a per-seat gate lets a 12-seat fleet
+hold 12 × cap rows and the complaint is about the fleet. If the operator wants a grace ramp or different numbers,
+they are knobs in `src/config.mjs`, not a code change. Also not the delegate's: the bulk retire of the 461 notices
+and 171 registrations is pm's verb (`node intent.mjs queue --op queue --action acknowledge-notices --apply --confirm`),
+and AGENTS.md forbids the delegate claiming/completing/routing rows.
+
+**Evidence:** `node demo/notice-not-work.test.mjs` 0.45 s exit 0; `node demo/queue-pressure.test.mjs` 12.1 s exit 0;
+areas `rig` 98/98 25.5 s, `check` 18/18 37.5 s, `broker` 83/83 39.8 s, `readapi` 7/7 7.0 s; `check` exits 1 with
+`queue-pressure` (severity `error`) and `registration-as-work` (17 ids). Host for every number: Linux, Fedora Linux 45 (Forty Five),
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0, measured in the same command as the measurement.

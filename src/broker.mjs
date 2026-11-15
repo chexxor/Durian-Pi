@@ -936,6 +936,11 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
           // waiting on someone. The transition records who it was waiting on.
           item.status = "queued";
           item.deferredTo = null;
+        } else if (action === "acknowledge-notices") {
+          // A NOTICE IS AN ACKNOWLEDGEMENT, NOT WORK (ROADMAP 39's unshipped half, operator request
+          // 2026-11-15). It is closed on the recipient's read rather than claimed and completed; the row is
+          // RETAINED so the trail (who was told what, and by whom) is still readable in `cli.mjs events`.
+          item.status = "done";
         }
         (item.transitions ??= []).push(reply.transitions[i]);
       }

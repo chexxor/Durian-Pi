@@ -272,6 +272,8 @@ try {
 		"pool-dead-gate": "demo/check-pool-gate.test.mjs",
 		"pool-claim-without-capability": "demo/check-pool-gate.test.mjs",
 		"pi-dependency-plane": "demo/depplane.test.mjs", // #6374: a mismatched plane is driven there, and the no-data case is pinned as UNKNOWN
+	"queue-pressure": "demo/queue-pressure.test.mjs", // out of band AND growing-past-the-fleet fire; a net +4 inside the band does not
+		"registration-as-work": "demo/queue-pressure.test.mjs", // a QUEUED registration fires; a held one and a notice whose subject names registration words do not
 	};
 	for (const rule of RULES) {
 		assert.ok(

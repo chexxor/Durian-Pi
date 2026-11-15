@@ -118,33 +118,42 @@ assert.ok(ack, `a DONE notice is enqueued for real work; subjects=${afterFirst.m
 assert.equal(ack.to, "pm", "the notice goes back to the sender");
 assert.equal(ack.from, "worker", "from the seat that completed the work");
 
-/* ------------------ 2. completing the DONE notice enqueues NO new item */
+/* -------- 2. the DONE notice is NOT claimable, and closing it loops nothing */
 
 const ackId = ack.id;
 await call("pm", "claim_work", {});
-assert.equal((await item(ackId)).status, "claimed", "pm can claim its own DONE notice");
-await call("pm", "complete_work", { itemId: ackId, resultSummary: "acknowledged" });
+assert.equal((await item(ackId)).status, "queued", "a seat cannot claim its own DONE notice: a notice is an acknowledgement, not work");
+assert.ok(!((await item(ackId)).transitions ?? []).some((t) => t.event === "claimed"), "and nothing claimed it");
 
-assert.equal(
-	(await items()).length,
-	seeded + 1,
-	"completing a DONE notice enqueues NO new item (the loop is broken)",
-);
-assert.equal((await item(ackId)).status, "done", "the notice is still marked done");
-assert.ok(
-	!(await items()).some((it) => it.subject?.startsWith(`DONE #${ackId}:`)),
-	"and no ack-of-the-ack exists",
-);
-
-/* ------------------ 3. LEGACY flag-less DONE items do not loop either */
-
+// The LEGACY row (#2, flag deleted above) must be refused on the SAME authority — the subject shape, since
+// it has no flag. This is #3739's lesson kept live: the fallback recognises the shape `complete_work` writes,
+// and refusing the claim is what stops the ack chain from needing a turn.
 await call("worker", "claim_work", {});
-assert.equal((await item(2)).status, "claimed");
-await call("worker", "complete_work", { itemId: 2, resultSummary: "acknowledged" });
+assert.equal((await item(2)).status, "queued", "the flag-less legacy notice is not claimable either");
+
+// The driver closes both on the next pass, with NO seat turn: the acknowledgement is a mechanical transition
+// (planAcknowledgeNotices + an `acknowledged` transition). That is what makes 322 queued notices retirable
+// without spending a turn each — and why the sweep covers the roster, not only the seats it wakes.
+const { driveOnce } = await import("../src/driver.mjs");
+const woke = await driveOnce(harness, { seats: roster, items: await items(), pendingConvIds: new Set(), busySeats: new Set(), stoppedConvIds: new Set(), context: ctx });
+assert.equal(woke, 0, "the pass wakes nobody for a notice — closing it costs no seat turn");
+assert.equal((await item(ackId)).status, "done", "the notice is closed by the pass, not by a seat");
+assert.ok(((await item(ackId)).transitions ?? []).some((t) => t.event === "acknowledged"), "and it is on the audit trail as an acknowledgement");
+assert.equal((await items()).length, seeded + 1, "closing a notice enqueues NO new item (the loop is broken)");
+assert.ok(!(await items()).some((it) => it.subject?.startsWith(`DONE #${ackId}:`)), "and no ack-of-the-ack exists");
+
+/* ------------------ 3. LEGACY flag-less DONE items are guarded the same way */
+
+assert.equal((await item(2)).status, "done", "the legacy notice is closed too — the subject-shape fallback carries the non-claimability");
+assert.ok(((await item(2)).transitions ?? []).some((t) => t.event === "acknowledged"), "and it was acknowledged, never claimed");
+assert.ok(
+	!((await item(2)).transitions ?? []).some((t) => t.event === "claimed"),
+	"and no seat spent a turn claiming it",
+);
 assert.equal(
 	(await items()).length,
 	seeded + 1,
-	"completing a legacy flag-less DONE item enqueues no new item",
+	"a legacy notice spawns no new item",
 );
 assert.ok(
 	!(await items()).some((it) => it.subject?.startsWith("DONE #2:")),

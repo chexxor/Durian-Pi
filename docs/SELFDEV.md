@@ -4783,3 +4783,47 @@ at `:743`). Re-measure every `path:line` before repeating it.
     (0 red), 14 s wall, host above. The general shape: **make the fault happen at the instant the precondition is
     observed**, not one await later; and when a suite red appears only under `--jobs 4`, run the file 10 times
     alone before routing it (pitfall 367).
+
+## Operational pitfalls (delegate queue-backlog tranche 2026-11-15 — numbered 378-383, continuing from 377; host measured with `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version` → Linux, `7.2.15-300.fc45.x86_64`, Fedora Linux 45 (Forty Five), node v24.22.1, `git version 2.56.0`)
+
+378. **A mint budget that counts OPEN rows is an outage, not a budget.** The first draft of the fan-out gate
+    capped open rows per seat. Measured on this rig the same day (`DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`):
+    `impl` already holds **439** open rows against a band of 10/seat, so the gate refuses the NEXT mint to
+    `impl` on the day it ships — every seat stops working on day one. The shipped rule is a **WINDOW BURST**
+    (`mintedBySeat`, first `queued` transition inside the window, cap 100, `DURIG_MINT_BURST_CAP`): it stops
+    fan-out WHILE IT IS HAPPENING and stays silent about backlog that has merely aged, which is what the
+    `check` rule reports instead. Rule: a budget gates the ACT of writing; a gate that gates the STATE of the
+    store is a policy, and policies belong in `check` where the operator can read the number.
+379. **A growth rule with a floor of zero fires on every fixture that mints anything.** The first spelling of
+    the pressure verdict's growth half was `netOpen > 0`. It made `demo/check-pool-gate.test.mjs` red on a
+    clean 4-row rig: two mints and no close is +1, so `queue-pressure` fired inside a fixture that was never
+    about pressure. The shipped floor is **one full fleet band per window** (`growthFloor = band.limit = perSeat × seats`):
+    net +4 inside a band of 30 does not fire, net +30 does — the backlog is growing at the rate the fleet was
+    built to hold, so within one window the rig IS out of band. Rule for any "is it growing" rule: state the
+    floor, never "any growth".
+380. **A fixture that floods the queue must RAISE the knobs, not dodge the new gate.** Three read-side demos
+    (`status-view-bound`, `queue-filter-attention`, `peekqueue`) mint 40+ rows into one seat; with the burst
+    cap and the lineage rule in force, those mints are refused and the demo's read assertions then fail for a
+    reason that names the mint gate, not the view. The fix is declared in each demo: raise `DURIG_MINT_BURST_CAP`
+    / `DURIG_BAND_PER_SEAT` for the mint phase and `delete process.env.…` right after, so the read-side
+    assertions run under the real defaults. A demo that was rewritten to fit a gate has stopped proving the
+    gate exists — the same lesson as pitfall 375 (fix the seam, not the assertion).
+381. **A `check` rule ships with two obligations that only a gate will remind you of.** Adding a rule to
+    `src/checkup.mjs` `RULES` changes a DECLARED count that a doc cites: `docs/WORKFLOWS.md:293` carried 28 before
+    this tranche, 29 after the `queue-pressure` rule and 30 after `registration-as-work`, and `doc-count-drift` goes
+    red on the mismatch until the doc line is edited in the same change (re-count with
+    `node -e "import('./src/checkup.mjs').then(m=>console.log(m.RULES.length))"`).
+    And `demo/starter.test.mjs` `CONTROL_FOR` asserts **every rule has a negative control somewhere**: a new
+    rule with no "does not fire" assertion fails the suite and names itself. Both are cheap and both are loud;
+    neither is optional.
+382. **`tools/queue-pressure.mjs --snapshot` reads a QUEUE CAPTURE, not its own `--json` report.** They are
+    two different documents (`--json out.json` writes the report; `--snapshot` reads a
+    `cli.mjs queue --json --no-body` capture). Pointing one at the other used to die as
+    `TypeError: Cannot read properties of undefined (reading 'filter')` three frames deep; it now refuses by
+    name and prints the capture command. Measured cost on this rig: **2.2 s** live store, **0.9 s** snapshot.
+383. **Two instruments answer "is the backlog growing" and their numbers differ by construction.** `tools/backlog-burn.mjs`
+    samples the fleet LEDGER (`node tools/backlog-burn.mjs`, 0.04 s) and printed `+166 open rows` over a
+    2,258-minute window; `tools/queue-pressure.mjs` reads the whole STORE and printed `+722` over 7 days the
+    same day. The ledger's last snapshot is dated **2026-11-13** — the fleet ledger stops being appended while
+    the broker is down, so a ledger-sampled rate silently becomes a stale rate. When the two disagree, say
+    which window each measured and check the ledger's last timestamp before believing either.

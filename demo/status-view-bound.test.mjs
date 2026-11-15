@@ -47,6 +47,12 @@ async function buildStore(storage) {
 	const registry = createRegistry();
 	registry.install(Router);
 	const harness = await Harness.open(storage, { models, registry }, ctx);
+	// The fixture MODELS a 400-row store in one seat's lane, which is exactly the fan-out the mint gate
+	// (mintGate, src/rig.mjs) refuses on a real rig. The knobs are raised for the fixture and restored right after
+	// the commit, so every assertion below reads the declared band; the gate itself is pinned by
+	// demo/notice-not-work.test.mjs, not here.
+	process.env.DURIG_MINT_BURST_CAP = String(ROWS * 4);
+	process.env.DURIG_BAND_PER_SEAT = String(ROWS * 4);
 	await harness.commit(
 		async (tx) => {
 			for (let i = 1; i <= ROWS; i += 1) {
@@ -67,6 +73,8 @@ async function buildStore(storage) {
 		ctx,
 	);
 	await harness.close(ctx);
+	delete process.env.DURIG_MINT_BURST_CAP;
+	delete process.env.DURIG_BAND_PER_SEAT;
 	return harness;
 }
 

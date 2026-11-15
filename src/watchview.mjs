@@ -8,6 +8,7 @@ import { ANSI } from "./ansi.mjs";
 import { sanitizeTerminalText } from "./sanitize.mjs";
 import { textWidth, sliceToWidth } from "./textwidth.mjs";
 import { deriveSeatAction } from "./viewmodel.mjs";
+import { queueShape } from "./queueclass.mjs";
 
 // Collapse whitespace before truncating: model prose arrives with newlines and
 // indentation that would otherwise break the one-line-per-seat layout.
@@ -135,6 +136,16 @@ export function formatSnapshot({ db, health, highlights = {}, seq = 1, width = 1
 			`queue ${counts.queued} queued · ${counts.claimed} claimed · ${counts.done} done` +
 				(counts.deferred > 0 ? ` · ${counts.deferred} deferred` : "") +
 				`  |  attention: ${attention.length ? attention.join(", ") : "none"}`,
+			),
+		);
+	// THE SHAPE BEHIND THE NUMBER (operator request 2026-11-15, src/queueclass.mjs). The status line above is
+	// kept byte-for-byte for the golden renders; this ADDS the reading the operator was missing: of the live
+	// rows, how many are actually work, how many are protocol acks, and how many are parked on the operator.
+	const shape = queueShape(health.queueItems ?? []);
+	lines.push(
+		paint(
+			"dim",
+			`  of the ${shape.live} live rows: ${shape.work} work (${shape.queuedWork} in the claim lane) · ${shape.notice} notices (not work) · ${shape.registration} ROADMAP registrations · ${shape.awaitingOperator} awaiting you`,
 		),
 	);
 	return lines.join("\n");

@@ -138,11 +138,17 @@ assert.ok(
 await call("pm", "cancel_work", { itemId: 3, reason: "stale registration" });
 assert.equal((await item(3)).status, "cancelled", "the sender cancels a stale routed item");
 
-// 5. The CANCELLED row is never claimable. Cancelling also lands a NOTICE to the holder, and
-// that notice is queued work, so the intruder's claim must surface the notice — never #3.
+// 5. The CANCELLED row is never claimable. Cancelling also lands a NOTICE to the holder — and a notice is an
+// acknowledgement, not work, so the intruder's claim must NOT spend a turn on it either: the refusal names the
+// row that is not claimable, and the notice stays queued until a driver pass acknowledges it.
 await call("intruder", "claim_work", {});
 assert.equal((await item(3)).status, "cancelled", "a cancelled item is never claimed");
-assert.match(await transcript("intruder"), /CANCELLED #3/, "the claim surfaced the cancellation NOTICE, the only queued row left");
+assert.match(await transcript("intruder"), /NO_QUEUED_WORK/, "the intruder has nothing claimable");
+assert.doesNotMatch(await transcript("intruder"), /CANCELLED #3/, "and the cancellation notice is NOT surfaced as claimable work");
+assert.ok(
+	(await item(5)).status === "queued",
+	"the notice is still on the books — it is acknowledged by the sweep, never deleted",
+);
 
 // 6. A finished item cannot be cancelled.
 await call("worker", "complete_work", { itemId: 1, resultSummary: "built it" });
@@ -150,8 +156,8 @@ assert.equal((await item(1)).status, "done", "worker finished #1");
 await call("worker", "cancel_work", { itemId: 1, reason: "oops" });
 assert.match(await transcript("worker"), /already done/, "cancelling a done item is refused");
 
-// 7. peek_queue never lists the cancelled row as WORK: the intruder holds the cancellation
-// notice (claimed), but #3 must not appear as a queued row it could pick up.
+// 7. peek_queue never lists the cancelled row as WORK: the intruder holds the cancellation notice (queued,
+// never claimed), but #3 must not appear as a queued row it could pick up.
 await call("intruder", "peek_queue", {});
 const peeked = await transcript("intruder");
 assert.ok(!/#3 queued /.test(peeked), "peek_queue does not show the cancelled row as queued work");

@@ -45,6 +45,9 @@ usage:
   node intent.mjs queue --op queue --action release --id N [--id N …] --reason <text> [--apply] [--confirm]
   node intent.mjs queue --op queue --action directive --seat S [--seat S2 …] [--subject <substr>] --priority now --reason <text> --until <iso> [--apply]
   node intent.mjs queue --op queue --action directive-clear [--apply]
+  node intent.mjs queue --op queue --action acknowledge-notices [--seat S …] [--reason <text>] [--apply] [--confirm]
+  node intent.mjs queue --op queue --action registrations            (census only: the ROADMAP ledger copies parked in the queue)
+  node intent.mjs queue --op queue --action pressure                  (census only: work/notice/registration split, band, burn rate)
 
 ops: ${SPOOL_OPS.join(", ")}
 
@@ -138,7 +141,7 @@ for (let i = 0; i < args.length; i += 1) if (args[i] === "--subject") subjects.p
 const subjectContains = subjects.length === 0 ? undefined : subjects.length === 1 ? subjects[0] : subjects;
 const apply = args.includes("--apply");
 const confirm = args.includes("--confirm");
-if (op === "queue" && !action) fail("op queue needs --action repair-gates|priority|cancel|stranded");
+if (op === "queue" && !action) fail("op queue needs --action repair-gates|priority|cancel|release|directive|directive-clear|stranded|acknowledge-notices|registrations|pressure");
 // repair-gates with NO --id means "repair every stranded row" (the census is the selection); priority and
 // cancel must name their targets, because neither has a defensible implicit set.
 if (op === "queue" && (action === "priority" || action === "cancel" || action === "release") && ids.length === 0)

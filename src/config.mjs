@@ -118,6 +118,12 @@ export const CONFIG_KEYS = [
 	"DURIG_PROVIDER",
 	"DURIG_MODEL",
 	"DURIG_MAX_CONCURRENT_SEATS",
+	// The queue-pressure knobs (operator request 2026-11-15). Registered here so a config file may set them:
+	// an unregistered key is refused by `assertNoUnknownFileKeys`, and a key read only from the environment is
+	// the inert-key class ROADMAP 272 records (see `queuePressureSettings`, below).
+	"DURIG_MINT_BURST_CAP",
+	"DURIG_BAND_PER_SEAT",
+	"DURIG_PRESSURE_WINDOW_DAYS",
 	"DURIG_OPTIMIZE",
 	"DURIG_EXTENSIONS",
 	"DURIG_LOCAL_BASE_URL",
@@ -892,6 +898,40 @@ export function describeConfig({ config, source }) {
  * accepted-and-ignored class #5071 names, and "never 0" should not be one operator typo away.
  */
 export const SEAT_RESTART_LIMIT = 3;
+
+/**
+ * THE QUEUE-PRESSURE KNOBS (operator request 2026-11-15, "the queue is overwhelming").
+ *
+ * Both are DECLARED numbers, never inferred from the data: a band you can only read off the current backlog
+ * is not a limit, it is a description of the problem.
+ *   - `DURIG_MINT_BURST_CAP` (default 100): how many rows ONE seat may be SENT within `windowDays` before
+     `enqueueItem` refuses to mint another. THE MEASURE IS A BURST, NOT A STANDING COUNT, and that is the
+     whole point: measured on this rig 2026-11-15, `impl` already holds 439 open rows, so a gate on the
+     standing count refuses the next mint to `impl` the day it ships — an outage, not a budget. A burst gate
+     stops fan-out WHILE IT IS HAPPENING (a split that spawns hundreds of children) and says nothing about
+     backlog that has simply aged.
+ *   - `DURIG_BAND_PER_SEAT` (default 10): the number the gate compares open work against fleet capacity.
+ *   - `DURIG_PRESSURE_WINDOW_DAYS` (default 7): the window the mint-vs-close rate is measured over, so the
+     "is it growing" half of the rule is a stated interval, not whatever the reader had in mind.
+ * A mistyped value throws rather than being ignored — the inert-key class ROADMAP 272 records.
+ */
+export const DEFAULT_MINT_BURST_CAP = 100;
+export const DEFAULT_BAND_PER_SEAT = 10;
+export const DEFAULT_PRESSURE_WINDOW_DAYS = 7;
+
+export function queuePressureSettings(config = {}) {
+	const readPositiveInt = (raw, dflt, name) => {
+		if (raw === undefined || raw === null || raw === "") return dflt;
+		const n = Number(raw);
+		if (!Number.isInteger(n) || n <= 0) throw new Error(`${name} must be a positive whole number, got: ${raw}`);
+		return n;
+	};
+	return {
+		mintBurstCap: readPositiveInt(config?.DURIG_MINT_BURST_CAP ?? process.env.DURIG_MINT_BURST_CAP, DEFAULT_MINT_BURST_CAP, "DURIG_MINT_BURST_CAP"),
+		bandPerSeat: readPositiveInt(config?.DURIG_BAND_PER_SEAT ?? process.env.DURIG_BAND_PER_SEAT, DEFAULT_BAND_PER_SEAT, "DURIG_BAND_PER_SEAT"),
+		windowDays: readPositiveInt(config?.DURIG_PRESSURE_WINDOW_DAYS ?? process.env.DURIG_PRESSURE_WINDOW_DAYS, DEFAULT_PRESSURE_WINDOW_DAYS, "DURIG_PRESSURE_WINDOW_DAYS"),
+	};
+}
 
 /**
  * The run-control half of `settings` for the harness seam.

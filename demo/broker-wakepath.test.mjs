@@ -24,7 +24,7 @@ const dbPath = join(base, "rig.sqlite");
 const cliPath = join(process.cwd(), "cli.mjs");
 
 // Enqueue one queued item addressed to an existing seat through a real harness.
-async function enqueueQueuedItem(to = "impl") {
+async function enqueueQueuedItem(to = "impl", subject = "wake-path probe item") {
   const { BACKGROUND_CONTEXT } = await import("@earendil-works/chord/context");
   const { openNodeSqliteStorage } = await import("@earendil-works/pi-durable/storage/sqlite/node");
   const { Harness, createRegistry } = await import("@earendil-works/pi-durable");
@@ -36,7 +36,7 @@ async function enqueueQueuedItem(to = "impl") {
   const harness = await Harness.open(storage, { models: createModels(), registry }, BACKGROUND_CONTEXT);
   await harness.commit(async (tx) => {
     await tx.doc(RigQueue);
-    await enqueueItem(tx, "operator", to, "wake-path probe item", "body — queued so the broker must wake the seat");
+    await enqueueItem(tx, "operator", to, subject, "body — queued so the broker must wake the seat");
   }, BACKGROUND_CONTEXT);
   await harness.close(BACKGROUND_CONTEXT);
 }
@@ -107,8 +107,10 @@ try {
   check("woken seat is impl (the seat with queued work)",
     Boolean(wakeLine) && /WAKE impl/.test(wakeLine), wakeLine ?? "none");
 
-  // 3. Wedged genlock slot (dead pid) must not stall a later wake pass.
-  await enqueueQueuedItem("impl"); // another queued item for a second pass
+  // 3. Wedged genlock slot (dead pid) must not stall a later wake pass. A DISTINCT subject: the mint gate
+  // (mintGate, src/rig.mjs) refuses the same seat being asked for the same subject twice, which is what makes
+  // a re-mint countable instead of silently duplicated.
+  await enqueueQueuedItem("impl", "wake-path probe item 2"); // another queued item for a second pass
   const stalePath = `${dbPath}.genlock.0`;
   writeFileSync(stalePath, JSON.stringify({ pid: 9999, seat: "ghost", since: new Date(Date.now() - 120000).toISOString() }));
   const slots = readGenerationSlots(dbPath, 2);

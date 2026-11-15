@@ -38,6 +38,11 @@ export const CONFIRM_THRESHOLD = 20;
 
 const TERMINAL = new Set(["done", "cancelled"]);
 
+// THE SAME CLASSIFICATION every surface uses (src/queueclass.mjs): a notice is an acknowledgement, a
+// registration is a ROADMAP ledger copy. Re-spelling these predicates here is the pair-of-spellings defect
+// #5047 records, so the plan and the census read the imported predicate.
+import { classifyRow, isNoticeItem, isTerminalRow, queueShape } from "./queueclass.mjs";
+
 const isTerminal = (item) => item != null && TERMINAL.has(item.status);
 
 /**
@@ -356,6 +361,59 @@ export function scopeMatches(directive, items = []) {
   });
 }
 
+/**
+ * PLAN: acknowledge the notices. ROADMAP 39 named two fixes for the notice chain — suppress a notice of a
+ * notice, or make notices non-claimable — and only the first shipped. Measured on this rig before the change
+ * (`node tools/queue-pressure.mjs`): 461 live notices, 322 of them `queued`, 321 of those passing `workable()`,
+ * and notices were 792 of the 2,002 rows minted in a 7-day window.
+ *
+ * A notice is RETAINED (the audit trail is the point: who was told what, and when) but it is not work, so on
+ * the recipient's next read it is closed with an `acknowledged` transition rather than claimed and completed.
+ * The parent id is pulled out of the subject so the trail names the item the notice is ABOUT.
+ *
+ * Pure: the driver calls this on the pass that wakes a seat, and the operator/delegate verb calls the SAME
+ * function for a bulk sweep — one rule, two surfaces.
+ */
+export function planAcknowledgeNotices(items = [], request = {}) {
+  const { by, authority } = authorityOf(request);
+  const at = request.at ?? new Date().toISOString();
+  const seats = Array.isArray(request.seats) && request.seats.length > 0 ? request.seats.map(String) : null;
+  const live = (items ?? []).filter((it) => !isTerminalRow(it) && isNoticeItem(it) && (seats === null || seats.includes(it.to)));
+  // A CLAIMED notice is in flight, and the module's own authority rule says a bulk plan never touches a row
+  // in flight (`planCancel` refuses the same shape). The driver pre-filters `queued`, so this only guards the
+  // BULK verb — the sweep over 461 live notices, five of which sat `claimed` when this was measured
+  // (`node tools/queue-pressure.mjs`, noticeByStatus {"deferred":126,"held":8,"queued":322,"claimed":5}).
+  // The claim releases on the seat's own turn end, and the NEXT pass acknowledges it once it is `queued`.
+  const rows = live.filter((it) => it.status !== "claimed");
+  const skippedClaimed = live.filter((it) => it.status === "claimed");
+  const changes = rows.map((it) => ({ id: String(it.id), from: it.status, to: "done" }));
+  const transitions = rows.map((it) => ({
+    at,
+    event: "acknowledged",
+    by,
+    authority,
+    about: Number((String(it.subject ?? "").match(/#(\d+)/) ?? [])[1]) ?? null,
+    reason: request.reason ?? "a notice is an acknowledgement, not work: closed on the recipient's read",
+  }));
+  return {
+    ok: true,
+    changes,
+    transitions,
+    census: { count: rows.length, skippedClaimed: skippedClaimed.map((it) => String(it.id)) },
+    note: skippedClaimed.length > 0 ? `${skippedClaimed.length} notice(s) are CLAIMED and were left alone (a bulk plan never touches a row in flight); they return to queued on the seat's turn end and the next pass acknowledges them` : undefined,
+  };
+}
+
+/**
+ * THE REGISTRATION CENSUS: rows that are ROADMAP ledger copies sitting in the queue. `docs/ROADMAP.md` is the
+ * ledger; the queue is holding a duplicate of it. The census is the plan the pm can act on — it decides
+ * nothing, it only names the rows.
+ */
+export function registrationCensus(items = []) {
+  const rows = (items ?? []).filter((it) => !isTerminalRow(it) && classifyRow(it) === "registration");
+  return { count: rows.length, rows: rows.map((it) => ({ id: String(it.id), status: it.status, to: it.to ?? null, subject: excerpt(it.subject) })) };
+}
+
 /** Dispatch by action name — the single entry the broker calls, so the op has no second rule. */
 export function planQueueAction(action, items, request = {}) {
   if (action === "repair-gates") return planRepairGates(items, request);
@@ -365,5 +423,8 @@ export function planQueueAction(action, items, request = {}) {
   if (action === "release") return planRelease(items, request);
   if (action === "directive-clear") return { ok: true, directive: null, changes: [{ id: "control", to: "directive:none" }], transitions: [] };
   if (action === "stranded") return { ok: true, changes: [], transitions: [], census: strandedGates(items) };
-  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, release, directive, directive-clear, stranded)` };
+  if (action === "acknowledge-notices") return planAcknowledgeNotices(items, request);
+  if (action === "registrations") return { ok: true, changes: [], transitions: [], census: registrationCensus(items) };
+  if (action === "pressure") return { ok: true, changes: [], transitions: [], census: queueShape(items) };
+  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, release, directive, directive-clear, stranded, acknowledge-notices, registrations, pressure)` };
 }

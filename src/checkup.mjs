@@ -40,6 +40,10 @@ import { MEASURES } from "./metrics.mjs";
 // The stranded-gate census lives with the repair it plans (src/queueops.mjs), so `check` reports exactly
 // the rows the operator/delegate repair verb would touch — one rule, one census.
 import { strandedGates } from "./queueops.mjs";
+// Queue pressure is measured by the SAME predicate the watch footer and tools/queue-pressure.mjs use
+// (src/queueclass.mjs) — three surfaces, one derivation, so the gate and the view cannot disagree (#5047).
+import { isRegistrationItem, pressureVerdict, queueShape } from "./queueclass.mjs";
+import { queuePressureSettings } from "./config.mjs";
 // The escalation census lives with the lease that produces it (src/deferlease.mjs), so `check` reports
 // exactly the rows `selectWakes` escalates — one rule, one census.
 import { escalations, escalationText } from "./deferlease.mjs";
@@ -210,6 +214,16 @@ export const RULES = [
     id: "pi-dependency-plane",
     severity: "fix-now",
     what: "the pi this tree resolves, the pin it claims, and the store's schema version do not agree - a suite total from one dependency plane is not a total from another (#6374)",
+  },
+  {
+    id: "queue-pressure",
+    severity: "error",
+    what: "open WORK rows exceed the fleet band (DURIG_BAND_PER_SEAT x seats), or the window net-grew by at least one full fleet band — 'the backlog is overwhelming' is a measurement, not a feeling (#6622)",
+  },
+  {
+    id: "registration-as-work",
+    severity: "fix-now",
+    what: "a ROADMAP registration sits in the CLAIM lane (queued, not parked), so a ledger copy is startable work — its home is docs/ROADMAP.md and the queue is holding a copy of it (#6622)",
   },
 ];
 
@@ -959,6 +973,62 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
           `give the seat the capability in the rig file and run: node cli.mjs up ${rig} — or re-send the row to a seat that has it and cancel this one (a row is POOL-addressed only while its "to" is null)`,
         );
       }
+    }
+  }
+
+  // 13f. QUEUE PRESSURE (ROADMAP 6622) — the operator's complaint "the queue is overwhelming" turns into a
+  //      rule that FAILS. Two numbers decide it: open WORK rows against fleet capacity (the band), and
+  //      mint-vs-close over the window (the direction). Notices and ROADMAP registrations are excluded from
+  //      the band on purpose: they are not startable work, and counting them is what made the watch line
+  //      print 876 when 542 rows sat in the claim lane. `add` collapses to ONE finding per rule for the same
+  //      reason as above — a wall of 1,043 findings is a report nobody reads.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({
+      id: "queue-pressure",
+      why: "the queue could not be read, so backlog pressure cannot be measured",
+    });
+  } else if (seats.length === 0) {
+    skipped.push({
+      id: "queue-pressure",
+      why: "the rig file declares no seats, so fleet capacity cannot be judged",
+    });
+  } else {
+    const settings = queuePressureSettings();
+    const shape = queueShape(queueItems);
+    // ONE verdict, ONE spelling: the same function the promoted tool reads (src/queueclass.mjs
+    // pressureVerdict), so `check` and `node tools/queue-pressure.mjs` cannot disagree about what "the
+    // backlog is growing" means, and the growth half has a declared floor instead of firing on every mint.
+    const verdict = pressureVerdict(shape, queueItems, { perSeat: settings.bandPerSeat, seats: seats.length, windowDays: settings.windowDays });
+    const { band, burn } = verdict;
+    if (verdict.fail) {
+      const busiest = Object.entries(shape.openWorkBySeat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(", ");
+      add(
+        "queue-pressure",
+        `${band.open} open work rows`,
+        `${verdict.reasons.join("; ")} — of the ${shape.live} live rows, ${shape.notice} are protocol notices and ${shape.registration} are ROADMAP registrations parked in the queue (neither is claimable work), ${shape.queuedWork} sit in the claim lane, and ${shape.awaitingOperator} are parked on a human answer; busiest seats: ${busiest}`,
+        `retire the non-work rows: node tools/queue-pressure.mjs prints the plan and pm applies it (node intent.mjs queue --op queue --action acknowledge-notices --apply --confirm); drain the claim lane before minting more, and raise the numbers only deliberately: DURIG_BAND_PER_SEAT / DURIG_MINT_BURST_CAP / DURIG_PRESSURE_WINDOW_DAYS. Cross-check the direction with node tools/backlog-burn.mjs (ledger-sampled rate) — if the two disagree, one of them is stale`,
+      );
+    }
+  }
+
+  // 13g. A ROADMAP REGISTRATION IN THE CLAIM LANE (ROADMAP 6622, the operator request 2026-11-15) — the
+  //      other half of "the queue is not a ledger". `enqueueItem` now parks a registration mint as `held`
+  //      (src/rig.mjs), so the mint path cannot produce this shape; the rows it catches are the ones minted
+  //      before the flag that are sitting where a seat can claim them, plus any mint that bypasses the
+  //      predicate. A registration is a COPY of a ledger line, and a seat "completing" it writes nothing
+  //      into docs/ROADMAP.md — it closes a duplicate of the ledger without amending the ledger.
+  if (!Array.isArray(queueItems)) {
+    skipped.push({ id: "registration-as-work", why: "the queue could not be read, so ledger copies cannot be found" });
+  } else {
+    const claimableRegs = queueItems.filter((it) => it?.status === "queued" && isRegistrationItem(it));
+    if (claimableRegs.length > 0) {
+      const ids = claimableRegs.map((it) => `#${it.id}`).join(", ");
+      add(
+        "registration-as-work",
+        `${claimableRegs.length} registration(s) in the claim lane`,
+        `${claimableRegs.length} ROADMAP registration(s) sit QUEUED and claimable — ${ids} — a ledger copy a seat can start and close without ever writing the line into docs/ROADMAP.md; the census is node tools/queue-pressure.mjs (plan.moveRegistrationsToLedger)`,
+        "park it out of the claim lane and put the line in the ledger: the addressee parks the row with hold_work(id, reason), and the scribe registers the line in docs/ROADMAP.md (the ledger is its home) then cancels the row. If the fleet really was built to hold this many rows, raise DURIG_BAND_PER_SEAT in the rig config instead.",
+      );
     }
   }
 

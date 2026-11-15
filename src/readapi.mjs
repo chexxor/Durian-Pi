@@ -22,6 +22,7 @@ import { strandedMsSetting, declaredContextWindow, compactionSettings } from "./
 import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { DEFAULT_STRATEGY, resolveStrategy } from "./workstrategy.mjs";
 import { contextConsumption } from "./context.mjs";
+import { queueShape } from "./queueclass.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
@@ -331,6 +332,10 @@ export function queueCensusOf(items) {
 		counts,
 		terminal: rows.filter((it) => TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
 		active: rows.filter((it) => !TERMINAL_QUEUE_STATUSES.includes(it.status)).length,
+		// THE SHAPE OF THE LIVE ROWS (src/queueclass.mjs, operator request 2026-11-15): a status-only census
+		// printed 876 "queued" when 542 of those rows were claimable work and 322 were protocol notices. The
+		// view reports work / notice / registration apart, from the ONE predicate the claim path uses.
+		shape: queueShape(rows),
 		// The pool numbers travel with the census, not in a second read: a bounded view must not look like a
 		// smaller rig (#5016), and the pool is exactly the part a status-count-only census hides - a pooled row
 		// is `queued` like any other, so a full pool and an idle fleet read as "busy".

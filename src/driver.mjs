@@ -16,7 +16,9 @@
 // re-deriving it from a status literal (#6189). A gate rule kept in two places is a rule that drifts
 // (#6112), and the drift here is invisible: the seat wakes, `claim_work` refuses, and the log says
 // nothing about why.
-import { workable, openPoolRow } from "./rig.mjs";
+import { workable, openPoolRow, RigQueue } from "./rig.mjs";
+import { isNoticeItem, isRegistrationItem } from "./queueclass.mjs";
+import { planAcknowledgeNotices } from "./queueops.mjs";
 import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { escalations, escalationSignature } from "./deferlease.mjs";
 
@@ -76,7 +78,7 @@ export const WAKE_CONTENT_PARKED =
  */
 export function parkedSignature(items, seatName) {
   return (items ?? [])
-    .filter((it) => it.to === seatName && (it.status === "held" || it.status === "deferred"))
+    .filter((it) => it.to === seatName && (it.status === "held" || it.status === "deferred") && !isNoticeItem(it) && !isRegistrationItem(it))
     .map((it) => `${it.id}:${it.status}`)
     .sort()
     .join(",");
@@ -193,7 +195,10 @@ export function selectWakes({
     // disagree. Pool rows are counted separately rather than spelled out one by one: a fleet-sized pool would
     // otherwise put hundreds of reason codes in a single SKIP line.
     const queuedVerdicts = (items ?? [])
-      .filter((it) => (it.to === name || openPoolRow(it)) && it.status === "queued")
+      // A NOTICE is not work and a ROADMAP REGISTRATION is a ledger copy (src/queueclass.mjs), so neither may
+      // wake a seat: before this, 321 of the 322 queued notices passed `workable()` and a seat could burn a
+      // turn claiming an acknowledgement (`node tools/queue-pressure.mjs`).
+      .filter((it) => (it.to === name || openPoolRow(it)) && it.status === "queued" && !isNoticeItem(it) && !isRegistrationItem(it))
       .map((it) => ({
         // The id is kept so the SKIP line can NAME the row, not just count it (see poolGatedSkipLine).
         id: it.id,
@@ -374,6 +379,32 @@ export async function driveOnce(
     wakes = eligible.filter((w) => allowed.has(w.name));
   }
   let actioned = 0;
+  // THE NOTICE SWEEP (ROADMAP 39's unshipped half, operator request 2026-11-15): a queued notice is an
+  // acknowledgement the rig has received, and closing it costs NO seat turn — so the pass closes the queued
+  // notices of EVERY seat in the roster, not only the ones it wakes. A seat woken for real work is not the
+  // only reader of its queue: measured on the live store 2026-11-15, 322 notices sat `queued` and most of
+  // their recipients had nothing else to do, which is why they never went away. Only `queued` is swept — a
+  // `held` or `deferred` notice was parked by a rule (a question, an operator lease) and stays visible until
+  // that rule clears it. Closed is not deleted: the row keeps its subject and gains an `acknowledged` transition.
+  // While the rig is paused nothing advances, including the sweep: a paused team must not close rows behind
+  // the operator's back.
+  const ackPlan = paused ? { changes: [], transitions: [] } : planAcknowledgeNotices((items ?? []).filter((it) => it.status === "queued"), { from: "broker", authority: "protocol: a notice is an acknowledgement, not work", seats: Object.keys(seats ?? {}) });
+  if (ackPlan.changes.length > 0) {
+    try {
+      await harness.commit(async (tx) => {
+        const queue = await tx.doc(RigQueue);
+        for (let i = 0; i < ackPlan.changes.length; i += 1) {
+          const row = queue.items.find((it) => String(it.id) === String(ackPlan.changes[i].id));
+          if (!row || row.status === "done" || row.status === "cancelled") continue;
+          row.status = "done";
+          (row.transitions ??= []).push(ackPlan.transitions[i]);
+        }
+      }, context);
+    } catch (error) {
+      // A failed acknowledgement must never cost a wake: the notices stay queued and the next pass retries.
+      onError?.({ name: "notice-ack", conversationId: null, error });
+    }
+  }
   for (const wake of wakes) {
     // #2420: a stop request must interrupt a pass MID-FLIGHT, not only at the loop
     // boundary. Checked before each wake so no NEW wake is submitted once stopping; the
