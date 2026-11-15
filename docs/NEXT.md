@@ -117,6 +117,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `f69dd23d0` | docs(NEXT+ARCHIVE): the pointer pays its 200-line cap again — 8 OLDEST table rows moved VERBATIM, and the cadence row for 53050f3c7 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s f69dd23d0`) |
 | `ef21d221c` | docs(runbook+NEXT): the cap cut gets its measured numbers on the runbook, and the pointer pays its cadence row for f69dd23d — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s ef21d221c`) |
 | `c77c65535` | docs(QUEUE): re-measure the backlog tranche at the moving HEAD, and record its traps (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s c77c65535`) |
+| `ed7ed55ec` | docs(tools): the promoted queue instrument's header costs re-measured at the moving HEAD (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s ed7ed55ec`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -181,7 +182,7 @@ seat/docs task and pm owns routing. **(c)** whether a STOPPED-but-rostered seat'
 (paused is excluded, stopped is not). **(d)** whether a longer or unbounded broker lease is held — this window's
 5-minute lease was the delegate driving the ratified goal.
 
-**Runbook index for these numbers:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`; §34 the mint-refusal ledger read; **§35 the cap’s PRICE**; §36 the knob CURVE; **§37 a cost is ambiguous without its flags**; **§38 the digest's byte budget is a budget to read before the edit, not after the failure** — full wording lives in the runbook, never in this slice.
+**Runbook index for these numbers:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`; §34 the mint-refusal ledger read; **§35 the cap’s PRICE**; §36 the knob CURVE; **§37 a cost is ambiguous without its flags**; **§38 the digest's byte budget is a budget to read before the edit, not after the failure**; **§39 a docs commit owes per-area tallies at its own tree, not a suite tally** — full wording lives in the runbook, never in this slice.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 

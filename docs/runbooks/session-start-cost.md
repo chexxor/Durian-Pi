@@ -1041,3 +1041,33 @@ Measured in this window, each number from the command that printed it:
   byte for byte; table rows, `docs/NEXT-ARCHIVE.md`, `docs/SELFDEV.md` bodies, and runbook bodies cost it none. So the
   durable half of a doc edit goes in a body, the actionable half stays in the slice, and the actionable half stays
   short by pointing at the body.
+
+## 39. A DOCS-ONLY COMMIT OWES A PER-AREA TALLY AT THE SHIPPING TREE, NOT A FULL-SUITE TALLY — 108 s for the four carrier areas, 28 s for a `tools/` edit (2026-11-15, delegate at `ed7ed55ec`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+The doc gates are cheap, but the honest claim is not "the suite is green" — it is "the area that carries this
+pin is green AT the tree this commit ships on". Measured in one window on this box, every number beside the
+command that printed it, `--jobs 4` on every area run:
+
+- `node scripts/test.mjs --area rig --jobs 4` **98/98 in 24.8 s** exit 0, 0 `FAILED` lines, `.err` 0 B, artifact
+  opens `PROVENANCE tree=c77c65535` (carries `demo/notice-not-work.test.mjs`, the notice/fan-out pin);
+- `node scripts/test.mjs --area readapi --jobs 4` **7/7 in 6.1 s** exit 0 (carries `demo/status-view-bound.test.mjs`
+  section C2, the census split);
+- `node scripts/test.mjs --area check --jobs 4` **18/18 in 10.4 s** exit 0 (carries `demo/queue-pressure.test.mjs`, the gate);
+- `node scripts/test.mjs --area docs --jobs 4` **8/8 in 66.9 s** exit 0 (the pointer cap and the digest budget —
+  `demo/runbook-diagnose.test.mjs` is almost all of it, §37's point);
+- the four together: **108.2 s**, against the full suite's 364 members at ~171.4 s at the tree that tally names.
+  A docs carrier that ran the suite paid 63 s to re-verify code it never touched, and its tally still named an older tree.
+- For a `tools/` edit the loop is `node scripts/test.mjs --area toolchain --jobs 4` → **42/42 in 27.8 s exit 0**,
+  0 FAILED, `.err` 0 B at PROVENANCE `tree=c77c65535`, and the CHEAPER claim for the instrument's own text is the
+  derived set: `node tools/what-to-test.mjs --paths=tools/queue-pressure.mjs --run --direct-only` → **8.3 s**,
+  "all derived tests passed", `.err` 0 B. Run both when a header's numbers move: the demo proves the assertions,
+  the area proves nothing broke around it, and the derived set names which guards read that file.
+- Gate set for a docs commit, measured in one call at `ed7ed55ec`: `tools/pointer-sha-coverage.mjs --base 8b5a19e1`
+  exit 0 (1.5 s) · `tools/doc-integrity-guard.mjs` **0 hard / 25 soft** exit 0 (0.3 s) · `demo/next-pointer.test.mjs`
+  exit 0 (0.03 s) · `node scripts/clockin.mjs --budget 1` prints the digest (**19,612 B of 20000**, 11–13 s) ·
+  `node tools/pointer-row-for-predecessor-test.mjs` PASS, `.err` 0 B. Total under 20 s — cheaper than one area.
+
+**The trap this section closes:** a pointer that quotes "363/363 in 171.4 s" as proof its own commit is green is
+pitfall 384's lie unless the artifact's PROVENANCE names the tree the commit ships on, and the suite is the wrong
+loop for a docs change anyway — it is 1.6× the carrier areas and re-verifies nothing they do not. State the per-area
+tallies, each with its PROVENANCE tree, and say explicitly when no full-suite run names the current tree.
