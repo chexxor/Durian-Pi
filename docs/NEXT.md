@@ -24,6 +24,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `7cb34194` | docs(NEXT): rows for `7b417971`, `0e46df03`, `352b5fcb` — `pointer-sha-coverage --base 8b5a19e1` exits **0** (158 range commits, 80 covered by landing-merge rows, 0 holes) |
 | `93e0044a` | docs: close the pointer chain (NEXT rows for `7b417971`/`0e46df03`/`352b5fcb` + measured costs) and add the pitfall-356 addendum |
 | `8bd56720` | **ROADMAP 376-380 / D315** — the queue-backlog tranche: notices refuse `workable()` and are acknowledged by the driver for the whole roster (no seat turn, row retained); the watch footer names work/notice/registration/awaiting-you; `mintGate` (duplicate + BURST 100/window + LINEAGE under pressure) at the single mint path; registrations mint HELD and `registration-as-work` rules a claimable one; `queue-pressure` is a `check` rule that FAILS (band + growth floor = one fleet band) sharing ONE derivation with `tools/queue-pressure.mjs`; 7 pre-existing demos corrected; 30 rules, `docs/WORKFLOWS.md:293` 29 → 30 |
+| `9eedeb3a` | docs(NEXT): the pointer names `93e0044a` and `8bd56720` in commit order so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits 0 (it was that commit's exempt carrier) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -87,8 +88,9 @@ a load flake, green standalone and green in every later run) and `.spike/suite-f
 and the new demos while HEAD/docs still claimed 29 rules and the doc close-out had not landed). A full suite is the
 only gate on a doc-count claim; run the file ALONE before calling a suite red a defect.
 
-**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` over `8bd56720`: the
-tranche commit carries 28 explicit paths, the pointer commit 1, nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
+**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` plus this pointer's own
+close-out commit over `8bd56720`: the tranche commit carries 28 explicit paths, the two docs close-outs 2 paths each,
+nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
 but un-transitioned; 5 notices are `claimed` and are deliberately left alone (`census.skippedClaimed`). Row owners:
 none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
 
