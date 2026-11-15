@@ -155,12 +155,12 @@ node scripts/test.mjs --area rig --jobs 4                 # 26.0 s, 98/98
 node cli.mjs check rig.selfdev.json --json                # 6.8 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
 node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED: broker down, 3 provider BLOCKs (keys out of tree, pitfall 386); SOURCED it was 24 s with 0 blocks (earlier window)
-timeout 560 node scripts/test.mjs --all --jobs 4          # 165.1 s at PROVENANCE tree=f331274fc (.spike/suite-f331274.out); older tallies live in docs/NEXT-ARCHIVE.md
+timeout 560 node scripts/test.mjs --all --jobs 4          # 168.9 s, 364/364, exit 0 (captured), PROVENANCE tree=b5c0a2470 (.spike/suite-b5c0a247.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
 ```
 
-**Suite tally:** the newest green FULL run — `timeout 560 node scripts/test.mjs --all --jobs 4` -> **364/364 passed in 165.1 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes**, its own PROVENANCE line `tree=f331274fc` (only the pointer's own cadence row was in the WORKING tree at that run), artifact `.spike/suite-f331274.out`, slowest `demo/runbook-diagnose.test.mjs` 66.6 s — kept VERBATIM with the earlier runs in `docs/NEXT-ARCHIVE.md` (dated heading); a tally is never quoted for a tree its artifact PROVENANCE line does not name; earlier runs are in the archive.
+**Suite tally rule:** a full-suite tally is quoted ONLY from an artifact whose own PROVENANCE line names the tree it ran on; the concrete numbers sit beside the command in the `Run these first` block, and every superseded tally is kept VERBATIM in `docs/NEXT-ARCHIVE.md` under a dated heading (the newest run on this box: **364/364 passed in 168.9 s at `--jobs 4`, exit 0 captured, `.err` 0 bytes**, PROVENANCE `tree=b5c0a2470`, artifact `.spike/suite-b5c0a247.out`).
 
-**State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above (`78d82057`, `44736311`, `2ec49b52`, `c37f583a`, … `8bd56720`, whose 28 explicit paths carry the tranche; the seam commit `0b9e4e5e` carries 5); **nothing pushed** (the push grant is the operator's) and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` (1.6-3.8 s) writes the rows for every `MISSING` hole **and** the row the coming commit owes **and permutes table rows that sit out of commit order**, then re-audits (`docs/runbooks/delegate-doc-hygiene.md` names the flag trap that made a false green look like a close) — then the residuals below.
+**State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above (the chain's shas and their path counts are VERBATIM in the commit table above and in `docs/NEXT-ARCHIVE.md`); **nothing pushed** (the push grant is the operator's) and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` (1.6-3.8 s) writes the rows for every `MISSING` hole **and** the row the coming commit owes **and permutes table rows that sit out of commit order**, then re-audits (`docs/runbooks/delegate-doc-hygiene.md` names the flag trap that made a false green look like a close) — then the residuals below.
 
 **Blocker:** none for the sweep — it ran. The residual is a **TRUE band failure**, not an outage: the fleet LEDGER
 stopped being appended on 2026-11-13 while the broker was down, so `tools/backlog-burn.mjs` (0.05 s, exit 0) quotes a
@@ -170,25 +170,19 @@ pitfall 383, and the `<N>`-min age is wall-clock relative, never a constant (pit
 to `docs/NEXT-ARCHIVE.md` (pitfall 392: the clock-in digest reads this slice, so the prose lives out of it); the rate there
 (+719/7 d) has slid to **+715 over 7 d at `c8495ff3f`** — the window is anchored to the wall clock.
 
-**Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
-(`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; with 1024 open work
-rows the gate is loud by design, and the caps are now **PRICED**, not guessed: runbook **§35** prices the rig's own cap and
-**§36** is the CURVE every candidate cap sits on (windows 3/7/14/30 d × caps 100–600, 20 bounded calls in 65.9 s, knee at
-7 d between 300 and 500) — the WINDOW is as much of the price as the CAP is. The paragraph's full price wording (the 523 of
-1,153 = 45.4 % point, the six seats over the 100/seat cap, the lineage recollection corrected by two orders of magnitude)
-lives VERBATIM in `docs/NEXT-ARCHIVE.md`. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
-pass-by-pass — the queue has no verb for it (`registrations` is census-only), so it is a seat/docs task, and pm owns routing.
-(c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
-(d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
-operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
+**Operator decisions owed** (full wording of all four VERBATIM in `docs/NEXT-ARCHIVE.md`): **(a)** the three numbers —
+burst cap 100, band 10/seat, window 7 d (`src/config.mjs` knobs `DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` /
+`DURIG_PRESSURE_WINDOW_DAYS`, whose default 100 / 10 / 7 is declared beside them), not a code change; the caps are
+**PRICED**, not guessed — runbook §35 prices the rig's own cap, §36 is the CURVE every candidate cap sits on (the knee
+at 7 d sits between 300 and 500 and the WINDOW is as much of the price as the CAP is). **(b)** whether the 16 `queued`
+registrations are HELD or written into `docs/ROADMAP.md` pass-by-pass — `registrations` is census-only, so it is a
+seat/docs task and pm owns routing. **(c)** whether a STOPPED-but-rostered seat's queued notices may be acknowledged
+(paused is excluded, stopped is not). **(d)** whether a longer or unbounded broker lease is held — this window's
+5-minute lease was the delegate driving the ratified goal.
 
-**The rate question, the cap's price, and which cost a read pays:** `docs/runbooks/session-start-cost.md` §32 census → ledger
-→ `check`; §34 the mint-refusal ledger read (`NOT MEASURED` is not `0`); **§35 the cap's PRICE**; §36 the knob CURVE; **§37 a
-read cost is only meaningful beside broker state** (`watch --once` 1.515 s down / 10.9 s up — never overwrite an old read cost).
-Full wording of all five moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
+**Runbook index for these numbers:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`; §34 the mint-refusal ledger read; **§35 the cap’s PRICE**; §36 the knob CURVE; **§37 a cost is ambiguous without its flags** — full wording moved VERBATIM to `docs/NEXT-ARCHIVE.md` (pitfall 392).
 
-**Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
-recorded, not touched by this tranche.
+**Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
 

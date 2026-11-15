@@ -15283,3 +15283,36 @@ operator's ratified goal; a longer or unbounded lease is the operator's grant to
 | `80a87fca` | docs(NEXT): the `3a8bce52` row |
 | `230ee8dd` | docs(NEXT): the `054da8d3` row, so the audit closes on its carrier |
 | `7b417971` | docs(NEXT): the `80a87fca` row — the audit names every range commit except its own carrier |
+
+## 2026-11-15T20:43Z — the pointer’s runbook-index paragraph moved VERBATIM out of the `## NEXT SESSION` slice (pitfall 392: the slice is the clock-in digest; 20,000 B is its budget and the pointer pays it, never the other way)
+
+**The rate question, the cap's price, and which cost a read pays:** `docs/runbooks/session-start-cost.md` §32 census → ledger
+→ `check`; §34 the mint-refusal ledger read (`NOT MEASURED` is not `0`); **§35 the cap's PRICE**; §36 the knob CURVE; **§37 a
+read cost is only meaningful beside broker state** (`watch --once` 1.515 s down / 10.9 s up — never overwrite an old read cost).
+Full wording of all five moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
+
+## 2026-11-15T21:03Z — four pointer paragraphs/phrases moved VERBATIM out of the `## NEXT SESSION` slice of `docs/NEXT.md` (pitfall 392: the slice is the clock-in digest; the pointer pays its 20,000 B budget, the archive never does). The Suite tally paragraph also stops claiming a `newest` run, because a newest-run claim becomes false at the next full run while every number in it stays true (pitfall 398's staleness shape).
+
+**Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
+recorded, not touched by this tranche.
+
+(`78d82057`, `44736311`, `2ec49b52`, `c37f583a`, … `8bd56720`, whose 28 explicit paths carry the tranche; the seam commit `0b9e4e5e` carries 5)
+
+**Suite tally:** the newest green FULL run — `timeout 560 node scripts/test.mjs --all --jobs 4` -> **364/364 passed in 165.1 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes**, its own PROVENANCE line `tree=f331274fc` (only the pointer's own cadence row was in the WORKING tree at that run), artifact `.spike/suite-f331274.out`, slowest `demo/runbook-diagnose.test.mjs` 66.6 s — kept VERBATIM with the earlier runs in `docs/NEXT-ARCHIVE.md` (dated heading); a tally is never quoted for a tree its artifact PROVENANCE line does not name; earlier runs are in the archive.
+
+# 165.1 s at PROVENANCE tree=f331274fc (.spike/suite-f331274.out); older tallies live in docs/NEXT-ARCHIVE.md
+
+## 2026-11-15T21:08Z — the pointer's operator-decisions paragraph tightened in place, its full wording kept VERBATIM in the archive (pitfall 392: the `## NEXT SESSION` slice is what the clock-in digest reads; prose in it pays the 20,000 B budget, table rows and the archive pay none). The drifted wall-clock pair (523 of 1,153) is dropped out of the slice rather than re-quoted, because a rolling-window pair slides by the MINUTE (pitfall 398 / §35).
+
+**Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
+(`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; with 1024 open work
+rows the gate is loud by design, and the caps are now **PRICED**, not guessed: runbook **§35** prices the rig's own cap and
+**§36** is the CURVE every candidate cap sits on (windows 3/7/14/30 d × caps 100–600, 20 bounded calls in 65.9 s, knee at
+7 d between 300 and 500) — the WINDOW is as much of the price as the CAP is. The paragraph's full price wording (the 523 of
+1,153 = 45.4 % point, the six seats over the 100/seat cap, the lineage recollection corrected by two orders of magnitude)
+lives VERBATIM in `docs/NEXT-ARCHIVE.md`. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
+pass-by-pass — the queue has no verb for it (`registrations` is census-only), so it is a seat/docs task, and pm owns routing.
+(c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
+(d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
+operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
+
