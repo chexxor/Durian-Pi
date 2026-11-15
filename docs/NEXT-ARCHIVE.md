@@ -15193,3 +15193,7 @@ tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledge
 ```text
 **Fixture leak closed (2026-11-15 at `0f14e998`):** 5 demos' `check` assertions now name their own `DURIG_CONFIG` (or the rule's SLA knob) — a fixture that inherits the live rig's armed extension rules measures its HOST, and 4 went red on 24.1 h of live landing debt.
 ```
+
+## docs/NEXT.md pointer block moved VERBATIM — 2026-11-15 (the suite tally at tree=880cf030c, superseded by the run at tree=27d27d2ef)
+
+**Suite tally (named by its own PROVENANCE line):** the newest green FULL run, named by its own artifact PROVENANCE line — `timeout 300 node scripts/test.mjs --all --jobs 4` -> **363/363 in 160.7 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes** at `tree=880cf030c` (`.spike/suite-880cf.out`), slowest `demo/runbook-diagnose.test.mjs` 66.6 s Every other green run, and the runs that are NOT tallies, is kept VERBATIM in `docs/NEXT-ARCHIVE.md` under a dated heading (pitfall 392: the clock-in digest reads THIS pointer section, so the tallies now live OUT of it). **A docs-only pointer commit after the newest green run carries no suite tally of its own** — it is gated by `demo/next-pointer.test.mjs`, `tools/pointer-sha-coverage.mjs`, `tools/doc-integrity-guard.mjs` and `demo/clockin-digest.test.mjs`, and a tally is never quoted for a tree its artifact PROVENANCE line does not name.
