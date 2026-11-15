@@ -1105,3 +1105,63 @@ balance`) is the operator's funding; a `model-absent` block on a server that COM
 (`docs/runbooks/local-provider-down.md:37` — restoring provider values in `rig.selfdev.json` is an OPERATOR call, lead
 R1); an EHOSTUNREACH LAN box is the operator's hardware. The delegate's honest report is `a lease is REFUSED`, with the
 refusal line quoted, not a lease forced past the preflight.
+
+## 41. THE LEDGER HALF OF THAT DEGRADATION IS NOT THE OPERATOR'S — ONE `--once --no-restart` call refreshes the window in 1.7 s, and the refresh FLIPS the verdict `check` quotes (2026-11-15, delegate, the window after `b11df9b26`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — host measured in the same command as every number here)
+
+§40 says the ledger stops being appended while the broker is DOWN, and pitfall 402 says the zero it leaves behind is
+not a verdict. What neither says is the half that matters for a delegate: **which half of that degradation needs a
+grant.** Appending a snapshot does not. A dark channel makes the fleet ledger stale for two days and nobody asks
+whether it needed to.
+
+```bash
+stat -c '%y %s' selfdev.sqlite                                            # BEFORE: 2026-11-15 02:28:46.948765114 -0600 810074112
+node tools/broker-keepalive.mjs --once --no-restart                        # 1.7 s, exit 0 — ONE snapshot, no broker touched
+stat -c '%y %s' selfdev.sqlite                                            # AFTER: byte-for-byte IDENTICAL (no store write)
+node tools/backlog-burn.mjs                                                # 0.04 s, exit 0 — the window now ends NOW
+```
+
+`--once` takes the snapshot at the top of the loop (`tools/broker-keepalive.mjs:286` is
+`snapshot(db, ledger, tick % 10 === 0)`, and `tick = 0` at the first pass, so the queue shape IS in the line), prints
+it, and exits at `:314`; `--no-restart` (`:48`, `--no-restart measure only; never stop or start a broker`) skips the
+re-arm leg at `:292`. Nothing is stopped, started, killed, claimed, or spent. Measured line, same call as the host:
+`2026-11-15T23:36:44.027Z pid=- hb=nulls lastPass=nulls intents=0 refs=55 itemBranches=51 worktrees=29 main=b11df9b26
+queued=553 claimed=28 held=319 deferred=300 leased=120` — and those four counts are the census's three classes summed
+(`537 work + 0 notice + 16 registration = 553 queued`; `20 + 5 = 28 claimed`), which is why the ledger can be
+RECONCILED against `tools/queue-pressure.mjs` but cannot be substituted for it.
+
+What the append changed, before and after, on the SAME day and the SAME store:
+
+| Read | Before (newest snapshot 2,964 min old) | After (newest 2 min before the measurement) |
+|---|---|---|
+| `node tools/backlog-burn.mjs` (0.04 s, exit 0) | `390 rows closed, +166 open rows in the window -> backlog GROWING` over 126 snapshots | `876 rows closed, -284 open rows in the window -> backlog shrinking` over 127/127 snapshots, window `2026-11-12T08:35:19.154Z -> 2026-11-15T23:36:44.027Z` = **5,221 min** |
+| `cli.mjs check rig.selfdev.json --json` (6.7 s, exit 1, 31 checks / 131 findings) | quotes the GROWING sentence | quotes the SHRINKING sentence **verbatim**, with its window and `newest snapshot 2 min before this measurement` |
+
+**Read the two rates as two questions, and say which one you are answering.** A refreshed ledger that says
+`shrinking` and a census that says `GROWING` are NOT a contradiction and not a defect — they ask different questions
+over different spans and different classes:
+
+- The ledger counts **rows by status** across its snapshot span (here 5,221 min). Its `-284 open rows` INCLUDES the
+  sweep's notice retirements — a bulk-acknowledge is a closure of a NON-WORK row, so the ledger's rate is class-blind
+  by construction, and a sweep reads as burn-down whether or not one work row closed.
+- The census (`tools/queue-pressure.mjs`, 1.5 s, exit 1) answers the CLASS question over its own 7 d window: at this
+  window `mint 1835 (1112 work, 723 notice) vs close 1144 (730 work, 414 notice) -> net +691 (262.14/d minted,
+  163.43/d closed, 98.71/d net): GROWING` — the WORK-only rate is **+382 rows over 7 d**, which is what a fleet
+  decision needs, and the pair slides by the MINUTE (§35, pitfall 398: the window is anchored to the wall clock).
+- So: direction over the ledger's span = SHRINKING; direction over 7 d by class = GROWING. Quote both with their span
+  and class, or quote neither. `check` already prints both faces in one finding; the sentence inside it is the LEDGER's,
+  so a doc that repeats it as "the backlog is shrinking" is quoting a class-blind window.
+
+**What still needs the grant after the refresh:** only the MINTING half. `tools/queue-pressure.mjs` still prints
+`mint refusals: 0 in 7 d (burst 0, lineage 0, duplicate 0) of 0 on the ledger` after the append — that zero is about
+rows that were never minted, and minting is what the four provider BLOCKs (§40) gate. Refresh the ledger every window
+(1.7 s, free); commission a lease only for a mint/ack intent (24.9 s of preflight to find out, then the refusal).
+
+**Cost of keeping the ledger honest:** one snapshot is ~933 B (`325,822 B -> 326,755 B` here), and
+`src/fleetledger.mjs` `FLEET_LEDGER_MAX_BYTES = 4_194_304` bounds the read with truncation reported, so a session
+can append dozens without making a reader drift.
+
+**Worth spending next, and who owns it:** the ledger line carries only `byStatus`, so the class-blindness above is a
+format fact, not a reading error. Growing `snapshot()` to carry the census split (`work` / `notice` / `registration`)
+would let `tools/backlog-burn.mjs` print a WORK-only rate — a `tools/`-plane change (§39's loop: `--area toolchain`
+42/42, ~28 s; the derived guard set is the cheaper claim), owned by a seat/pm, not by the delegate, and older lines
+missing the field must read as "class unknown", never as zero.
