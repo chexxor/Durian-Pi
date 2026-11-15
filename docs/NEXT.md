@@ -68,26 +68,35 @@ node intent.mjs queue --op queue --action registrations                         
 ```
 
 It CANNOT run yet: `node tools/broker-serve.mjs --status` → `broker: down (no broker state)` and BLOCKs
-`provider-local-refuses-inference` (127.0.0.1:8080 answers 401 to the loopback placeholder) plus
-`provider-verifier-no-key`. A read drain serves only read-only intents, so an `--apply` intent needs a pass.
+`provider-local-refuses-inference` plus `provider-verifier-no-key`. Re-probed in the resumed window 2026-11-15:
+the local endpoint now answers **`authentication_error — missing or wrong API key` (401) to BOTH `/v1/models` and a
+1-token `/v1/chat/completions`**, and `env | grep -iE 'deepinfra|openai|api_key'` returns nothing — earlier it listed
+models and refused only completions, so the shape has degraded further, not improved. A read drain serves only
+read-only intents, so an `--apply` intent needs a pass.
 **Waking the fleet and funding the provider are the operator's grants** — do not start the broker on a provider
 that only lists models (`docs/runbooks/broker-down-or-stalled.md`, `docs/runbooks/local-provider-down.md`).
 
-**Suite tally:** 363 members; the last full run before this window's close-out was **363/363 in 192.0 s, exit 0**
-(`timeout 560 node scripts/test.mjs --all --jobs 4`, 2026-11-15; the one red in the run before it was
-`demo/restart-limit-behaviour.test.mjs` charging 4 restarts for 5 landed crashes under `--jobs 4` — pitfall 352/377,
-a load flake, green standalone and green on the next full run; classify a suite red by running the file ALONE first).
-Slowest: `demo/runbook-diagnose.test.mjs` 91.2 s. Areas: `check` 18/18 37.5 s, `rig` 98/98 25.5 s, `broker` 83/83 39.8 s,
-`readapi` 7/7 7.0 s.
+**Suite tally:** 363 members; the GREEN full run is **363/363 in 219.3 s, exit 0** at tree `8bd56720` —
+`timeout 560 node scripts/test.mjs --all --jobs 4` (2026-11-15, `.spike/suite-final-c.out`, PROVENANCE line
+`tree=8bd56720 … pi-durable=1.5.1`). Slowest there: `demo/runbook-diagnose.test.mjs` 104.5 s. Areas re-measured in
+the resumed window: `check` **18/18 in 35.4 s**, two new-rule demos green in it. Do **not** cite the two earlier
+full runs at HEAD `93e0044a` as a tally: `.spike/suite-final-20261115.out` was **362/363 in 199.3 s** (the one red
+= `demo/restart-limit-behaviour.test.mjs` charging 4 restarts for 5 landed crashes under `--jobs 4` — pitfall 352/377,
+a load flake, green standalone and green in every later run) and `.spike/suite-final-20261115b.out` was **360/363 in
+191.4 s** (`check`, `doc-count-drift`, `starter` red because the working tree carried the new 30-rule `checkup.mjs`
+and the new demos while HEAD/docs still claimed 29 rules and the doc close-out had not landed). A full suite is the
+only gate on a doc-count claim; run the file ALONE before calling a suite red a defect.
 
-**State the team is in:** the tranche is **landed in the shared tree** (committed on `main`, one commit, 24 paths,
-nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
+**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` over `8bd56720`: the
+tranche commit carries 28 explicit paths, the pointer commit 1, nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
 but un-transitioned; 5 notices are `claimed` and are deliberately left alone (`census.skippedClaimed`). Row owners:
 none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
 
 **Blocker:** the sweep (task-4) needs a broker window and a provider that answers completions; both credentials are
 the operator's. Second, `tools/backlog-burn.mjs` reads the fleet LEDGER whose last snapshot is dated **2026-11-13**,
-so its rate (+166 over 2,258 min) is stale while the broker is down — the store-wide rate is +722 over 7 d (pitfall 383).
+so its rate (+166 over 2,258 min) is stale while the broker is down — the store-wide rate is **+718 over 7 d**
+(re-measured in the resumed window: `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` → 2.27 s, exit 1,
+mint 1921 vs close 1203; the rate drifts as rows close, so re-measure rather than quote it — pitfall 383).
 
 **Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
 (`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; the LINEAGE rule

@@ -4827,3 +4827,19 @@ at `:743`). Re-measure every `path:line` before repeating it.
     same day. The ledger's last snapshot is dated **2026-11-13** — the fleet ledger stops being appended while
     the broker is down, so a ledger-sampled rate silently becomes a stale rate. When the two disagree, say
     which window each measured and check the ledger's last timestamp before believing either.
+384. **A suite tally without its PROVENANCE line is a lie you can prove.** This window shipped a `docs/NEXT.md` line
+    claiming `363/363 in 192.0 s, exit 0`; no artifact shows it. The three runs that day were
+    `.spike/suite-final-c.out` **363/363 in 219.3 s at tree `8bd56720`** (the green one),
+    `.spike/suite-final-20261115.out` **362/363 in 199.3 s at tree `93e0044a`** (red = `demo/restart-limit-behaviour.test.mjs`,
+    a `--jobs 4` load flake) and `.spike/suite-final-20261115b.out` **360/363 in 191.4 s at the same pre-tranche tree**
+    (red = `check`, `doc-count-drift`, `starter`). Read the **first line** of a suite artifact
+    (`PROVENANCE tree=<sha> …`) before quoting its tally, and expect a full suite run **while the code is in the
+    working tree but the doc close-out has not landed** to be red on the doc-count rules BY CONSTRUCTION (pitfall 381) —
+    that red is not a defect and does not license "the last green run was N s". Same lesson as D159: a number without
+    the command and the tree it was measured on is ungrounded.
+385. **A resumed session cannot tick goal tasks if the goal tools are not exposed.** In the resumed window the tool
+    surface was `read/bash/edit/write/context_handoff` + the goal-question tools only — `get_goal`/`update_goal` were
+    absent, so the goal snapshot kept reading `0/8 tasks complete` even though seven contracts were met. The completion
+    auditor's ground truth on this rig is the DOCS, not the checkbox: `docs/NEXT.md` must name which tasks are in and
+    which one is outstanding, with the command that verifies each. If `update_goal` IS exposed, call it once when
+    every contract is satisfied — never piecemeal, and never while a task is still open (task gate).
