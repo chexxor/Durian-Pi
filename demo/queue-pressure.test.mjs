@@ -25,7 +25,7 @@
 // exit 0 / 43 checks / 2.7 s, `.err` 0 bytes.
 // Measured on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0.
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -363,6 +363,79 @@ check("a capture WITHOUT the field says NOT MEASURED rather than 0", /mint refus
 const fullLedger = mintRefusalCensus(Array.from({ length: MINT_REFUSAL_LEDGER_CAP }, (i) => ({ at: NOW, event: "mint-refused", by: "pm", to: "impl", subject: `task ${i}`, kind: "burst", reason: "burst" })), { windowDays: 7 });
 check("a FULL ledger says the total is a FLOOR, not a count", fullLedger.saturated && fullLedger.ledger === MINT_REFUSAL_LEDGER_CAP, `ledger ${fullLedger.ledger} cap ${fullLedger.cap} saturated ${fullLedger.saturated}`);
 check("an audit handed NO ledger read says NOT MEASURED, never 0", /NOT MEASURED here/.test(unreadLedger.findings.find((f) => f.id === "queue-pressure")?.detail ?? ""), JSON.stringify(unreadLedger.findings.find((f) => f.id === "queue-pressure")?.detail ?? ""));
+console.log("\n=== --price-budget: the COUNTERFACTUAL — is the mint budget PRICED, or is it an outage? ===");
+// THE CONTRACT THIS PINS. A RECORDED refusal says the gate FIRED; it says nothing about whether the cap that
+// fired is sized to this fleet, and an unpriced cap is the same class of lie as an unread limit (ROADMAP 272).
+// `--price-budget` replays the mints the store recorded inside the window through the SHIPPED rules — `mintGate`
+// precedence (duplicate, then burst, then lineage), notices and parked rows exempt — and counts what each rule
+// WOULD have refused. Measured 2026-11-15 on the live store: burst would have refused 506 of 1,153 work mints
+// (43.9%) while lineage refused 6 (0.5%) — the BURST cap at 100/seat/7 d is an outage on real work at this
+// fleet's own fan-out rate, the lineage rule is priced. The fixture is small enough that the expected numbers
+// are stated exactly, which is what makes the leg red the moment the replay drifts.
+const PRICE_NOW = new Date().toISOString();
+const pmint = (id, to, subject, body, notice = false) => ({
+	id,
+	from: "pm",
+	to,
+	status: "queued",
+	subject,
+	body,
+	...(notice ? { notice: true } : {}),
+	transitions: [{ at: PRICE_NOW, event: "queued" }],
+});
+const PRICE_ROWS = [
+	pmint(9201, "impl", "close src/a.mjs", "src/a.mjs"), // lineage: an artifact
+	pmint(9202, "impl", "polish #411", ""), // lineage: a parent row
+	pmint(9203, "impl", "parentless ask", "nothing names this"), // armed 2 < cap, band out -> lineage
+	pmint(9204, "impl", "parentless two", "nothing names this"), // same
+	pmint(9205, "impl", "ROADMAP 92 copy", ""), // lineage: a ledger item -> allowed (armed reaches the cap)
+	pmint(9206, "impl", "src/b.mjs follow-up", ""), // armed 3 >= cap -> burst
+	pmint(9207, "verifier", "same task twice #500", ""), // allowed (it names a parent)
+	pmint(9208, "verifier", "same task twice #500", ""), // the mint gate's duplicate rule fires first
+	pmint(9209, "impl", "DONE #411: an acknowledgement", "", true), // exempt: a notice is not work
+];
+const priceSnap = join(dir, "price-capture.json");
+writeFileSync(priceSnap, JSON.stringify({ ok: true, command: "queue", items: PRICE_ROWS }));
+const priceReport = join(dir, "price-report.json");
+const priceRun = await tool(["--snapshot", priceSnap, "--price-budget", "--band-per-seat", "1", "--mint-burst-cap", "3", "--json", priceReport], { DURIG_DB: db });
+const price = (() => {
+	try {
+		return JSON.parse(readFileSync(priceReport, "utf8")).mintBudgetPrice;
+	} catch {
+		return null;
+	}
+})();
+check("the back-test is machine-readable — `--json` carries mintBudgetPrice", price !== null, `${priceRun.code}: ${priceRun.stderr.slice(0, 300)}`);
+check("it replays the 8 work mints and exempts the notice", price?.work === 8 && price?.exempt?.notice === 1, JSON.stringify({ work: price?.work, exempt: price?.exempt }));
+check("...and refuses 4 of 8 under the shipped precedence: 2 lineage, 1 burst, 1 duplicate", price?.refusedTotal === 4 && price.refused.lineage === 2 && price.refused.burst === 1 && price.refused.duplicate === 1 && price.allowed === 4, JSON.stringify({ refused: price?.refused, allowed: price?.allowed, total: price?.refusedTotal }));
+check("...and the per-seat numbers come from the shipped mintedBySeat (the notice row rides with its seat)", JSON.stringify(price?.perSeatWindow) === JSON.stringify({ impl: 7, verifier: 2 }), JSON.stringify(price?.perSeatWindow));
+check("...and the cap it priced is a KNOB the run asked for, stated as an override of the rig's own", price?.cap === 3 && price?.capOverride === true && price?.rigCap === 100 && price?.windowDays === 7, JSON.stringify({ cap: price?.cap, capOverride: price?.capOverride, rigCap: price?.rigCap, windowDays: price?.windowDays }));
+check("...and says so on the printed line, so an override never reads as the fleet's setting", /this run priced 3 as an OVERRIDE/.test(priceRun.stdout), priceRun.stdout.slice(0, 1600));
+// The band is what arms the lineage leg, so the SAME rows must read differently when the fleet is inside it.
+const priceRunIn = await tool(["--snapshot", priceSnap, "--price-budget", "--band-per-seat", "500", "--mint-burst-cap", "3", "--json", priceReport], { DURIG_DB: db });
+const priceIn = (() => {
+	try {
+		return JSON.parse(readFileSync(priceReport, "utf8")).mintBudgetPrice;
+	} catch {
+		return null;
+	}
+})();
+check("an inside band UNARMS the lineage leg — the same rows price at 0 lineage refusals", priceIn !== null && priceIn.refused.lineage === 0 && priceIn.refused.burst === 3 && priceIn.bandArmed === false, JSON.stringify({ refused: priceIn?.refused, armed: priceIn?.bandArmed }));
+check("...and the price verdict never changes the gate's exit code (the rows are inside band now)", priceRunIn.code === 0, `${priceRunIn.code}`);
+// Honest-absent, the same discipline as the mint-refusal census: a body-less capture cannot measure lineage over
+// body text, and must say which text it measured over rather than pass its subject-only number off as the number.
+const priceSnapNoBody = join(dir, "price-capture-nobodies.json");
+writeFileSync(priceSnapNoBody, JSON.stringify({ ok: true, command: "queue", items: PRICE_ROWS.map((it) => { const { body, ...rest } = it; return rest; }) }));
+const priceRunNoBody = await tool(["--snapshot", priceSnapNoBody, "--price-budget", "--band-per-seat", "1"], { DURIG_DB: db });
+check("a capture without bodies labels the lineage leg as SUBJECT TEXT ONLY instead of claiming the number", /SUBJECT TEXT ONLY/.test(priceRunNoBody.stdout), priceRunNoBody.stdout.slice(0, 1400));
+// The empty-window edge: the seeded store's rows were backdated OUT of the window, so there is nothing to replay
+// — a divide by zero would be a crash, and a zero printed as if it were a verdict would be a lie about a fleet
+// that was never asked.
+const priceStoreRun = await tool(["--db", db, "--price-budget"], { DURIG_DB: db });
+check("a store with no mints inside the window replays 0 and still exits on the band verdict", /replayed: 0 /.test(priceStoreRun.stdout) && priceStoreRun.code === 1, `${priceStoreRun.code}: ${priceStoreRun.stdout.match(/.*replayed.*/)?.[0] ?? ""}`);
+check("...and names which read the bodies came from, so a reader knows the lineage leg had body text at all", /read: bodies INCLUDED — a second bounded read/.test(priceStoreRun.stdout), priceStoreRun.stdout.slice(0, 1600));
+check("...and a capture run says so too (no second read was paid)", /bodies (present in the capture|OMITTED — the lineage leg)/.test(priceRunNoBody.stdout), priceRunNoBody.stdout.slice(0, 1600));
+
 await storage.close(BACKGROUND_CONTEXT);
 
 console.log(failures === 0 ? "\nQUEUE PRESSURE TEST PASS (0 failures)" : `\nQUEUE PRESSURE TEST FAIL (${failures} failures)`);

@@ -20,8 +20,8 @@ import { DEFAULT_BAND_PER_SEAT, DEFAULT_MINT_BURST_CAP, DEFAULT_PRESSURE_WINDOW_
 // THE ROW CLASSIFICATION lives in its own dependency-free module (src/queueclass.mjs) because `check`,
 // `status`, `watch`, the driver and tools/queue-pressure.mjs all need the SAME predicate. Re-exported here so
 // every importer that reached `isNoticeItem` through rig.mjs keeps working (the `verifierrole.mjs` pattern).
-import { bandVerdict, isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, mintedBySeat, queueShape, REGISTRATION_RE, MINT_REFUSAL_LEDGER_CAP } from "./queueclass.mjs";
-export { isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, REGISTRATION_RE };
+import { bandVerdict, isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, mintedBySeat, queueShape, REGISTRATION_RE, MINT_REFUSAL_LEDGER_CAP, NORMALIZE_SUBJECT, LINEAGE_RE, lineageOf } from "./queueclass.mjs";
+export { isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, REGISTRATION_RE, lineageOf };
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { validateHumanDefer } from "./deferlease.mjs"
 import { executionModeRecord } from "./executionmode.mjs";
@@ -300,17 +300,12 @@ export async function seatId(tx, name) {
  * fleet band is the number the operator set; the gate fires against the same number the `check` rule reports.
  *
  * Pure (no store, no clock) so a demo proves it with a plain array.
+ *
+ * THE NORMALIZER AND THE LINEAGE PREDICATE MOVED to src/queueclass.mjs (2026-11-15): they are row-shape rules,
+ * and `tools/queue-pressure.mjs`'s budget back-test needs the SAME ones — a normalizer retyped in the tool is
+ * a second spelling of "the same task" (#5047). They are imported above, and `lineageOf` is re-exported from
+ * this module so an importer that reached it here keeps working.
  */
-const NORMALIZE_SUBJECT = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-const LINEAGE_RE = /\bROADMAP\s+\d+\b|#[a-z0-9][a-z0-9-]*\b|\b(?:src|demo|docs|tools|scripts|extensions)\/[\w./-]+\b|\b[a-f0-9]{7,40}\b/i;
-
-export function lineageOf(item = {}) {
-	const text = `${item.subject ?? ""} ${item.body ?? ""}`;
-	const match = LINEAGE_RE.exec(text);
-	if (!match) return null;
-	return { kind: /roadmap/i.test(match[0]) ? "roadmap" : /#/.test(match[0]) ? "item" : /[a-f0-9]{7,40}/i.test(match[0]) && !/[\/]/.test(match[0]) ? "commit" : "artifact", named: match[0] };
-}
-
 export function mintGate(queueItems = [], { to, subject, body = "", notice = false, held = false, tier = null, blockedBy = null, mintBurstCap = DEFAULT_MINT_BURST_CAP, bandPerSeat = DEFAULT_BAND_PER_SEAT, windowDays = DEFAULT_PRESSURE_WINDOW_DAYS, seats = null, now = Date.now() } = {}) {
 	// A NOTICE is an acknowledgement, not work: it is never subject to the work budget, and suppressing it is
 	// the other half of what ROADMAP 39 named (notice-of-notice suppression shipped; non-claimability did not).

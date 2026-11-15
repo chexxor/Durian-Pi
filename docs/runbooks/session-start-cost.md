@@ -885,3 +885,31 @@ with the same 31 checks and the same 3 error findings.
 that file is the whole-store read, 18,270,766 B measured 2026-11-15. And the ledger is bounded by the WRITER at
 `MINT_REFUSAL_LEDGER_CAP = 100` events (`src/rig.mjs` `slice(-MINT_REFUSAL_LEDGER_CAP)`), so when `saturated` is
 true the `ledger` number is a **FLOOR**, not a total — the older refusals were dropped on the floor.
+
+## 35. IS THE MINT BUDGET PRICED, OR IS IT AN OUTAGE? — one call, 3.3 s, and the number that makes the operator's knob ruling answerable (2026-11-15, delegate at `2566c14ff`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**The question §34 cannot answer.** §34 reads the ledger of refusals, and an empty ledger is BOTH "the budget
+is working and nothing fanned out" and "the cap is so small it would refuse half the fleet, and nobody has
+minted since the gate shipped". The other question — is the cap sized to this fleet, or is it an outage wearing
+a gate — is answered by replaying the mints THIS STORE recorded inside the window through the shipped rules.
+
+```bash
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 3.3 s, exit 1 (the band verdict is unchanged)
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget --mint-burst-cap 600   # price a CANDIDATE cap
+```
+
+Measured at `2566c14ff` on this box, one command: of **1,153 work mints** in the 7-day window (763 notice mints
+exempt) the caps as configured would have refused **523 (45.4%)** — burst **506**, lineage **6**, duplicate **11**
+— and six seats sit above the 100/seat cap by the shipped `mintedBySeat` (impl 567, pm 474, devtools 264, lead
+170, qa 158, scribe 154). `--json` carries the same shape as `mintBudgetPrice` (`work`, `exempt`, `refused` by
+kind, `allowed`, `perSeatWindow`, `bandArmed`, `capOverride`).
+
+**Two reads, and which number came from which.** The back-test needs BODY text, so it pays a second bounded read
+(`cli.mjs queue --json`, 1.3 s / 32.3 MB measured); the `mintRefusals` census exists only on the `--no-body`
+form, because the whole-document form is deliberately unchanged bytes (#5016). The tool prints which read each
+number came from; do not "save the second read" by switching the census read to the whole-document form — that
+read carries no census, and the line turns into `NOT MEASURED`, which is not zero.
+
+**Never do:** quote a mint cap as "it stops pathological fan-out" without the back-test number next to it. A cap
+below the fleet's own window rate stops REAL work; measured here, 45.4% of the window's mints. A priced number
+and an unpriced number look the same in prose, and only one of them is a fact about the fleet.

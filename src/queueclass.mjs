@@ -75,6 +75,38 @@ export function classifyRow(item) {
 	return "work";
 }
 
+/**
+ * THE SUBJECT NORMALIZER and THE LINEAGE a mint names — the two row-shape rules `mintGate` (src/rig.mjs)
+ * judges a mint against.
+ *
+ * WHY HERE and not in `src/rig.mjs`: both are row-shape questions, so they live with the other row-shape
+ * predicates and keep this module dependency-free; `mintGate`, the mint-side demos and the promoted
+ * instrument's budget back-test (`tools/queue-pressure.mjs --price-budget`) all need the SAME answer, and a
+ * regex or a normalizer retyped in each place is #5047's pair-of-spellings defect — two spellings of "the
+ * same task" mean two different duplicate rules. Re-exported from `src/rig.mjs` so an importer that reached
+ * `lineageOf` there keeps working (the `verifierrole.mjs` pattern).
+ *
+ * Pure (no store, no clock) so a demo proves it with a plain array.
+ */
+export const NORMALIZE_SUBJECT = (s) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+export const LINEAGE_RE = /\bROADMAP\s+\d+\b|#[a-z0-9][a-z0-9-]*\b|\b(?:src|demo|docs|tools|scripts|extensions)\/[\w./-]+\b|\b[a-f0-9]{7,40}\b/i;
+
+export function lineageOf(item = {}) {
+	const text = `${item.subject ?? ""} ${item.body ?? ""}`;
+	const match = LINEAGE_RE.exec(text);
+	if (!match) return null;
+	return {
+		kind: /roadmap/i.test(match[0])
+			? "roadmap"
+			: /#/.test(match[0])
+				? "item"
+				: /[a-f0-9]{7,40}/i.test(match[0]) && !/[\/]/.test(match[0])
+					? "commit"
+					: "artifact",
+		named: match[0],
+	};
+}
+
 /** Non-terminal rows only — `done`/`cancelled` are terminal (src/checkup.mjs TERMINAL_STATUSES). */
 export const TERMINAL_STATUSES = ["done", "cancelled"];
 export const isTerminalRow = (item) => item != null && TERMINAL_STATUSES.includes(item.status);

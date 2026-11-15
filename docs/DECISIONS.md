@@ -13559,3 +13559,34 @@ Two durable facts this window adds to D315, both measured on Linux, Fedora Linux
 - **A flag the header documents and the code ignores is the same class of lie as a flag the code reads and ignores.** This tool's header listed `--json`; the only trace was `const asJson = is.includes("--json")`, read by nothing. Deleted (the declaration and the header line) rather than documented as a no-op — D317's choice (c) refuses a form the tool does not read; here there was nothing to refuse, so the capability is removed and the doc made true.
 
 Re-measured on the same host, in the same commands: `node tools/pointer-row-for-predecessor-test.mjs` → PASS, **38 checks / 0 FAIL, 1.244 s** (was 24 at `4ea4101b7`, 31 at `27d27d2ef` — the test grew with the `--order` legs, nothing pinned before was dropped; the new legs prove an out-of-order fixture closes to 0 holes / 0 ordering defects in ONE call and that the row texts are unchanged); `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` on the live pointer → exit 0, **3.4 s**, 1 row written for `edd22c534` over a 233-commit range (three audit passes); `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` → exit 0, 233 range commits, 92 NEXT rows + 201 archive rows, 0 holes / 0 ordering defects; `node scripts/test.mjs --area toolchain` → **42/42 in 29.0 s**, exit 0 (the area both tool tests are registered in). The `--order` legs are pinned by FIXTURES, not by the live pointer: the live table had 0 ordering defects at that commit, so the reorder is proven only on the throwaway repo — that is the honest scope of the gate, and the live proof arrives the first time a table goes out of order.
+
+## D318 — A mint budget's CAP is a RATE, and a rate nobody has priced is an outage wearing a gate: price it by replaying the store's OWN mints (2026-11-15, delegate, goal mwh73rd1-izyq72; host **Linux**, **Fedora Linux 45 (Forty Five)**, kernel `7.2.15-300.fc45.x86_64`, node **v24.22.1**, git 2.56.0 — measured with the hostname-free probe of pitfall 396, in the same command as every number below)
+
+**The decision.** A mint-time fan-out budget ships with three numbers (burst cap, band, window). Two of them
+were measured last window; none of them was ever PRICED, and pricing is a different question than reading.
+`mintRefusalCensus` answers "did the gate bite?" — a store whose ledger is empty answers 0 for both "the
+budget is working and nothing fanned out" and "the cap is so small it would refuse half the fleet's real
+mints, and nobody has minted since the gate shipped". D318's move is to price the cap against the ONE
+material this rig already owns that no session had used: the mints the store RECORDED inside the window.
+
+**The measurement (`DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget`, 3.3 s, exit 1):**
+of **1,153 work mints** inside the 7-day window (763 notice mints exempt), the caps as configured would have
+refused **523 — 45.4% — burst 506, lineage 6, duplicate 11**. Six seats sit above the 100/seat burst cap by the
+shipped `mintedBySeat`: impl 567, pm 474, devtools 264, lead 170, qa 158, scribe 154. The LINEAGE rule priced
+at **0.5%** of real mints, so the `~38 %` parentless recollection that had been carried against it was wrong
+by two orders of magnitude: 451 of 1,195 LIVE rows name no parent, but only 6 of 1,153 in-window MINTS lack
+lineage — the live backlog is full of rows that named lineage in their bodies, and lineage is a mint-time test.
+
+**Why it is durable.** A cap BELOW the fleet's own window rate is not a pathological-fan-out stop, it is a halt
+on real work — the same "a gate that halts the team is not a budget, it is a outage" ruling this tranche already
+made about the standing-count design, now measured against the BURST rule instead of argued. The instrument that
+makes the question answerable lives on the delegate plane (`tools/queue-pressure.mjs --price-budget`) because it
+is a judgement about knobs, not a rule the base should enforce; the counterfactual NEVER changes the exit code
+(a priced budget is not pressure), and a candidate cap is printed as an OVERRIDE so a priced number never reads
+as the fleet's setting. `demo/queue-pressure.test.mjs` (**67 checks / 7.8 s exit 0, `.err` 0 bytes**) pins the
+fixture counts exactly, the inside-band case that unarms the lineage leg on the SAME rows, and the body-less
+capture that must label its lineage leg `SUBJECT TEXT ONLY`.
+
+**What only the operator can do.** Raising `DURIG_MINT_BURST_CAP` (src/config.mjs) is the operator's; the
+measured basis is now in the open — a cap above 567 stops the burst rule from refusing real work at the rate
+this fleet is currently minting, and the band (10/seat) is a DIFFERENT knob that the `check` rule owns.
