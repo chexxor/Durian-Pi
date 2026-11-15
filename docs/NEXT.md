@@ -113,6 +113,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `6d1c18396` | docs(377): a drifted read cost amended IN PLACE — watch --once is 1.5 s or 10.9 s by broker state — plus the cadence row for fbe129ab5 — cadence row named from git's own subject line (`git log -1 --format=%s 6d1c18396`), pitfall 384 |
 | `b8dcceb47` | docs(NEXT): the pointer pays its byte budget again — the price paragraph and the read-cost wording moved VERBATIM to the archive, and §37 names which cost a read pays — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s b8dcceb47`) |
 | `41a03e910` | docs(NEXT): the cadence rows for 6d1c18396 and b8dcceb47 — pitfall 384's chase, paid by the closer in ONE call — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 41a03e910`) |
+| `c8495ff3f` | docs(NEXT): pay pitfall 384's cadence row for 41a03e910 — the closer's chase row, text from git's own subject line — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s c8495ff3f`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -129,10 +130,10 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 **Current item:** the **queue-backlog tranche is shipped, gated, AND the sweep has run** — all eight goal tasks are
 contract-satisfied, and the two clauses that were prose before are now NUMBERS: task-2's red-first is a measured run
 (**RED 4 failing checks / exit 1 / 0.13 s** at `93e0044a` = `8bd56720^`, **GREEN exit 0 / 0.15 s** at HEAD), and task-3's
-readapi-area pin is section C2 of `demo/status-view-bound.test.mjs` (**2.36 s exit 0**, `--area readapi` **7/7 in 6.1 s**) (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
+readapi-area pin is section C2 of `demo/status-view-bound.test.mjs` (**2.36 s exit 0**, `--area readapi` **7/7 in 5.9 s**) (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
 **379** registrations → ledger + `registration-as-work`, **380** the `queue-pressure` gate, `tools/queue-pressure.mjs` and the `src/fleetledger.mjs` seam that makes the finding QUOTE the tool's verdict,
 task-4's broker-window re-measure in the `State the team is in` block below). `cli.mjs check rig.selfdev.json --json` now exits **1** with **3 errors**:
-**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +718/7 d — re-measured 2026-11-15 at `6d1c18396`, exit 1, 2.073 s), **`pool-dead-gate`** (#7660 queued in the POOL, requires docs, no seat advertises it) and **`ready-ref-stale`** (`item-3570-recut` ready to land and past its 24 h SLA — the age is `<N>` h **at measurement**, wall-clock relative and never a constant (pitfall 398's rolling-window shape); landing debt the fleet owns, the land grant is the operator's), plus **`registration-as-work`** at `fix-now` on **16** ids:
+**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +715/7 d — re-measured 2026-11-15 at `c8495ff3f`, exit 1, 1.906 s), **`pool-dead-gate`** (#7660 queued in the POOL, requires docs, no seat advertises it) and **`ready-ref-stale`** (`item-3570-recut` ready to land and past its 24 h SLA — the age is `<N>` h **at measurement**, wall-clock relative and never a constant (pitfall 398's rolling-window shape); landing debt the fleet owns, the land grant is the operator's), plus **`registration-as-work`** at `fix-now` on **16** ids:
 #6700 #6759 #6879 #6906 #6913 #6992 #7014 #7031 #7039 #7051 #7258 #7282 #7311 #7645 #7703 #7739 (was 17 — the broker
 window claimed one, which is exactly what the rule exists to catch). **That is the queue the next session acts on.**
 
@@ -140,16 +141,16 @@ window claimed one, which is exactly what the rule exists to catch). **That is t
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 1.7 s, exit 1 — the census, the per-DAY rate, the band verdict, the plan pm runs, AND `mint refusals:` (the fan-out budget's read path)
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 3.3 s, exit unchanged — the cap's PRICE (runbook §35): 523 of 1,153 in-window work mints would be refused
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 1.9 s, exit 1 — the census, the per-DAY rate, the band verdict, the plan pm runs, AND `mint refusals:` (the fan-out budget's read path)
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 3.2 s, exit unchanged — the cap's PRICE (runbook §35): 523 of 1,153 in-window work mints would be refused
 node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
 node demo/notice-not-work.test.mjs                        # 0.29 s, exit 0 — notices are not work, the mint gate, the ack plan
 node demo/status-view-bound.test.mjs                       # 2.2 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
-node scripts/test.mjs --area readapi                       # 5.3 s, 7/7 — the AREA task-3 names; the pin lives here (the area's slow member is `demo/read-no-create-store.test.mjs`, not the pin)
+node scripts/test.mjs --area readapi                       # 5.9 s, 7/7 — the AREA task-3 names; the pin lives here (the area's slow member is `demo/read-no-create-store.test.mjs`, not the pin)
 node demo/queue-pressure.test.mjs                         # 7.8 s, exit 0, 67 checks — the gate: inside PASS / out FAIL / growing FAIL / floor, the finding QUOTES the ledger verdict, the mint-refusal read path, and the budget back-test (12 new legs)
-node scripts/test.mjs --area check                        # 25.9 s, 18/18 — the new rule plus doc-count-drift and starter
+node scripts/test.mjs --area check                        # 9.4 s, 18/18 — the new rule plus doc-count-drift and starter
 node scripts/test.mjs --area rig                          # 15.7 s, 98/98
-node cli.mjs check rig.selfdev.json --json                # 6.7 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
+node cli.mjs check rig.selfdev.json --json                # 6.8 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
 node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED: broker down, 3 provider BLOCKs (keys out of tree, pitfall 386); SOURCED it was 24 s with 0 blocks (earlier window)
 timeout 560 node scripts/test.mjs --all --jobs 4          # 165.1 s at PROVENANCE tree=f331274fc (.spike/suite-f331274.out); older tallies live in docs/NEXT-ARCHIVE.md
@@ -161,11 +162,11 @@ timeout 560 node scripts/test.mjs --all --jobs 4          # 165.1 s at PROVENANC
 
 **Blocker:** none for the sweep — it ran. The residual is a **TRUE band failure**, not an outage: the fleet LEDGER
 stopped being appended on 2026-11-13 while the broker was down, so `tools/backlog-burn.mjs` (0.05 s, exit 0) quotes a
-stale window and `cli.mjs check` quotes the same sentence inside its finding; the store-wide rate is +719 over 7 d.
-Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (2.2 s, exit 1) rather than quote either;
+stale window and `cli.mjs check` quotes the same sentence inside its finding; the store-wide rate is +715 over 7 d.
+Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (1.9 s, exit 1) rather than quote either;
 pitfall 383, and the `<N>`-min age is wall-clock relative, never a constant (pitfall 398). Full paragraph moved VERBATIM
 to `docs/NEXT-ARCHIVE.md` (pitfall 392: the clock-in digest reads this slice, so the prose lives out of it); the rate there
-(+719/7 d) has slid to **+718 over 7 d at `6d1c18396`** — the window is anchored to the wall clock.
+(+719/7 d) has slid to **+715 over 7 d at `c8495ff3f`** — the window is anchored to the wall clock.
 
 **Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
 (`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; with 1024 open work
