@@ -948,3 +948,32 @@ duplicate 12 + lineage 1; at 30 d even a cap of 600 still refuses **587** real m
 outside the window is not counted); the lineage exemption proxy reads a row still `held` as "was minted parked";
 the window denominator is anchored to the WALL clock, so these counts slide when the store does not. None of it
 is a recommendation: the knob is the operator's (`src/config.mjs`), and this section is the curve, not a decision.
+
+## 37. WHICH COST A `watch --once` PAYS — the same command costs 1.5 s or 10.9 s depending on whether a broker is routing it, and the drift reads as a defect (2026-11-15, delegate at `fbe129ab5`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**Symptom:** a doc quotes ONE wall clock for `cli.mjs watch --once --human` and the next session measures a number
+7× away, so the row looks like a regression. `docs/ROADMAP.md` row **377** shipped `watch --once` at **10.9 s**; the
+identical command on this box returned **1.515 s** at `fbe129ab5`. Nothing in the store changed size-wise between the
+two readings — the difference is **broker state**, and it is invisible in the row as written.
+
+```bash
+# 1) name the broker state in the SAME command as the measurement (303/329's discriminator)
+cat selfdev.sqlite.broker.json 2>/dev/null || echo "no broker.json — the read is direct"
+# 2) measure the read, exit captured WITHOUT a pipe
+t0=$(date +%s%N); DURIG_DB=./selfdev.sqlite node cli.mjs watch --once --human > .spike/watch.out 2> .spike/watch.err; e=$?; t1=$(date +%s%N); echo "exit=$e"; echo "scale=3; ($t1-$t0)/1000000000" | bc
+```
+
+Measured on this box, 2026-11-15, with the broker **down** (`selfdev.sqlite.broker.json` absent, no `cli.mjs serve`
+process in `ps -o pid,etime,args -C node`): **1.515 s, exit 0, 3,939 B on stdout, 0 B on stderr**, and the footer
+still printed the census line (`of the 1200 live rows: 1024 work (537 in the claim lane) · 5 notices (not work) ·
+171 ROADMAP registrations · 286 awaiting you`). Row 377's **10.9 s** is the **broker-up** shape.
+
+**The rule for the next reader:** a `watch`/`status`/`queue` cost is only meaningful beside the broker state, and the
+two shapes are different reads — a broker-routed read pays the router's turn, a direct read pays the store. Row 329
+carries the failure half: against a broker that is **alive but dark** (fresh `heartbeatAt`, frozen `lastPassAt`, no
+`genlock.*`) the same command printed **0 bytes on both streams for 90+ s** and exited on the bound, and the read was
+*destroyed*, not delayed — so a slow `watch` is not "the store is big", and an empty `watch` is not "nothing is
+waiting". When quoting a read cost, write the state with it: `1.5 s (broker down)` / `10.9 s (broker up)`.
+
+**Never do:** re-measure a read cost and overwrite the old number in a row. Keep both numbers and name which shape
+each is, or the drift becomes indistinguishable from a regression — which is exactly how 377's `10.9 s` came to look.
