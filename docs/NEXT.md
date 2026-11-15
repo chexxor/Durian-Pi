@@ -41,6 +41,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `df0c891f` | docs: `docs/runbooks/session-start-cost.md` §29 (the rate question: census → ledger → `check`, 2.2 s) and the run-first block gains `node tools/backlog-burn.mjs` — this commit is the exempt carrier; full suite re-measured **at this tree** 363/363 in 196.7 s exit 0 |
 | `4919c660` | docs(NEXT): the pointer names `df0c891f` and carries the full-suite tally AT that tree (363/363 in 196.7 s exit 0) — that commit's exempt carrier |
 | `c37f583a` | demo pins that a CAP refusal is **recorded**, not only refused (task-5's literal clause): `demo/notice-not-work.test.mjs` §10 asserts `kind: "burst"`, the cap/window/knob named in the record, the ledger bounded at 100, and no row minted — whole demo still 0.365 s exit 0; ROADMAP 378 amended in place; the `--jobs 4` run there came back 361/363 and exposed the clock-in digest over budget (pitfall 392) |
+| `2ec49b52` | docs consolidation forced by a REAL gate failure: the clock-in digest reached 20,354 B over its declared 20,000 B budget (pitfall 392), so this window's sweep-procedure block and its long suite-tally paragraph moved VERBATIM into `docs/NEXT-ARCHIVE.md` and the pointer keeps facts + one-line measurements; `node demo/clockin-digest.test.mjs` then green standalone (27.5 s, exit 0, entry point 18,367 B against the 20,000 B cap) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -89,15 +90,15 @@ decision, not a verb. A lease is NOT side-effect-free: it minted one item branch
 in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386),
 and the local provider is priced 0 in/0 out, so the sweep cost ~$0.
 
-**Suite tally (363 members):** GREEN full runs, each named by its own artifact PROVENANCE line — **363/363 in 196.7 s** at
-`df0c891f` (`.spike/suite-final-df0c891f.out`, the last run after every doc close-out); 363/363 in 201.6 s at `28fa2c5f`;
-363/363 in 193.7 s at HEAD `8e39f105` with the `fleetledger` seam in the tree (`.spike/suite-quote-all.out`); 363/363 in 224.0 s
-at `fd5e3316`; 363/363 in 219.3 s at tree `8bd56720`. Do NOT cite the two runs at HEAD `93e0044a` (362/363, 360/363) as a
-tally — a `--jobs 4` load flake and a pre-close-out tree (pitfall 385). Areas re-measured after the seam: `check` 18/18,
-`rig` 98/98 in 18.1 s. **At `c37f583a` a `--jobs 4` run came back 361/363**: `restart-limit-behaviour` green ALONE (1.39 s,
-the known load flake) and `demo/clockin-digest.test.mjs` RED — a REAL failure, the clock-in digest at 20,354 B over its
-declared 20,000 B budget (pitfall 392: the `## NEXT SESSION` section feeds the digest VERBATIM, so pointer growth is digest
-growth; ROADMAP 289's size gate). Fixed by consolidation into `docs/NEXT-ARCHIVE.md` — `node demo/clockin-digest.test.mjs` is then **green standalone (27.5 s, exit 0; entry point 18,367 B against the 20,000 B cap)**; **the FULL suite has NOT been re-run since that commit — run it first next session and correct this line.**
+**Suite tally (363 members):** GREEN full runs, each named by its own artifact PROVENANCE line — **363/363 in 197.9 s, exit 0** at
+`2ec49b52` (`.spike/suite-2ec49b52.out`, the NEWEST full run, after the consolidation); **363/363 in 196.7 s** at `df0c891f`; 363/363 in
+201.6 s at `28fa2c5f`; 363/363 in 193.7 s at `8e39f105`; 363/363 in 224.0 s at `fd5e3316`; 363/363 in 219.3 s at `8bd56720`. Do NOT
+CITE the two runs at HEAD `93e0044a` (362/363, 360/363) or the 361/363 at `c37f583a` as tallies — a `--jobs 4` load flake
+(`demo/restart-limit-behaviour.test.mjs` green ALONE, 1.39 s, pitfall 352/377) and a REAL failure, the clock-in digest at 20,354 B
+over its declared 20,000 B budget (pitfall 392: `## NEXT SESSION` feeds the digest VERBATIM; ROADMAP 289's size gate; fixed by
+consolidation into `docs/NEXT-ARCHIVE.md`, and `node demo/clockin-digest.test.mjs` is then green standalone — 27.5 s, exit 0,
+entry point 18,367 B against the 20,000 B cap). Areas re-measured after the seam and after the readapi pin: `check` 18/18,
+`rig` 98/98 in 18.1 s, `readapi` 7/7 in 6.1 s.
 
 **State the team is in:** the tranche is **landed in the shared tree** (`main` = this pointer's own commit, over `0b9e4e5e` (the `fleetledger` seam) over `8e39f105`, `cc4769ec`, `6fff4560` and the six docs close-outs
 `b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`, `1fd8134a`, `6fff4560` over `8bd56720`, whose 28 explicit paths carry the

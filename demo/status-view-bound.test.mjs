@@ -129,6 +129,33 @@ try {
 	assert.equal(census.terminal, TERMINAL_ROWS, "terminal rows are counted");
 	assert.equal(census.active, DEFERRED_ROWS + (ROWS - TERMINAL_ROWS - DEFERRED_ROWS), "active rows are counted");
 	assert.equal(census.counts.deferred, DEFERRED_ROWS, "the deferred backlog is counted from the full row set");
+
+	// ─── C2. THE SHAPE THE CENSUS NAMES (ROADMAP 377 — the readapi-area pin of the split) ───
+	// `queueCensusOf.shape` is ONE derivation (src/readapi.mjs `queueCensusOf` calls src/queueclass.mjs
+	// `queueShape`); this is the demo that proves a bounded read-side census says WHAT it counted, not just
+	// how many. The fixture's own rows are all work, so the three rows appended below are what make the
+	// split observable — a census that still calls everything work cannot tell them apart.
+	const mixed = [...rows,
+		{ id: 9001, from: "devtools", to: "pm", subject: "DONE #9000: build the landing screen", body: "completed by devtools", status: "queued" },
+		{ id: 9002, from: "lead", to: "pm", subject: "CANCELLED #9001: old request", body: "cancelled by lead: superseded", status: "queued" },
+		{ id: 9003, from: "pm", to: "impl", subject: "ROADMAP 92 (BACKLOG — hold, do not start)", body: "docs/ROADMAP.md", status: "queued" },
+	];
+	const mixedCensus = queueCensusOf(mixed);
+	assert.equal(mixedCensus.shape.notice, 2, "two queued acknowledgements are named as notices, not folded into work");
+	assert.equal(mixedCensus.shape.registration, 1, "a queued ledger registration is named as a ROADMAP registration");
+	assert.equal(mixedCensus.shape.work, census.active, `the work bucket stayed at the fixture's ${census.active} live rows: the 3 queued rows added are NOT startable work`);
+	assert.equal(
+		mixedCensus.shape.work + mixedCensus.shape.notice + mixedCensus.shape.registration,
+		mixedCensus.shape.live,
+		"the buckets SUM to the live-row count — nothing is counted twice and nothing is missing",
+		);
+	assert.equal(mixedCensus.shape.queuedWork, ROWS - TERMINAL_ROWS - DEFERRED_ROWS, "the claim lane did NOT grow: 3 queued rows that are not work added 0 startable work");
+	assert.equal(mixedCensus.shape.noticeQueued, 2, "the queued-notice count travels too — that is the number that inflated the claim lane before ROADMAP 376");
+	assert.equal(mixedCensus.shape.awaitingOperator, DEFERRED_ROWS, "the awaiting-operator bucket names exactly the rows parked on a human answer");
+	const empty = queueCensusOf([]);
+	assert.equal(empty.shape.live, 0, "an empty store yields an empty shape, not an error");
+	assert.equal(empty.shape.work + empty.shape.notice + empty.shape.registration, empty.shape.live, "the sum identity holds at the bottom edge");
+
 	const backlog = deferredBacklogRows(rows);
 	assert.equal(backlog.length, DEFERRED_ROWS, `the deferred backlog is complete even though ${DEFERRED_ROWS} > ${QUEUE_VIEW_ROW_CAP}`);
 	assert.ok(backlog.every((r) => r.status === "deferred"), "a projected backlog row keeps its status — the projection must stay filterable, not just pretty");
