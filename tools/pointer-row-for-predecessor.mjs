@@ -14,11 +14,14 @@
 // audit and report its exit code, so the close is proven by the same reader the gate uses.
 //
 // Run: node tools/pointer-row-for-predecessor.mjs --base=<base-sha> [--file=docs/NEXT.md]
-//        [--archive=docs/NEXT-ARCHIVE.md] [--no-archive] [--dry-run] [--for=<rev>]
+//        [--archive=docs/NEXT-ARCHIVE.md] [--no-archive] [--dry-run] [--for=<rev>] [--order]
+//      `--order` additionally PERMUTES the table's existing rows into the commit order the audit
+//      reports (`ordered`), so one call closes BOTH shapes the audit can report — a hole AND an
+//      ordering defect. Without it, an ordering defect is reported and left alone (appending rows
+//      cannot fix one); with it the move is mechanical and no row text is retyped.
 //      `--for=HEAD` also pays the row the NEXT commit will owe for the commit that is HEAD now, so
 //      running this tool BEFORE a commit gets the WHOLE cadence in one call (pitfall 384: HEAD can
 //      never name itself in the commit that carries it).
-//        [--archive docs/NEXT-ARCHIVE.md] [--no-archive] [--dry-run] [--json]
 //      This tool takes ONLY the `=` form (`--base=8b5a19e1`, `--file=…`) and REFUSES the space form,
 //      because the audit it calls, `tools/pointer-sha-coverage.mjs`, takes only the space form and
 //      silently ignores `--base=` (pitfall 398: that false green audited 37 of 197 commits and still
@@ -28,20 +31,24 @@
 //
 // COST: 1.6 s for a 0-hole pass over a 227-commit range (measured 2026-11-15 on Linux, Fedora Linux
 // 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0 at `4ea4101b7`:
-// `time node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --dry-run` -> 1.607 s). Two
-// audit passes plus one file write; no store, no network, no model. Re-measure rather than trust.
+// `time node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --dry-run` -> 1.607 s). Re-measured
+// 2026-11-15 at `edd22c534` with `--order` on the LIVE pointer: `node tools/pointer-row-for-predecessor.mjs
+// --base=8b5a19e1 --for=HEAD --order` -> **3.4 s**, exit 0 (one row written, one row already present,
+// three audit passes over a 233-commit range; no store, no network, no model). Re-measure rather than trust.
 //
-// last_verified: 2026-11-15 — `node tools/pointer-row-for-predecessor-test.mjs` PASS, 24 checks
-// 0 FAIL, 0.594 s, on the same host.
-//
-// Exit: 0 = the audit exits 0 after this call (rows added, or none were owed);
-//       1 = the audit still does not exit 0 (holes fixed, ordering defect not — or a write failed);
+// Exit: 0 = the audit exits 0 after this call (rows added, rows reordered, or none were owed);
+//       1 = the audit still does not exit 0 (holes fixed but an ordering defect left and `--order`
+//             not given, or a write failed);
 //       2 = usage.
 //
-// last_verified: 2026-11-15 — `node tools/pointer-row-for-predecessor-test.mjs` PASS, 31 checks
-// 0 FAIL, 0.92 s, on Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node
+// last_verified: 2026-11-15 — `node tools/pointer-row-for-predecessor-test.mjs` PASS, 38 checks
+// 0 FAIL, 1.215 s, on Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node
 // v24.22.1, git 2.56.0 (the throwaway repo is init + a milestone anchor + five commits, and the
-// audit is pointed at its `docs/NEXT.md` with `--file`).
+// audit is pointed at its `docs/NEXT.md` with `--file`; the new legs pin `--order` and the audit's
+// `ordered` list — an out-of-order fixture closes to 0 holes / 0 ordering defects in ONE call, and
+// the row texts are the ones that came in). History of this same test on the same day, kept so the
+// check count is not read as a regression: 24 checks at `4ea4101b7`, 31 checks at `27d27d2ef`, 38 now
+// — the test grew with the `--order` legs; nothing that was pinned before was dropped.
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -65,7 +72,7 @@ const file = flag("file", "docs/NEXT.md");
 const archive = flag("archive", "docs/NEXT-ARCHIVE.md");
 const noArchive = is.includes("--no-archive");
 const dryRun = is.includes("--dry-run");
-const asJson = is.includes("--json");
+const fixOrder = is.includes("--order");
 const base = flag("base");
 
 // ONE derivation of "what is missing": the audit itself, asked for its report.
@@ -110,10 +117,52 @@ const forRow = (() => {
   return { sha, subject: subj, text: `| \`${sha}\` | ${subj.replace(/\|/g, "\\|")} — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (\`git log -1 --format=%s ${sha}\`) |` };
 })();
 
+// `isRow`, `shaOfRow` and `applyOrder` sit ABOVE the early exit because `--order` runs on the path
+// where NO row is owed but the table is out of order; a `const` declared below it is in the temporal
+// dead zone there (ReferenceError, not a clean refusal).
+const isRow = (l) => /^\| `[0-9a-f]{7,}` \|/.test(l);
+const shaOfRow = (l) => (l.match(/^\| `([0-9a-f]{7,40})` \|/) ?? [, ""])[1];
+// `--order`: the mechanical permutation. The ORDER comes from the AUDIT's `ordered` list — this
+// tool never re-derives it from `git log` here, which would be a second spelling of one rule. A row
+// is MOVED, never rewritten: the text that leaves the file is the text that came in, so a reorder
+// cannot be a place to invent a row label (pitfall 398's shape two). Rows naming something outside
+// the audited range keep their position; they are anchors, not holes.
+const applyOrder = (path, rep) => {
+  const lines = readFileSync(path, "utf8").split("\n");
+  const ordered = rep.ordered || [];
+  const rankOf = (rowSha) => {
+    for (let i = 0; i < ordered.length; i += 1) {
+      const s = ordered[i];
+      if (rowSha.startsWith(s) || s.startsWith(rowSha)) return i;
+    }
+    return null;
+  };
+  const slots = [];
+  for (let k = 0; k < lines.length; k += 1) if (isRow(lines[k]) && rankOf(shaOfRow(lines[k])) !== null) slots.push(k);
+  const texts = slots.map((k) => lines[k]);
+  texts.sort((a, b) => rankOf(shaOfRow(a)) - rankOf(shaOfRow(b)));
+  let moved = 0;
+  for (let i = 0; i < slots.length; i += 1) {
+    if (lines[slots[i]] !== texts[i]) moved += 1;
+    lines[slots[i]] = texts[i];
+  }
+  if (moved) writeFileSync(path, lines.join("\n"));
+  return moved;
+};
+
 const holesText = (report.outOfOrder || []).length
   ? `; ${(report.outOfOrder || []).length} ordering defect(s) are NOT fixable by appending rows`
   : "";
 if (!missing.length && !forRow) {
+  if (fixOrder && (report.outOfOrder || []).length) {
+    const moved = applyOrder(file, report);
+    const again = spawnSync("node", covArgs, { encoding: "utf8" });
+    let rep2 = null;
+    try { rep2 = JSON.parse(again.stdout); } catch { rep2 = null; }
+    console.log(`  --order: ${moved} row(s) MOVED into commit order (a permutation — no row text retyped); re-audit: ${(again.stdout || again.stderr).trim().split("\n")[0]}`);
+    if (rep2) console.log(`  re-audit verdict: ${rep2.missing.length} hole(s), ${(rep2.outOfOrder || []).length} ordering defect(s)`);
+    process.exit(again.status === 0 ? 0 : 1);
+  }
   console.log(`  rows owed: 0 — every range commit is already named${holesText}`);
   process.exit((report.outOfOrder || []).length ? 1 : 0);
 }
@@ -133,7 +182,6 @@ console.log(`  rows to add, in commit order (oldest first, the table's order): $
 for (const r of rows) console.log(`    ${r.slice(0, 120)}${r.length > 120 ? "…" : ""}`);
 
 const L = readFileSync(file, "utf8").split("\n");
-const isRow = (l) => /^\| `[0-9a-f]{7,}` \|/.test(l);
 let lastRow = -1;
 for (let k = 0; k < L.length; k += 1) if (isRow(L[k])) lastRow = k;
 if (lastRow < 0) {
@@ -160,4 +208,15 @@ try {
 }
 console.log(`  re-audit: ${(after.stdout || after.stderr).trim().split("\n")[0]}`);
 if (rep) console.log(`  re-audit verdict: ${rep.missing.length} hole(s), ${(rep.outOfOrder || []).length} ordering defect(s)`);
+if (fixOrder && rep && (rep.outOfOrder || []).length) {
+  // Appending a row for an OLD hole at the bottom is exactly what makes an otherwise-clean table
+  // report an ordering defect; `--order` closes that in the same call instead of paying another commit.
+  const moved = applyOrder(file, rep);
+  const again = spawnSync("node", covArgs, { encoding: "utf8" });
+  let rep2 = null;
+  try { rep2 = JSON.parse(again.stdout); } catch { rep2 = null; }
+  console.log(`  --order: ${moved} row(s) MOVED into commit order (a permutation — no row text retyped); re-audit: ${(again.stdout || again.stderr).trim().split("\n")[0]}`);
+  if (rep2) console.log(`  re-audit verdict: ${rep2.missing.length} hole(s), ${(rep2.outOfOrder || []).length} ordering defect(s)`);
+  process.exit(again.status === 0 ? 0 : 1);
+}
 process.exit(after.status === 0 ? 0 : 1);

@@ -170,6 +170,40 @@ try {
     equalsAudit.stdout + equalsAudit.stderr,
   );
 
+  // (8) `--order` closes an ORDERING defect in the SAME call: a mechanical permutation of the
+  // table's own rows, never a rewrite of them. The order comes from the audit's `ordered` list, so
+  // the audit stays the ONE derivation of both the verdict and the order.
+  const tangled = [`| \`${c3}\` | the middle row |`, `| \`${c1}\` | the first row |`, `| \`${c2}\` | the second row |`];
+  writeFileSync(pointer, tableOf(tangled));
+  const orderedReport = runAudit(["--base", c0, "--file", "docs/NEXT.md", "--no-archive", "--json"]);
+  const ord = JSON.parse(orderedReport.stdout);
+  check(
+    "the audit publishes the ORDER its verdict uses (`ordered`), so the closer never re-derives it",
+    (ord.ordered || []).join(",") === [c1, c2, c3].join(","),
+    orderedReport.stdout,
+  );
+  const orderedWith = runCloser([`--base=${c0}`, "--file=docs/NEXT.md", "--no-archive", "--order"]);
+  check("--order exits 0 on a table whose only defect is ordering", orderedWith.status === 0, `status=${orderedWith.status}\n${orderedWith.stdout}`);
+  check(
+    "it says it MOVED rows rather than adding any",
+    orderedWith.stdout.includes("MOVED into commit order"),
+    orderedWith.stdout,
+  );
+  check("the re-audit is green (0 holes / 0 ordering defects)", orderedWith.stdout.includes("re-audit verdict: 0 hole(s), 0 ordering defect(s)"), orderedWith.stdout);
+  const linesOrdered = readFileSync(pointer, "utf8").split("\n").filter((l) => l.startsWith("| `"));
+  check(
+    "the row TEXTS are exactly the ones that came in (a permutation, no row retyped or invented)",
+    linesOrdered.slice().sort().join("\n") === tangled.slice().sort().join("\n"),
+    linesOrdered.join("\n"),
+  );
+  check(
+    "the rows now run in commit order (c1 before c2 before c3)",
+    linesOrdered[0].includes(c1) && linesOrdered[1].includes(c2) && linesOrdered[2].includes(c3),
+    linesOrdered.join("\n"),
+  );
+  const orderedAgain = runCloser([`--base=${c0}`, "--file=docs/NEXT.md", "--no-archive", "--order"]);
+  check("--order on an ordered table moves nothing and still exits 0", orderedAgain.status === 0 && orderedAgain.stdout.includes("rows owed: 0"), `status=${orderedAgain.status}\n${orderedAgain.stdout}`);
+
   console.log(`\npointer-row-for-predecessor test: ${failures === 0 ? "PASS" : `${failures} FAIL(s)`}`);
   process.exit(failures === 0 ? 0 : 1);
 } finally {

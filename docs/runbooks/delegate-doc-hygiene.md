@@ -300,7 +300,7 @@ commits to close one chain, each paying its own ~13 s of doc gates).
 **The call, before you commit:**
 
 ```bash
-node tools/pointer-row-for-predecessor.mjs --base=<base-sha> --for=HEAD            # 1.6-1.8 s, exit 0/1
+node tools/pointer-row-for-predecessor.mjs --base=<base-sha> --for=HEAD --order   # 1.6-3.4 s, exit 0/1
 node tools/pointer-row-for-predecessor.mjs --base=<base-sha> --dry-run             # names the rows, writes nothing
 ```
 
@@ -311,8 +311,15 @@ two: a retyped row label is a lie the gate cannot see), then re-audits and repor
 so the close is PROVEN by the same reader the gate uses. `--for=HEAD` also pays the row the coming
 commit will owe, because HEAD can never name itself in the commit that carries it (pitfall 384) —
 that is what makes the whole cadence ONE call instead of one commit per commit. A planning pass writes
-nothing and says so; a row already present is not added twice; an **ordering** defect is NOT fixed by
-appending rows and the tool exits 1 saying exactly that rather than papering it over.
+nothing and says so; a row already present is not added twice. **`--order` closes the OTHER shape the
+audit reports:** an ordering defect is not fixable by appending rows — without the flag the tool exits
+1 and says exactly that rather than papering it over — but with it the tool PERMUTES the table's
+existing rows into the order the audit reports in its `ordered` field (the audit is the ONE derivation
+of both the verdict and the order; re-sorting from a second `git log` here would be a second spelling
+of one rule). The move is mechanical: every row text that leaves the file is the text that came in, so
+a reorder cannot be a place to invent a row label, and rows naming shas outside the audited range keep
+their position. Appending a row for an OLD hole at the bottom is what creates an ordering defect, so
+`--order` is what makes the one call close BOTH shapes instead of paying another commit per shape.
 
 **The flag trap that used to make this invisible:** `tools/pointer-sha-coverage.mjs` took ONLY the
 space form; `--base=<ref>` was ignored, the range fell back to `merge-base(origin/main, HEAD)`, and
@@ -321,14 +328,18 @@ that made the next window's cadence look closed. The audit now REFUSES the `=` f
 closer REFUSES the space form; each says which form it reads. Never conclude "covered" from one flag
 form — read the `range … (<baseLabel>)` line the audit prints.
 
-**Cost and host, measured:** 1.607 s for a 0-hole `--dry-run` over a 227-commit range and 0.92 s for
-the instrument's own test (`node tools/pointer-row-for-predecessor-test.mjs`, 31 checks / 0 FAIL,
-registered in the `toolchain` area of `demo/test-areas.json`) on Linux, Fedora Linux 45 (Forty Five),
-kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0.
+**Cost and host, measured:** 1.607 s for a 0-hole `--dry-run` over a 227-commit range (measured at
+`4ea4101b7`); **3.4 s** for the live pre-commit call `node tools/pointer-row-for-predecessor.mjs
+--base=8b5a19e1 --for=HEAD --order` (1 row written, 233-commit range, three audit passes) and **1.244 s**
+for the instrument's own test (`node tools/pointer-row-for-predecessor-test.mjs`, **38 checks / 0 FAIL**,
+registered in the `toolchain` area of `demo/test-areas.json`) — all on Linux, Fedora Linux 45 (Forty Five),
+kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. Re-measure rather than trust.
 
-**last_verified:** 2026-11-15 at `d34aa03f7` by `node tools/pointer-row-for-predecessor-test.mjs`
-(exit 0) plus `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (exit 0, 230 range commits, 0 holes
-/ 0 ordering defects).
+**last_verified:** 2026-11-15 at `edd22c534` by `node tools/pointer-row-for-predecessor-test.mjs` (exit
+0, 38 checks / 0 FAIL, 1.244 s) plus `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (exit 0,
+233 range commits, 0 holes / 0 ordering defects) and `node tools/pointer-sha-coverage-test.mjs` (exit
+0). The `--order` legs are pinned by fixtures, not by the live pointer: the live table had 0 ordering
+defects at that commit, so the reorder is proven only on the throwaway repo.
 
 ## If it fails
 

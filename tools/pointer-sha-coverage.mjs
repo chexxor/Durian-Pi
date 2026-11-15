@@ -152,6 +152,12 @@ for (let k = 1; k < positions.length; k += 1) {
 const foreign = [...rowIndex.keys()].filter((r) => !commits.some((c) => c.sha.startsWith(r) || r.startsWith(c.sha)) && !head.startsWith(r));
 
 const ok = missing.length === 0 && outOfOrder.length === 0;
+// `ordered` is the ORDER the live table's rows must be in: the range commits that the live table
+// names, in commit order. It exists so `tools/pointer-row-for-predecessor.mjs --order` can PERMUTE
+// the existing rows against the audit's own verdict instead of re-deriving the order from `git log`
+// a second time (the pair-of-spellings defect: two derivations of one rule, and they drift).
+// Only commits the LIVE file names get a rank; archive-only names have no row to move.
+const ordered = positions.filter((p) => p.tableOrder !== undefined).map((p) => p.sha);
 const report = {
 	tool: "pointer-sha-coverage",
 	file,
@@ -164,6 +170,7 @@ const report = {
 	carrier: carrier ? carrier.sha : null,
 	missing,
 	outOfOrder,
+	ordered,
 	foreign,
 	ok,
 };
