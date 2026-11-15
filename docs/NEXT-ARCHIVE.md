@@ -15316,3 +15316,9 @@ pass-by-pass — the queue has no verb for it (`registrations` is census-only), 
 (d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
 operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
 
+## 2026-11-15T21:37Z — the pointer's full-suite reading re-pointed at the run measured at the newest tree; the superseded wording VERBATIM here (pitfall 392 pays the slice's byte budget by MOVING; pitfall 398's staleness shape drops a restated `newest` claim)
+
+# 168.9 s, 364/364, exit 0 (captured), PROVENANCE tree=b5c0a2470 (.spike/suite-b5c0a247.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
+
+ (the newest run on this box: **364/364 passed in 168.9 s at `--jobs 4`, exit 0 captured, `.err` 0 bytes**, PROVENANCE `tree=b5c0a2470`, artifact `.spike/suite-b5c0a247.out`).
+
