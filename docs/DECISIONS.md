@@ -13492,3 +13492,18 @@ Two durable facts this window adds to D315, both measured on Linux, Fedora Linux
    fleet, no longer an outage, and it is what `queue-pressure` exists to say. **`registrations` is census-only**
    (`src/queueops.mjs:427` → `{changes: []}`): moving a ledger copy into `docs/ROADMAP.md` is a seat/docs task with no queue verb,
    so the 16 `queued` registrations are pm's routing decision, not a verb the delegate can call.
+
+3. **The burn-rate verdict is a SEAM, and the finding QUOTES it (task-7's literal clause, closed 2026-11-15).** The
+   `queue-pressure` finding used to *cross-reference* `tools/backlog-burn.mjs`; the goal asks it to QUOTE that verdict,
+   because "the gate says GROWING and the instrument says shrinking" is the #5047 pair-of-spellings defect wearing prose.
+   The choice made: `src/fleetledger.mjs` owns the ONE derivation (`fleetLedgerVerdict(text, {hours})`, pure over TEXT) and
+   `tools/backlog-burn.mjs` prints `v.verdictLine` while `src/checkup.mjs` quotes it — **not** importing `tools/` into the
+   base (a base that depends on the delegate plane is the D212 layering inversion: `src/` is the seam, `tools/` is the
+   instrument that reads the seam), and **not** a second inline computation in `checkup.mjs` (that file is deliberately
+   fs-free and subprocess-free; the CALLER — `cli.mjs`'s `check` verb — does the bounded read and hands it as plain data,
+   the same shape `commitMessages`/`citations`/`docCounts` already use). Measured: `node tools/backlog-burn.mjs` 0.049 s
+   exit 0; the live finding carries `"390 rows closed, +166 open rows in the window -> backlog GROWING"` over
+   `2026-11-12T08:35:19.154Z -> 2026-11-13T22:13:03.207Z` + `newest snapshot 2,116 min before this measurement`; the ledger
+   is gitignored and stops being appended while the broker is down, so the quote ships WITH its window and that caveat —
+   a stale window is a caveat, never a contradiction of the store-wide +719/7 d. Pinned by the equality assertion in
+   `demo/queue-pressure.test.mjs` (same fixture text through both surfaces, sentences compared as strings).

@@ -4873,3 +4873,25 @@ at `:743`). Re-measure every `path:line` before repeating it.
     made the demo exit 1 — the assertion is `/^\*\*Blocker:\*\*/m`, and it wants the literal bold-closed label, not the
     word "Blocker" in a sentence. Keep the label and put the truth in it ("`**Blocker:**` none — resolved this window").
     The failure dump prints `expected: /…/, operator: 'match'` — read that line, it names the missing element directly.
+390. **`cli.mjs check` now QUOTES the fleet ledger's burn-rate sentence, and the fleet ledger stops being appended
+    while the broker is down — so the quoted window is usually NOT "now".** `tools/broker-keepalive.mjs:272` appends
+    queue snapshots to the gitignored `.spike/fleet-ledger.jsonl`, and `src/fleetledger.mjs` derives the verdict from
+    it. Measured 2026-11-15 on this box: `node tools/backlog-burn.mjs` → **0.049 s, exit 0**, newest snapshot
+    `2026-11-13T22:13:03.207Z` while the store moved **+719 rows over 7 d** — a 2,116-minute stale gap, because the
+    broker was DOWN (pitfall 386's window). The `queue-pressure` finding therefore prints both numbers side by side,
+    the ledger one IN QUOTES with its window and `newest snapshot N min before this measurement: the ledger stops
+    being appended while the broker is down`. Do not read the quoted `+166 open rows` as the store's rate, and do not
+    "fix" the gap by making the rule read the store — the two windows measure different things on purpose. If the
+    ledger is missing at all (a scratch worktree has no `.spike/`), the clause says `no fleet-ledger burn-rate verdict
+    could be quoted (<reason>)` rather than dropping silently: an unreadable cross-check is never a pass.
+391. **The burn-rate arithmetic does not live in `tools/backlog-burn.mjs` any more — `src/fleetledger.mjs` owns it,
+    and the demo asserts the tool's sentence and the rule's quote are EQUAL strings.** The goal task said the finding
+    must QUOTE the tool's verdict; the temptation is a second inline computation in `src/checkup.mjs`, which is the
+    #5047 pair-of-spellings defect wearing prose. What shipped instead: `fleetLedgerVerdict(text, {hours})` is pure
+    over TEXT (so `auditRig` stays fs-free — the CALLER does the bounded read and hands it as data, the pattern `cli.mjs`'s
+    `check` verb already uses for `commitMessages`/`citations`/`docCounts`), `tools/backlog-burn.mjs` prints `v.verdictLine`, and `demo/queue-pressure.test.mjs`
+    §"the finding QUOTES the tools/backlog-burn.mjs burn-rate verdict" pushes the SAME fixture text through both and
+    compares. Two API traps hit while writing the bounded read: `fs.readSync(fd, buf, offsetInBuffer, positionInFile,
+    bytesToRead)` — swapping the last two reads from the wrong end silently; and `fs.fstat(fd)` is the CALLBACK form
+    (`"cb" must be a function`), while `statSync(path).size` is the sync one. A `--ledger` path is resolved relative to
+    the TOOL's repo, not the shell cwd, so a session in a seat worktree reads ITS ledger.
