@@ -15268,3 +15268,18 @@ operator's ratified goal; a longer or unbounded lease is the operator's grant to
 | `fc4e3730` | **ROADMAP 374 residual** — `branch-prune --retire-ruled` reads `docs/DISPOSITIONS.md` verdicts (last row wins, specificity-matched) instead of a typed regex; bundle-verify guard unchanged; `demo/branch-prune.test.mjs` §15 |
 | `2dfce088` | **ROADMAP 375** — `selectWakes` takes a named `now`; the human-defer-lease demo drives a fixture clock and pins the seam (same row, two clocks, two verdicts) — the suite was red on a calendar, not a defect |
 | `1f1a881c` | **ROADMAP 375** — the restart-limit crash fixture dies AT the observation, not one await after it: 10 standalone runs 2 red → 10 runs 0 red (14 s wall); full suite 361/361 in 192.3 s |
+
+## 2026-11-15T20:36Z — the superseded FULL-suite tally, moved VERBATIM out of `docs/NEXT.md` (pitfall 392: prose pays the clock-in digest; the archive does not)
+
+**364/364 passed in 165.1 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes**, its own PROVENANCE line `tree=f331274fc` (only the pointer's own cadence row was in the WORKING tree at that run), artifact `.spike/suite-f331274.out`, slowest `demo/runbook-diagnose.test.mjs` 66.6 s
+
+**Exit-code note for the replacement run (2026-11-15, delegate at `44989c830`):** the run was launched detached as `nohup sh -c 'time timeout 560 node scripts/test.mjs --all --jobs 4' > .spike/suite-44989c83.out 2> .spike/suite-44989c83.err`, so the `time` wrapper SWALLOWED the suite exit code. Proven: the run’s own tally line prints **364/364 passed in 175.0 s**, `grep -c FAILED .spike/suite-44989c83.out` → **0**, artifact 15,896 B, PROVENANCE `tree=44989c830 branch=main node=v24.22.1 host=linux 7.2.15-300.fc45.x86_64 pi-durable=1.5.1 dependencySet=built-pin`. NOT proven: a captured exit code — if the exit code is the claim, re-run and read `$?` (175.0 s at `--jobs 4` on this box, one bounded call).
+
+## 2026-11-15T20:37Z — 6 more pointer TABLE rows moved VERBATIM out of `docs/NEXT.md` (the 200-line cap; pitfall 392). Headroom restored: the live file now has room for the next sessions’ cadence rows (rows cost the clock-in digest ZERO bytes; a cap breach turns `demo/next-pointer.test.mjs` AND `demo/doc-integrity-ledger.test.mjs` red from ONE guard finding).
+
+| `be71da98` | **docs close-out** — ROADMAP 371/368/373/374 amended in place with measured costs + new row 375; SELFDEV pitfalls 374-377; a DISPOSITIONS row for `item-7232-recut` showing `--retire-ruled` planning it and the bundle guard refusing to delete it without `--bundle-dir` |
+| `3a8bce52` | docs(NEXT): the pointer back inside the 200-line cap — 61 earlier-tranche rows moved VERBATIM to `docs/NEXT-ARCHIVE.md`, the stale 25/25/3 and 358/358 tallies replaced with the measured state, `doc-integrity-guard` exit 0 |
+| `054da8d3` | docs(NEXT): the pointer paragraphs restored in full (Blocker, decisions owed, known red, archive link) and the duplicated broker-window paragraph dropped — 102 lines, cap 200 |
+| `80a87fca` | docs(NEXT): the `3a8bce52` row |
+| `230ee8dd` | docs(NEXT): the `054da8d3` row, so the audit closes on its carrier |
+| `7b417971` | docs(NEXT): the `80a87fca` row — the audit names every range commit except its own carrier |

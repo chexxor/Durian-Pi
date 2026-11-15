@@ -8,12 +8,6 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 
 | sha | shipped |
 |---|---|
-| `be71da98` | **docs close-out** — ROADMAP 371/368/373/374 amended in place with measured costs + new row 375; SELFDEV pitfalls 374-377; a DISPOSITIONS row for `item-7232-recut` showing `--retire-ruled` planning it and the bundle guard refusing to delete it without `--bundle-dir` |
-| `3a8bce52` | docs(NEXT): the pointer back inside the 200-line cap — 61 earlier-tranche rows moved VERBATIM to `docs/NEXT-ARCHIVE.md`, the stale 25/25/3 and 358/358 tallies replaced with the measured state, `doc-integrity-guard` exit 0 |
-| `054da8d3` | docs(NEXT): the pointer paragraphs restored in full (Blocker, decisions owed, known red, archive link) and the duplicated broker-window paragraph dropped — 102 lines, cap 200 |
-| `80a87fca` | docs(NEXT): the `3a8bce52` row |
-| `230ee8dd` | docs(NEXT): the `054da8d3` row, so the audit closes on its carrier |
-| `7b417971` | docs(NEXT): the `80a87fca` row — the audit names every range commit except its own carrier |
 | `0e46df03` | docs(NEXT): rows for the two pointer-fix commits (`230ee8dd`, `80a87fca`) |
 | `352b5fcb` | docs(NEXT): the pointer-fix rows in commit order (`80a87fca` before `230ee8dd`) — the audit reported an ordering defect |
 | `7cb34194` | docs(NEXT): rows for `7b417971`, `0e46df03`, `352b5fcb` — `pointer-sha-coverage --base 8b5a19e1` exits **0** (158 range commits, 80 covered by landing-merge rows, 0 holes) |
