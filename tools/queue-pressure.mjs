@@ -153,7 +153,7 @@ line(`  work      ${JSON.stringify(shape.workByStatus)}   (queued ${shape.queued
 line(`  notice    ${JSON.stringify(shape.noticeByStatus)}   — a protocol ack, not work (ROADMAP 39)`);
 line(`  reg       ${JSON.stringify(shape.registrationByStatus)}   — ROADMAP ledger copies parked in the queue`);
 line(`  ages of live rows: ${Object.entries(ages).map(([k, v]) => `${k}=${v}`).join(" ")}`);
-line(`  mint ${burn.minted} (${burn.mintedWork} work, ${burn.mintedNotice} notice) vs close ${burn.closed} (${burn.closedWork} work, ${burn.closedNotice} notice) -> net ${burn.netOpen > 0 ? "+" : ""}${burn.netOpen}: ${burn.verdict}`);
+line(`  mint ${burn.minted} (${burn.mintedWork} work, ${burn.mintedNotice} notice) vs close ${burn.closed} (${burn.closedWork} work, ${burn.closedNotice} notice) -> net ${burn.netOpen > 0 ? "+" : ""}${burn.netOpen} (${burn.perDay.minted}/d minted, ${burn.perDay.closed}/d closed, ${burn.perDay.netOpen}/d net): ${burn.verdict}`);
 line(`  awaiting operator: ${shape.awaitingOperator} work rows parked on a human answer`);
 line(`  open work per seat: ${Object.entries(shape.openWorkBySeat).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 line(`  oldest live rows: ${oldest.slice(0, 5).map((r) => `#${r.id} ${r.status}`).join(" | ")}`);

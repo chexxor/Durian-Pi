@@ -167,6 +167,13 @@ export function burnRate(items = [], { windowDays = 7, now = Date.now() } = {}) 
 		closedNotice: closed.filter(isNoticeItem).length,
 		closedWork: closed.filter((it) => !isNoticeItem(it)).length,
 		netOpen: minted.length - closed.length,
+		// PER DAY, not only per window: "is the backlog growing" is a RATE question (ROADMAP 378/380), and a
+		// window total alone answers it differently for a 2-day window than for a 7-day one.
+		perDay: {
+			minted: +(minted.length / windowDays).toFixed(2),
+			closed: +(closed.length / windowDays).toFixed(2),
+			netOpen: +((minted.length - closed.length) / windowDays).toFixed(2),
+		},
 		verdict: minted.length - closed.length > 0 ? "GROWING" : "SHRINKING",
 	};
 }
