@@ -46,6 +46,8 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `78d82057` | docs(NEXT): the pointer rows for `2ec49b52` and `44736311` in commit order (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` → exit 0, 0 holes, 0 ordering defects at the pre-B tree) and the suite tally re-measured at `44736311` (363/363 in 202.8 s exit 0); `docs/failing-first-recipe.md` gains the ADDENDUM for the archive-from-parent red proof and the probe-placement rule |
 | `f8667cfb` | docs(NEXT): the `78d82057` row in commit order (so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` stays exit 0 — `f8667cfb` is its exempt carrier there), the readapi-area lines, and the digest pulled back inside its 20,000 B budget by MOVING the long sweep/state paragraphs VERBATIM into `docs/NEXT-ARCHIVE.md` (pitfall 392: `node scripts/clockin.mjs` 19,228 B against `DIGEST_BUDGET_BYTES = 20000` at `scripts/clockin.mjs:46`); `docs/DECISIONS.md` D315 addendum 4 |
 | `9019c9df` | docs(NEXT): the pointer closes on this commit — the `f8667cfb` row named in commit order, and the suite tally quoted ONLY from an artifact whose PROVENANCE names its tree (**363/363 in 192.6 s, exit 0, `.err` 0 bytes** at `tree=f8667cfb`, `.spike/suite-f8667cfb.out`); the honest-posture sentence made sha-independent so a later docs commit needs ONE chase, not three; digest 19,409 B against the 20,000 B cap |
+| `cc6d16cc` | docs close-out: SELFDEV **pitfall 394** (the `--base=` flag-form refusal at `tools/what-to-test.mjs:62-63` and the **DOC-ONLY fast path**) plus the NEXT.md row naming `9019c9df` in commit order; 2 explicit paths |
+| `f410e4de` | docs(NEXT): the `cc6d16cc` row in commit order, and the Suite-tally paragraph's area costs replaced by numbers **measured AT `cc6d16cc`** (`readapi` 7/7 in 14.3 s, `check` 18/18 in 35.6 s, `rig` 98/98 in 26.2 s, PROVENANCE `tree=cc6d16cc`, 123 members / 0 FAILED) — a drifted cost in a `Run these first` block is the same class of lie as a tally without a PROVENANCE line (pitfall 384), and gets the same fix: name the tree |
 | `cc6d16cc` | docs close-out: SELFDEV **pitfall 394** (the `--base=` flag-form refusal at `tools/what-to-test.mjs:62-63` — the tool's usage block prints the space form it rejects — and the **DOC-ONLY fast path**: 19 derived guards instead of 363 members, `--run` 19/19 PASS, and the fact that 18 of them sit OUTSIDE `--area docs`) plus the NEXT.md row naming `9019c9df` in commit order; 2 explicit paths, nothing pushed |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
@@ -71,18 +73,18 @@ in the POOL, requires docs, no seat advertises it), plus **`registration-as-work
 #6700 #6759 #6879 #6906 #6913 #6992 #7014 #7031 #7039 #7051 #7258 #7282 #7311 #7645 #7703 #7739 (was 17 — the broker
 window claimed one, which is exactly what the rule exists to catch). **That is the queue the next session acts on.**
 
-**Run these first** (measured on this box 2026-11-15; re-measure rather than trust):
+**Run these first** (each cost measured on this box 2026-11-15 AT `cc6d16cc`; re-measure rather than trust):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
 DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 2.1 s, exit 1 — the census, the per-DAY rate, the band verdict, and the plan pm runs
 node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
-node demo/notice-not-work.test.mjs                        # 0.45 s, exit 0 — notices are not work, the mint gate, the ack plan
-node demo/status-view-bound.test.mjs                       # 2.4 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
-node scripts/test.mjs --area readapi                       # 6.1 s, 7/7 — the AREA task-3 names; the pin lives here
-node demo/queue-pressure.test.mjs                         # 12.1 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor
-node scripts/test.mjs --area check                        # 37.5 s, 18/18 — the new rule plus doc-count-drift and starter
-node scripts/test.mjs --area rig                          # 25.5 s, 98/98
+node demo/notice-not-work.test.mjs                        # 0.36 s, exit 0 — notices are not work, the mint gate, the ack plan
+node demo/status-view-bound.test.mjs                       # 2.6 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
+node scripts/test.mjs --area readapi                       # 14.3 s, 7/7 — the AREA task-3 names; the pin lives here (the area's slow member is `demo/read-no-create-store.test.mjs`, not the pin)
+node demo/queue-pressure.test.mjs                         # 7.6 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor, and the finding QUOTES the ledger verdict
+node scripts/test.mjs --area check                        # 35.6 s, 18/18 — the new rule plus doc-count-drift and starter
+node scripts/test.mjs --area rig                          # 26.2 s, 98/98
 node cli.mjs check rig.selfdev.json --json                # 9 s, exit 1 — 2 errors: queue-pressure + pool-dead-gate; 30 rules
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
 node tools/broker-serve.mjs --status                      # 24 s SOURCED — providers COMPLETE; 0 blocks; broker down
