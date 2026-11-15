@@ -28,11 +28,21 @@ const lf = (text) => String(text ?? "").replace(/\r\n/g, "\n");
 
 const dir = mkdtempSync(join(tmpdir(), "durig-starter-"));
 
+// THE FIXTURE NAMES ITS OWN CONFIG (found 2026-11-15 at `0f14e998`). `cli.mjs check` runs EVERY armed rule over
+// `process.cwd()`, so a fixture that inherits the LIVE rig's config also runs the live rig's EXTENSION rules over
+// the live repo: `ready-ref-stale` reported `item-3570-recut` ready and 24.1 h past its 24 h SLA, which failed the
+// "check must exit 0 on the starter" assertion below. The proof it read the host and not the fixture is in the
+// finding itself — its `fix` names the FIXTURE store (`queue status no-row`) while its git facts came from the live
+// repo. The starter rig is the BASE surface (`durian-core` ships with NO armed extension, durig.config.example.json),
+// so the fixture says so: `DURIG_CONFIG` is precedence 1 in src/config.mjs.
+const baseConfig = join(dir, "base-config.json");
+writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
+
 /** Run cli.mjs against a scratch database and return its parsed JSON. */
 function cli(args, dbName) {
 	const r = spawnSync(process.execPath, ["cli.mjs", ...args], {
 		cwd: durigDir,
-		env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(dir, `${dbName}.sqlite`) },
+		env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(dir, `${dbName}.sqlite`), DURIG_CONFIG: baseConfig },
 		encoding: "utf8",
 	});
 	let json = null;

@@ -16,6 +16,13 @@ import { auditRig, formatCheck, VERIFIER_TERMS } from "../src/checkup.mjs";
 import { readDependencyPlane } from "../src/depplane.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "durig-check-"));
+// THE FIXTURE NAMES ITS OWN CONFIG (found 2026-11-15 at `0f14e998`): `cli.mjs check` runs every armed rule over
+// `process.cwd()`, so inheriting the live rig's config put the live repo's EXTENSION rules in this fixture's
+// findings — `ready-ref-stale` fired on `item-3570-recut` (ready, 24.1 h past its 24 h SLA) and broke the
+// "CLI findings match the pure audit" assertion below. These fixture rigs are BASE rigs (no extension armed),
+// so the fixture declares its own config: `DURIG_CONFIG` is precedence 1 in src/config.mjs.
+const baseConfig = join(dir, "base-config.json");
+writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
 const CONSTITUTION = "# Team culture\n\nGround every claim in a retrieved passage.\n";
@@ -54,7 +61,7 @@ const cli = (args, env) =>
   new Promise((resolve) => {
     const child = spawn(process.execPath, ["cli.mjs", ...args], {
       cwd: durigDir,
-      env: { ...process.env, DURIG_PROVIDER: "faux", ...env },
+      env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_CONFIG: baseConfig, ...env },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

@@ -193,7 +193,14 @@ try {
     new Promise((resolve) => {
       const child = spawn(process.execPath, ["cli.mjs", ...args], {
         cwd: ROOT,
-        env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(scratch, "no-store.sqlite") },
+        // THE FIXTURE STATE THIS DEMO NEEDS DECLARED (found 2026-11-15 at `0f14e998`): `cli.mjs check` also runs the
+        // live rig's EXTENSION rules over the live repo, and this demo deliberately asserts one of them is PRESENT
+        // (`ready-ref-stale` in the checks list). What it does NOT want is that rule's verdict, which rides on the
+        // host's landing debt: `ready-ref-stale` reported `item-3570-recut` ready and 24.1 h past its 24 h SLA, so
+        // `check` exited 1 and the "json check carries the measured plane as data" assertion below failed. The rule's
+        // declared override is `DURIG_SELF_MERGE_SLA_HOURS` (extensions/self-merge.mjs), so the fixture sets an SLA no
+        // ref can exceed — the rule stays armed, its verdict stops being about the host repo.
+        env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(scratch, "no-store.sqlite"), DURIG_SELF_MERGE_SLA_HOURS: "1000000" },
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";

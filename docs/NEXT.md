@@ -93,9 +93,8 @@ contract-satisfied, and the two clauses that were prose before are now NUMBERS: 
 (**RED 4 failing checks / exit 1 / 0.13 s** at `93e0044a` = `8bd56720^`, **GREEN exit 0 / 0.15 s** at HEAD), and task-3's
 readapi-area pin is section C2 of `demo/status-view-bound.test.mjs` (**2.36 s exit 0**, `--area readapi` **7/7 in 6.1 s**) (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
 **379** registrations → ledger + `registration-as-work`, **380** the `queue-pressure` gate, `tools/queue-pressure.mjs` and the `src/fleetledger.mjs` seam that makes the finding QUOTE the tool's verdict,
-task-4's broker-window re-measure in the `State the team is in` block below). `cli.mjs check rig.selfdev.json --json` now exits **1** with **2 errors**:
-**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +719/7 d — re-measured 2026-11-15 at this commit) and **`pool-dead-gate`** (#7660 queued
-in the POOL, requires docs, no seat advertises it), plus **`registration-as-work`** at `fix-now` on **16** ids:
+task-4's broker-window re-measure in the `State the team is in` block below). `cli.mjs check rig.selfdev.json --json` now exits **1** with **3 errors**:
+**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +719/7 d — re-measured 2026-11-15 at this commit), **`pool-dead-gate`** (#7660 queued in the POOL, requires docs, no seat advertises it) and **`ready-ref-stale`** (`item-3570-recut` ready to land, 24.1 h past the 24 h SLA — landing debt the fleet owns; the land grant is the operator's), plus **`registration-as-work`** at `fix-now` on **16** ids:
 #6700 #6759 #6879 #6906 #6913 #6992 #7014 #7031 #7039 #7051 #7258 #7282 #7311 #7645 #7703 #7739 (was 17 — the broker
 window claimed one, which is exactly what the rule exists to catch). **That is the queue the next session acts on.**
 
@@ -111,7 +110,7 @@ node scripts/test.mjs --area readapi                       # 5.3 s, 7/7 — the 
 node demo/queue-pressure.test.mjs                         # 7.1 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor, and the finding QUOTES the ledger verdict
 node scripts/test.mjs --area check                        # 25.9 s, 18/18 — the new rule plus doc-count-drift and starter
 node scripts/test.mjs --area rig                          # 15.7 s, 98/98
-node cli.mjs check rig.selfdev.json --json                # 6.3 s, exit 1 — 2 errors: queue-pressure + pool-dead-gate; 30 rules
+node cli.mjs check rig.selfdev.json --json                # 5.8 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks (30 base RULES + the armed extension rule)
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
 node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED: broker down, 3 provider BLOCKs (keys out of tree, pitfall 386); SOURCED it was 24 s with 0 blocks (earlier window)
 timeout 560 node scripts/test.mjs --all --jobs 4          # 201.2 s at PROVENANCE tree=144185c89; the tally lives in docs/NEXT-ARCHIVE.md
@@ -135,7 +134,7 @@ operator's ratified goal; a longer or unbounded lease is the operator's grant to
 **The rate question, in 2.2 s:** `docs/runbooks/session-start-cost.md` §32 — census (`tools/queue-pressure.mjs`, per-DAY rate) then ledger (`tools/backlog-burn.mjs`), and `cli.mjs check` prints both, the ledger one inside quotes with its window and the staleness caveat.
 
 **Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
-recorded, not touched by this tranche.
+recorded, not touched by this tranche. **Fixture leak closed (2026-11-15 at `0f14e998`):** 5 demos' `check` assertions now name their own `DURIG_CONFIG` (or the rule's SLA knob) — a fixture that inherits the live rig's armed extension rules measures its HOST, and 4 went red on 24.1 h of live landing debt.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
 

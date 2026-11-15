@@ -34,6 +34,13 @@ import { enqueueItem, RigQueue, Router } from "../src/rig.mjs";
 
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const dir = mkdtempSync(join(tmpdir(), "durig-pool-gate-"));
+// THE FIXTURE NAMES ITS OWN CONFIG (found 2026-11-15 at `0f14e998`): `cli.mjs check` runs every armed rule over
+// `process.cwd()`, so this fixture inherited the live rig's EXTENSION rules and the live repo's refs — `ready-ref-stale`
+// fired on `item-3570-recut` (ready, 24.1 h past its 24 h SLA) and broke the "advertising the capability clears
+// it, and `check` exits 0" assertion below. A pool-gate fixture is a BASE rig, so it declares its own config:
+// `DURIG_CONFIG` is precedence 1 in src/config.mjs.
+const baseConfig = join(dir, "base-config.json");
+writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
 
 let failures = 0;
 function check(label, ok, detail = "") {
@@ -154,7 +161,7 @@ const cli = (args, env) =>
 	new Promise((resolve) => {
 		const child = spawn(process.execPath, ["cli.mjs", ...args], {
 			cwd: durigDir,
-			env: { ...process.env, DURIG_PROVIDER: "faux", ...env },
+			env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_CONFIG: baseConfig, ...env },
 			stdio: ["ignore", "pipe", "pipe"],
 		});
 	 let stdout = "";

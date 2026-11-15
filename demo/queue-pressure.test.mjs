@@ -13,8 +13,13 @@
 // rows makes `node cli.mjs check` exit 1, and raising the band deliberately makes it exit 0.
 //
 // Run: node demo/queue-pressure.test.mjs   (exit 0 = pass)
-// Cost: measured 12.1 s (the pure half is instant; the wiring half runs `up` + `check` twice and the promoted
+// Cost: measured 2.7 s (the pure half is instant; the wiring half runs `up` + `check` twice and the promoted
 // tool twice on the mocked fauxProvider plane — no network, no key).
+// Cost CORRECTION 2026-11-15 at `0f14e998`: this demo measured 12.1 s while the fixture inherited the live rig's
+// armed extension rules, and 2.7 s once the fixture names its own config and arms none — the ~9 s gap is `ready-ref-stale`,
+// which ran `tools/self-merge-sla.mjs`'s landingHealth over the LIVE repo (55 refs, a merge-tree per ref) inside a
+// fixture that has no business reading the live repo. `last_verified: 2026-11-15`, `node demo/queue-pressure.test.mjs`
+// exit 0 / 43 checks / 2.7 s, `.err` 0 bytes.
 // Measured on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0.
 import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -238,6 +243,15 @@ check("...and quoting the ledger does not change the verdict: the rule still FAI
 const rigPath = join(dir, "pressure.rig.json");
 const db = join(dir, "pressure.sqlite");
 writeFileSync(rigPath, JSON.stringify(SPEC));
+// THE FIXTURE MUST BE HERMETIC (found 2026-11-15 at `0f14e998`). `cli.mjs check` runs EVERY armed rule over
+// `process.cwd()`, so a fixture rig that inherits the LIVE rig's config inherits the live rig's extension rules
+// and the live repo's refs: `ready-ref-stale` reported `item-3570-recut` ready and 24.1 h past its 24 h SLA,
+// which turned the assertion below red while NOTHING inside the fixture changed (it had passed the same day at
+// `c5947cc2b`, 24.0 h — the SLA crossed mid-window, pitfall 398's rolling-window shape again). A fixture rig is
+// the BASE surface, so the fixture names its own config: `DURIG_CONFIG` is precedence 1 in src/config.mjs,
+// and arming NOTHING keeps the exit code about the fixture store alone.
+const fixtureConfig = join(dir, "durig.config.json");
+writeFileSync(fixtureConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
 const up = await cli(["up", rigPath], { DURIG_DB: db, DURIG_CONTEXT_WINDOW: JSON.stringify({ "faux/model-a": 65536, "faux/model-b": 40960 }) });
 check("`up` built the rig", up.code === 0, up.stderr.slice(0, 300));
 
@@ -262,11 +276,23 @@ await harness.commit(async (tx) => {
 delete process.env.DURIG_MINT_BURST_CAP;
 delete process.env.DURIG_BAND_PER_SEAT;
 
-const overStore = await cli(["check", rigPath], { DURIG_DB: db });
+const overStore = await cli(["check", rigPath, "--json"], { DURIG_DB: db, DURIG_CONFIG: fixtureConfig });
 check("`check` exits 1 when open work exceeds the band", overStore.code === 1, `${overStore.code}: ${overStore.stderr.slice(0, 200)}`);
 check("...and names the rule in the report", overStore.stdout.includes("queue-pressure"), overStore.stdout.slice(0, 300));
-const insideStore = await cli(["check", rigPath], { DURIG_DB: db, DURIG_BAND_PER_SEAT: "500" });
+const insideStore = await cli(["check", rigPath, "--json"], { DURIG_DB: db, DURIG_BAND_PER_SEAT: "500", DURIG_CONFIG: fixtureConfig });
 check("`check` exits 0 when the band is raised deliberately", insideStore.code === 0, `${insideStore.code}: ${insideStore.stdout.slice(0, 400)}`);
+// The leak this closes, pinned rather than assumed: every finding the fixture reports must be a rule the BASE
+// declares (`RULES`, src/checkup.mjs) — an extension rule from the live rig in here is a fixture that measures
+// its own host repo, and its verdict changes with the host's landing debt, not with the code under test.
+const baseRuleIds = new Set(RULES.map((r) => r.id));
+let insideReport = null;
+try {
+ insideReport = JSON.parse(insideStore.stdout);
+} catch {
+ /* the check below names the parse failure as the finding */
+}
+const foreign = insideReport === null ? ["STDOUT IS NOT A REPORT"] : (insideReport.findings ?? []).filter((f) => !baseRuleIds.has(f.id)).map((f) => `${f.id}/${f.severity}`);
+check("the fixture audit stays on the BASE rules — no live-rig extension rule leaks in", foreign.length === 0, JSON.stringify(foreign));
 // THE TOOL'S OWN SURFACE (task-1's exit-code contract, not just the derivation): the promoted instrument is
 // run against the SAME seeded store, so the gate and the view are shown to agree on one store.
 const overTool = await tool(["--db", db], {});
