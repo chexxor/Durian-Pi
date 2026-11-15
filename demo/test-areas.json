@@ -145,6 +145,7 @@
       "demo/broker-serve-env-presence.test.mjs",
       "demo/broker-serve-provider-auth.test.mjs",
       "demo/broker-serve-shell-availability.test.mjs",
+      "demo/broker-serve-pipe-safe.test.mjs",
       "demo/broker-session-reopen.test.mjs",
       "demo/broker-stop-audit.test.mjs",
       "demo/broker-stop-liveness.test.mjs",

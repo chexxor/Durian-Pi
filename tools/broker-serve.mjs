@@ -23,7 +23,8 @@
 // proven gone (brokerProcessAlive is the only proof — see src/broker.mjs #2420/#3398).
 //
 // Exit codes: 0 preflight clean / action done · 1 findings block a start, or the action failed
-// · 2 usage error.
+// · 2 usage error · 3 the READER closed stdout early (piped into a truncating reader), so the verdict was
+// NOT delivered — never read a 3 as clean or dirty, re-run to an artifact and read that.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readdirSync, readFileSync } from "node:fs";
@@ -46,6 +47,29 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..");
 const CLI = join(REPO, "cli.mjs");
+
+// ---------------------------------------------------------------- pipe safety
+// An instrument that outprints a screen gets read through `| head`, and the read used to CRASH it.
+// Measured 2026-11-15 on Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1:
+// `node tools/broker-serve.mjs --status | head -1` died of an UNCAUGHT async `write EPIPE` — 1,001 B of
+// stderr, 13 stack frames, 2 EPIPE words (`node:events:505 throw er; // Unhandled 'error' event` above the
+// frames at `node:net` `Socket._writeGeneric`) — while the PIPELINE still exited 0 (that is the READER'S
+// code) and the tool's own code was 1 (bash reads it with `echo tool_exit=` `{PIPESTATUS[0]}`). Both halves
+// of that shape read as a HEALTHY preflight over a crashed instrument, which is docs/SELFDEV.md pitfall 398's
+// sixth shape; there the falsifier was `wc -c` on .err rather than the exit code, because the exit code was
+// lying. This guard is what turns the shape into an honest one: attaching an 'error' listener to process.stdout
+// is what stops the async throw (a try/catch around the write alone would NOT have caught it — the frames are
+// the async `writeGeneric` path, not a synchronous throw), and the exit code is then CHOSEN HERE, not inherited.
+// 3 is reserved for "the reader truncated me", so no verdict may be read from it, and the note is ONE line
+// (measured 42 B). demo/broker-serve-pipe-safe.test.mjs pins the whole contract: RED 4 failing checks before
+// this block, exit 1, 3.6 s.
+let stdoutClosed = false;
+process.stdout.on("error", (e) => {
+  if (stdoutClosed) return;
+  stdoutClosed = true;
+  process.stderr.write(`TRUNCATED: stdout closed by the reader (${e.code}); the verdict was NOT delivered — re-run to an artifact\n`);
+  process.exit(3);
+});
 // (The shell-availability section used to hold `const IS_WINDOWS = process.platform === "win32"` to pick a
 // `where` vs `sh -c` PATH probe. It is gone with the grep: the registry's `programOnPath` does the PATH scan
 // host-generically, so the instrument no longer needs to know which OS family it is in to ask the question.

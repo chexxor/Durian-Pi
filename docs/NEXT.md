@@ -118,6 +118,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `ef21d221c` | docs(runbook+NEXT): the cap cut gets its measured numbers on the runbook, and the pointer pays its cadence row for f69dd23d — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s ef21d221c`) |
 | `c77c65535` | docs(QUEUE): re-measure the backlog tranche at the moving HEAD, and record its traps (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s c77c65535`) |
 | `ed7ed55ec` | docs(tools): the promoted queue instrument's header costs re-measured at the moving HEAD (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s ed7ed55ec`) |
+| `3e282602d` | docs(runbook): §39 — a docs commit owes per-area tallies at ITS tree, and the 108 s that proves it (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 3e282602d`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -156,7 +157,7 @@ node scripts/test.mjs --area check --jobs 4               # 8.8 s, 18/18 — the
 node scripts/test.mjs --area rig --jobs 4                 # 22.1 s, 98/98
 node cli.mjs check rig.selfdev.json --json                # 7.4 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
-node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED: broker down, 3 provider BLOCKs (keys out of tree, pitfall 386); SOURCED it was 24 s with 0 blocks (earlier window)
+node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED: broker down, 3 provider BLOCKs (keys out of tree, pitfall 386); SOURCED it was 24 s with 0 blocks (earlier window); piped into `head -1` it exits 3 = TRUNCATED (pipe-safety block; pitfall 398's fix addendum)
 timeout 560 node scripts/test.mjs --all --jobs 4          # 171.4 s, 364/364, exit 0 (captured), PROVENANCE tree=e1c4cfe5c (.spike/suite-e1c4cfe5.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
 ```
 
