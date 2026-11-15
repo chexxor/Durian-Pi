@@ -15322,3 +15322,14 @@ operator's ratified goal; a longer or unbounded lease is the operator's grant to
 
  (the newest run on this box: **364/364 passed in 168.9 s at `--jobs 4`, exit 0 captured, `.err` 0 bytes**, PROVENANCE `tree=b5c0a2470`, artifact `.spike/suite-b5c0a247.out`).
 
+
+## 2026-11-15T21:54Z — 8 pointer TABLE rows moved VERBATIM out of `docs/NEXT.md` (the 200-line cap; `wc -l` <= 199 is the passing maximum, split("\n") counts the trailing newline). Proof in this commit: head + moved + tail is byte-identical to the pre-cut file (positional identity, extracted by index from the file, never retyped). A rows-only move costs the clock-in digest ZERO bytes (the rows sit above the `## NEXT SESSION` slice).
+
+| `0e46df03` | docs(NEXT): rows for the two pointer-fix commits (`230ee8dd`, `80a87fca`) |
+| `352b5fcb` | docs(NEXT): the pointer-fix rows in commit order (`80a87fca` before `230ee8dd`) — the audit reported an ordering defect |
+| `7cb34194` | docs(NEXT): rows for `7b417971`, `0e46df03`, `352b5fcb` — `pointer-sha-coverage --base 8b5a19e1` exits **0** (158 range commits, 80 covered by landing-merge rows, 0 holes) |
+| `93e0044a` | docs: close the pointer chain (NEXT rows for `7b417971`/`0e46df03`/`352b5fcb` + measured costs) and add the pitfall-356 addendum |
+| `8bd56720` | **ROADMAP 376-380 / D315** — the queue-backlog tranche: notices refuse `workable()` and are acknowledged by the driver for the whole roster (no seat turn, row retained); the watch footer names work/notice/registration/awaiting-you; `mintGate` (duplicate + BURST 100/window + LINEAGE under pressure) at the single mint path; registrations mint HELD and `registration-as-work` rules a claimable one; `queue-pressure` is a `check` rule that FAILS (band + growth floor = one fleet band) sharing ONE derivation with `tools/queue-pressure.mjs`; 7 pre-existing demos corrected; 30 rules, `docs/WORKFLOWS.md:293` 29 → 30 |
+| `9eedeb3a` | docs(NEXT): the pointer names `93e0044a` and `8bd56720` in commit order so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits 0 (it was that commit's exempt carrier) |
+| `b08d1aa9` | docs close-out (resumed window): NEXT.md's suite tally corrected to artifact PROVENANCE — the cited `363/363 in 192.0 s` matched NO artifact; the green run is `suite-final-c.out` **363/363 in 219.3 s at tree `8bd56720`**, the earlier `362/363 in 199.3 s` and `360/363 in 191.4 s` at tree `93e0044a` are not a tally — plus provider 401 evidence re-probed and SELFDEV pitfalls 384-385 |
+| `5a739a94` | docs(NEXT): the pointer names `9eedeb3a` in commit order — the audit reported one hole there (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` at this commit → `1 hole: b08d1aa9`, exit **1**); it is exit 0 only from the commit that names `b08d1aa9` and this one |
