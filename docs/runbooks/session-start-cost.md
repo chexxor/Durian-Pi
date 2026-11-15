@@ -914,6 +914,8 @@ read carries no census, and the line turns into `NOT MEASURED`, which is not zer
 below the fleet's own window rate stops REAL work; measured here, 45.4% of the window's mints. A priced number
 and an unpriced number look the same in prose, and only one of them is a fact about the fleet.
 
+**Addendum (2026-11-15, delegate at `da4a9395`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1): the pair drifts by the MINUTE, not by the session.** Two `--price-budget` calls minutes apart read **519 of 1,147 (45.2%)** then **516 of 1,144 (45.1%)** — burst 499, lineage 6, duplicate 11 — and the census `net` slid +715/7 d -> +714/7 d in the same span. The window is anchored to the wall clock, so every mint that ages past 7 d drops BOTH sides of the fraction, and the ratio barely moves while the pair does. Never diff a quoted pair against a fresh read to hunt for a store change: compare the **exit code**, the **band verdict** and the **census totals** (`rows 7742 · live 1200 = work 1024 + notice 5 + registration 171`), which are window-stable. Costs at this tree: 2.79 s / 2.87 s for `--price-budget`, 1.48 s / 1.52 s plain. Runbook bodies cost the clock-in digest ZERO bytes (only the `## NEXT SESSION` slice is read), so an addendum like this pays nothing — a new `SELFDEV.md` `##` heading would cost it 300-430 B.
+
 ## 36. THE KNOB CURVE — what the mint cap refuses at every window and every candidate cap, 20 calls in 60 s (2026-11-15, delegate at `2df624a2`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
 
 §35 prices ONE point (the rig's own cap in the rig's own window). The operator's ruling on

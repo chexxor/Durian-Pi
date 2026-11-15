@@ -146,7 +146,7 @@ window claimed one, which is exactly what the rule exists to catch). **That is t
 ```bash
 cd /home/chexxor/Git/Durian-Pi
 DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 1.9 s, exit 1 — the census, the per-DAY rate, the band verdict, the plan pm runs, AND `mint refusals:` (the fan-out budget's read path)
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 3.4 s, exit unchanged — the cap's PRICE (runbook §35): 519 of 1,147 in-window (window-relative, pitfall 398) work mints would be refused
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 2.9 s, exit unchanged — the cap's PRICE (runbook §35): 516 of 1,144 in-window (window-relative, pitfall 398) work mints would be refused
 node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
 node demo/notice-not-work.test.mjs                        # 0.34 s, exit 0 — notices are not work, the mint gate, the ack plan
 node demo/status-view-bound.test.mjs                       # 3.3 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
