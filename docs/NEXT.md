@@ -27,6 +27,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `9eedeb3a` | docs(NEXT): the pointer names `93e0044a` and `8bd56720` in commit order so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits 0 (it was that commit's exempt carrier) |
 | `b08d1aa9` | docs close-out (resumed window): NEXT.md's suite tally corrected to artifact PROVENANCE — the cited `363/363 in 192.0 s` matched NO artifact; the green run is `suite-final-c.out` **363/363 in 219.3 s at tree `8bd56720`**, the earlier `362/363 in 199.3 s` and `360/363 in 191.4 s` at tree `93e0044a` are not a tally — plus provider 401 evidence re-probed and SELFDEV pitfalls 384-385 |
 | `5a739a94` | docs(NEXT): the pointer names `9eedeb3a` in commit order — the audit reported one hole there (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` at this commit → `1 hole: b08d1aa9`, exit **1**); it is exit 0 only from the commit that names `b08d1aa9` and this one |
+| `fd5e3316` | docs(NEXT): the pointer names `b08d1aa9` and `5a739a94` in commit order — closes the audit's last hole; `tools/pointer-sha-coverage.mjs --base 8b5a19e1` → exit **0** (162 range commits, 84 covered, 0 holes), and `timeout 540 node scripts/test.mjs --all --jobs 4` at this tree → **363/363 in 224.0 s** |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -88,7 +89,10 @@ full runs at HEAD `93e0044a` as a tally: `.spike/suite-final-20261115.out` was *
 a load flake, green standalone and green in every later run) and `.spike/suite-final-20261115b.out` was **360/363 in
 191.4 s** (`check`, `doc-count-drift`, `starter` red because the working tree carried the new 30-rule `checkup.mjs`
 and the new demos while HEAD/docs still claimed 29 rules and the doc close-out had not landed). A full suite is the
-only gate on a doc-count claim; run the file ALONE before calling a suite red a defect.
+only gate on a doc-count claim; run the file ALONE before calling a suite red a defect. **Re-verified at the final tree
+of this window:** `timeout 540 node scripts/test.mjs --all --jobs 4` at `fd5e3316` → **363/363 in 224.0 s, exit 0**
+(`.spike/suite-final-fd5e3316.out`, PROVENANCE `tree=fd5e3316`) — the docs close-outs move no test member, so the
+member count stays 363 while the wall clock drifts 199 → 219 → 224 s with store load and `--jobs 4`.
 
 **State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` under three docs close-outs
 (`b08d1aa9`, `5a739a94`, and this pointer's) over `8bd56720`: the tranche commit carries 28 explicit paths, the docs
