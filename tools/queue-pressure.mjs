@@ -47,12 +47,17 @@
 // `mintRefusals` census adds ~436 B to that read, not a second read); 0.5-0.9 s against a snapshot capture;
 // 2.6-3.4 s with `--price-budget` (the bodies-carrying read is 1.3 s / ~32 MB of it). Host it was first measured
 // on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. `last_verified:
-// 2026-11-15` by
+// 2026-11-15 at `c77c65535` by
 // `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (exit 1 — the store IS out of band, which is the
 // point: a 0 would mean the gate found nothing to say) and by
 // `node demo/queue-pressure.test.mjs` (exit 0 / 67 checks / 7.8 s, `.err` 0 bytes — the demo grew from 43 checks
 // when the mint-refusal read path landed (55) and again for the budget back-test (67); nothing pinned before was
-// dropped) and by `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget` (exit 1, 3.3 s).
+// dropped) and by `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget` (exit 1, 2.806 s at `c77c65535`).
+// Cost re-measured at `c77c65535` (Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+// host read in the SAME command as the numbers): store 1.506 s exit 1 · `--price-budget` 2.806 s exit 1 · snapshot read as
+// part of the price 1.3 s / 32.3 MB · `demo/queue-pressure.test.mjs` 67 checks / 0 failures / 6.8 s exit 0, `.err` 0 B.
+// Quote a rate only beside the command that printed it: the price pair is WINDOW-RELATIVE and slid 523/1,153 -> 489/1,117
+// across four calls in one day (docs/runbooks/session-start-cost.md §35, SELFDEV pitfall 398's rolling-window shape).
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
