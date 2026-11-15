@@ -167,7 +167,28 @@ try {
 		`status=${withoutArchive.status}\n${withoutArchive.stdout}`,
 	);
 
-	// (6) The cost claim in the header: under a second on a 3-commit repo.
+	// (6) WIDTH INDEPENDENCE (the 2026-11-15 addendum). A landing-MERGE row must cover its branch
+	// whatever width git's `%h` happens to be. The shipped tool used to bridge its Set of FULL shas with
+	// a hardcoded `slice(0, 8)`, which stopped matching the moment git widened `%h` past 8 (measured at
+	// `16f70cf8`: 80 FALSE holes, exit 1, over a pointer that was complete). Here `%h` is 7 chars, so the
+	// old bridge would miss and this case is falsifiable rather than vacuous.
+	git("checkout", "-q", "-b", "side");
+	writeFileSync(join(repo, "side.txt"), "side work\n");
+	git("add", "side.txt");
+	git("commit", "-q", "-m", "the side work");
+	git("checkout", "-q", "main"); // no staged-but-uncommitted file here: a dirty index refuses the merge
+	git("merge", "-q", "--no-ff", "-m", "merge: land side onto main", "side");
+	const merge = git("rev-parse", "--short", "HEAD").stdout.trim();
+	writeFileSync(join(repo, "carrier2.txt"), "carrier\n");
+	git("add", "carrier2.txt");
+	git("commit", "-q", "-m", "the carrier that holds the pointer");
+	writeFileSync(pointer, ["# pointer", "", "| sha | shipped |", "|---|---|", `| \`${merge}\` | merge: land side onto main |`, ""].join("\n"));
+	const wide = spawnSync(process.execPath, [tool, "--base", c3, "--file", pointer], { encoding: "utf8", cwd: repo });
+	check("a merge row covers its branch at a 7-char %h (exit 0)", wide.status === 0, `status=${wide.status}\n${wide.stdout}`);
+	check("it says the side commit is COVERED, not a hole", wide.stdout.includes("covered: 1 commit(s)"), wide.stdout);
+	check("the side commit is not reported MISSING", !wide.stdout.includes("MISSING"), wide.stdout);
+
+	// (7) The cost claim in the header: under a second on a small repo.
 	const t0 = Date.now();
 	run();
 	check("runs in under 2 s", Date.now() - t0 < 2000, `${Date.now() - t0} ms`);

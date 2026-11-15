@@ -22,6 +22,15 @@
 // reported 265 "holes", most of them named in the archive). Archive rows therefore count as named and
 // their landing merges count as coverage; the ORDER check still applies to the live pointer only, since
 // the archive is a stack of dated blocks, not one table.
+// ADDENDUM 2026-11-15 (delegate, queue-backlog tranche): the tool compared an ABBREVIATED sha against
+// a Set of FULL shas, with a hardcoded `slice(0, 8)` as the only bridge. git widens `%h` by itself
+// (measured on this repo: `git log --format=%h -1 HEAD` -> `9bdcacc2e`, 9 chars, and `git log --format=%h`
+// was 8 chars a month ago), so past that threshold every landing-MERGE row stopped covering its branch
+// and the tool reported **80 false holes** (exit 1) over a range whose pointer was complete. Fixed in
+// place: the range is read as BOTH `%H` and `%h`, membership tests use the full sha, and `%h` is kept
+// only for display and for prefix-matching a table row. Verified at `16f70cf8` on Linux, Fedora Linux
+// 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1: before the fix exit 1 / 80 holes in
+// 1.4 s; after, exit 0 (187 range commits, 45 + 201 rows, 0 holes / 0 ordering defects) in 1.4 s.
 // Run: node tools/pointer-sha-coverage.mjs [--base <sha>] [--file docs/NEXT.md] [--archive docs/NEXT-ARCHIVE.md] [--json]
 // Use --no-archive to ignore the archive. Exit 0 = every range commit is named (or is the carrier),
 // 1 = holes / out-of-order rows, 2 = usage.
@@ -60,12 +69,14 @@ if (!base) {
 
 const head = git("rev-parse", "HEAD");
 // Oldest-first: the table is ordered "in order" of shipping.
-const commits = git("log", "--reverse", "--format=%h%x09%s", `${base}..HEAD`)
+// `%H` AND `%h`: git widens `%h` on its own as objects accumulate, so an abbreviated sha is only ever
+// used for display and for prefix-matching a table row; Set membership uses the full sha.
+const commits = git("log", "--reverse", "--format=%H%x09%h%x09%s", `${base}..HEAD`)
 	.split("\n")
 	.filter(Boolean)
 	.map((line) => {
-		const [sha, ...rest] = line.split("\t");
-		return { sha, subject: rest.join("\t") };
+		const [full, sha, ...rest] = line.split("\t");
+		return { full, sha, subject: rest.join("\t") };
 	});
 
 const text = readFileSync(file, "utf8");
@@ -96,8 +107,7 @@ for (const row of [...rows, ...archiveRows]) {
 	const sideBranch = parents.slice(1);
 	for (const p of sideBranch) {
 		for (const c of git("rev-list", `${full}^1..${p}`).split("\n").filter(Boolean)) {
-			covered.add(c);
-			covered.add(c.slice(0, 8)); // `git log --format=%h` prints abbreviated shas
+			covered.add(c); // full shas only — `slice(0, 8)` was the bug: `%h` is now 9 chars here
 		}
 		covered.add(p);
 	}
@@ -105,17 +115,17 @@ for (const row of [...rows, ...archiveRows]) {
 
 const matches = (list, sha) => list.some((r) => sha.startsWith(r) || r.startsWith(sha));
 const namedByRow = (sha) => matches([...rowIndex.keys()], sha) || matches(archiveRows, sha);
-const named = (sha) => namedByRow(sha) || covered.has(sha);
-const coveredOnly = commits.filter((c) => covered.has(c.sha) && !namedByRow(c.sha)).length;
+const named = (c) => namedByRow(c.sha) || covered.has(c.full);
+const coveredOnly = commits.filter((c) => covered.has(c.full) && !namedByRow(c.sha)).length;
 
-const missing = commits.filter((c) => !named(c.sha) && !head.startsWith(c.sha));
+const missing = commits.filter((c) => !named(c) && !head.startsWith(c.sha));
 const carrier = commits.find((c) => head.startsWith(c.sha)) ?? null;
 
 // Order: the sequence of named commits as they appear in the table must be a subsequence of
 // the commit order. Compare positions of the commits that ARE named.
 const positions = commits
 	.map((c, i) => ({ c, i }))
-	.filter(({ c }) => named(c.sha))
+	.filter(({ c }) => named(c))
 	.map(({ c, i }) => ({ sha: c.sha, commitOrder: i, tableOrder: rowIndex.get([...rowIndex.keys()].find((r) => c.sha.startsWith(r) || r.startsWith(c.sha))) }));
 const outOfOrder = [];
 for (let k = 1; k < positions.length; k += 1) {
