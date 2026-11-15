@@ -22,6 +22,8 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `0e46df03` | docs(NEXT): rows for the two pointer-fix commits (`230ee8dd`, `80a87fca`) |
 | `352b5fcb` | docs(NEXT): the pointer-fix rows in commit order (`80a87fca` before `230ee8dd`) — the audit reported an ordering defect |
 | `7cb34194` | docs(NEXT): rows for `7b417971`, `0e46df03`, `352b5fcb` — `pointer-sha-coverage --base 8b5a19e1` exits **0** (158 range commits, 80 covered by landing-merge rows, 0 holes) |
+| `93e0044a` | docs: close the pointer chain (NEXT rows for `7b417971`/`0e46df03`/`352b5fcb` + measured costs) and add the pitfall-356 addendum |
+| `8bd56720` | **ROADMAP 376-380 / D315** — the queue-backlog tranche: notices refuse `workable()` and are acknowledged by the driver for the whole roster (no seat turn, row retained); the watch footer names work/notice/registration/awaiting-you; `mintGate` (duplicate + BURST 100/window + LINEAGE under pressure) at the single mint path; registrations mint HELD and `registration-as-work` rules a claimable one; `queue-pressure` is a `check` rule that FAILS (band + growth floor = one fleet band) sharing ONE derivation with `tools/queue-pressure.mjs`; 7 pre-existing demos corrected; 30 rules, `docs/WORKFLOWS.md:293` 29 → 30 |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
