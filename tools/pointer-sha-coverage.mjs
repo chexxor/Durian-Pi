@@ -32,6 +32,10 @@
 // 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1: before the fix exit 1 / 80 holes in
 // 1.4 s; after, exit 0 (187 range commits, 45 + 201 rows, 0 holes / 0 ordering defects) in 1.4 s.
 // Run: node tools/pointer-sha-coverage.mjs [--base <sha>] [--file docs/NEXT.md] [--archive docs/NEXT-ARCHIVE.md] [--json]
+//      Flags take the SPACE form ONLY: `--base=8b5a19e1` is now REFUSED (exit 2). It used to be
+//      ignored, the range silently fell back to merge-base(origin/main, HEAD), and the tool audited
+//      37 of 197 commits while still exiting 0 — a FALSE green (measured 2026-11-15 at `247a6211a`).
+//      `node tools/pointer-row-for-predecessor.mjs` is the batch closer for the holes this reports.
 // Use --no-archive to ignore the archive. Exit 0 = every range commit is named (or is the carrier),
 // 1 = holes / out-of-order rows, 2 = usage.
 
@@ -39,6 +43,15 @@ import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const argv = process.argv.slice(2);
+// A flag in `=` form is a TYPO, not a value: `--base=8b5a19e1` was silently ignored here, the range
+// fell back to `merge-base(origin/main, HEAD)`, and the tool audited 37 of 197 commits while still
+// exiting 0 — a FALSE green (measured 2026-11-15 at `247a6211a`, SELFDEV pitfall 398's mirror image
+// of pitfall 394, where `what-to-test.mjs` REFUSED the space form). Refuse the wrong form loudly.
+const badForm = argv.filter((a) => /^--(base|file|archive)=/.test(a));
+if (badForm.length) {
+  console.error(`pointer-sha-coverage: ${badForm.join(" ")} must use the space form (e.g. --base 8b5a19e1); the equals form used to be ignored silently and narrowed the range`);
+  process.exit(2);
+}
 const flag = (name, fallback = null) => {
 	const i = argv.indexOf(`--${name}`);
 	return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : fallback;
