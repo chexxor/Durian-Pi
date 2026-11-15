@@ -25,6 +25,8 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `93e0044a` | docs: close the pointer chain (NEXT rows for `7b417971`/`0e46df03`/`352b5fcb` + measured costs) and add the pitfall-356 addendum |
 | `8bd56720` | **ROADMAP 376-380 / D315** — the queue-backlog tranche: notices refuse `workable()` and are acknowledged by the driver for the whole roster (no seat turn, row retained); the watch footer names work/notice/registration/awaiting-you; `mintGate` (duplicate + BURST 100/window + LINEAGE under pressure) at the single mint path; registrations mint HELD and `registration-as-work` rules a claimable one; `queue-pressure` is a `check` rule that FAILS (band + growth floor = one fleet band) sharing ONE derivation with `tools/queue-pressure.mjs`; 7 pre-existing demos corrected; 30 rules, `docs/WORKFLOWS.md:293` 29 → 30 |
 | `9eedeb3a` | docs(NEXT): the pointer names `93e0044a` and `8bd56720` in commit order so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits 0 (it was that commit's exempt carrier) |
+| `b08d1aa9` | docs close-out (resumed window): NEXT.md's suite tally corrected to artifact PROVENANCE — the cited `363/363 in 192.0 s` matched NO artifact; the green run is `suite-final-c.out` **363/363 in 219.3 s at tree `8bd56720`**, the earlier `362/363 in 199.3 s` and `360/363 in 191.4 s` at tree `93e0044a` are not a tally — plus provider 401 evidence re-probed and SELFDEV pitfalls 384-385 |
+| `5a739a94` | docs(NEXT): the pointer names `9eedeb3a` in commit order — the audit reported one hole there (`tools/pointer-sha-coverage.mjs --base 8b5a19e1` at this commit → `1 hole: b08d1aa9`, exit **1**); it is exit 0 only from the commit that names `b08d1aa9` and this one |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -88,9 +90,9 @@ a load flake, green standalone and green in every later run) and `.spike/suite-f
 and the new demos while HEAD/docs still claimed 29 rules and the doc close-out had not landed). A full suite is the
 only gate on a doc-count claim; run the file ALONE before calling a suite red a defect.
 
-**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` plus this pointer's own
-close-out commit over `8bd56720`: the tranche commit carries 28 explicit paths, the two docs close-outs 2 paths each,
-nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
+**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` under three docs close-outs
+(`b08d1aa9`, `5a739a94`, and this pointer's) over `8bd56720`: the tranche commit carries 28 explicit paths, the docs
+close-outs 1–2 paths each, nothing pushed) and **in flight for pm**: 461 queued/live notices and 171 registrations are classified and planned
 but un-transitioned; 5 notices are `claimed` and are deliberately left alone (`census.skippedClaimed`). Row owners:
 none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
 
