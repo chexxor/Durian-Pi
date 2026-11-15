@@ -96,6 +96,7 @@ grep -s "^| \[" docs/runbooks/README.md | grep -c "\](.*\.md)"   # index rows; c
     measurement `docs/DISPOSITIONS.md` has no footnote markers at all (`grep -c '\[\^' docs/DISPOSITIONS.md` -> 0, exit 1) and
     no declaration (`grep -c 'cite-ns' docs/DISPOSITIONS.md` -> 0, exit 1), so renaming one key fixes one row while the next
     appended row re-arms the same hard finding — which is why the posture has to be a file-level decision, not a per-row patch.
+11. **Scope a commit by explicit paths, and read the refusal instead of retrying blindly.** The shape that lands is `git add -- <paths>` then `git commit -F <msg>` (the message lives in gitignored `.spike/`). Measured 2026-11-15: `git commit -F .spike/msg-cap.txt -- docs/NEXT.md -- docs/NEXT-ARCHIVE.md` exits **1** with `error: pathspec '--' did not match any file(s) known to git` and leaves both files **STAGED**, so the session looks unchanged and the next call silently commits whatever is in the index. Prove the boundary after the commit, not before it: `git show --name-only --format= HEAD` must name exactly the paths you meant (measured: two paths, 12 insertions / 8 deletions).
 
 ## Verify
 
@@ -353,6 +354,14 @@ and PROVE the cut in the same commit: `head(post) + moved + tail(post)` is byte-
 exit 0, 0.04 s; `--area docs` **8/8** and `--area check` **18/18** green, both `--jobs 4`). A cut of the pointer's PROSE instead
 pays the clock-in digest (pitfall 392); a cut of table rows pays **ZERO** digest bytes because the rows sit above the
 `## NEXT SESSION` slice — that is the cheaper shape when the file is long and the slice is not.
+
+**The cap cut, re-measured 2026-11-15 at `f69dd23d0` — ONE commit carries BOTH the cadence row and the cut.** 8 OLDEST table rows / 2,059 B over a 63,722 B file: `wc -l` 195 to 187 (split("\\n") 196 to 188; the cap is 200, i.e. `wc -l` <= 199), table rows 114 to 106. The closer ran BEFORE the commit (`node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order`, exit 0, 1 row written, re-audit 0 holes / 0 ordering defects), then `.spike/cut-cap.mjs` moved the rows and proved the move in the same call: `head(pre) + moved + tail(pre) === pre` positional identity, and `archive2.lastIndexOf(moved) >= 0`.
+
+**The rows-above-the-slice fact, proven by the slice's own byte count rather than claimed:** `awk -v n="$(grep -n '^## NEXT SESSION$' docs/NEXT.md | cut -d: -f1)" 'NR>=n' docs/NEXT.md | wc -c` printed **8,061 B UNCHANGED** across the cut while the slice's first line moved from 120 to 128 — a rows-only move changes the slice's position but not one byte of its content, so it costs the clock-in digest ZERO bytes; `node scripts/clockin.mjs` stayed exit 0 (11.8 s), and its `--json` prints `## POINTER (docs/NEXT.md lines 128-188 of 188; cap 200)`.
+
+**Gates at that tree, every exit code captured on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0:** `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exit 0 over 270 range commits, **106** `docs/NEXT.md` rows + **223** `docs/NEXT-ARCHIVE.md` rows — the cut rows are counted from the archive, which is why a VERBATIM move can never open a hole; `tools/doc-integrity-guard.mjs` exit 0 (0 hard / 25 soft); `demo/next-pointer.test.mjs` exit 0; `node scripts/test.mjs --area docs --jobs 4` 8/8 in 69.8 s and `--area check --jobs 4` 18/18 in 11.6 s, both PROVENANCE `tree=f69dd23d0`, `.err` 0 B each. `tools/review-cite-check.mjs docs/NEXT.md docs/NEXT-ARCHIVE.md` exits **1** with 6 hard — all six PRE-EXISTING in the archive at lines 5815..6629 (five `metagpt/docs/ROADMAP.md:2875` LINE-OUT-OF-RANGE plus one elided vendor path), ZERO at the appended region past line 15324: the scope is reported in the same breath as the verdict, per Do step 9.
+
+**Headroom is the NEXT window's debt, not this one's:** 187 of 199 passing maximums, and each cadence commit adds 1-2 table rows, so cut BEFORE the breach turns red rather than after.
 
 ## If it fails
 
