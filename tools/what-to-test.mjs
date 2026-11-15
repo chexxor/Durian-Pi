@@ -24,8 +24,23 @@
 // instruments: doc writes carry control bytes and zero-width characters typed into a code fence, and no demo
 // checks for them.
 //
+// ADDENDUM (2026-11-15, delegate at `b049db61`; measured on Linux, Fedora Linux 45 (Forty Five), kernel
+// `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — the SAME command as the numbers, pitfall 384/392):
+//   1. **the printed costs were Oct's and are now an order of magnitude off.** The advice line claimed the
+//      whole suite was 238 tests / ~42 s and `--area docs` cost 0.1 s. Measured here: the suite is 363 tests
+//      / 171.4 s at `--jobs 4` (`.spike/suite-1339ab10a.out`, PROVENANCE `tree=1339ab10a`), and `--area docs`
+//      is 8 tests / **80.2 s** — the whole cost is `demo/runbook-diagnose.test.mjs` (80.2 s); the other 7
+//      total under 0.7 s. A docs session that believes the 0.1 s pays 80 s and then learns the area was the
+//      wrong loop anyway, so the claims are corrected to the measured numbers and dated, below.
+//   2. **the usage block printed a flag form the parser refuses** (pitfall 394): both this comment block and
+//      `USAGE` showed `--base <ref>` / `--paths <p,..>`, and `parseArgs` throws `--base needs a value (use
+//      --base=<ref>)` for the space form. The documented incantation could not be run. Corrected to the `=`
+//      form (the control keeps refusing; only the documentation changed, so no behaviour assertion moves).
+//   `last_verified: 2026-11-15` by `node tools/what-to-test.mjs --run --base=508d1ea25` (it refuses to run
+//    >25 derived guards — exit 2 — which is the point: a 35-guard set is the full gate's job).
+//
 //   node tools/what-to-test.mjs                 classify the working tree (staged + unstaged + untracked)
-//   node tools/what-to-test.mjs --base main     classify a whole branch vs its merge-base with main
+//   node tools/what-to-test.mjs --base=main     classify a whole branch vs its merge-base with main
 //   node tools/what-to-test.mjs --run           run the selected guards now (sequential, 120 s each)
 //   node tools/what-to-test.mjs --json          machine-readable verdict
 //   node tools/what-to-test.mjs --no-scan       skip the byte-integrity scan of changed text files
@@ -46,11 +61,11 @@ const CHEAP_CAP = 25;
 
 const USAGE = `usages:
   node tools/what-to-test.mjs                 classify the working tree (staged + unstaged + untracked)
-  node tools/what-to-test.mjs --base <ref>    classify everything HEAD changed since the merge-base with <ref>
+  node tools/what-to-test.mjs --base=<ref>    classify everything HEAD changed since the merge-base with <ref>
   node tools/what-to-test.mjs --run           run the derived guard set now, then report (direct tier first)
   node tools/what-to-test.mjs --direct-only   run only the DIRECT guards (the sub-second "did I break the
                                               pointer / a runbook?" check; a doc edit does not stop here)
-  node tools/what-to-test.mjs --paths <p,..>  classify these paths instead of the working tree (plan before editing)
+  node tools/what-to-test.mjs --paths=<p,..>  classify these paths instead of the working tree (plan before editing)
   node tools/what-to-test.mjs --json          one JSON document
   node tools/what-to-test.mjs --no-scan       skip the control-byte / zero-width scan of changed text files`;
 
@@ -310,10 +325,10 @@ function main(argv) {
 	if (docOnly) {
 		const docArea = filesForArea(manifest, "docs");
 		process.stdout.write(
-			`\nDOC-ONLY FAST PATH — the whole suite is ${tests.length} tests / ~42 s; the derived set above is ` +
+			`\nDOC-ONLY FAST PATH — the whole suite is ${tests.length} tests / ~171.4 s at --jobs 4 (measured 2026-11-15, Linux Fedora 45, node v24.22.1; the 2026-10-28 claim was 238 tests / ~42 s); the derived set above is ` +
 				`${selected.length} test(s) (${direct.length} direct + ${mention.length} mention).\n` +
 				`  run them:   node tools/what-to-test.mjs --run${opts.base ? ` --base=${opts.base}` : ""}\n` +
-				`  or the area: node scripts/test.mjs --area docs   (${docArea.length} tests, measured 0.1 s) — but it is NOT this set: ` +
+				`  or the area: node scripts/test.mjs --area docs   (${docArea.length} tests; ~80 s, NOT 0.1 s — measured 2026-11-15 at b049db61: 80.2 s, of which demo/runbook-diagnose.test.mjs is the whole 80.2 s, so for a docs commit the derived set above is the cheap loop and the area is not) — but it is NOT this set: ` +
 				`${selected.filter((t) => !docArea.includes(t)).map((t) => `${t} (${areaOf(t)})`).join(", ") || "nothing outside it"} ` +
 				`sits outside area "docs" and would be missed by the area alone.\n`,
 		);
