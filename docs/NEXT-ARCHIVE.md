@@ -15156,3 +15156,10 @@ and the local provider is priced 0 in/0 out, so the sweep cost ~$0.
 tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledger.mjs`, `src/checkup.mjs`, `cli.mjs`, `tools/backlog-burn.mjs`, `demo/queue-pressure.test.mjs`; nothing pushed) and **the sweep is DONE in the store**: notices 461 → 5 (only the 5 `claimed` remain, deliberately),
 171 registrations still parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3) and 1024 open work rows still out of band. Row owners: none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
 ```
+
+## Cut from the pointer 2026-11-15 (the `b72636bd` window — the sweep paragraph, moved so the clock-in digest keeps its byte budget) — verbatim
+
+```
+**The sweep RAN in this window** (the full procedure and the before/after numbers live in `docs/DECISIONS.md` D315 addenda 1-2, ROADMAP 376 and this pointer's archive): pm's `acknowledge-notices` intent drained through a bounded 300 s broker lease, live rows **1656 → 1200**, notices **461 → 5** (the 5 `claimed` left alone per `census.skippedClaimed`), ~$0 spend (the local provider is priced 0 in / 0 out). A lease is NOT side-effect-free: it minted one item branch + one worktree and left one `[read]` intent pending — run `tools/branch-census.mjs` after any lease. Credentials live OUT OF TREE in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386); `registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`).
+
+```
