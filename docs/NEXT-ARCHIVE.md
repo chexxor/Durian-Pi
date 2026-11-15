@@ -15187,3 +15187,9 @@ tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledge
 ```text
 **The sweep RAN** — live **1656 → 1200**, notices **461 → 5**, ~$0; the procedure and the before/after numbers are kept VERBATIM in `docs/NEXT-ARCHIVE.md` (dated heading — pitfall 392: the clock-in digest reads this section verbatim), plus `docs/DECISIONS.md` D315 addenda 1-2 and ROADMAP 376. Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (1.6 s, exit 1); `registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`), so a ledger copy is a seat/docs task.
 ```
+
+## Cut from the pointer 2026-11-15 (queue-backlog resumed window at `880cf030` — the fixture-leak sentence moved VERBATIM out of the `## NEXT SESSION` slice to buy clock-in digest headroom back: `DIGEST_BUDGET_BYTES = 20000` had only 191 B left and a table row costs it nothing) — verbatim
+
+```text
+**Fixture leak closed (2026-11-15 at `0f14e998`):** 5 demos' `check` assertions now name their own `DURIG_CONFIG` (or the rule's SLA knob) — a fixture that inherits the live rig's armed extension rules measures its HOST, and 4 went red on 24.1 h of live landing debt.
+```
