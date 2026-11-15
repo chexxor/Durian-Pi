@@ -139,7 +139,22 @@ try {
     readFileSync(pointer, "utf8"),
   );
 
-  // (6) The flag form is REFUSED, not silently defaulted — by the closer, and by the audit it calls.
+  // (6) `--for=HEAD` pays the row the NEXT commit will owe, so ONE pre-commit call does the whole
+  // cadence: HEAD can never name itself in the commit that carries it (pitfall 384).
+  writeFileSync(pointer, tableOf([`| \`${c1}\` | the first row |`, `| \`${c2}\` | the second row |`, `| \`${c3}\` | the third row |`]));
+  const paid = runCloser([`--base=${c0}`, "--file=docs/NEXT.md", "--no-archive", "--for=HEAD"]);
+  check("--for=HEAD on a hole-free table exits 0", paid.status === 0, `status=${paid.status}\n${paid.stdout}`);
+  check("it adds exactly one row", paid.stdout.includes("rows to add, in commit order (oldest first, the table's order): 1"), paid.stdout);
+  const linesPaid = readFileSync(pointer, "utf8").split("\n");
+  const row4 = linesPaid.find((l) => l.startsWith(`| \`${c4}\` |`));
+  check("the row is for HEAD, and its text is git's own subject line", row4 !== undefined && row4.includes(subjects[4]), linesPaid.join("\n"));
+  check("it says the row is for the commit that cannot name itself", row4 !== undefined && row4.includes("cannot name itself"), row4 === undefined ? "no row" : row4);
+  check("the close is still proven by the audit", paid.stdout.includes("re-audit verdict: 0 hole(s), 0 ordering defect(s)"), paid.stdout);
+  const paidAgain = runCloser([`--base=${c0}`, "--file=docs/NEXT.md", "--no-archive", "--for=HEAD"]);
+  check("a second --for pass does not add the row twice", paidAgain.stdout.includes("already has a row"), paidAgain.stdout);
+  check("and it exits 0", paidAgain.status === 0, `status=${paidAgain.status}`);
+
+  // (7) The flag form is REFUSED, not silently defaulted — by the closer, and by the audit it calls.
   const spaceForm = runCloser(["--base", c0, "--file=docs/NEXT.md", "--no-archive"]);
   check("the closer refuses the space form", spaceForm.status === 2, `status=${spaceForm.status}`);
   check("and names the form it wants", (spaceForm.stdout + spaceForm.stderr).includes("`=` form"), spaceForm.stdout + spaceForm.stderr);

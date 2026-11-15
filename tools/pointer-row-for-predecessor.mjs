@@ -14,6 +14,10 @@
 // audit and report its exit code, so the close is proven by the same reader the gate uses.
 //
 // Run: node tools/pointer-row-for-predecessor.mjs --base=<base-sha> [--file=docs/NEXT.md]
+//        [--archive=docs/NEXT-ARCHIVE.md] [--no-archive] [--dry-run] [--for=<rev>]
+//      `--for=HEAD` also pays the row the NEXT commit will owe for the commit that is HEAD now, so
+//      running this tool BEFORE a commit gets the WHOLE cadence in one call (pitfall 384: HEAD can
+//      never name itself in the commit that carries it).
 //        [--archive docs/NEXT-ARCHIVE.md] [--no-archive] [--dry-run] [--json]
 //      This tool takes ONLY the `=` form (`--base=8b5a19e1`, `--file=…`) and REFUSES the space form,
 //      because the audit it calls, `tools/pointer-sha-coverage.mjs`, takes only the space form and
@@ -34,9 +38,10 @@
 //       1 = the audit still does not exit 0 (holes fixed, ordering defect not — or a write failed);
 //       2 = usage.
 //
-// last_verified: 2026-11-15 — verified by `node tools/pointer-row-for-predecessor-test.mjs`
-// (a throwaway repo whose table is missing rows: the audit exits 1 before, exits 0 after this tool
-// runs, and the rows it adds carry git's own subject lines in commit order).
+// last_verified: 2026-11-15 — `node tools/pointer-row-for-predecessor-test.mjs` PASS, 31 checks
+// 0 FAIL, 0.92 s, on Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node
+// v24.22.1, git 2.56.0 (the throwaway repo is init + a milestone anchor + five commits, and the
+// audit is pointed at its `docs/NEXT.md` with `--file`).
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -89,14 +94,41 @@ console.log(
   `pointer-row-for-predecessor — ${file}: the audit reports ${missing.length} hole(s) over ${report.rangeCommits} range commits (carrier exempt ${report.carrier})`,
 );
 
-if (!missing.length) {
-  console.log(`  rows owed: 0 — every range commit is already named${(report.outOfOrder || []).length ? `; ${report.outOfOrder.length} ordering defect(s) are NOT fixable by appending rows` : ""}`);
+// `--for=<rev>` pays the row the NEXT commit will owe for the commit that is HEAD now: HEAD can
+// never name itself in the commit that carries it (pitfall 384), so a session running this tool
+// BEFORE it commits gets the whole cadence in one call — the holes plus the row for HEAD.
+const forRef = flag("for");
+const forRow = (() => {
+  if (!forRef) return null;
+  const one = spawnSync("git", ["log", "-1", "--format=%h%x09%s", forRef], { encoding: "utf8" });
+  if (one.status !== 0) {
+    console.log(`--for=${forRef} names no commit: ${(one.stderr || one.stdout).trim().slice(0, 120)}`);
+    process.exit(2);
+  }
+  const [sha, ...rest] = one.stdout.trim().split("\t");
+  const subj = rest.join("\t");
+  return { sha, subject: subj, text: `| \`${sha}\` | ${subj.replace(/\|/g, "\\|")} — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (\`git log -1 --format=%s ${sha}\`) |` };
+})();
+
+const holesText = (report.outOfOrder || []).length
+  ? `; ${(report.outOfOrder || []).length} ordering defect(s) are NOT fixable by appending rows`
+  : "";
+if (!missing.length && !forRow) {
+  console.log(`  rows owed: 0 — every range commit is already named${holesText}`);
   process.exit((report.outOfOrder || []).length ? 1 : 0);
 }
 
 const rowText = (sha, subject) =>
   `| \`${sha}\` | ${(subject || "").replace(/\|/g, "\\|")} — cadence row named from git's own subject line (\`git log -1 --format=%s ${sha}\`), pitfall 384 |`;
 const rows = missing.map((m) => rowText(m.sha, m.subject));
+if (forRow) {
+  const text = readFileSync(file, "utf8");
+  if (text.includes(`\`${forRow.sha}\``)) {
+    console.log(`  --for=${forRef} already has a row (${forRow.sha}) — not added twice`);
+  } else {
+    rows.push(forRow.text);
+  }
+}
 console.log(`  rows to add, in commit order (oldest first, the table's order): ${rows.length}`);
 for (const r of rows) console.log(`    ${r.slice(0, 120)}${r.length > 120 ? "…" : ""}`);
 
