@@ -291,6 +291,45 @@ also pre-existing: `node tools/review-cite-check.mjs docs/DECISIONS.md` -> `23 f
 exit 1, on the untouched copy (the row quoted 23/142 of 165 on `main f192f543` — the corpus grows, the count does not
 stay true, which is itself the point of citing a tree).
 
+## The pointer's cadence rows: ONE call writes them — `tools/pointer-row-for-predecessor.mjs`
+
+**Symptom:** `tools/pointer-sha-coverage.mjs` exits 1 and prints `MISSING <sha> <subject>` lines, or
+the chase is costing one commit per commit (measured 2026-11-15: one window paid **eight** rows-only
+commits to close one chain, each paying its own ~13 s of doc gates).
+
+**The call, before you commit:**
+
+```bash
+node tools/pointer-row-for-predecessor.mjs --base=<base-sha> --for=HEAD            # 1.6-1.8 s, exit 0/1
+node tools/pointer-row-for-predecessor.mjs --base=<base-sha> --dry-run             # names the rows, writes nothing
+```
+
+It spawns the AUDIT (`tools/pointer-sha-coverage.mjs --json`) and reads its `missing[]` — it never
+re-derives the hole set here, which is the pair-of-spellings defect — appends one row per hole **in
+commit order at the BOTTOM** of the live table, text from git's OWN subject line (pitfall 398's shape
+two: a retyped row label is a lie the gate cannot see), then re-audits and reports the audit's verdict,
+so the close is PROVEN by the same reader the gate uses. `--for=HEAD` also pays the row the coming
+commit will owe, because HEAD can never name itself in the commit that carries it (pitfall 384) —
+that is what makes the whole cadence ONE call instead of one commit per commit. A planning pass writes
+nothing and says so; a row already present is not added twice; an **ordering** defect is NOT fixed by
+appending rows and the tool exits 1 saying exactly that rather than papering it over.
+
+**The flag trap that used to make this invisible:** `tools/pointer-sha-coverage.mjs` took ONLY the
+space form; `--base=<ref>` was ignored, the range fell back to `merge-base(origin/main, HEAD)`, and
+the tool audited 37 of 197 commits while still exiting **0** (measured at `247a6211a`) — a FALSE green
+that made the next window's cadence look closed. The audit now REFUSES the `=` form (exit 2) and the
+closer REFUSES the space form; each says which form it reads. Never conclude "covered" from one flag
+form — read the `range … (<baseLabel>)` line the audit prints.
+
+**Cost and host, measured:** 1.607 s for a 0-hole `--dry-run` over a 227-commit range and 0.92 s for
+the instrument's own test (`node tools/pointer-row-for-predecessor-test.mjs`, 31 checks / 0 FAIL,
+registered in the `toolchain` area of `demo/test-areas.json`) on Linux, Fedora Linux 45 (Forty Five),
+kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0.
+
+**last_verified:** 2026-11-15 at `d34aa03f7` by `node tools/pointer-row-for-predecessor-test.mjs`
+(exit 0) plus `node tools/pointer-sha-coverage.mjs --base 8b5a19e1` (exit 0, 230 range commits, 0 holes
+/ 0 ordering defects).
+
 ## If it fails
 
 Nothing here writes, so there is nothing to roll back except your own edits: `git checkout -- <path>` restores a doc you
