@@ -15163,3 +15163,9 @@ tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledge
 **The sweep RAN in this window** (the full procedure and the before/after numbers live in `docs/DECISIONS.md` D315 addenda 1-2, ROADMAP 376 and this pointer's archive): pm's `acknowledge-notices` intent drained through a bounded 300 s broker lease, live rows **1656 → 1200**, notices **461 → 5** (the 5 `claimed` left alone per `census.skippedClaimed`), ~$0 spend (the local provider is priced 0 in / 0 out). A lease is NOT side-effect-free: it minted one item branch + one worktree and left one `[read]` intent pending — run `tools/branch-census.mjs` after any lease. Credentials live OUT OF TREE in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386); `registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`).
 
 ```
+
+## Cut from the pointer 2026-11-15 (queue-backlog resumed window — the sweep paragraph moved so the clock-in digest keeps its byte budget after the pitfall-397 SELFDEV heading) — verbatim
+
+```text
+**The sweep RAN** — live **1656 → 1200**, notices **461 → 5** (the 5 `claimed` left per `census.skippedClaimed`), ~$0 (provider priced 0/0); the procedure and the before/after numbers are recorded VERBATIM in `docs/NEXT-ARCHIVE.md` (and in `docs/DECISIONS.md` D315 addenda 1-2, ROADMAP 376). A lease mints one item branch + one worktree and leaves one `[read]` intent pending — `tools/branch-census.mjs` after any lease; keys live OUT OF TREE (`~/.config/durig/env`, mode 0600), an **unsourced** preflight looked blocked (pitfall 386); `registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`).
+```
