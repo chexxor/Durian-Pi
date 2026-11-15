@@ -913,3 +913,38 @@ read carries no census, and the line turns into `NOT MEASURED`, which is not zer
 **Never do:** quote a mint cap as "it stops pathological fan-out" without the back-test number next to it. A cap
 below the fleet's own window rate stops REAL work; measured here, 45.4% of the window's mints. A priced number
 and an unpriced number look the same in prose, and only one of them is a fact about the fleet.
+
+## 36. THE KNOB CURVE — what the mint cap refuses at every window and every candidate cap, 20 calls in 60 s (2026-11-15, delegate at `2df624a2`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+§35 prices ONE point (the rig's own cap in the rig's own window). The operator's ruling on
+`DURIG_MINT_BURST_CAP` / `DURIG_PRESSURE_WINDOW_DAYS` needs the CURVE, and the curve is 20 bounded calls,
+not a guess. Sweep (one loop, exit code captured WITHOUT a pipe):
+
+```bash
+time { for w in 3 7 14 30; do for c in 100 200 300 500 600; do
+  DURIG_DB=./selfdev.sqlite timeout 60 node tools/queue-pressure.mjs --price-budget --window-days $w --mint-burst-cap $c > .spike/sw.out 2>&1
+  grep -E "would have refused" .spike/sw.out | head -1
+done; done; }   # 2.5-3.5 s per call (printed by the tool), 65.9 s for the 20 (measured 2026-11-15 at `2df624a2`)
+```
+
+Measured refusal rate (of the work mints this store recorded inside the window; every call exits **1** — a
+priced budget never changes the band verdict):
+
+| window | work mints replayed | cap 100 | cap 200 | cap 300 | cap 500 | cap 600 |
+|---|---|---|---|---|---|---|
+| 3 d | 152 | 13 (8.6%) | 13 (8.6%) | 13 (8.6%) | 13 (8.6%) | 13 (8.6%) |
+| 7 d | 1,153 | 523 (45.4%) | 212 (18.4%) | 110 (9.5%) | 36 (3.1%) | 36 (3.1%) |
+| 14 d | 1,592 | 903 (56.7%) | 490 (30.8%) | 219 (13.8%) | 41 (2.6%) | 41 (2.6%) |
+| 30 d | 3,638 | 2,762 (75.9%) | 2,142 (58.9%) | 1,583 (43.5%) | 806 (22.2%) | 648 (17.8%) |
+
+**What the curve says, in the numbers it printed.** (1) The BURST rule is a function of the WINDOW, not only the
+cap: at 3 d the busiest seat's window fan-out stays under 100, so burst refuses **0** and the only refusals are
+duplicate 12 + lineage 1; at 30 d even a cap of 600 still refuses **587** real mints. (2) The knee at the rig's
+7 d window is **between 300 and 500**: 9.5% → 3.1%, and from 500 up the residual is duplicate + lineage only
+(3.1%, flat to 600). (3) The `duplicate` and `lineage` legs barely move with the cap (duplicate 11→28 across
+100→600 at 7 d) — the cap is the BURST knob and the band is the CHECK signal, two different knobs.
+
+**Caveats that belong next to every row here:** the `duplicate` leg is a LOWER BOUND (a duplicate whose twin sits
+outside the window is not counted); the lineage exemption proxy reads a row still `held` as "was minted parked";
+the window denominator is anchored to the WALL clock, so these counts slide when the store does not. None of it
+is a recommendation: the knob is the operator's (`src/config.mjs`), and this section is the curve, not a decision.
