@@ -15181,3 +15181,9 @@ tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledge
 ```text
 **Suite tally (363 members):** GREEN full runs, newest first, each named by its own artifact PROVENANCE line — **363/363 in 201.2 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes** at the tree this pointer ships on (`.spike/suite-144185c8.out` PROVENANCE `tree=144185c89`; slowest `demo/runbook-diagnose.test.mjs` 92.8 s; the `broker` fixture flake is fixed AT its fixture, so no `--jobs 4` run needed a standalone re-check this window); **363/363 in 171.4 s exit 0** at `tree=1339ab10a` and **187.2 s** at `16f70cf8`. Areas green at `144185c89`: `broker` 83/83 in 27.1 s, `readapi` 7/7 in 5.8 s, `check` 18/18 in 25.3 s, `rig` 98/98 in 17.7 s. The runs that are NOT tallies, and the older green runs, are kept VERBATIM in `docs/NEXT-ARCHIVE.md`. **A docs-only pointer commit after the newest green run carries no suite tally of its own** — it is gated by `demo/next-pointer.test.mjs`, `tools/pointer-sha-coverage.mjs`, `tools/doc-integrity-guard.mjs` and `demo/clockin-digest.test.mjs`, and a tally is never quoted for a tree its artifact PROVENANCE line does not name.
 ```
+
+## Cut from the pointer 2026-11-15 (queue-backlog resumed window at `28be1665b` — the sweep paragraph moved VERBATIM so the clock-in digest keeps its byte budget: only 231 B of `DIGEST_BUDGET_BYTES = 20000` headroom remained before this move) — verbatim
+
+```text
+**The sweep RAN** — live **1656 → 1200**, notices **461 → 5**, ~$0; the procedure and the before/after numbers are kept VERBATIM in `docs/NEXT-ARCHIVE.md` (dated heading — pitfall 392: the clock-in digest reads this section verbatim), plus `docs/DECISIONS.md` D315 addenda 1-2 and ROADMAP 376. Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (1.6 s, exit 1); `registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`), so a ledger copy is a seat/docs task.
+```
