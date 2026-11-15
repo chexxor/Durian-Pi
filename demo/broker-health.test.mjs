@@ -13,6 +13,15 @@
 // health leg, so the assertions below fail.
 //
 // Run: node demo/broker-health.test.mjs  (exit 0 = pass)
+// Cost: 2.22 s standalone, and it is the load member of area `broker` (83/83 in 27.1 s) — measured 2026-11-15
+// on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0. `last_verified: 2026-11-15`.
+// ADDENDUM 2026-11-15: the fixture's 100 x 20 ms (2 s) guess for the fake broker's state file was the LAST
+// load flake in the suite at `--jobs 4` — under four-way load the node start exceeded 2 s, `status` saw NO
+// broker state, and the wedge read `down` instead of `degraded` (362/363 with exactly one FAILED, `.err`
+// naming `actual: 'down', expected: 'degraded'`). Green alone in 2.2 s, so the disambiguation cost a 189 s
+// suite run. `startFake` now waits on the CONDITION (up to 10 s) and exits at the first poll when idle, so
+// the fast path is unchanged and the flake class is gone; a start over 2 s prints its elapsed ms instead of
+// silently failing the bound.
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -83,7 +92,17 @@ const cli = (args, env) =>
 
 async function startFake(db, frozenMs) {
 	const child = spawn(process.execPath, [fakePath, db, String(frozenMs)], { stdio: ["ignore", "ignore", "inherit"] });
-	for (let i = 0; i < 100 && !existsSync(`${db}.broker.json`); i++) await sleep(20);
+	/* CONDITION wait, not a guess (pitfall 352/377's `--jobs 4` load-flake class): a 100 x 20 ms bound is
+	 * 2 s of REAL wall clock, and a node start under four-way load can exceed it — `status` then reads the
+	 * ABSENT state as `down` instead of the wedge's `degraded`, which is a false red that costs a whole
+	 * suite re-run to disambiguate. The wait exits at the first poll when the machine is idle (measured
+	 * 20-40 ms standalone), so the fast path stays fast; the bound is 10 s, and the elapsed ms is printed
+	 * when it crosses the old 2 s so a drift reads as a number instead of a flake. */
+	const t0 = Date.now();
+	while (Date.now() - t0 < 10_000 && !existsSync(`${db}.broker.json`)) await sleep(20);
+	const waited = Date.now() - t0;
+	if (!existsSync(`${db}.broker.json`)) throw new Error(`fixture start failed: the fake broker wrote no state within 10000 ms (waited ${waited} ms) — the FIXTURE did not start, this is not a product verdict`);
+	if (waited > 2_000) console.log(`  note   the fake broker took ${waited} ms to start (over the 2 s a fixed guess would have allowed) — load, not a defect`);
 	return child;
 }
 const killFake = (child) => {
