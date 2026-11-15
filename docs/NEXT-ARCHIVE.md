@@ -15221,3 +15221,39 @@ tranche; the seam commit `0b9e4e5e` carries 5 explicit paths — `src/fleetledge
 ## Suite tally measured at `2566c14ff` with the price diff in the WORKING tree — verbatim (2026-11-15, delegate, queue-backlog price window; superseded by the run at the shipping tree `f331274fc`)
 
 **Suite tally:** the newest green FULL run — `timeout 560 node scripts/test.mjs --all --jobs 4` -> **364/364 passed in 164.8 s, 0 `FAILED` lines, `.err` 0 bytes**, its own PROVENANCE line `tree=2566c14ff` (this window's price diff was in the WORKING tree at that run, uncommitted), artifact `.spike/suite-price.out`, slowest `demo/runbook-diagnose.test.mjs` 64.9 s — kept VERBATIM with the earlier runs in `docs/NEXT-ARCHIVE.md` (dated heading); a tally is never quoted for a tree its artifact PROVENANCE line does not name; earlier runs are in the archive.
+
+### The pointer's rate/cost paragraph, verbatim (carried out of `docs/NEXT.md` 2026-11-15 at `6d1c18396`; the pointer now points at runbook §32–§37 instead, because the clock-in digest is at its 20,000 B byte budget and the wording belongs out of the slice — pitfall 392)
+
+**The rate question and the cap's price, in 2.2 s + 3.3 s:** `docs/runbooks/session-start-cost.md` §32 census → ledger
+→ `check`; §34 the mint-refusal ledger read (`NOT MEASURED` is not `0`); **§35 the cap's PRICE** (`tools/queue-pressure.mjs
+--price-budget`, 3.3 s, never changes the exit code). Full wording of all three moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
+
+### What §37 adds to that paragraph, verbatim (2026-11-15, delegate, at `6d1c18396`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**§37 is which cost a read pays — a `watch`/`status`/`queue` cost is meaningless beside the broker state that pays it.** Row
+377 shipped `cli.mjs watch --once --human` at **10.9 s** (broker UP); measured at `fbe129ab5` with the broker **DOWN**
+(`selfdev.sqlite.broker.json` absent and no `cli.mjs serve` process in `ps -o pid,etime,args -C node`, both checked in the
+same command as the number) the identical call returned **1.515 s, exit 0, 3,939 B stdout / 0 B stderr**, and the census
+footer line still rendered. A 7× drift on a read cost is indistinguishable from a regression in prose, so BOTH numbers stay
+in row 377, each named by the state that pays it: a broker-routed read pays the router's turn, a direct read pays the store.
+Row 329 carries the third shape — against a broker **alive but dark** (fresh `heartbeatAt`, frozen `lastPassAt`, no
+`genlock.*`) the same command printed **0 bytes on both streams for 90+ s** and the read was DESTROYED, not delayed, so a
+slow `watch` is not "the store is big" and an empty `watch` is not "nothing is waiting". The rule for the next reader: name
+the broker state in the SAME command as the measurement, and never overwrite an old read cost with a new number.
+
+### The pointer's `Operator decisions owed` paragraph, verbatim (carried out of `docs/NEXT.md` 2026-11-15 at `6d1c18396` — the
+price detail is duplicated by runbook §35/§36, so the pointer keeps the decision and points at the curve; pitfall 392)
+
+**Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
+(`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; with 1024 open work
+rows the gate is loud by design, and the caps are now **PRICED** (`--price-budget`: 523 of the window's 1,153 work
+mints = 45.4 % would have been refused — burst 506, lineage 6, duplicate 11; six seats above the 100/seat cap, impl
+567 to scribe 154), so a `DURIG_MINT_BURST_CAP` above 567 stops the burst rule refusing REAL work at this fleet's own
+rate; the LINEAGE rule is priced at 0.5 % of in-window mints, not the old ~38 % recollection (451 of 1,195 LIVE rows
+name no parent, but only 6 of 1,153 in-window MINTS lack it — the recollection was wrong by two orders of magnitude). The
+full curve (windows 3/7/14/30 d × caps 100–600, 20 calls in 65.9 s) is runbook §36: the knee at 7 d is between 300 and 500,
+and the WINDOW is as much of the price as the CAP is. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
+pass-by-pass — the queue has no verb for it (`registrations` is census-only), so it is a seat/docs task, and pm owns routing.
+(c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
+(d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
+operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.

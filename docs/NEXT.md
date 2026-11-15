@@ -129,7 +129,7 @@ contract-satisfied, and the two clauses that were prose before are now NUMBERS: 
 readapi-area pin is section C2 of `demo/status-view-bound.test.mjs` (**2.36 s exit 0**, `--area readapi` **7/7 in 6.1 s**) (D315; ROADMAP **376** notices-are-not-work, **377** the census split, **378** the mint fan-out budget,
 **379** registrations → ledger + `registration-as-work`, **380** the `queue-pressure` gate, `tools/queue-pressure.mjs` and the `src/fleetledger.mjs` seam that makes the finding QUOTE the tool's verdict,
 task-4's broker-window re-measure in the `State the team is in` block below). `cli.mjs check rig.selfdev.json --json` now exits **1** with **3 errors**:
-**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +719/7 d — re-measured 2026-11-15 at this commit), **`pool-dead-gate`** (#7660 queued in the POOL, requires docs, no seat advertises it) and **`ready-ref-stale`** (`item-3570-recut` ready to land and past its 24 h SLA — the age is `<N>` h **at measurement**, wall-clock relative and never a constant (pitfall 398's rolling-window shape); landing debt the fleet owns, the land grant is the operator's), plus **`registration-as-work`** at `fix-now` on **16** ids:
+**`queue-pressure`** (1024 open work vs a band of 120, over by 904, net +718/7 d — re-measured 2026-11-15 at `6d1c18396`, exit 1, 2.073 s), **`pool-dead-gate`** (#7660 queued in the POOL, requires docs, no seat advertises it) and **`ready-ref-stale`** (`item-3570-recut` ready to land and past its 24 h SLA — the age is `<N>` h **at measurement**, wall-clock relative and never a constant (pitfall 398's rolling-window shape); landing debt the fleet owns, the land grant is the operator's), plus **`registration-as-work`** at `fix-now` on **16** ids:
 #6700 #6759 #6879 #6906 #6913 #6992 #7014 #7031 #7039 #7051 #7258 #7282 #7311 #7645 #7703 #7739 (was 17 — the broker
 window claimed one, which is exactly what the rule exists to catch). **That is the queue the next session acts on.**
 
@@ -161,25 +161,25 @@ stopped being appended on 2026-11-13 while the broker was down, so `tools/backlo
 stale window and `cli.mjs check` quotes the same sentence inside its finding; the store-wide rate is +719 over 7 d.
 Re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (2.2 s, exit 1) rather than quote either;
 pitfall 383, and the `<N>`-min age is wall-clock relative, never a constant (pitfall 398). Full paragraph moved VERBATIM
-to `docs/NEXT-ARCHIVE.md` (pitfall 392: the clock-in digest reads this slice, so the prose lives out of it).
+to `docs/NEXT-ARCHIVE.md` (pitfall 392: the clock-in digest reads this slice, so the prose lives out of it); the rate there
+(+719/7 d) has slid to **+718 over 7 d at `6d1c18396`** — the window is anchored to the wall clock.
 
 **Operator decisions owed.** (a) The three numbers: burst 100, band 10/seat, window 7 d — knobs in `src/config.mjs`
 (`DURIG_MINT_BURST_CAP` / `DURIG_BAND_PER_SEAT` / `DURIG_PRESSURE_WINDOW_DAYS`), not a code change; with 1024 open work
-rows the gate is loud by design, and the caps are now **PRICED** (`--price-budget`: 523 of the window's 1,153 work
-mints = 45.4 % would have been refused — burst 506, lineage 6, duplicate 11; six seats above the 100/seat cap, impl
-567 to scribe 154), so a `DURIG_MINT_BURST_CAP` above 567 stops the burst rule refusing REAL work at this fleet's own
-rate; the LINEAGE rule is priced at 0.5 % of in-window mints, not the old ~38 % recollection (451 of 1,195 LIVE rows
-name no parent, but only 6 of 1,153 in-window MINTS lack it — the recollection was wrong by two orders of magnitude). The
-full curve (windows 3/7/14/30 d × caps 100–600, 20 calls in 65.9 s) is runbook §36: the knee at 7 d is between 300 and 500,
-and the WINDOW is as much of the price as the CAP is. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
+rows the gate is loud by design, and the caps are now **PRICED**, not guessed: runbook **§35** prices the rig's own cap and
+**§36** is the CURVE every candidate cap sits on (windows 3/7/14/30 d × caps 100–600, 20 bounded calls in 65.9 s, knee at
+7 d between 300 and 500) — the WINDOW is as much of the price as the CAP is. The paragraph's full price wording (the 523 of
+1,153 = 45.4 % point, the six seats over the 100/seat cap, the lineage recollection corrected by two orders of magnitude)
+lives VERBATIM in `docs/NEXT-ARCHIVE.md`. (b) Whether the 16 `queued` registrations should be HELD or written into `docs/ROADMAP.md`
 pass-by-pass — the queue has no verb for it (`registrations` is census-only), so it is a seat/docs task, and pm owns routing.
 (c) Whether a STOPPED-but-rostered seat's queued notices may be acknowledged (paused is excluded, stopped is not).
 (d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
 operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
 
-**The rate question and the cap's price, in 2.2 s + 3.3 s:** `docs/runbooks/session-start-cost.md` §32 census → ledger
-→ `check`; §34 the mint-refusal ledger read (`NOT MEASURED` is not `0`); **§35 the cap's PRICE** (`tools/queue-pressure.mjs
---price-budget`, 3.3 s, never changes the exit code). Full wording of all three moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
+**The rate question, the cap's price, and which cost a read pays:** `docs/runbooks/session-start-cost.md` §32 census → ledger
+→ `check`; §34 the mint-refusal ledger read (`NOT MEASURED` is not `0`); **§35 the cap's PRICE**; §36 the knob CURVE; **§37 a
+read cost is only meaningful beside broker state** (`watch --once` 1.515 s down / 10.9 s up — never overwrite an old read cost).
+Full wording of all five moved VERBATIM to `docs/NEXT-ARCHIVE.md`.
 
 **Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
 recorded, not touched by this tranche.
