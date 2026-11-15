@@ -4895,3 +4895,10 @@ at `:743`). Re-measure every `path:line` before repeating it.
     bytesToRead)` — swapping the last two reads from the wrong end silently; and `fs.fstat(fd)` is the CALLBACK form
     (`"cb" must be a function`), while `statSync(path).size` is the sync one. A `--ledger` path is resolved relative to
     the TOOL's repo, not the shell cwd, so a session in a seat worktree reads ITS ledger.
+392. **`docs/NEXT.md`'s `## NEXT SESSION` section feeds `scripts/clockin.mjs`'s digest VERBATIM, and the digest has a
+    20,000 B budget (`scripts/clockin.mjs:46` `DIGEST_BUDGET_BYTES`) — so pointer growth is session-start cost, and
+    `demo/clockin-digest.test.mjs` fails on it (measured 2026-11-15: digest 20,354 B, exit 1, while the pointer was
+    inside its own 200-line cap — the pointer has TWO caps, lines and bytes, pitfall 29 of the runbook names the second).
+    The fix is consolidation, not prose compression: move the window's HISTORY blocks verbatim into
+    `docs/NEXT-ARCHIVE.md` (the established `3a8bce52` pattern) and keep the pointer's section as facts + one-line
+    measurements. A `--budget <B>` flag exists for diagnostics; never raise the budget to make a gate pass.

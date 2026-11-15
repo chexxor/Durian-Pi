@@ -39,6 +39,8 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `0b9e4e5e` | **the `queue-pressure` finding now QUOTES the fleet ledger's own verdict (task-7's literal clause)** — `src/fleetledger.mjs` is the ONE derivation of `rows closed / open rows / GROWING` over the JSONL `tools/broker-keepalive.mjs:272` appends: `tools/backlog-burn.mjs` prints `v.verdictLine`, `src/checkup.mjs` quotes it verbatim with its window plus the stale-window caveat, and `demo/queue-pressure.test.mjs` pushes the SAME fixture text through both and asserts the sentences are EQUAL (the #5047 pair-of-spellings defect in prose form); `auditRig` stays fs-free — `cli.mjs`'s `check` verb does the bounded read (newest 4 MiB, truncation reported) and hands it as data; full suite 363/363 in 193.7 s exit 0 |
 | `28fa2c5f` | docs close-out: NEXT.md gains the rows that closed the coverage hole (`cc4769ec`, `8e39f105`, `0b9e4e5e`) so `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exits **0** (170 range commits, 0 holes — this commit is its exempt carrier); ROADMAP 380 amended with the quote clause, SELFDEV pitfalls 390/391, D315 addendum 3; full suite re-measured **363/363 in 201.6 s exit 0** at this tree (`.spike/suite-final-28fa2c5f.out`, PROVENANCE `tree=28fa2c5f`) |
 | `df0c891f` | docs: `docs/runbooks/session-start-cost.md` §29 (the rate question: census → ledger → `check`, 2.2 s) and the run-first block gains `node tools/backlog-burn.mjs` — this commit is the exempt carrier; full suite re-measured **at this tree** 363/363 in 196.7 s exit 0 |
+| `4919c660` | docs(NEXT): the pointer names `df0c891f` and carries the full-suite tally AT that tree (363/363 in 196.7 s exit 0) — that commit's exempt carrier |
+| `c37f583a` | demo pins that a CAP refusal is **recorded**, not only refused (task-5's literal clause): `demo/notice-not-work.test.mjs` §10 asserts `kind: "burst"`, the cap/window/knob named in the record, the ledger bounded at 100, and no row minted — whole demo still 0.365 s exit 0; ROADMAP 378 amended in place; the `--jobs 4` run there came back 361/363 and exposed the clock-in digest over budget (pitfall 392) |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -77,41 +79,25 @@ node tools/broker-serve.mjs --status                      # 24 s SOURCED — pro
 timeout 560 node scripts/test.mjs --all --jobs 4          # see the Suite tally line below
 ```
 
-**The sweep pm RAN this window** (the delegate spools, the broker's harness writes the transitions — no seat turn is spent;
-the store delta was live 1656 → 1200 rows, notices 461 → 5):
+**The sweep RAN in this window** (facts; the procedure and the before/after numbers live in `docs/DECISIONS.md` D315
+addendum, ROADMAP 376-380 and this pointer's archive): live rows **1656 → 1200**, notices **461 → 5** (only the 5 `claimed`
+remain, per `census.skippedClaimed`), via pm's `acknowledge-notices` intent drained through a 300 s broker lease (`node
+intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm`, requestId `f4cdad9d…`).
+`registrations` is census-only (`src/queueops.mjs:427` → `{changes: []}`), so the 16 `queued` registrations are pm's routing
+decision, not a verb. A lease is NOT side-effect-free: it minted one item branch + one worktree (branches 54 → 55, worktrees
+28 → 29) and left one `[read]` intent pending — run `tools/branch-census.mjs` after any lease. Credentials live OUT OF TREE
+in `~/.config/durig/env` (mode 0600, names only); an **unsourced** preflight is what made the sweep look blocked (pitfall 386),
+and the local provider is priced 0 in/0 out, so the sweep cost ~$0.
 
-```bash
-node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm   # 456 notices → done with an `acknowledged` transition
-node intent.mjs queue --op queue --action registrations                                          # census ONLY (src/queueops.mjs:427 returns changes: [])
-```
-
-**IT RAN — and the earlier "the operator must fund the provider" reading was WRONG.** The credentials are already on
-this box in `~/.config/durig/env` (mode 0600, dated 2026-11-08, names `DURIG_LOCAL_API_KEY` + `DURIG_VERIFIER_API_KEY`);
-the rig never sources it, so an **unsourced** preflight printed 401s and the sweep looked blocked. Sourced (`set -a; . "$HOME/.config/durig/env"; set +a`,
-a step in `docs/runbooks/broker-down-or-stalled.md`), the preflight reports **0 blocks**: `local: completes (finish=stop,
-prompt=57 tok, completion=29 tok)` and `verifier: answers, advertises 178 model(s)` + `completes (59 in / 48 out)`.
-The window then ran: spool `node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm`
-(0.14 s, `requestId f4cdad9d…`), open the lease `nohup timeout --signal=TERM --kill-after=60 380 node cli.mjs serve --max-duration 300 &`,
-confirm liveness on the last ` PASS ` line (`PASS 192 ms=20`), `node cli.mjs resume` before closing. **Never print the key values.**
-A broker lease is not free of side effects: it also minted one item branch + one worktree (branches 54 → 55, worktrees 28 → 29)
-and left one `[read]` intent pending after `resume` — run the branch/worktree census after any lease (`tools/branch-census.mjs`).
-
-**Suite tally:** 363 members; the GREEN full run is **363/363 in 219.3 s, exit 0** at tree `8bd56720` —
-`timeout 560 node scripts/test.mjs --all --jobs 4` (2026-11-15, `.spike/suite-final-c.out`, PROVENANCE line
-`tree=8bd56720 … pi-durable=1.5.1`). Slowest there: `demo/runbook-diagnose.test.mjs` 104.5 s. Areas re-measured in
-the resumed window: `check` **18/18 in 35.4 s**, two new-rule demos green in it. Do **not** cite the two earlier
-full runs at HEAD `93e0044a` as a tally: `.spike/suite-final-20261115.out` was **362/363 in 199.3 s** (the one red
-= `demo/restart-limit-behaviour.test.mjs` charging 4 restarts for 5 landed crashes under `--jobs 4` — pitfall 352/377,
-a load flake, green standalone and green in every later run) and `.spike/suite-final-20261115b.out` was **360/363 in
-191.4 s** (`check`, `doc-count-drift`, `starter` red because the working tree carried the new 30-rule `checkup.mjs`
-and the new demos while HEAD/docs still claimed 29 rules and the doc close-out had not landed). A full suite is the
-only gate on a doc-count claim; run the file ALONE before calling a suite red a defect. **Re-verified at the final tree
-of this window:** `timeout 540 node scripts/test.mjs --all --jobs 4` at `fd5e3316` → **363/363 in 224.0 s, exit 0**
-(`.spike/suite-final-fd5e3316.out`, PROVENANCE `tree=fd5e3316`) — the docs close-outs move no test member, so the
-member count stays 363 while the wall clock drifts 199 → 219 → 224 s with store load and `--jobs 4`. **Green at the tree
-this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `6fff4560` → **363/363 in 196.1 s, exit 0,
-0 `FAILED` lines** (`.spike/suite-final-6fff4560.out`, PROVENANCE `tree=6fff4560`) — that is the full-suite gate the
-completion auditor should read, taken after the sweep and after every doc close-out. **Re-verified with the `fleetledger` seam in the tree:** `timeout 520 node scripts/test.mjs --all --jobs 4` at HEAD `8e39f105` (the working tree carried `src/fleetledger.mjs` + the `checkup`/`cli`/`backlog-burn`/demo edits) → **363/363 in 193.7 s, exit 0** (`.spike/suite-quote-all.out`, PROVENANCE `tree=8e39f105`) — the member count stays 363 because no test member was added, only assertions inside existing demos. **Green at the tree this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `df0c891f` → **363/363 in 196.7 s, exit 0, 0 `FAILED` lines** (`.spike/suite-final-df0c891f.out`, PROVENANCE `tree=df0c891f`) — the docs close-outs move no test member, so 363 stays 363 while the wall clock drifts 193.7 → 201.6 → 196.7 s with store load and `--jobs 4`.
+**Suite tally (363 members):** GREEN full runs, each named by its own artifact PROVENANCE line — **363/363 in 196.7 s** at
+`df0c891f` (`.spike/suite-final-df0c891f.out`, the last run after every doc close-out); 363/363 in 201.6 s at `28fa2c5f`;
+363/363 in 193.7 s at HEAD `8e39f105` with the `fleetledger` seam in the tree (`.spike/suite-quote-all.out`); 363/363 in 224.0 s
+at `fd5e3316`; 363/363 in 219.3 s at tree `8bd56720`. Do NOT cite the two runs at HEAD `93e0044a` (362/363, 360/363) as a
+tally — a `--jobs 4` load flake and a pre-close-out tree (pitfall 385). Areas re-measured after the seam: `check` 18/18,
+`rig` 98/98 in 18.1 s. **At `c37f583a` a `--jobs 4` run came back 361/363**: `restart-limit-behaviour` green ALONE (1.39 s,
+the known load flake) and `demo/clockin-digest.test.mjs` RED — a REAL failure, the clock-in digest at 20,354 B over its
+declared 20,000 B budget (pitfall 392: the `## NEXT SESSION` section feeds the digest VERBATIM, so pointer growth is digest
+growth; ROADMAP 289's size gate). Fixed by consolidation into `docs/NEXT-ARCHIVE.md` — `node demo/clockin-digest.test.mjs` is then **green standalone (27.5 s, exit 0; entry point 18,367 B against the 20,000 B cap)**; **the FULL suite has NOT been re-run since that commit — run it first next session and correct this line.**
 
 **State the team is in:** the tranche is **landed in the shared tree** (`main` = this pointer's own commit, over `0b9e4e5e` (the `fleetledger` seam) over `8e39f105`, `cc4769ec`, `6fff4560` and the six docs close-outs
 `b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`, `1fd8134a`, `6fff4560` over `8bd56720`, whose 28 explicit paths carry the

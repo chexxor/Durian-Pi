@@ -15081,3 +15081,43 @@ land with `--changed-suite` (pitfall 347). (b) A fixture with absolute dates is 
 recorded, not touched.
 
 Full history of this pointer, verbatim: [docs/NEXT-ARCHIVE.md](NEXT-ARCHIVE.md)
+
+## 2026-11-15 — pointer blocks moved VERBATIM out of `## NEXT SESSION` (the clock-in digest reads that section verbatim and hit its 20,000 B budget; the detail belongs in the archive, not in the ritual)
+
+```
+**The sweep pm RAN this window** (the delegate spools, the broker's harness writes the transitions — no seat turn is spent;
+the store delta was live 1656 → 1200 rows, notices 461 → 5):
+
+```bash
+node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm   # 456 notices → done with an `acknowledged` transition
+node intent.mjs queue --op queue --action registrations                                          # census ONLY (src/queueops.mjs:427 returns changes: [])
+```
+
+**IT RAN — and the earlier "the operator must fund the provider" reading was WRONG.** The credentials are already on
+this box in `~/.config/durig/env` (mode 0600, dated 2026-11-08, names `DURIG_LOCAL_API_KEY` + `DURIG_VERIFIER_API_KEY`);
+the rig never sources it, so an **unsourced** preflight printed 401s and the sweep looked blocked. Sourced (`set -a; . "$HOME/.config/durig/env"; set +a`,
+a step in `docs/runbooks/broker-down-or-stalled.md`), the preflight reports **0 blocks**: `local: completes (finish=stop,
+prompt=57 tok, completion=29 tok)` and `verifier: answers, advertises 178 model(s)` + `completes (59 in / 48 out)`.
+The window then ran: spool `node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm`
+(0.14 s, `requestId f4cdad9d…`), open the lease `nohup timeout --signal=TERM --kill-after=60 380 node cli.mjs serve --max-duration 300 &`,
+confirm liveness on the last ` PASS ` line (`PASS 192 ms=20`), `node cli.mjs resume` before closing. **Never print the key values.**
+A broker lease is not free of side effects: it also minted one item branch + one worktree (branches 54 → 55, worktrees 28 → 29)
+and left one `[read]` intent pending after `resume` — run the branch/worktree census after any lease (`tools/branch-census.mjs`).
+
+**Suite tally:** 363 members; the GREEN full run is **363/363 in 219.3 s, exit 0** at tree `8bd56720` —
+`timeout 560 node scripts/test.mjs --all --jobs 4` (2026-11-15, `.spike/suite-final-c.out`, PROVENANCE line
+`tree=8bd56720 … pi-durable=1.5.1`). Slowest there: `demo/runbook-diagnose.test.mjs` 104.5 s. Areas re-measured in
+the resumed window: `check` **18/18 in 35.4 s**, two new-rule demos green in it. Do **not** cite the two earlier
+full runs at HEAD `93e0044a` as a tally: `.spike/suite-final-20261115.out` was **362/363 in 199.3 s** (the one red
+= `demo/restart-limit-behaviour.test.mjs` charging 4 restarts for 5 landed crashes under `--jobs 4` — pitfall 352/377,
+a load flake, green standalone and green in every later run) and `.spike/suite-final-20261115b.out` was **360/363 in
+191.4 s** (`check`, `doc-count-drift`, `starter` red because the working tree carried the new 30-rule `checkup.mjs`
+and the new demos while HEAD/docs still claimed 29 rules and the doc close-out had not landed). A full suite is the
+only gate on a doc-count claim; run the file ALONE before calling a suite red a defect. **Re-verified at the final tree
+of this window:** `timeout 540 node scripts/test.mjs --all --jobs 4` at `fd5e3316` → **363/363 in 224.0 s, exit 0**
+(`.spike/suite-final-fd5e3316.out`, PROVENANCE `tree=fd5e3316`) — the docs close-outs move no test member, so the
+member count stays 363 while the wall clock drifts 199 → 219 → 224 s with store load and `--jobs 4`. **Green at the tree
+this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `6fff4560` → **363/363 in 196.1 s, exit 0,
+0 `FAILED` lines** (`.spike/suite-final-6fff4560.out`, PROVENANCE `tree=6fff4560`) — that is the full-suite gate the
+completion auditor should read, taken after the sweep and after every doc close-out. **Re-verified with the `fleetledger` seam in the tree:** `timeout 520 node scripts/test.mjs --all --jobs 4` at HEAD `8e39f105` (the working tree carried `src/fleetledger.mjs` + the `checkup`/`cli`/`backlog-burn`/demo edits) → **363/363 in 193.7 s, exit 0** (`.spike/suite-quote-all.out`, PROVENANCE `tree=8e39f105`) — the member count stays 363 because no test member was added, only assertions inside existing demos. **Green at the tree this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `df0c891f` → **363/363 in 196.7 s, exit 0, 0 `FAILED` lines** (`.spike/suite-final-df0c891f.out`, PROVENANCE `tree=df0c891f`) — the docs close-outs move no test member, so 363 stays 363 while the wall clock drifts 193.7 → 201.6 → 196.7 s with store load and `--jobs 4`.
+```
