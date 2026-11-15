@@ -797,7 +797,7 @@ ahead, 0 unlandable). `--pairwise` adds the O(n²) conflict-pair diagnostics if 
 the queue rows for landing passes can sit `queued` for hours while the broker is healthy.
 
 
-## 29. IS THE BACKLOG GROWING — two reads, 2.2 s, and `check` already QUOTES the second one (2026-11-15, D315/ROADMAP 380; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+## 32. IS THE BACKLOG GROWING — two reads, 2.2 s, and `check` already QUOTES the second one (renumbered from §29 on 2026-11-15, delegate; `df0c891f` registered it as §29, which collided with the `## 29. HOW FAR IS THE MILESTONE?` section already in this file — a cited section number must be UNIQUE, and this file is an append-only journal whose numbers were already out of order; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
 
 The operator's complaint "the queue is overwhelming" now has THREE cheap answers, and only the first is a census:
 
@@ -819,3 +819,35 @@ while the broker is down.
 **What it does not tell you:** whether the band is the problem or the plan is. The band FAIL is a decision for the
 operator (the knobs `DURIG_BAND_PER_SEAT` / `DURIG_MINT_BURST_CAP` / `DURIG_PRESSURE_WINDOW_DAYS` in `src/config.mjs`);
 the census's `plan for pm` line is the verb that retires non-work rows, and pm applies it, not the delegate (AGENTS.md).
+
+## 33. THE CLOCK-IN DIGEST HAS 19 BYTES OF HEADROOM — AND THE COMMIT TABLE IS NOT IN IT (2026-11-15, delegate at `508d1ea25`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+Pitfall 392 says the digest has a byte budget and that the budget reads `docs/NEXT.md` verbatim. It does not say
+WHERE it reads, and that is the whole difference between paying the budget and fighting it. Two reads, 6 s:
+
+```bash
+node scripts/clockin.mjs > /dev/null; echo $?
+node scripts/clockin.mjs --json > .spike/clockin.json; node -e 'const j=require("fs").readFileSync(".spike/clockin.json");console.log(Buffer.from(JSON.parse(j).text).length)'
+```
+
+Measured at `508d1ea25` on 2026-11-15: the digest is **19,981 B of the `DIGEST_BUDGET_BYTES = 20000`** budget at
+`scripts/clockin.mjs:46` — **19 B of headroom**, exit 0. The `--json` pointer field says
+`docs/NEXT.md lines 71-127 of 127`, so the slice is the `## NEXT SESSION` block ONLY:
+
+- **the commit table (lines 1-70) costs the budget ZERO bytes** — a table row can be added byte-free, and a row that
+  must be moved out to pay the budget can equally be moved INTO the table;
+- **prose inside the `## NEXT SESSION` block costs byte for byte** — that is where the budget actually lives;
+- **every new `## heading` in `docs/SELFDEV.md` costs ~300-430 B** — the digest prints the heading map (`SELFDEV (4936
+  lines, headings below)`), so adding a pitfall heading needs a compensating move of the same size, or `scripts/clockin.mjs`
+  exits 1 and no session can clock in;
+- `docs/runbooks/*.md` bodies are NOT in the digest (only the staleness probe's one-line summary), so **a state read
+  written into a runbook is free**, while the same sentence written into NEXT.md is not — which is why the new cheap
+  reads go to this file and not to the pointer.
+
+**What this does not prove:** that the headroom stays. `demo/clockin-digest.test.mjs` pins a production figure of
+18,367 B against a 5,773-row fixture census; the LIVE store is 7,742 rows and prints 19,981 B, so the demo has 1,633 B
+of margin while the real entry point has 19 B. A green digest demo is not evidence the entry point will clock in —
+queue row `#7290` (claimed, `devtools`) is exactly "the clockin digest test asserts against a stale census — make it
+read the live queue". Until that lands, re-measure `node scripts/clockin.mjs` before the first edit to the pointer's
+`## NEXT SESSION` block, and move text VERBATIM to `docs/NEXT-ARCHIVE.md` in the same commit (never raise
+`DIGEST_BUDGET_BYTES` — the budget is the rule, not a knob).
