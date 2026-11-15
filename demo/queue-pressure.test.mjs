@@ -29,6 +29,7 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 
 import { auditRig, formatCheck, RULES } from "../src/checkup.mjs";
 import { bandVerdict, burnRate, queueShape } from "../src/queueclass.mjs";
+import { fleetLedgerVerdict } from "../src/fleetledger.mjs";
 import { DEFAULT_BAND_PER_SEAT, DEFAULT_MINT_BURST_CAP, DEFAULT_PRESSURE_WINDOW_DAYS } from "../src/config.mjs";
 import { RigQueue, enqueueItem, Router } from "../src/rig.mjs";
 
@@ -61,7 +62,7 @@ const SPEC = {
 	ownership: { "src-tools-harness": ["impl"], verification: ["verifier"] },
 };
 
-const audit = (queueItems) =>
+const audit = (queueItems, fleetLedger = null) =>
 	auditRig({
 		rig: "pressure.rig.json",
 		spec: SPEC,
@@ -70,6 +71,7 @@ const audit = (queueItems) =>
 		storedSeats: SPEC.seats.map((s) => s.name),
 		modelsBySeat: Object.fromEntries(SPEC.seats.map((s) => [s.name, s.model])),
 		queueItems,
+		fleetLedger,
 		featureDocs: [],
 		commitMessages: [],
 		textIntegrity: [],
@@ -202,6 +204,36 @@ const run = (entry, args, env) =>
 	});
 const cli = (args, env) => run("cli.mjs", args, env);
 const tool = (args, env) => run("tools/queue-pressure.mjs", args, env);
+
+console.log("\n=== the finding QUOTES the tools/backlog-burn.mjs burn-rate verdict (one derivation, two surfaces) ===");
+// THE CONTRACT THIS PINS. The goal says the `queue-pressure` finding must QUOTE the burn-rate verdict, not
+// paraphrase it: "the gate says GROWING and the instrument says shrinking" is the #5047 pair-of-spellings defect
+// in prose form. The fixture below is the JSONL `tools/broker-keepalive.mjs:272` appends, and the SAME text is
+// pushed through both surfaces: src/fleetledger.mjs derives it once, src/checkup.mjs quotes it, tools/backlog-burn.mjs
+// prints it. Asserting the two sentences are EQUAL (not merely similar) is what turns red if either side re-spells it.
+const LEDGER_FIXTURE = [
+	{ at: OLD, queue: { done: 10, cancelled: 2, held: 5, deferred: 4, claimed: 1, queued: 8 }, refs: 10, worktrees: 6, mainSha: "aaaaaaa1" },
+	{ at: NOW, queue: { done: 22, cancelled: 6, held: 3, deferred: 2, claimed: 2, queued: 20 }, refs: 14, worktrees: 9, mainSha: "bbbbbbb2" },
+].map((s) => JSON.stringify(s)).join("\n") + "\n";
+const ledgerPath = join(dir, "fleet-ledger-fixture.jsonl");
+writeFileSync(ledgerPath, LEDGER_FIXTURE);
+const sharedVerdict = fleetLedgerVerdict(LEDGER_FIXTURE);
+const overRows = [
+	...Array.from({ length: 35 }, (_, i) => row(2500 + i)),
+	row(2600, "queued", { subject: "DONE #2500: an acknowledgement", notice: true }),
+];
+const overLedger = audit(overRows, { ok: true, path: ledgerPath, bytes: LEDGER_FIXTURE.length, truncated: false, text: LEDGER_FIXTURE });
+const ledgerDetail = overLedger.findings.find((f) => f.id === "queue-pressure")?.detail ?? "";
+check("the finding quotes the SHARED verdict sentence verbatim", ledgerDetail.includes(`"${sharedVerdict.verdictLine}"`), ledgerDetail.slice(0, 600));
+check("...and names the window it was quoted over", ledgerDetail.includes(sharedVerdict.firstAt) && ledgerDetail.includes(sharedVerdict.lastAt) && ledgerDetail.includes(`${sharedVerdict.spanMins} min window`), ledgerDetail.slice(0, 600));
+check("...and states the ledger-staleness caveat, not a bare number", /stops being appended while the broker is down/.test(ledgerDetail), ledgerDetail.slice(0, 600));
+const burnTool = await run("tools/backlog-burn.mjs", ["--ledger", ledgerPath], {});
+const toolLine = (burnTool.stdout.match(/verdict: (.*)/) ?? [, ""])[1].trim();
+check("the SAME fixture through tools/backlog-burn.mjs prints the SAME sentence the finding quoted", toolLine === sharedVerdict.verdictLine, `tool: ${toolLine} :: rule: ${sharedVerdict.verdictLine} (exit ${burnTool.code})`);
+const unreadLedger = audit(overRows, { ok: false, path: ledgerPath, reason: "no fleet ledger at .spike/fleet-ledger.jsonl" });
+check("an unreadable ledger says WHICH cross-check is missing, instead of silently dropping it", /no fleet-ledger burn-rate verdict could be quoted/.test(unreadLedger.findings.find((f) => f.id === "queue-pressure")?.detail ?? ""), JSON.stringify(unreadLedger.findings));
+check("...and quoting the ledger does not change the verdict: the rule still FAILS because of the band", unreadLedger.findings.some((f) => f.id === "queue-pressure" && f.detail.includes("out of band")), JSON.stringify(unreadLedger.findings.filter((f) => f.id === "queue-pressure")));
+
 
 const rigPath = join(dir, "pressure.rig.json");
 const db = join(dir, "pressure.sqlite");

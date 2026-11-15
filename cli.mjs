@@ -92,6 +92,7 @@ import { readCitations } from "./src/citation.mjs";
 import { readDocCountClaims } from "./src/doccounts.mjs";
 import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs"
 import { readDependencyPlane } from "./src/depplane.mjs"
+import { readFleetLedger } from "./src/fleetledger.mjs"
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
 import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
@@ -3794,6 +3795,11 @@ async function cmdCheck(rigFile, human, rest = []) {
   // be the cwd while the imports still resolve from the checkout. The measurement is handed to auditRig
   // as plain data, keeping that function fs-free.
   const dependencyPlane = await readDependencyPlane({ db: DB_PATH });
+  // THE FLEET LEDGER (2026-11-15, the queue-backlog tranche): `check`'s `queue-pressure` finding QUOTES the burn-rate
+  // verdict `node tools/backlog-burn.mjs` prints, so the gate and the instrument cannot spell "the backlog is growing"
+  // differently (#5047). The read is bounded (src/fleetledger.mjs, newest 4 MiB) and the ledger is the fleet's own
+  // record — it stops being appended while the broker is down, which the rule states as a caveat rather than hiding.
+  const fleetLedger = readFleetLedger({ root: process.cwd() });
   // THE EXTENSION-PLANE CHECK SEAM (D212). A team's own landing-hygiene rule is customization, so it lives in
   // an extension, not in src/checkup.mjs. Each loaded extension may declare `checks: [{id, severity, what,
   // run(ctx)}]`; the audit folds them in exactly like a base rule. A rule that throws or cannot measure is
@@ -3845,6 +3851,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     extensionRules,
     extensionFindings,
     extensionSkipped,
+    fleetLedger,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {

@@ -43,6 +43,10 @@ import { strandedGates } from "./queueops.mjs";
 // Queue pressure is measured by the SAME predicate the watch footer and tools/queue-pressure.mjs use
 // (src/queueclass.mjs) — three surfaces, one derivation, so the gate and the view cannot disagree (#5047).
 import { isRegistrationItem, pressureVerdict, queueShape } from "./queueclass.mjs";
+// The burn-rate verdict the `queue-pressure` finding QUOTES lives with the ledger read (src/fleetledger.mjs), so
+// the `check` finding and `node tools/backlog-burn.mjs` print the SAME sentence (#5047). Pure over text: `auditRig`
+// is handed the ledger as data, and the caller does the fs read.
+import { fleetLedgerVerdict } from "./fleetledger.mjs";
 import { queuePressureSettings } from "./config.mjs";
 // The escalation census lives with the lease that produces it (src/deferlease.mjs), so `check` reports
 // exactly the rows `selectWakes` escalates — one rule, one census.
@@ -515,7 +519,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   rule reports UNKNOWN, never a false pass (#6155).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null, extensionRules = [], extensionFindings = [], extensionSkipped = [] }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null, extensionRules = [], extensionFindings = [], extensionSkipped = [], fleetLedger = null }) {
   // THE EXTENSION-PLANE SEAM (D212). A team's own hygiene rule — "a ready ref must not sit" — is not a base
   // capability, so it must be able to arrive from a loaded extension without being bolted into this file.
   // The base provides the SHAPE (a rule with an id/severity/what, plus findings and a skipped-with-reason
@@ -1000,12 +1004,22 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
     // backlog is growing" means, and the growth half has a declared floor instead of firing on every mint.
     const verdict = pressureVerdict(shape, queueItems, { perSeat: settings.bandPerSeat, seats: seats.length, windowDays: settings.windowDays });
     const { band, burn } = verdict;
+    // The finding QUOTES the ledger's own burn-rate sentence — `src/fleetledger.mjs` derives it, `tools/backlog-burn.mjs`
+    // prints it, and this rule quotes it, so the operator can see the two instruments' disagreement in one line instead
+    // of discovering it when the two numbers differ. `burn` here is the DERIVATION over the ledger text the caller read
+    // (auditRig stays fs-free); a ledger that could not be read says which, rather than silently dropping the clause.
+    const burnQuote = (() => {
+      const v = fleetLedger?.text ? fleetLedgerVerdict(fleetLedger.text) : null;
+      if (!v) return `no fleet-ledger burn-rate verdict could be quoted (${fleetLedger?.reason ?? "the audit was handed no ledger read"}); run node tools/broker-keepalive.mjs --once then node tools/backlog-burn.mjs`;
+      const trunc = fleetLedger.truncated ? `, only its newest ${String(fleetLedger.text).length} B were read` : "";
+      return `"${v.verdictLine}" — the fleet LEDGER over ${v.firstAt} -> ${v.lastAt} (${v.spanMins} min window, ${v.inWindow} of ${v.snapshots} snapshots${trunc}), newest snapshot ${v.staleMins} min before this measurement: the ledger stops being appended while the broker is down, so a stale window is a caveat, not a contradiction of the store-wide rate above`;
+    })();
     if (verdict.fail) {
       const busiest = Object.entries(shape.openWorkBySeat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(", ");
       add(
         "queue-pressure",
         `${band.open} open work rows`,
-        `${verdict.reasons.join("; ")} — of the ${shape.live} live rows, ${shape.notice} are protocol notices and ${shape.registration} are ROADMAP registrations parked in the queue (neither is claimable work), ${shape.queuedWork} sit in the claim lane, and ${shape.awaitingOperator} are parked on a human answer; busiest seats: ${busiest}`,
+        `${verdict.reasons.join("; ")} — of the ${shape.live} live rows, ${shape.notice} are protocol notices and ${shape.registration} are ROADMAP registrations parked in the queue (neither is claimable work), ${shape.queuedWork} sit in the claim lane, and ${shape.awaitingOperator} are parked on a human answer; busiest seats: ${busiest}. The fleet ledger's own burn-rate verdict (quoted from node tools/backlog-burn.mjs): ${burnQuote}`,
         `retire the non-work rows: node tools/queue-pressure.mjs prints the plan and pm applies it (node intent.mjs queue --op queue --action acknowledge-notices --apply --confirm); drain the claim lane before minting more, and raise the numbers only deliberately: DURIG_BAND_PER_SEAT / DURIG_MINT_BURST_CAP / DURIG_PRESSURE_WINDOW_DAYS. Cross-check the direction with node tools/backlog-burn.mjs (ledger-sampled rate) — if the two disagree, one of them is stale`,
       );
     }

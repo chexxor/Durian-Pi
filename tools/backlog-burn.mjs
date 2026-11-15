@@ -1,85 +1,81 @@
 #!/usr/bin/env node
 // tools/backlog-burn.mjs — is the backlog actually shrinking, and at what rate?
 //
-// WHY THIS EXISTS (measured 2026-11-12, Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64,
-// node v24.22.1, git 2.56.0 — re-measure before quoting): `cli.mjs status` and
-// `tools/queue-drain-audit.mjs` give a single census — a snapshot with no direction. The operator's
-// directive "finish the backlog" is a RATE question: rows close while new rows are minted, so a
-// fleet can be busy every minute and still grow. tools/broker-keepalive.mjs already appends a queue
-// snapshot every 10th tick to its ledger, so the rate is already recorded; this tool reads it back.
+// WHY THIS EXISTS (measured 2026-11-12, Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+// git 2.56.0 — re-measure before quoting): `cli.mjs status` and `tools/queue-drain-audit.mjs` give a single
+// census — a snapshot with no direction. "Finish the backlog" is a RATE question: rows close while new rows are
+// minted, so a fleet can be busy every minute and still grow. `tools/broker-keepalive.mjs:272` already appends a
+// queue snapshot every 10th tick to `.spike/fleet-ledger.jsonl`, so the rate is already recorded; this tool reads
+// it back.
 //
 // Trigger symptom: "the team is busy but the queue never empties / nothing is ever finished".
-// Cost: < 1 s (one read of the JSONL ledger, no store open, no git).
-// Exit codes: 0 = read OK; 2 = usage / no queue snapshots in the ledger.
+// Cost: < 1 s (one BOUNDED read of the JSONL ledger — no store open, no git, no provider).
+// Exit codes: 0 = read OK; 2 = usage / no ledger / no queue snapshots in it.
 //
 // usage:
 //   node tools/backlog-burn.mjs [--ledger .spike/fleet-ledger.jsonl] [--hours N]
 //
-// Reads lines that carry a `queue` object (keepalive ticks). Prints the first/last snapshot, the
-// delta per hour for each state, the intake-vs-close verdict, and the ref/worktree trend.
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+// THE ARITHMETIC IS NOT HERE. src/fleetledger.mjs `fleetLedgerVerdict` is the ONE derivation of "rows closed vs
+// open rows vs GROWING"; `src/checkup.mjs`'s `queue-pressure` rule quotes that same `verdictLine`, so the tool's
+// words and the gate's words cannot disagree (#5047). If this tool ever prints a sentence the rule does not quote
+// verbatim, one of them has been re-spelled — fix the shared module, not the caller.
+//
+// Measured cost, re-run before quoting: 0.04 s against the live ledger (1,191 lines); host Linux, Fedora Linux 45
+// (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0; `last_verified: 2026-11-15`.
 import { fileURLToPath } from "node:url";
+import { basename, dirname, join } from "node:path";
+
+import { fleetLedgerVerdict, readFleetLedger, LEDGER_STATES } from "../src/fleetledger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..");
 
 function arg(name, fallback) {
-	const i = process.argv.findIndex((a) => a === name || a.startsWith(name + "="));
-	if (i < 0) return fallback;
-	return process.argv[i].includes("=") ? process.argv[i].split("=")[1] : process.argv[i + 1];
+  const i = process.argv.findIndex((a) => a === name || a.startsWith(name + "="));
+  if (i < 0) return fallback;
+  return process.argv[i].includes("=") ? process.argv[i].split("=")[1] : process.argv[i + 1];
 }
 
-const ledger = arg("--ledger", join(REPO, ".spike", "fleet-ledger.jsonl"));
+const want = arg("--ledger", ".spike/fleet-ledger.jsonl");
 const hours = Number(arg("--hours", 0));
+// An absolute --ledger is read from where it is; a relative one is always relative to the repo the tool lives
+// in, not the shell's cwd, so a session in a seat worktree still reads ITS fleet ledger.
+const absolute = want.startsWith("/") || /^[A-Za-z]:[\\/]/.test(want);
+const root = absolute ? dirname(want) : REPO;
+const path = absolute ? basename(want) : want;
 
-let lines;
-try {
-	lines = readFileSync(ledger, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-} catch (e) {
-	console.error(`cannot read ledger ${ledger}: ${e.message}`);
-	process.exit(2);
+const record = readFleetLedger({ root, path });
+if (!record.ok) {
+  console.error(`cannot read ledger ${record.path}: ${record.reason ?? "unreadable"}`);
+  process.exit(2);
+}
+const v = fleetLedgerVerdict(record.text, { hours });
+if (!v) {
+  console.error(`no queue snapshots in ${record.path} — run tools/broker-keepalive.mjs --once first`);
+  process.exit(2);
 }
 
-const snaps = lines.filter((l) => l.queue);
-if (!snaps.length) {
-	console.error(`no queue snapshots in ${ledger} — run tools/broker-keepalive.mjs --once first`);
-	process.exit(2);
-}
-
-const cut = hours > 0 ? Date.now() - hours * 3600 * 1000 : 0;
-let win = snaps.filter((s) => new Date(s.at).getTime() >= cut);
-if (!win.length) {
-	// A ledger older than the window still has to answer the question, not crash.
-	console.log(`note: no snapshot in the last ${hours} h — using the whole ledger (${snaps.length} snapshots)`);
-	win = snaps;
-}
-const first = win[0];
-const last = win[win.length - 1];
-const mins = (new Date(last.at) - new Date(first.at)) / 60000;
-const perHour = (delta) => (mins > 0 ? delta / (mins / 60) : 0);
-const STATES = ["done", "cancelled", "held", "deferred", "claimed", "queued"];
-const total = (q) => STATES.reduce((a, k) => a + (q[k] ?? 0), 0);
+const perHour = (d) => (v.spanMins > 0 ? d / (v.spanMins / 60) : 0);
+const sign = (n) => (n >= 0 ? "+" : "") + n;
 
 console.log(
-	`backlog burn ${first.at} -> ${last.at}  (ledger has ${snaps.length} queue snapshots; ${win.length} in the ${hours > 0 ? hours + "h" : "all"} window; span ${Math.round(mins)} min)`
+  `backlog burn ${v.firstAt} -> ${v.lastAt}  (ledger has ${v.snapshots} queue snapshots; ${v.inWindow} in the ${hours > 0 ? hours + "h" : "all"} window; span ${v.spanMins} min)`
 );
-console.log(`  ledger ${ledger}`);
-for (const k of STATES) {
-	const d = (last.queue[k] ?? 0) - (first.queue[k] ?? 0);
-	console.log(`  ${k.padEnd(10)} ${first.queue[k] ?? 0} -> ${last.queue[k] ?? 0}   delta ${d >= 0 ? "+" : ""}${d}   ${perHour(d).toFixed(1)}/h`);
+console.log(`  ledger ${record.path} (${record.bytes} B${record.truncated ? `, read as the newest ${record.text.length} B tail — the older part is not in this verdict` : ""}${v.malformed ? `, ${v.malformed} unparseable line(s) ignored` : ""})`);
+if (v.fellBack) console.log(`  note: no snapshot in the last ${hours} h — using the whole ledger (${v.snapshots} snapshots)`);
+for (const k of LEDGER_STATES) {
+  const d = (v.last.queue[k] ?? 0) - (v.first.queue[k] ?? 0);
+  console.log(`  ${k.padEnd(10)} ${v.first.queue[k] ?? 0} -> ${v.last.queue[k] ?? 0}   delta ${sign(d)}   ${perHour(d).toFixed(1)}/h`);
 }
-const rowsDelta = total(last.queue) - total(first.queue);
-const closedDelta = (last.queue.done ?? 0) + (last.queue.cancelled ?? 0) - ((first.queue.done ?? 0) + (first.queue.cancelled ?? 0));
-const openDelta = (last.queue.queued ?? 0) + (last.queue.claimed ?? 0) + (last.queue.held ?? 0) + (last.queue.deferred ?? 0) -
-	((first.queue.queued ?? 0) + (first.queue.claimed ?? 0) + (first.queue.held ?? 0) + (first.queue.deferred ?? 0));
-console.log(`  verdict: ${closedDelta} rows closed, ${openDelta >= 0 ? "+" : ""}${openDelta} open rows in the window -> backlog ${openDelta > 0 ? "GROWING" : openDelta < 0 ? "shrinking" : "flat"}`);
+console.log(`  verdict: ${v.verdictLine}`);
+if (v.staleMins > 0) console.log(`  note: the newest snapshot is ${v.staleMins} min old — the fleet ledger stops being appended while the broker is down, so this window is not "now"`);
 const wt = (s) => (typeof s.worktrees === "number" ? s.worktrees : null);
 console.log(
-	`  refs ${first.refs} -> ${last.refs} (${last.refs - first.refs})` +
-		(wt(first) !== null && wt(last) !== null ? `, worktrees ${wt(first)} -> ${wt(last)} (${wt(last) - wt(first)})` : "")
+  `  refs ${v.first.refs} -> ${v.last.refs} (${v.last.refs - v.first.refs})` +
+    (wt(v.first) !== null && wt(v.last) !== null ? `, worktrees ${wt(v.first)} -> ${wt(v.last)} (${wt(v.last) - wt(v.first)})` : "")
 );
-if (last.mainSha) {
-	if (!first.mainSha) console.log(`  main ${last.mainSha} (first snapshots in this ledger predate the mainSha field, so no comparison is possible)`);
-	else console.log(`  main ${first.mainSha} -> ${last.mainSha}` + (first.mainSha === last.mainSha ? "  (NOT MOVING: nothing landed)" : "  (main moved — a landing is only PROVEN when refs fall; a delegate commit also moves main)"));
+if (v.last.mainSha) {
+  if (!v.first.mainSha) console.log(`  main ${v.last.mainSha} (first snapshots in this ledger predate the mainSha field, so no comparison is possible)`);
+  else console.log(`  main ${v.first.mainSha} -> ${v.last.mainSha}` + (v.first.mainSha === v.last.mainSha ? "  (NOT MOVING: nothing landed)" : "  (main moved — a landing is only PROVEN when refs fall; a delegate commit also moves main)"));
 }
+process.exit(0);
