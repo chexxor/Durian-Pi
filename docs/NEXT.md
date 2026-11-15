@@ -33,6 +33,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `fd5e3316` | docs(NEXT): the pointer names `b08d1aa9` and `5a739a94` in commit order — closes the audit's last hole; `tools/pointer-sha-coverage.mjs --base 8b5a19e1` → exit **0** (162 range commits, 84 covered, 0 holes), and `timeout 540 node scripts/test.mjs --all --jobs 4` at this tree → **363/363 in 224.0 s** |
 | `fa1c1dda` | docs(NEXT): name `fd5e3316` in commit order so `pointer-sha-coverage --base 8b5a19e1` stays exit 0 (this commit is its exempt carrier). The **store-side sweep** this pointer records is NOT a commit: pm's verb drained the spooled `acknowledge-notices` intent through the broker (`INTENT delivered=1 dead=0 dup=0`), retiring 456 notice ROWS in `selfdev.sqlite` |
 | `1fd8134a` | docs close-out: **the sweep RAN** — NEXT.md rewritten to the post-sweep state (live 1656 → 1200, notices 461 → 5), SELFDEV pitfalls 386-388 (keys out of tree, a lease mutates the store, `check` without the rig file changes the band denominator), D315 addendum, ROADMAP 376/379/380 amended in place |
+| `6fff4560` | docs(NEXT): restore the literal `**Blocker:**` label that `demo/next-pointer.test.mjs` pins (`/^\*\*Blocker:\*\*/m`, pitfall 389) and name `1fd8134a` in commit order; full suite then measured green **at this tree** — 363/363 in 196.1 s |
 
 **Broker windows.** A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs:2058`), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -101,13 +102,15 @@ and the new demos while HEAD/docs still claimed 29 rules and the doc close-out h
 only gate on a doc-count claim; run the file ALONE before calling a suite red a defect. **Re-verified at the final tree
 of this window:** `timeout 540 node scripts/test.mjs --all --jobs 4` at `fd5e3316` → **363/363 in 224.0 s, exit 0**
 (`.spike/suite-final-fd5e3316.out`, PROVENANCE `tree=fd5e3316`) — the docs close-outs move no test member, so the
-member count stays 363 while the wall clock drifts 199 → 219 → 224 s with store load and `--jobs 4`.
+member count stays 363 while the wall clock drifts 199 → 219 → 224 s with store load and `--jobs 4`. **Green at the tree
+this pointer ships on:** `timeout 520 node scripts/test.mjs --all --jobs 4` at `6fff4560` → **363/363 in 196.1 s, exit 0,
+0 `FAILED` lines** (`.spike/suite-final-6fff4560.out`, PROVENANCE `tree=6fff4560`) — that is the full-suite gate the
+completion auditor should read, taken after the sweep and after every doc close-out.
 
-**State the team is in:** the tranche is **landed in the shared tree** (`main` = `9eedeb3a` under four docs close-outs
-(`b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`) over `8bd56720`: the tranche commit carries 28 explicit paths, the docs
-close-outs 1–2 paths each, nothing pushed) and **the sweep is DONE in the store**: notices 461 → 5 (only the 5 `claimed`
-remain, deliberately), 171 registrations still parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3) and 1024
-open work rows still out of band. Row owners: none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
+**State the team is in:** the tranche is **landed in the shared tree** (`main` = `6fff4560` and the six docs close-outs
+`b08d1aa9`, `5a739a94`, `fd5e3316`, `fa1c1dda`, `1fd8134a`, `6fff4560` over `8bd56720`, whose 28 explicit paths carry the
+tranche; nothing pushed) and **the sweep is DONE in the store**: notices 461 → 5 (only the 5 `claimed` remain, deliberately),
+171 registrations still parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3) and 1024 open work rows still out of band. Row owners: none claimed by the delegate — queue transitions are pm's verbs (AGENTS.md).
 
 **Blocker:** none for the sweep — it ran (pitfall 386: the credentials were already on-box in `~/.config/durig/env`, the rig never sources them, and an **unsourced** preflight is what made it look blocked). The residual is a **TRUE band failure**, not an outage: `tools/backlog-burn.mjs` still reads the fleet LEDGER whose last snapshot is dated **2026-11-13** (+166 over 2,258 min) while the store-wide rate is **+718 over 7 d** — re-measure with `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (2.2 s, exit 1) rather than quote either; pitfall 383.
 
