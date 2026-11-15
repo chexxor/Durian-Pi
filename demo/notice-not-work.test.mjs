@@ -263,5 +263,18 @@ const bounded = Array.from({ length: 150 }, (_, n) => ({ ok: false, refusal: `re
 for (const g of bounded) await recordMintRefusal(harness, ctx, { by: "pm", to: "impl", subject: `task ${g.refusal}`, gate: g });
 check("the ledger is bounded, so it is a signal and not a second queue", (await harness.snapshot(RigQueue, undefined, ctx)).mintRefusals.length === 100, String((await harness.snapshot(RigQueue, undefined, ctx)).mintRefusals.length));
 
+console.log("\n=== 10. the CAP refusal is recorded the same way (task-5's literal clause) ===");
+// The duplicate is not the only refusal that has to be countable: "a seat already holding N open rows cannot be
+// minted past the cap, and the refusal is recorded as a transition". `recordMintRefusal` derives `kind` from the
+// gate's shape — duplicateOf -> duplicate, band -> lineage, otherwise burst — so the BURST record is only kind-correct
+// if the burst verdict carries NO `band` key (src/rig.mjs mintGate: the burst return omits `band`, the lineage return carries it).
+const capGate = mintGate(hundredBurst, { to: "impl", subject: "task 101", body: "src/x.mjs", seats: 20 });
+check("the cap refusal is the burst kind, not the lineage kind", capGate.ok === false && capGate.burst === 100 && !("band" in capGate) && capGate.duplicateOf === null, JSON.stringify({ k: Object.keys(capGate), burst: capGate.burst }));
+const capRecorded = await recordMintRefusal(harness, ctx, { by: "pm", to: "impl", subject: "task 101", gate: capGate });
+const capLedger = (await harness.snapshot(RigQueue, undefined, ctx)).mintRefusals ?? [];
+check("the cap refusal is committed as a transition-shaped event", capRecorded && capLedger.at(-1)?.event === "mint-refused" && capLedger.at(-1)?.kind === "burst", JSON.stringify(capLedger.at(-1)));
+check("...and the record names the cap, the window and the knob so a census can count it", String(capLedger.at(-1)?.reason).includes("mint-burst cap is 100") && String(capLedger.at(-1)?.reason).includes("7-day pressure window") && String(capLedger.at(-1)?.reason).includes("DURIG_MINT_BURST_CAP"), String(capLedger.at(-1)?.reason));
+check("...and the ledger is still bounded at 100, so the cap cannot become a second queue", capLedger.length === 100, String(capLedger.length));
+check("...and no row was minted by the cap refusal", (await harness.snapshot(RigQueue, undefined, ctx)).items.length === after.items.length, String((await harness.snapshot(RigQueue, undefined, ctx)).items.length));
 console.log(failures === 0 ? "\nNOTICE-NOT-WORK TEST PASS (0 failures)" : `\nNOTICE-NOT-WORK TEST FAIL (${failures} failures)`);
 process.exit(failures === 0 ? 0 : 1);
