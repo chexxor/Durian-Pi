@@ -18,11 +18,11 @@ import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
-import { strandedMsSetting, declaredContextWindow, compactionSettings } from "./config.mjs";
+import { strandedMsSetting, declaredContextWindow, compactionSettings, queuePressureSettings } from "./config.mjs";
 import { DEFAULT_TIER_TOKENS } from "./config.mjs";
 import { DEFAULT_STRATEGY, resolveStrategy } from "./workstrategy.mjs";
 import { contextConsumption } from "./context.mjs";
-import { queueShape } from "./queueclass.mjs";
+import { queueShape, mintRefusalCensus } from "./queueclass.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
@@ -187,14 +187,32 @@ export async function readSeatModels(storage, seats, context = BACKGROUND_CONTEX
 
 /** The queue's items, newest-current document. Returns [] for an absent store so
  * a first-run read is empty rather than exceptional. */
-export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
+export async function readQueueValue(storage, context = BACKGROUND_CONTEXT) {
 	const rec = await storage.findDocument(
 		{ kind: RigQueue.definition.kind, scope: { kind: "session" } },
 		"current",
 		context,
 	);
-	const value = rec ? (await storage.document(rec.id, "current", context))?.value ?? {} : {};
-	return value.items ?? [];
+	return rec ? (await storage.document(rec.id, "current", context))?.value ?? {} : {};
+}
+
+/** The queue ROWS — `value.items`. The document's other fields (nextId, and since 2026-11-15 `mintRefusals`)
+ * live at the same level, so the read that wants one of them must not be written as if the document were only
+ * its rows; `readQueueValue` is the seam and this is the row-shaped view over it. */
+export async function readQueueItems(storage, context = BACKGROUND_CONTEXT) {
+	return (await readQueueValue(storage, context)).items ?? [];
+}
+
+/**
+ * THE MINT-REFUSAL LEDGER, raw (#3486: a fact written needs a read). `mintGate` refuses a mint and
+ * `recordMintRefusal` (src/rig.mjs) commits the refusal as a `queue.mintRefusals` event — until now nothing
+ * read that field, so "the fan-out budget refused something" and "the cap got quietly raised" were the same
+ * view. The ledger is BOUNDED at `MINT_REFUSAL_LEDGER_CAP` by the writer (a signal, not a second queue), so
+ * this read cannot become a second 20 MB payload; what the ledger MEANS is `mintRefusalCensus` in
+ * src/queueclass.mjs, which `cli.mjs check` and `tools/queue-pressure.mjs` both call.
+ */
+export async function readQueueMintRefusals(storage, context = BACKGROUND_CONTEXT) {
+	return (await readQueueValue(storage, context)).mintRefusals ?? [];
 }
 
 /**
@@ -460,9 +478,20 @@ export function refuseOversizedQueueRead(items, { capRows = QUEUE_VIEW_ROW_CAP }
  * registered failure, and `readQueueRow` returning `rows` is the same correction at a smaller scale.
  */
 export async function readQueueCensus(storage, context = BACKGROUND_CONTEXT) {
-	const items = await readQueueItems(storage, context);
+	const value = await readQueueValue(storage, context);
+	const items = value.items ?? [];
 	const seats = await readSeatList(storage, context);
-	return { rows: items.length, counts: queueCounts(items), attention: queueAttention(items, seats), pool: poolCounts(items) };
+	return {
+		rows: items.length,
+		counts: queueCounts(items),
+		attention: queueAttention(items, seats),
+		pool: poolCounts(items),
+		// THE FAN-OUT BUDGET, as a number (the read path for `queue.mintRefusals`). Named `mintRefusals` because
+		// it is the census the operator asks — "did the mint gate bite, on which seat, in how many?" — and it is
+		// the CENSUS, not the ledger: the raw events are `readQueueMintRefusals`, so this view stays a few hundred
+		// bytes even when the ledger is full (a bounded slice of transition-shaped events is not a few hundred bytes).
+		mintRefusals: mintRefusalCensus(value.mintRefusals ?? [], { windowDays: queuePressureSettings().windowDays }),
+	};
 }
 
 /**

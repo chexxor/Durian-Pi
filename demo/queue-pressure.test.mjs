@@ -13,8 +13,11 @@
 // rows makes `node cli.mjs check` exit 1, and raising the band deliberately makes it exit 0.
 //
 // Run: node demo/queue-pressure.test.mjs   (exit 0 = pass)
-// Cost: measured 2.7 s (the pure half is instant; the wiring half runs `up` + `check` twice and the promoted
-// tool twice on the mocked fauxProvider plane — no network, no key).
+// Cost: measured 5.5 s (the pure half is instant; the wiring half runs `up` + `check` three times, one
+// `queue --json --no-body`, the promoted tool four times and the ledger writer twice on the mocked fauxProvider
+// plane — no network, no key). Cost CORRECTION 2026-11-15 at the mint-refusal read path: 2.7 s -> 5.5 s because
+// the demo grew 12 legs (43 -> 55 checks) for that path; the fixture store is small, so the whole demo stays under
+// 6 s and the growth is per-surface plumbing, not the store.
 // Cost CORRECTION 2026-11-15 at `0f14e998`: this demo measured 12.1 s while the fixture inherited the live rig's
 // armed extension rules, and 2.7 s once the fixture names its own config and arms none — the ~9 s gap is `ready-ref-stale`,
 // which ran `tools/self-merge-sla.mjs`'s landingHealth over the LIVE repo (55 refs, a merge-tree per ref) inside a
@@ -33,10 +36,10 @@ import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 
 import { auditRig, formatCheck, RULES } from "../src/checkup.mjs";
-import { bandVerdict, burnRate, queueShape } from "../src/queueclass.mjs";
+import { bandVerdict, burnRate, queueShape, mintRefusalCensus, MINT_REFUSAL_LEDGER_CAP } from "../src/queueclass.mjs";
 import { fleetLedgerVerdict } from "../src/fleetledger.mjs";
 import { DEFAULT_BAND_PER_SEAT, DEFAULT_MINT_BURST_CAP, DEFAULT_PRESSURE_WINDOW_DAYS } from "../src/config.mjs";
-import { RigQueue, enqueueItem, Router } from "../src/rig.mjs";
+import { RigQueue, enqueueItem, Router, recordMintRefusal } from "../src/rig.mjs";
 
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const dir = mkdtempSync(join(tmpdir(), "durig-queue-pressure-"));
@@ -306,6 +309,60 @@ const notACapture = join(dir, "not-a-capture.json");
 writeFileSync(notACapture, JSON.stringify({ host: "n/a", rows: 0 }));
 const badSnap = await tool(["--snapshot", notACapture], {});
 check("a snapshot that is not a queue capture is REFUSED by name, not a TypeError", /has no items\[\]/.test(badSnap.stderr), `${badSnap.code}: ${badSnap.stderr.slice(0, 300)}`);
+// THE FAN-OUT BUDGET'S RECORD HAS A READ PATH (the #3486 / ROADMAP 272 half of task-5).
+// `mintGate` (src/rig.mjs) REFUSES an over-fan-out mint and `recordMintRefusal` RECORDS the refusal as a
+// `queue.mintRefusals` event. Measured before this seam: `rg mintRefusals` over the repo found the writer, its
+// demos and one ROADMAP row — NOTHING READ IT, so "the budget is biting" and "the cap got quietly raised" were
+// the SAME view. These legs run ONE ledger through all three surfaces — the queue view's census (`cli.mjs queue
+// --json --no-body` -> `mintRefusals`), `check`'s `queue-pressure` finding, and the promoted tool — so the three
+// cannot spell the number differently (#5047), and they pin the two honesty branches: a FULL ledger is a FLOOR,
+// and an audit/view handed NO ledger reads as NOT MEASURED rather than as zero.
+const burstGate = { ok: false, refusal: "send_work refused: burst cap reached", burst: 101, windowDays: 7, band: null, lineage: null, duplicateOf: null };
+const lineageGate = { ok: false, refusal: "send_work refused: the fleet is out of band", burst: 1, windowDays: 7, band: { open: 35, limit: 20, perSeat: 10, seats: 2, inside: false, overBy: 15 }, lineage: null, duplicateOf: null };
+const wroteBurst = await recordMintRefusal(harness, BACKGROUND_CONTEXT, { by: "pm", to: "impl", subject: "pressure task 1", gate: burstGate });
+const wroteLineage = await recordMintRefusal(harness, BACKGROUND_CONTEXT, { by: "pm", to: "impl", subject: "pressure task 2", gate: lineageGate });
+check("the writer records both refusals and never throws", wroteBurst === true && wroteLineage === true, `${wroteBurst}/${wroteLineage}`);
+const qview = await cli(["queue", "--json", "--no-body"], { DURIG_DB: db, DURIG_CONFIG: fixtureConfig });
+const qpayload = (() => {
+	try {
+		return JSON.parse(qview.stdout.slice(qview.stdout.indexOf("{"), qview.stdout.lastIndexOf("}") + 1));
+	} catch {
+		return null;
+	}
+})();
+check("the queue VIEW carries the census — the seam exists", qpayload !== null && qpayload.mintRefusals !== undefined && qpayload.mintRefusals !== null, `${qview.code}: ${qview.stderr.slice(0, 200)}`);
+check("...and counts both refusals in the window, by kind", qpayload?.mintRefusals?.ledger === 2 && qpayload.mintRefusals.inWindow === 2 && qpayload.mintRefusals.inWindowByKind.burst === 1 && qpayload.mintRefusals.inWindowByKind.lineage === 1, JSON.stringify(qpayload?.mintRefusals ?? qview.stdout.slice(0, 200)));
+check("...and names the seat they went to", Object.keys(qpayload?.mintRefusals?.bySeat ?? {}).join(",") === "impl", JSON.stringify(qpayload?.mintRefusals?.bySeat));
+check("...and states the bound it enforces, so a reader knows the ledger is a signal", qpayload?.mintRefusals?.cap === MINT_REFUSAL_LEDGER_CAP && qpayload?.mintRefusals?.saturated === false, `cap ${qpayload?.mintRefusals?.cap} saturated ${qpayload?.mintRefusals?.saturated}`);
+const refusalStore = await cli(["check", rigPath, "--json"], { DURIG_DB: db, DURIG_CONFIG: fixtureConfig });
+const refusalDetail = (() => {
+	try {
+			return (JSON.parse(refusalStore.stdout).findings ?? []).find((f) => f.id === "queue-pressure")?.detail ?? "";
+	} catch {
+		return "";
+	}
+})();
+check("`check`'s finding NAMES the refusals on the SAME store", /refused 2 mint\(s\) in \d+ d \(burst 1, lineage 1, duplicate 0\) of 2 on the ledger/.test(refusalDetail), refusalDetail.slice(0, 900));
+const refTool = await tool(["--db", db], { DURIG_DB: db });
+check("the promoted tool prints the SAME numbers on the SAME store", /mint refusals: 2 in \d+ d \(burst 1, lineage 1, duplicate 0\) of 2 on the ledger/.test(refTool.stdout), refTool.stdout.slice(0, 1200));
+check("...and names which seat and which refusal is newest", /newest \d{4}-\d\d-\d\dT[\d:.]+Z (burst|lineage|duplicate) pm->impl/.test(refTool.stdout), refTool.stdout.slice(0, 1200));
+// The window caveat, pinned: `--window-days` re-derives the ROW rate over the requested window, but the ledger
+// census comes from the view, which measured over its own declared window. Labelling the view's number as the
+// run's would be a lie; the tool says which is which.
+const refTool1 = await tool(["--db", db, "--window-days", "1"], { DURIG_DB: db });
+check("a narrower window says which number came from which, instead of labelling the view's census as the run's", /mint refusals: .* \(window 7 d \(the view's census\) vs 1 d \(this run\)\)/.test(refTool1.stdout), refTool1.stdout.slice(0, 900));
+// A capture from a build that predates the seam must read as NOT MEASURED, not as "zero refusals" — an
+// unmeasured budget is not a budget that is not biting (#3539's blind-pass shape, in the other direction).
+const legacyCapture = join(dir, "legacy-capture.json");
+writeFileSync(legacyCapture, JSON.stringify({ ok: true, command: "queue", items: [row(4100)] }));
+const legacyTool = await tool(["--snapshot", legacyCapture], { DURIG_DB: db });
+check("a capture WITHOUT the field says NOT MEASURED rather than 0", /mint refusals: NOT MEASURED/.test(legacyTool.stdout), `${legacyTool.code}: ${legacyTool.stdout.slice(0, 600)}`);
+// The bound is a property of the LEDGER, and filling it to the cap is a 100-commit exercise the writer's own
+// demo already pays (demo/notice-not-work.test.mjs §10). Here the census is what is pinned, over the same shape
+// the writer emits — so the FLOOR statement is proven without re-paying the commits.
+const fullLedger = mintRefusalCensus(Array.from({ length: MINT_REFUSAL_LEDGER_CAP }, (i) => ({ at: NOW, event: "mint-refused", by: "pm", to: "impl", subject: `task ${i}`, kind: "burst", reason: "burst" })), { windowDays: 7 });
+check("a FULL ledger says the total is a FLOOR, not a count", fullLedger.saturated && fullLedger.ledger === MINT_REFUSAL_LEDGER_CAP, `ledger ${fullLedger.ledger} cap ${fullLedger.cap} saturated ${fullLedger.saturated}`);
+check("an audit handed NO ledger read says NOT MEASURED, never 0", /NOT MEASURED here/.test(unreadLedger.findings.find((f) => f.id === "queue-pressure")?.detail ?? ""), JSON.stringify(unreadLedger.findings.find((f) => f.id === "queue-pressure")?.detail ?? ""));
 await storage.close(BACKGROUND_CONTEXT);
 
 console.log(failures === 0 ? "\nQUEUE PRESSURE TEST PASS (0 failures)" : `\nQUEUE PRESSURE TEST FAIL (${failures} failures)`);

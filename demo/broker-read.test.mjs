@@ -77,6 +77,7 @@ try {
     "queue",
     "queue-row", // #4986: one row by id, so an audit costs the rows it asked for (the full dump measured 21,927,512 B on this rig)
     "queue-census", // #5016: the counts + row-derived attention over ALL rows, so a filtered or `--no-body` view can carry the census without shipping the document
+    "mint-refusals", // the READ PATH for `recordMintRefusal`'s record (#3486): `check` asks the broker for the raw mint-refusal ledger so "is the fan-out budget biting?" is answerable without a second store owner; bounded at MINT_REFUSAL_LEDGER_CAP events by the WRITER, so it is a signal, not the 20 MB document this view exists to avoid
     "roots",
     "health",
     "live",

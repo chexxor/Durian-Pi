@@ -102,6 +102,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `edd22c534` | docs(DECISIONS): D317 — a tool REFUSES a flag form it does not read; the hole set is asked from the audit; the cadence is one call — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s edd22c534`) |
 | `037b9e3e0` | feat(pointer cadence): --order pays an ORDERING defect in the SAME call; the audit is the ONE order derivation — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 037b9e3e0`) |
 | `a632c5a62` | docs(SELFDEV+NEXT): pitfall 398 gains --order, the missing-file-as-red-gate trap, and the tools/ derived gate; the pointer pays its cadence row — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s a632c5a62`) |
+| `63c7f23a2` | docs(NEXT): the pointer names the cadence incantation the closer now has (--order), and pays the row for a632c5a62 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 63c7f23a2`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -129,21 +130,21 @@ window claimed one, which is exactly what the rule exists to catch). **That is t
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 1.6 s, exit 1 — the census, the per-DAY rate, the band verdict, and the plan pm runs
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 1.7 s, exit 1 — the census, the per-DAY rate, the band verdict, the plan pm runs, AND `mint refusals:` (the fan-out budget's read path)
 node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
 node demo/notice-not-work.test.mjs                        # 0.29 s, exit 0 — notices are not work, the mint gate, the ack plan
 node demo/status-view-bound.test.mjs                       # 2.2 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
 node scripts/test.mjs --area readapi                       # 5.3 s, 7/7 — the AREA task-3 names; the pin lives here (the area's slow member is `demo/read-no-create-store.test.mjs`, not the pin)
-node demo/queue-pressure.test.mjs                         # 7.1 s, exit 0 — the gate: inside PASS / out FAIL / growing FAIL / floor, and the finding QUOTES the ledger verdict
+node demo/queue-pressure.test.mjs                         # 5.5 s, exit 0, 55 checks — the gate: inside PASS / out FAIL / growing FAIL / floor, the finding QUOTES the ledger verdict, and the mint-refusal read path (12 new legs)
 node scripts/test.mjs --area check                        # 25.9 s, 18/18 — the new rule plus doc-count-drift and starter
 node scripts/test.mjs --area rig                          # 15.7 s, 98/98
-node cli.mjs check rig.selfdev.json --json                # 5.8 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks (30 base RULES + the armed extension rule)
+node cli.mjs check rig.selfdev.json --json                # 6.7 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
 node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED: broker down, 3 provider BLOCKs (keys out of tree, pitfall 386); SOURCED it was 24 s with 0 blocks (earlier window)
 timeout 560 node scripts/test.mjs --all --jobs 4          # 164.3 s at PROVENANCE tree=27d27d2ef (.spike/suite-27d27d2e.out); older tallies live in docs/NEXT-ARCHIVE.md
 ```
 
-**Suite tally (named by its own PROVENANCE line):** the newest green FULL run, named by its own artifact PROVENANCE line — `timeout 560 node scripts/test.mjs --all --jobs 4` -> **364/364 in 164.3 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes** at `tree=27d27d2ef` (`.spike/suite-27d27d2e.out`), slowest `demo/runbook-diagnose.test.mjs` 65.9 s, `demo/clockin-digest.test.mjs` 28.2 s, `demo/broker-wakepath.test.mjs` 16.5 s. Every other green run, and the runs that are NOT tallies, is kept VERBATIM in `docs/NEXT-ARCHIVE.md` under a dated heading (pitfall 392: the clock-in digest reads THIS pointer section, so the tallies now live OUT of it). **A docs-only pointer commit after the newest green run carries no suite tally of its own** — it is gated by `demo/next-pointer.test.mjs`, `tools/pointer-sha-coverage.mjs`, `tools/doc-integrity-guard.mjs` and `demo/clockin-digest.test.mjs`, and a tally is never quoted for a tree its artifact PROVENANCE line does not name.
+**Suite tally:** the newest green FULL run — `timeout 560 node scripts/test.mjs --all --jobs 4` -> **364/364 in 161.2 s, exit 0, 0 `FAILED` lines, `.err` 0 bytes**, its own PROVENANCE line `tree=63c7f23a2` (the seam diff was in the WORKING tree at that run, uncommitted), artifact `.spike/suite-ship2.out`, slowest `demo/runbook-diagnose.test.mjs` 64.0 s — kept VERBATIM with the earlier runs in `docs/NEXT-ARCHIVE.md` (dated heading); a tally is never quoted for a tree its artifact PROVENANCE line does not name; earlier runs are in the archive.
 
 **State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above (`78d82057`, `44736311`, `2ec49b52`, `c37f583a`, … `8bd56720`, whose 28 explicit paths carry the tranche; the seam commit `0b9e4e5e` carries 5); **nothing pushed** (the push grant is the operator's) and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` (1.6-3.4 s) writes the rows for every `MISSING` hole **and** the row the coming commit owes **and permutes table rows that sit out of commit order**, then re-audits (`docs/runbooks/delegate-doc-hygiene.md` names the flag trap that made a false green look like a close) — then the residuals below.
 
@@ -158,7 +159,7 @@ pass-by-pass — the queue has no verb for it (`registrations` is census-only), 
 (d) The broker lease this window woke the fleet for 5 minutes and let pm route — that wake was the delegate driving the
 operator's ratified goal; a longer or unbounded lease is the operator's grant to hold.
 
-**The rate question, in 2.2 s:** `docs/runbooks/session-start-cost.md` §32 — census (`tools/queue-pressure.mjs`, per-DAY rate) then ledger (`tools/backlog-burn.mjs`), and `cli.mjs check` prints both, the ledger one inside quotes with its window and the staleness caveat.
+**The rate question, in 2.2 s:** `docs/runbooks/session-start-cost.md` §32 — census (`tools/queue-pressure.mjs`, per-DAY rate) then ledger (`tools/backlog-burn.mjs`), and `cli.mjs check` prints both, the ledger one inside quotes with its window and the staleness caveat. **§34 is the sibling read for the mint-gate refusals** (the seam this window ships): `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs | grep "mint refusals"` (1.7 s, no extra store read) prints `N in W d (burst b, lineage l, duplicate d) of L on the ledger` — measured `0 in 7 d … of 0` on the live store — `check`'s finding names the SAME counts (+0.27 s), and `NOT MEASURED` is not `0`: only the second one licenses raising a knob.
 
 **Known red:** `node demo/offline.mjs` exits 1 (`ASSERT FAIL: the fresh context should be short, got 7 messages`) —
 recorded, not touched by this tranche.

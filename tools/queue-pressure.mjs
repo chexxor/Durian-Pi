@@ -13,6 +13,11 @@
 //   5. a PLAN for `pm` to execute: the notices to acknowledge and the registrations to move to the ledger.
 //      This tool TRANSITIONS NOTHING — queue transitions are `pm`'s ActiveRecord verbs
 //      (docs/runbooks/stale-held-backlog.md), and a delegate does not route rows (AGENTS.md).
+//   6. "is the mint-time fan-out budget BITING?" — `mintGate` (src/rig.mjs) refuses a mint and `recordMintRefusal`
+//      records it, so the count of refusals in the window, by kind (burst / lineage / duplicate), on which seat,
+//      and the newest one, is printed here. A refusal with no read path is a cap that gets quietly raised
+//      (#3486 written-and-never-read, ROADMAP 272 inert-default): the ledger is bounded at MINT_REFUSAL_LEDGER_CAP
+//      events by the WRITER, so when it is full this line says the total is a FLOOR, not a count.
 //
 // Exact command (the cost is printed at the end):
 //   DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs
@@ -23,18 +28,22 @@
 // window "growing past the fleet" means it net-grew by at least ONE FULL FLEET BAND (src/queueclass.mjs
 // pressureVerdict) — a net +4 on a two-seat rig is a Tuesday, not a crisis. That is the gate — "the backlog is
 // growing" becomes a measured verdict that fails, not prose — and `check`'s queue-pressure rule reads the SAME
-// function, so the two cannot disagree.
+// function, so the two cannot disagree. The mint-refusal line does NOT change this verdict: a refusal is the gate
+// WORKING (it stopped a mint), not pressure; only a saturated ledger changes what the number means (FLOOR vs count).
 //
-// Measured cost, re-run before quoting: 2.2 s against the live store (the queue read is the whole cost);
-// 0.9 s against a snapshot capture. Host it was first measured on: Linux, Fedora Linux 45 (Forty Five), kernel
-// 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. `last_verified: 2026-11-15` by
+// Measured cost, re-run before quoting: 1.7-2.0 s against the live store (the queue read is the whole cost; the
+// `mintRefusals` census adds ~436 B to that read, not a second read); 0.5-0.9 s against a snapshot capture. Host
+// it was first measured on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+// git 2.56.0. `last_verified: 2026-11-15` by
 // `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs` (exit 1 — the store IS out of band, which is the
-// point: a 0 would mean the gate found nothing to say).
+// point: a 0 would mean the gate found nothing to say) and by
+// `node demo/queue-pressure.test.mjs` (exit 0 / 55 checks / 5.5 s, `.err` 0 bytes — the demo grew from 43 checks
+// when the mint-refusal read path landed; nothing that was pinned before was dropped).
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
-import { ageBuckets, classifyRow, pressureVerdict, queueShape } from "../src/queueclass.mjs";
+import { ageBuckets, classifyRow, pressureVerdict, queueShape, mintRefusalCensus } from "../src/queueclass.mjs";
 import { queuePressureSettings } from "../src/config.mjs";
 
 const argv = process.argv.slice(2);
@@ -66,7 +75,7 @@ function readRows() {
 		// frames deep; the refusal now names the capture command so the reader can fix it without reading code.
 		const snap = decodeCliJson(readFileSync(SNAPSHOT, "utf8"));
 		if (!Array.isArray(snap.items)) throw new Error(`snapshot ${SNAPSHOT} has no items[] — it must be a queue capture: DURIG_DB=<store> node cli.mjs queue --json --no-body > <file>`);
-		return snap.items;
+		return snap;
 	}
 	const r = spawnSync(process.execPath, ["cli.mjs", "queue", "--json", "--no-body"], {
 		encoding: "utf8",
@@ -74,7 +83,7 @@ function readRows() {
 		env: { ...process.env, DURIG_DB: DB },
 	});
 	if (r.status !== 0) throw new Error(`cli.mjs queue failed: ${String(r.stderr || "").slice(0, 400)}`);
-	return decodeCliJson(r.stdout).items;
+	return decodeCliJson(r.stdout);
 }
 
 function readSeats() {
@@ -105,7 +114,22 @@ function hostLine() {
 	return `${u}, ${distro}, kernel ${k}, node ${process.version}`;
 }
 
-const items = readRows();
+const payload = readRows();
+const items = payload.items;
+// THE FAN-OUT BUDGET, from the SAME read as the rows: `cli.mjs queue --json --no-body` carries `mintRefusals`
+// — the CENSUS src/queueclass.mjs derives. A plain ARRAY is the RAW ledger (an older view, or a capture taken
+// from `readQueueMintRefusals`), so it goes through the SAME function; a missing key means the read path is not
+// in this build, which is stated rather than scored as "zero refusals" (UNKNOWN is not NONE, #3539).
+const refusals = (() => {
+	const raw = payload.mintRefusals;
+	if (Array.isArray(raw)) return mintRefusalCensus(raw, { windowDays: WINDOW_DAYS });
+	if (raw && typeof raw === "object") {
+		const c = { ...raw };
+		if (c.windowDays !== WINDOW_DAYS) c.windowMismatch = `${c.windowDays} d (the view's census) vs ${WINDOW_DAYS} d (this run)`;
+		return c;
+	}
+	return null;
+})();
 const shape = queueShape(items);
 const seats = readSeats();
 const verdict = pressureVerdict(shape, items, { perSeat: BAND, seats: seats.length, windowDays: WINDOW_DAYS });
@@ -141,6 +165,15 @@ const report = {
 		verb: "node intent.mjs queue --op queue --action acknowledge-notices --from delegate --apply --confirm",
 		note: "this tool plans; pm applies. Queue transitions are pm's ActiveRecord verbs.",
 	},
+	mintRefusals: refusals,
+	mintRefusalPlan: refusals
+		? {
+				inWindow: refusals.inWindow,
+				byKind: refusals.inWindowByKind,
+				busiestSeat: Object.entries(refusals.bySeat).sort((a, b) => b[1] - a[1])[0] ?? null,
+				note: "the gate REFUSED these mints; nothing to retire. If the refusals are the whole story, the fleet is being asked for too much fan-out — the knobs are DURIG_MINT_BURST_CAP / DURIG_BAND_PER_SEAT / DURIG_PRESSURE_WINDOW_DAYS, and the operator owns raising them.",
+			}
+		: { inWindow: null, note: "the queue view carried no mintRefusals field — the read path is missing on this build" },
 	costMs: Date.now() - t0,
 };
 
@@ -157,6 +190,7 @@ line(`  mint ${burn.minted} (${burn.mintedWork} work, ${burn.mintedNotice} notic
 line(`  awaiting operator: ${shape.awaitingOperator} work rows parked on a human answer`);
 line(`  open work per seat: ${Object.entries(shape.openWorkBySeat).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 line(`  oldest live rows: ${oldest.slice(0, 5).map((r) => `#${r.id} ${r.status}`).join(" | ")}`);
+line(`  mint refusals: ${refusals ? `${refusals.inWindow} in ${refusals.windowDays} d (burst ${refusals.inWindowByKind.burst}, lineage ${refusals.inWindowByKind.lineage}, duplicate ${refusals.inWindowByKind.duplicate}) of ${refusals.ledger} on the ledger${refusals.saturated ? ` — BOUNDED at ${refusals.cap}, so the total is a FLOOR not a count` : ""}${refusals.newest ? `; newest ${refusals.newest.at} ${refusals.newest.kind} ${refusals.newest.by ?? "?"}->${refusals.newest.to ?? "?"}` : ""}${refusals.windowMismatch ? ` (window ${refusals.windowMismatch})` : ""}` : `NOT MEASURED — the queue view carried no mintRefusals field, so the fan-out budget's record has no read path in this build (src/readapi.mjs readQueueCensus)`}`);
 line(`  verdict: ${verdict.fail ? `FAIL — ${verdict.reasons.join(" · ")}` : `inside band (${band.open} open work vs ${band.limit}) and not growing past the fleet (net ${burn.netOpen >= 0 ? "+" : ""}${burn.netOpen} vs a floor of ${verdict.growthFloor})`}`);
 line(`  cost: ${report.costMs / 1000} s · host: ${report.host}`);
 line(`  plan for pm: ${report.plan.acknowledgeNotices.count} notices to acknowledge, ${report.plan.moveRegistrationsToLedger.count} registrations to move to docs/ROADMAP.md`);

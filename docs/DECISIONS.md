@@ -9456,6 +9456,8 @@ open. (d) `docs/ROADMAP.md` must receive the resulting items as *registered, not
 research prompt to the off-host research agent. Neither is delegated by silence, and nothing here was renamed
 unilaterally.
 
+**ADDENDUM (2026-11-15, delegate at `63c7f23a2`): the policy has a second half, and it is the half that unblocks a base edit.** D212 forbids growing a FEATURE into the base, but a capability that no extension can reach is a missing **SEAM**, and growing a seam is a base change this policy explicitly permits. The mint-gate refusal is the worked case: `recordMintRefusal` (src/rig.mjs) wrote `queue.mintRefusals` and `rg -n mintRefusals` outside the writer and its demos returned ONE hit — a doc row — so the fact had a writer and no reader (#3486), and no extension could add a read surface to a base view it cannot touch. The fix grew the seam that already ships: `src/readapi.mjs` `readQueueValue` (ONE document read under `readQueueItems`), `readQueueMintRefusals`, a `mintRefusals` census in `readQueueCensus`, and `src/brokerread.mjs` `READ_VIEWS` `mint-refusals` so `check` can ask broker-side. What stayed on the delegate plane is only the READER of that seam (`tools/queue-pressure.mjs`), which now calls the same derivation (`src/queueclass.mjs` `mintRefusalCensus`) instead of spelling its own (#5047). Rule of thumb the addendum records: ask "can an extension reach this at all?" — if no, name the seam and grow it; if yes, the extension plane owns it.
+
 ---
 
 ## D213 — Fast iteration is an architectural requirement: every piece must have a fast dev loop, and the slow part gets isolated behind a seam (operator ruling, 2026-11-05)

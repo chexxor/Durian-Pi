@@ -95,7 +95,7 @@ import { readDependencyPlane } from "./src/depplane.mjs"
 import { readFleetLedger } from "./src/fleetledger.mjs"
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueMintRefusals, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
 import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS, describeStoreOpenFailure } from "./src/readclient.mjs"
@@ -1542,6 +1542,12 @@ async function cmdQueue(args = []) {
     // makes a rig with a full pool and an idle fleet look busy (N19 row 5, docs/POOL-QUEUE-SPEC.md §6.4).
     pool: census.pool ?? null,
     attention: census.attention,
+    // THE FAN-OUT BUDGET, as a number: `mintGate` (src/rig.mjs) refuses a mint and `recordMintRefusal` records
+    // it — this is the read that makes "the budget bit N times, on seat X, for reason Y" answerable instead of
+    // a sentence. It is the CENSUS of `queue.mintRefusals` (counts + newest, over DURIG_PRESSURE_WINDOW_DAYS),
+    // NOT the ledger: the ledger itself is bounded at MINT_REFUSAL_LEDGER_CAP events by the writer and is read
+    // by `check` through its own view. A view that carried the raw ledger would pay ~40 KB per census read.
+    mintRefusals: census.mintRefusals ?? null,
     // Mechanism honesty (#5016): filters and `--no-body` narrow the PAYLOAD, never the storage read — the queue is
     // one document (`RigQueue.value.items`), so it is read whole every time. Saying which half moved is what stops
     // a small answer from being mistaken for a small read.
@@ -1588,6 +1594,7 @@ async function cmdQueue(args = []) {
       rows: census.rows,
       counts: census.counts,
       pool: census.pool ?? null,
+      mintRefusals: census.mintRefusals ?? null,
       // The number the census was asked for: held rows with NOTHING recorded about why they are parked.
       gatelessHeld: view.filter((v) => v.status === "held" && v.gate === "none").length,
       items: view.slice(0, limit),
@@ -3706,6 +3713,11 @@ async function cmdCheck(rigFile, human, rest = []) {
   // `VERIFY #N` item with no recorded evidence is an ack, not a re-run. Null
   // until read, so "could not read" stays distinguishable from "read and empty".
   let queueItems = null;
+  // The mint-refusal ledger (`queue.mintRefusals`), for the fan-out half of the `queue-pressure` finding. null
+  // means "not read", which the finding states as a missing cross-check rather than as "zero refusals" — the
+  // difference between "the budget is not biting" and "nobody knows" (the #3486 write-with-no-read class).
+  let queueMintRefusals = null;
+  let queueMintRefusalRead = null;
   // #5049 (ROADMAP 208): the per-seat context measure, for the `context-over-window` rule. Null means
   // "not read", which SKIPS the rule with its reason rather than passing it — and it is read through the
   // SAME producer `status.context` uses (`seatContextMap`), so the rule can never score a number the
@@ -3737,6 +3749,15 @@ async function cmdCheck(rigFile, human, rest = []) {
       stored = { reason: "read", text: constitution.value?.text ?? "" };
       storedSeats = (await readData(DB_PATH, "seats", {}, (s) => readSeatList(s))).map((s) => s.name);
       queueItems = await readData(DB_PATH, "queue", {}, (s) => readQueueItems(s));
+      // THE MINT-REFUSAL LEDGER (the read path for `mintGate`'s record). Its OWN try/catch: a ledger read that
+      // fails must skip ONE clause of the `queue-pressure` finding, not turn the whole audit into "store unreadable"
+      // (#3539's blind-pass shape — the same reason `contextBySeat` gets its own handler below). The read is bounded
+      // by the writer (MINT_REFUSAL_LEDGER_CAP events), so it is cheap even on a 20 MB queue document.
+      try {
+        queueMintRefusals = await readData(DB_PATH, "mint-refusals", {}, (s) => readQueueMintRefusals(s));
+      } catch (err) {
+        queueMintRefusalRead = `the mint-refusal ledger could not be read: ${String(err?.message ?? err)}`;
+      }
       // Its OWN try/catch: a context read that fails must skip one rule, not turn the whole audit into
       // "store unreadable" (which would silently skip every store-backed rule, #3539's blind-pass shape).
       // The page read is bounded by SCAN_LIMIT (24 entries/seat), the same bound `status` reads with.
@@ -3840,6 +3861,8 @@ async function cmdCheck(rigFile, human, rest = []) {
     storedSeats,
     modelsBySeat,
     queueItems,
+    queueMintRefusals,
+    queueMintRefusalRead,
     commitMessages,
     textIntegrity,
     citations,

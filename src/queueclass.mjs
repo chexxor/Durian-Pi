@@ -233,6 +233,68 @@ export function pressureVerdict(shape, items = [], { perSeat = 10, seats = 0, wi
 	};
 }
 
+/**
+ * THE BOUND on the mint-refusal ledger, stated ONCE. `recordMintRefusal` (src/rig.mjs) keeps the last this
+ * many and the reader needs the same number to know when a total stopped being a total: `ledger === cap`
+ * means older refusals were DROPPED, so the count is a FLOOR. A bound that only the writer knows is the
+ * inert-default class ROADMAP 272 rules against — the reader would report a saturation as a real count.
+ */
+export const MINT_REFUSAL_LEDGER_CAP = 100;
+
+/** The three reasons `mintGate` refuses a mint, published so a census bucket for an unrecognised `kind` is visible rather than folded into one of the three. */
+export const MINT_REFUSAL_KINDS = ["burst", "lineage", "duplicate"];
+
+/**
+ * THE MINT-REFUSAL LEDGER AS A NUMBER — the READ PATH for what `mintGate` writes.
+ *
+ * WHY THIS FUNCTION HAS TO EXIST (measured 2026-11-15): `recordMintRefusal` (src/rig.mjs) writes
+ * `queue.mintRefusals`, and `rg mintRefusals` over this repo returned the writer, its demos and ONE
+ * ROADMAP row — NOTHING READ IT. A fact that is written and never read is the #3486 class, and here its
+ * concrete cost is that nobody can say whether the fan-out budget is BITING: a gate that records and a
+ * gate whose cap got quietly raised look identical from the outside, which is exactly the inert-key shape
+ * ROADMAP 272 names. The row that closes it is a SEAM in the queue view (D212: the extension plane cannot
+ * reach a missing read surface, so the base grows the seam), and the derivation of "what the ledger means"
+ * lives HERE so `cli.mjs queue`, `check` and `tools/queue-pressure.mjs` cannot spell it differently (#5047).
+ *
+ * A refusal has no row — the event IS the mint attempt — so its own `at` is the clock, the same WINDOW the
+ * same knob sets (DURIG_PRESSURE_WINDOW_DAYS) that `burnRate` uses for rows.
+ *
+ * @param {Array<object>} events the `queue.mintRefusals` slice, transition-shaped
+ * @param {number} windowDays the window `inWindow` and `inWindowByKind` are measured over
+ * @param {number} now injectable clock, so a demo is hermetic
+ * @param {number} cap [opts] the bound the writer enforces (`MINT_REFUSAL_LEDGER_CAP`)
+ * @returns {{ledger, cap, saturated, windowDays, byKind, inWindow, inWindowByKind, bySeat, newest, firstAt, lastAt}}
+ */
+export function mintRefusalCensus(events = [], { windowDays = 7, now = Date.now(), cap = MINT_REFUSAL_LEDGER_CAP } = {}) {
+	const list = events ?? [];
+	const windowStart = now - windowDays * 86400000;
+	const byKind = { burst: 0, lineage: 0, duplicate: 0, unknown: 0 };
+	const inWindowByKind = { burst: 0, lineage: 0, duplicate: 0, unknown: 0 };
+	const bySeat = {};
+	let inWindow = 0;
+	let newest = null;
+	let firstAt = null;
+	let lastAt = null;
+	for (const e of list) {
+		const kind = MINT_REFUSAL_KINDS.includes(e?.kind) ? e.kind : "unknown";
+		byKind[kind] += 1;
+		const at = typeof e?.at === "string" ? e.at : null;
+		const ms = at ? Date.parse(at) : Number.NaN;
+		if (at && Number.isFinite(ms)) {
+			if (firstAt === null) firstAt = at;
+			lastAt = at;
+			if (ms >= windowStart) {
+				inWindow += 1;
+				inWindowByKind[kind] += 1;
+				const seat = e?.to ?? "unaddressed";
+				bySeat[seat] = (bySeat[seat] ?? 0) + 1;
+			}
+			if (newest === null || ms >= Date.parse(newest.at)) newest = { at, kind, by: e?.by ?? null, to: e?.to ?? null, subject: String(e?.subject ?? "") };
+		}
+	}
+	return { windowDays, ledger: list.length, cap, saturated: list.length >= cap, inWindow, outsideWindow: list.length - inWindow, byKind, inWindowByKind, bySeat, newest, firstAt, lastAt };
+}
+
 /** Age buckets of the LIVE rows, measured from the row's first `queued` transition. */
 export function ageBuckets(items = [], { now = Date.now() } = {}) {
 	const buckets = { "<=2d": 0, "3-7d": 0, "8-14d": 0, "15-30d": 0, ">30d": 0, "no-queued-event": 0 };

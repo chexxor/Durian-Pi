@@ -20,6 +20,7 @@ import {
   readLiveState,
   readQueueCensus,
   readQueueItems,
+  readQueueMintRefusals,
   readQueueRow,
   readRigHealth,
   readSeatList,
@@ -34,7 +35,7 @@ import { conversationExhausted, readOlderEntries } from "./rigstory.mjs";
  * `readRigHealth` alone makes dozens of storage calls, and a per-call round-trip
  * through the ~1 s broker inbox would make `status` take minutes.
  */
-export const READ_VIEWS = ["seats", "queue", "queue-row", "queue-census", "roots", "health", "live", "entries", "feed", "document", "exhausted", "older"];
+export const READ_VIEWS = ["seats", "queue", "queue-row", "queue-census", "mint-refusals", "roots", "health", "live", "entries", "feed", "document", "exhausted", "older"];
 
 /** The non-secret config keys `readRigHealth` reads. The CLI sends ONLY these: the
  * broker must never receive the provider key that lives in the full config. */
@@ -68,6 +69,10 @@ export async function dispatchRead(storage, request, { dbPath, context = BACKGRO
   // over the spool: the answer is a few hundred bytes. This is the view that makes `--no-body` and the filters
   // honest rather than merely smaller.
   if (view === "queue-census") return await readQueueCensus(storage, context);
+  // THE MINT-REFUSAL LEDGER (the read path for `recordMintRefusal`'s record). Bounded by the WRITER at
+  // MINT_REFUSAL_LEDGER_CAP events, so this stays a signal rather than becoming the 20 MB document the
+  // caller was avoiding — and a broker-served `check` asks for it without opening a second store owner.
+  if (view === "mint-refusals") return await readQueueMintRefusals(storage, context);
   if (view === "roots") return await readSeatRoots(storage, context);
   if (view === "health") {
     return await readRigHealth(storage, dbPath, request.slots, {

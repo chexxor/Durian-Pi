@@ -851,3 +851,37 @@ queue row `#7290` (claimed, `devtools`) is exactly "the clockin digest test asse
 read the live queue". Until that lands, re-measure `node scripts/clockin.mjs` before the first edit to the pointer's
 `## NEXT SESSION` block, and move text VERBATIM to `docs/NEXT-ARCHIVE.md` in the same commit (never raise
 `DIGEST_BUDGET_BYTES` — the budget is the rule, not a knob).
+
+## 34. IS THE FAN-OUT BUDGET BITING — one census line, ~0.3 s extra on `check`, and it rides the read that already happened (2026-11-15, delegate at `63c7f23a2`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**Symptom:** a seat's `send_work` came back refused by `mintGate` (burst / lineage / duplicate) and nobody can say
+whether the budget is actually biting on the live fleet, or whether the cap has been quietly raised — which is the
+inert-default shape ROADMAP 272 rules against. Measured before the seam: `rg -n mintRefusals --glob '"'"'!src/rig.mjs'"'"' --glob '"'"'!demo/**'"'"' .`
+returned ONE hit, `docs/ROADMAP.md:6215` (row 378 prose) — the record had a writer and **no reader**, and
+`cli.mjs queue --json --no-body` top keys were `projection,ok,command,rows,counts,pool,attention,narrowed,items`.
+
+**The read that now exists (no new tool, no second store read for the view):** `src/rig.mjs` `recordMintRefusal`
+writes `queue.mintRefusals`; `cli.mjs queue --json --no-body` carries `mintRefusals` — the **census**
+`src/queueclass.mjs` `mintRefusalCensus` derives: `inWindow`, `inWindowByKind` split by
+`burst`/`lineage`/`duplicate`/`unknown`, `bySeat`, `newest`, `ledger`, `cap`, `saturated`. It rides the read that
+already happened, so `tools/queue-pressure.mjs` pays the same ~1.7-2.0 s it paid before — the census adds ~436 B to
+an 18 MB dump, it does not add a read:
+
+```bash
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs | grep "mint refusals"   # 1.7 s, one line
+```
+
+Measured at `63c7f23a2` with the command above: `mint refusals: 0 in 7 d (burst 0, lineage 0, duplicate 0) of 0 on
+the ledger`. **A printed zero is a MEASURED zero, not an absent field** — an absent field prints
+`NOT MEASURED — the queue view carried no mintRefusals field` and `check`'s finding prints `NOT MEASURED here`;
+`ledger: 0` and a missing field are different answers, and only the second one licenses raising a knob.
+
+`check` reads the RAW events through its own read view (`mint-refusals`, added to `src/brokerread.mjs` `READ_VIEWS`)
+and derives the SAME census, so the gate and the instrument cannot spell the number differently (#5047). Measured
+cost of that read on this store: `node cli.mjs check rig.selfdev.json --json` went 6.413 s -> 6.683 s (**+0.27 s**)
+with the same 31 checks and the same 3 error findings.
+
+**Never do:** pull the ledger out of the queue dump (`cli.mjs queue --json --no-body > f` then read `f` whole) —
+that file is the whole-store read, 18,270,766 B measured 2026-11-15. And the ledger is bounded by the WRITER at
+`MINT_REFUSAL_LEDGER_CAP = 100` events (`src/rig.mjs` `slice(-MINT_REFUSAL_LEDGER_CAP)`), so when `saturated` is
+true the `ledger` number is a **FLOOR**, not a total — the older refusals were dropped on the floor.

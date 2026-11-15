@@ -20,7 +20,7 @@ import { DEFAULT_BAND_PER_SEAT, DEFAULT_MINT_BURST_CAP, DEFAULT_PRESSURE_WINDOW_
 // THE ROW CLASSIFICATION lives in its own dependency-free module (src/queueclass.mjs) because `check`,
 // `status`, `watch`, the driver and tools/queue-pressure.mjs all need the SAME predicate. Re-exported here so
 // every importer that reached `isNoticeItem` through rig.mjs keeps working (the `verifierrole.mjs` pattern).
-import { bandVerdict, isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, mintedBySeat, queueShape, REGISTRATION_RE } from "./queueclass.mjs";
+import { bandVerdict, isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, mintedBySeat, queueShape, REGISTRATION_RE, MINT_REFUSAL_LEDGER_CAP } from "./queueclass.mjs";
 export { isCancellationNotice, isDoneNotice, isNoticeItem, isRegistrationItem, REGISTRATION_RE };
 import { derivePark, normalizeBlock } from "./queue-lifecycle.mjs";
 import { validateHumanDefer } from "./deferlease.mjs"
@@ -390,7 +390,8 @@ export function mintGate(queueItems = [], { to, subject, body = "", notice = fal
  * (`{at, event, by, reason}`) rather than a queue row - there is no row to attach it to, and minting one
  * would defeat the cap.
  *
- * Bounded to the last 100 refusals: the ledger is a signal, not a second queue.
+ * Bounded to the last `MINT_REFUSAL_LEDGER_CAP` (src/queueclass.mjs) refusals: the ledger is a signal, not a
+ * second queue — and the number is declared in ONE place so the READ can say when a total stopped being a total.
  */
 export async function recordMintRefusal(api, context, { by, to, subject, gate }) {
 	try {
@@ -398,8 +399,8 @@ export async function recordMintRefusal(api, context, { by, to, subject, gate })
 			const queue = await tx.doc(RigQueue);
 			// ONE top-level assignment, not `push` on a nested array: the doc proxy persists an assigned value,
 			// and `(queue.mintRefusals ??= []).push(...)` mutates a detached copy (measured with
-			// .spike/ledger-probe.mjs — the commit reads back `[]`). Bounded to the last 100 so the ledger is a
-			// signal, not a second queue.
+			// .spike/ledger-probe.mjs — the commit reads back `[]`). Bounded to the last MINT_REFUSAL_LEDGER_CAP
+			// so the ledger is a signal, not a second queue.
 			queue.mintRefusals = [...(queue.mintRefusals ?? []), {
 				at: new Date().toISOString(),
 				event: "mint-refused",
@@ -408,7 +409,7 @@ export async function recordMintRefusal(api, context, { by, to, subject, gate })
 				subject: String(subject ?? "").slice(0, 120),
 				kind: gate.duplicateOf ? "duplicate" : gate.band ? "lineage" : "burst",
 				reason: gate.refusal,
-			}].slice(-100);
+			}].slice(-MINT_REFUSAL_LEDGER_CAP);
 			}, context);
 		return true;
 	} catch {

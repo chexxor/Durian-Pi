@@ -42,7 +42,7 @@ import { MEASURES } from "./metrics.mjs";
 import { strandedGates } from "./queueops.mjs";
 // Queue pressure is measured by the SAME predicate the watch footer and tools/queue-pressure.mjs use
 // (src/queueclass.mjs) — three surfaces, one derivation, so the gate and the view cannot disagree (#5047).
-import { isRegistrationItem, pressureVerdict, queueShape } from "./queueclass.mjs";
+import { isRegistrationItem, pressureVerdict, queueShape, mintRefusalCensus } from "./queueclass.mjs";
 // The burn-rate verdict the `queue-pressure` finding QUOTES lives with the ledger read (src/fleetledger.mjs), so
 // the `check` finding and `node tools/backlog-burn.mjs` print the SAME sentence (#5047). Pure over text: `auditRig`
 // is handed the ledger as data, and the caller does the fs read.
@@ -222,7 +222,7 @@ export const RULES = [
   {
     id: "queue-pressure",
     severity: "error",
-    what: "open WORK rows exceed the fleet band (DURIG_BAND_PER_SEAT x seats), or the window net-grew by at least one full fleet band — 'the backlog is overwhelming' is a measurement, not a feeling (#6622)",
+    what: "open WORK rows exceed the fleet band (DURIG_BAND_PER_SEAT x seats), or the window net-grew by at least one full fleet band — 'the backlog is overwhelming' is a measurement, not a feeling (#6622); the finding also NAMES the mint-gate refusals, because a refusal nobody can read is a cap that gets quietly raised (#3486/272)",
   },
   {
     id: "registration-as-work",
@@ -519,7 +519,7 @@ export function runbookFrontMatterProblems(runbook) {
  *   rule reports UNKNOWN, never a false pass (#6155).
  * @returns {{findings:Array, checks:Array, summary:object, pass:boolean, exitCode:number}}
  */
-export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null, extensionRules = [], extensionFindings = [], extensionSkipped = [], fleetLedger = null }) {
+export function auditRig({ rig, spec, specConstitution, stored, storedSeats = null, modelsBySeat = {}, runbooks, queueItems = null, queueMintRefusals = null, queueMintRefusalRead = null, featureDocs = null, commitMessages = null, textIntegrity = null, citations = null, sharedTreeBranch = null, sharedTreeLinked = false, sharedTreeExpected = "main", contextBySeat = null, docCounts = null, dependencyPlane = null, extensionRules = [], extensionFindings = [], extensionSkipped = [], fleetLedger = null }) {
   // THE EXTENSION-PLANE SEAM (D212). A team's own hygiene rule — "a ready ref must not sit" — is not a base
   // capability, so it must be able to arrive from a loaded extension without being bolted into this file.
   // The base provides the SHAPE (a rule with an id/severity/what, plus findings and a skipped-with-reason
@@ -1014,12 +1014,26 @@ export function auditRig({ rig, spec, specConstitution, stored, storedSeats = nu
       const trunc = fleetLedger.truncated ? `, only its newest ${String(fleetLedger.text).length} B were read` : "";
       return `"${v.verdictLine}" — the fleet LEDGER over ${v.firstAt} -> ${v.lastAt} (${v.spanMins} min window, ${v.inWindow} of ${v.snapshots} snapshots${trunc}), newest snapshot ${v.staleMins} min before this measurement: the ledger stops being appended while the broker is down, so a stale window is a caveat, not a contradiction of the store-wide rate above`;
     })();
+    // THE FAN-OUT BUDGET, as a number (the read path for `recordMintRefusal`'s record). A refusal the mint
+    // gate wrote but nothing reads is the #3486 class: "the budget is biting" and "the cap got quietly raised"
+    // look identical. `mintRefusals` is the RAW bounded ledger handed over as data (auditRig stays fs-free);
+    // the meaning is `mintRefusalCensus` in src/queueclass.mjs — the SAME function the view prints, so the
+    // gate and the instrument cannot disagree (#5047). `queueMintRefusalRead` names why it is UNKNOWN rather
+    // than letting an unread ledger read as "zero refusals".
+    const refusalQuote = (() => {
+      if (queueMintRefusalRead) return `the fan-out budget's RECORD could not be read (${queueMintRefusalRead}) — "is the budget biting?" is UNKNOWN from here, not zero`; 
+      if (queueMintRefusals === null) return `the fan-out budget's refusals were NOT MEASURED here — this audit was handed no ledger read (null is "not read", an empty ledger is zero), so "the budget bit" and "the cap got quietly raised" cannot be told apart from these findings; the read is node cli.mjs queue --json --no-body (mintRefusals) or node tools/queue-pressure.mjs`;
+      const m = mintRefusalCensus(queueMintRefusals ?? [], { windowDays: settings.windowDays });
+      const k = m.inWindowByKind;
+      const newest = m.newest ? `; newest ${m.newest.at} ${m.newest.kind} ${m.newest.by ?? "?"}->${m.newest.to ?? "?"}` : "";
+      return `the fan-out budget refused ${m.inWindow} mint(s) in ${m.windowDays} d (burst ${k.burst}, lineage ${k.lineage}, duplicate ${k.duplicate}) of ${m.ledger} on the ledger${m.saturated ? ` — the ledger is bounded at ${m.cap}, so older refusals were dropped and ${m.ledger} is a FLOOR` : ""}${newest} — the read is node cli.mjs queue --json --no-body (mintRefusals)`;
+    })();
     if (verdict.fail) {
       const busiest = Object.entries(shape.openWorkBySeat).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(", ");
       add(
         "queue-pressure",
         `${band.open} open work rows`,
-        `${verdict.reasons.join("; ")} — of the ${shape.live} live rows, ${shape.notice} are protocol notices and ${shape.registration} are ROADMAP registrations parked in the queue (neither is claimable work), ${shape.queuedWork} sit in the claim lane, and ${shape.awaitingOperator} are parked on a human answer; busiest seats: ${busiest}. The fleet ledger's own burn-rate verdict (quoted from node tools/backlog-burn.mjs): ${burnQuote}`,
+        `${verdict.reasons.join("; ")} — of the ${shape.live} live rows, ${shape.notice} are protocol notices and ${shape.registration} are ROADMAP registrations parked in the queue (neither is claimable work), ${shape.queuedWork} sit in the claim lane, and ${shape.awaitingOperator} are parked on a human answer; busiest seats: ${busiest}. The fleet ledger's own burn-rate verdict (quoted from node tools/backlog-burn.mjs): ${burnQuote}. ${refusalQuote}`,
         `retire the non-work rows: node tools/queue-pressure.mjs prints the plan and pm applies it (node intent.mjs queue --op queue --action acknowledge-notices --apply --confirm); drain the claim lane before minting more, and raise the numbers only deliberately: DURIG_BAND_PER_SEAT / DURIG_MINT_BURST_CAP / DURIG_PRESSURE_WINDOW_DAYS. Cross-check the direction with node tools/backlog-burn.mjs (ledger-sampled rate) — if the two disagree, one of them is stale`,
       );
     }
