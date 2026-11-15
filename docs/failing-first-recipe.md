@@ -100,3 +100,27 @@ If you think you need one of the forbidden commands, **STOP and report the block
 of working around it. The guard is a backstop, not the seatbelt — structural isolation
 (worktrees, discussed in Roadmap item 34) is the real protection; the guard refuses
 unresolvable commands.
+
+## ADDENDUM 2026-11-15 (delegate, Linux) — proving the RED once the change has ALREADY LANDED
+
+Method 2's "fresh checkout at HEAD" is right only while the change is UNCOMMITTED. After it lands, `HEAD` is
+the FIXED tree, and `git archive HEAD src | tar -x -C .spike/x` silently archives the fix — the scratch then
+fails on a MISSING MODULE, which reads exactly like the failure the test was meant to expose (measured on this
+rig: `node .spike/redfirst/demo/notice-not-work.test.mjs` → `ERR_MODULE_NOT_FOUND … .spike/redfirst/src/queueclass.mjs`,
+exit 1, 0.175 s — a crash, not a contract). Two rules, both measured on Linux, Fedora Linux 45 (Forty Five),
+kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0:
+
+```bash
+# 1. take the tree from the COMMIT before the landing commit, and PROVE the trees differ
+PARENT=$(git rev-parse '<landing-commit>^')                     # e.g. 93e0044a for the tranche commit 8bd56720
+git archive "$PARENT" src | tar -x -C .spike/prechange
+git archive HEAD src | tar -x -C .spike/headtree
+grep -c '<the rule the change adds>' .spike/prechange/src/<file>.mjs .spike/headtree/src/<file>.mjs   # expect 0 and 1
+# 2. put the probe ONE DIRECTORY DEEPER than the scratch root when the test's import is `../src/…` (written from demo/):
+#    .spike/prechange/probe/x.mjs is correct; .spike/prechange/x.mjs resolves ../src to .spike/src and crashes instead.
+node .spike/prechange/probe/x.mjs    # RED: 4 failing checks, exit 1, 0.13 s  (measured pair, ROADMAP 376)
+node .spike/headtree/probe/x.mjs     # GREEN: 0 failures, exit 0, 0.15 s
+```
+
+Record the red as NUMBERS — failing-check count, exit code, seconds — next to the word "red-first" in the row,
+not only the word; a red-first claim with no number cannot be re-verified next session (pitfall 393, `docs/SELFDEV.md`).
