@@ -4868,3 +4868,8 @@ at `:743`). Re-measure every `path:line` before repeating it.
     (10/seat x 12 seats), over by 904` on the SAME store the SAME minute. The band denominator is the roster in the rig
     file, so quoting a band or an over-by without the rig argument is a wrong number, in the same family as the `DURIG_DB`
     trap: the flag you forgot changes the denominator, not the answer.
+389. **`demo/next-pointer.test.mjs` pins the pointer's SHAPE with literal regexes, so prose edits can break the pointer
+    contract rather than the content.** Rewriting the `**Blocker:**` paragraph to `**No blocker remains for the sweep.**`
+    made the demo exit 1 — the assertion is `/^\*\*Blocker:\*\*/m`, and it wants the literal bold-closed label, not the
+    word "Blocker" in a sentence. Keep the label and put the truth in it ("`**Blocker:**` none — resolved this window").
+    The failure dump prints `expected: /…/, operator: 'match'` — read that line, it names the missing element directly.
