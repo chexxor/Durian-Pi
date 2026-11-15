@@ -1000,3 +1000,44 @@ a 2.7× swing on `check` that is fully explained by the flag (4 jobs is slower t
   decimal is a measurement, not a fact about the rig.
 - **know the pointer's digest headroom BEFORE writing a truth swap — one bounded call, 14.8 s.** `node scripts/clockin.mjs --budget 1` exits **1** and its stderr prints the EXACT digest size: **`digest is 19993 B`** at `9c4c8700` against `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`) — **7 B of headroom**. The human form prints the number only when it is OVER budget, and its `COST … B printed` footer is NOT the digest (**19,708 B printed vs 19,993 B digest** at this tree), so subtracting printed-from-budget reads a failing swap as a legal one. At single-digit headroom, prose must PAY the archive in the SAME commit (pitfall 392: move the paragraph VERBATIM to `docs/NEXT-ARCHIVE.md`), not in the next one. Byte-neutral swaps (`519 of 1,147` -> `516 of 1,144`, `0.29 s` -> `0.34 s`, flag inserted against the alignment padding) cost ZERO and are the cheap shape.
 - **table rows cost the digest ZERO bytes because the table sits ABOVE the slice**: at `9c4c8700` the digest is `docs/NEXT.md` lines **134-200 of 200** (clockin's own `--json` fields `pointer.start`/`pointer.end`/`pointer.fileLines`), the `## NEXT SESSION` heading is at line 134, and the pointer table lives at lines **11-122**. This is why pitfall 384's cadence chase costs bytes but costs one commit per pointer commit — a rows-only commit grows the file, not the digest (measured: at `9c4c8700` the digest is **19,993 B** with **112** table rows, all of them above the slice, so no table row is ever inside it). The `--json` form also carries the digest itself in `.text`, so `Buffer.byteLength` of it is the same number without the `--budget 1` trick (22.8 s vs 14.8 s).
+
+
+## 38. THE CLOCK-IN DIGEST IS A BYTE BUDGET THE POINTER PAYS — read the headroom BEFORE the edit, and the archive is the only free destination (2026-11-15, delegate at `aebebd9f`/`e1c4cfe5`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0)
+
+**Symptom:** `node scripts/clockin.mjs` exits **1** at session start with `digest is 20053 B, over its 20000 B budget`,
+so every session that clocks in pays a debt it did not create, and the number of bytes to cut is unknown until the
+debt has already been paid. This window closed it; the chain below is the measurement to reuse, not a fix to re-derive.
+
+Measured in this window, each number from the command that printed it:
+
+- `node scripts/clockin.mjs` at HEAD `b5c0a247` with the working tree mid-move → exit **1**, stderr `digest is 20053 B`
+  against `DIGEST_BUDGET_BYTES = 20000`.
+- five VERBATIM prose moves out of the slice (`.spike/cut-1.mjs`: the `**Known red:**` paragraph, the tranche-chain
+  parenthesis, the `**Suite tally:**` paragraph, the `Run these first` suite comment; `.spike/cut-2.mjs`: the whole
+  `**Operator decisions owed.**` paragraph) → the slice measured by `awk -v n="$(grep -n '^## NEXT SESSION$' docs/NEXT.md | cut -d: -f1)" 'NR>=n' docs/NEXT.md | wc -c"` goes **8,539 B → 8,108 B**;
+  `node scripts/clockin.mjs --budget 1` → **`digest is 19622 B`**.
+- two truth swaps inside the slice (the suite comment and the tally paragraph re-pointed at a run whose own
+  PROVENANCE line names the tree) → slice **8,063 B**, `node scripts/clockin.mjs --budget 1` → **`digest is 19577 B`**,
+  headroom **423 B**, and `node scripts/clockin.mjs` exit **0** (13.0 s) printing `COST 12931 ms, 19301 B printed`.
+- the commit that shipped ONLY the two cadence rows re-measured `node scripts/clockin.mjs` exit **0** (12.98 s) at
+  `e1c4cfe5` with a clean working tree — the fourth proof that table rows cost the digest ZERO bytes (§37's fact above).
+
+**The rules this window proves:**
+
+- **Pay the byte budget by MOVING, and prove the move is VERBATIM, not a paraphrase.** The proof that costs nothing:
+  put each replacement back into the new file and require the result to be byte-identical to the pre-cut file
+  (`back === orig`), and require the archive to contain the moved block (`a2.lastIndexOf(MOVED) >= 0`). A pointer that
+  says "moved VERBATIM" without that proof is pitfall 398's shape wearing the coat of a hygiene note.
+- **Extract every moved block FROM THE FILE BY INDEX in a `.spike/` script, never retype it.** A retyped anchor fails
+  on the file's real typographic characters — the `…` in a chain list and the U+2019 in `cap's` — and a failed move
+  script writes **nothing**, so the digest debt reads as unchanged rather than half-applied. `awk`/`sed` line slices
+  work; hand-typed `oldText` is what fails.
+- **Read the headroom before writing a swap, in one 14 s call:** `node scripts/clockin.mjs --budget 1` exits 1 and
+  its stderr prints the exact digest. The human form's `COST … B printed` footer is NOT the digest and is not a fixed
+  offset from it: measured in this window it was 19,664 B printed against a 19,945 B digest (mid-move at `b5c0a247`,
+  87 B above) and 19,301 B printed against a 19,577 B digest (clean at `e1c4cfe5`, 276 B below), because the footer
+  counts the store/git dumps as well and both halves move. Only `--budget 1` states the digest.
+- **Headroom in the low hundreds is the state that reopens next window.** Prose in the `## NEXT SESSION` slice pays it
+  byte for byte; table rows, `docs/NEXT-ARCHIVE.md`, `docs/SELFDEV.md` bodies, and runbook bodies cost it none. So the
+  durable half of a doc edit goes in a body, the actionable half stays in the slice, and the actionable half stays
+  short by pointing at the body.

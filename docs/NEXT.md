@@ -118,6 +118,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `9fb43e341` | docs(NEXT): the suite tally re-numbered to the FULL run measured AT this tree (364/364 in 175.0 s, PROVENANCE tree=44989c830) — its superseded self moved VERBATIM to the archive, plus 6 rows cut to pay the 200-line cap (proof: head+moved+tail byte-identical) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 9fb43e341`) |
 | `b5c0a2470` | docs(NEXT): the cadence rows for the tally refresh and this commit — pitfall 384's chase in ONE closer call; rows-only, digest measured unchanged — cadence row named from git's own subject line (`git log -1 --format=%s b5c0a2470`), pitfall 384 |
 | `aebebd9fc` | docs(NEXT): the pointer pays its clock-in digest again — five prose blocks moved VERBATIM to docs/NEXT-ARCHIVE.md (proof: the inverse substitution rebuilds the pre-cut file byte-for-byte, each block VERBATIM in the archive), the slice stops claiming a newest full-suite run, digest 20,053 B -> 19,577 B of DIGEST_BUDGET_BYTES = 20000 (node scripts/clockin.mjs exit 0, 13.3 s) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s aebebd9fc`) |
+| `e1c4cfe5c` | docs(NEXT): cadence rows in commit order for b5c0a247 and aebebd9fc — pitfall 384's chase paid in ONE closer call (node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order, 4.1 s, exit 0, re-audit 0 holes / 0 ordering defects); rows-only, so the clock-in digest pays ZERO bytes (the table sits above the ## NEXT SESSION slice) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s e1c4cfe5c`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -182,7 +183,7 @@ seat/docs task and pm owns routing. **(c)** whether a STOPPED-but-rostered seat'
 (paused is excluded, stopped is not). **(d)** whether a longer or unbounded broker lease is held — this window's
 5-minute lease was the delegate driving the ratified goal.
 
-**Runbook index for these numbers:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`; §34 the mint-refusal ledger read; **§35 the cap’s PRICE**; §36 the knob CURVE; **§37 a cost is ambiguous without its flags** — full wording moved VERBATIM to `docs/NEXT-ARCHIVE.md` (pitfall 392).
+**Runbook index for these numbers:** `docs/runbooks/session-start-cost.md` §32 census → ledger → `check`; §34 the mint-refusal ledger read; **§35 the cap’s PRICE**; §36 the knob CURVE; **§37 a cost is ambiguous without its flags**; **§38 the digest's byte budget is a budget to read before the edit, not after the failure** — full wording lives in the runbook, never in this slice.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
