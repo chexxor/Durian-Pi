@@ -15572,3 +15572,22 @@ WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration
 **Superseded line (verbatim) — the `1f34c1f4c` tree's Tallies paragraph (superseded by the re-measured tally at this tree, 2026-11-16):**
 
 **Tallies (the carrier tally, closed at tree=`bd54df3f5` per §42; the gate a `tools/` path owes is the FULL suite at the tree it carries, not the per-area pair §39/D319 reserves for a docs commit):** `timeout 300 node scripts/test.mjs --all --jobs 4` → **367/367 in 194.6 s exit 0, 0 `FAILED` lines**, run on the working tree `bd54df3f5` carries (PROVENANCE `tree=fb36568a2`, the commit not yet landed) (`.spike/suite-costaudit.out`; `.err` 45 B = the `time` wrapper's own report line, pitfall 407); `node tools/instrument-provenance.mjs --quiet` → **`suite members: git=367 disk=367`** exit 0. The pair a DOCS-only commit owes at its tree instead (§39/D319, measured at `tree=bd54df3f5`): `timeout 150 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 70.1 s exit 0 `.err` 0 B**, `timeout 120 node scripts/test.mjs --area toolchain --jobs 4` → **44/44 in 36.0 s exit 0 `.err` 0 B** — pair **106.1 s**, both PROVENANCE `tree=bd54df3f5` (`.spike/area-{docs,toolchain}-c2b.out`). Superseded wording VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **367**.
+
+**Superseded line (verbatim) — the Blocker paragraph's second line, cut from `docs/NEXT.md` when the pointer row for `983b91e72` paid its bytes (2026-11-16):**
+
+The two residual faces — the band is over BY ARITHMETIC (`queue-pressure` exit 1, re-measure it in 2.3 s) and the provider CHANNEL is REFUSED (`node tools/broker-serve.mjs --status` 1.1 s unsourced, `--start --dry-run` SOURCED exit 1) — VERBATIM in `docs/NEXT-ARCHIVE.md`; funding, model pins and LAN hardware are the operator’s, the **ledger** half is free (`node tools/broker-keepalive.mjs --once --no-restart` 2.1 s exit 0, store byte-identical).
+
+
+**Superseded line (verbatim) — the pitfall-408 parenthetical, cut from `docs/NEXT.md`'s State-the-team paragraph when this window's tally clause paid its bytes (2026-11-16):
+
+— pitfall 408: both move inside the reading session, so neither is quotable (the count moves with the pointer's OWN commits and the ref moves inside the reading session — both advanced OUTSIDE the delegate's verbs), and
+
+
+**Superseded line (verbatim) — the `What the next session runs first` sentence, cut from the same paragraph (2026-11-16):
+
+**What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` — then §43's two reads and the residuals; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
+
+
+**Superseded line (verbatim) — the Tallies clause that named `node cli.mjs check rig.selfdev.json --json` (superseded by the pair + full-suite clause at this tree, 2026-11-16):
+
+`node cli.mjs check rig.selfdev.json --json` → exit 1, 6.7 s, **3 error(s)** (`summary.error`), 31 checks, `.err` 772 B = the rig's own 2 provider BLOCK lines (pitfall 407: name which bytes are whose).

@@ -3,8 +3,8 @@ runbook: suite-red-standalone-green
 symptom: "a demo exits 0 on its own but the suite reports it FAIL or TIMED OUT; OR the inverse - it is red standalone AND red in the suite, yet green in a tree built a different way"
 writes: false
 precondition: "read-only"
-last_verified: 2026-11-11
-verified_by: devtools; qa (2026-11-10, scripts/test.mjs); impl (2026-11-11, scripts/suite.mjs half - see Evidence)
+last_verified: 2026-11-16
+verified_by: devtools; qa (2026-11-10, scripts/test.mjs); impl (2026-11-11, scripts/suite.mjs half - see Evidence); delegate (2026-11-16, the jobs-4 vs jobs-2 shape below - see Addendum)
 evidence: "item 6104; fixture demo/test-runner-concurrency.test.mjs §8 (leak); runs 2026-11-10. The inverse shape, measured 2026-11-11 (#6207): the SAME tree main `35001c3a` in two dependency sets - unlinked (`dependencySet: lockfile-released`, pi-durable **1.3.0** from the lockfile, `dist/index.js` sha256 `467d9cf6b27c…`) gives **279/300, exit 1, 134.5 s**, and every one of the 21 failures is ALSO red standalone (`node demo/<f>.test.mjs` exit 1 each; `demo/broker.test.mjs` hangs to the 120 s kill); the identical tree with the pin built and linked (`dependencySet: built-pin`, **1.5.1**) gives **300/300, exit 0, 89.7 s** (item-6200). Signatures: 4 broker demos `SessionFailed: Session failed after a storage error; close and reopen it`, 4 `TypeError: Cannot read properties of undefined (reading 'id')`, 5 tui-durable assertion mismatches, and `demo/commit-discipline-personas.test.mjs` dying with `ERR_MODULE_NOT_FOUND: @earendil-works/pi-schema` - a workspace package that only exists when the pin is built. All 21 are dependency-graph artefacts, not content defects."; runs 2026-11-10. The scripts/suite.mjs half (#6268) verified 2026-11-11 in worktree item-6268 (linked tree, pi-durable 1.5.1): `node demo/suite-runner-exit-verdict.test.mjs` exit 0 on the branch and exit 1 with 5 failed checks in a detached worktree at base e01e9256 (leak fixture wall 15.100s there vs 0.309s on the branch); the real runner on the real suite printed `SUITE GREEN: pass=300 environmental=0 fail=0`, exit 0"
 check_rule: null
 ---
@@ -162,3 +162,18 @@ Item 6104, 2026-11-10. Old-vs-new pair, one command each: `node scripts/old-test
 built after the 1.5.1 pin move flattened eight distinct failures into one bucket, and `demo/suite-signature.test.mjs
 runs it and the predecessor on the same nine-fixture capture (9 signatures vs 6 buckets, 4 of them in the
 catch-all).
+
+## Addendum (2026-11-16, delegate at the tree `983b91e72` carries) — a full-suite red that is green ALONE and green IN ITS AREA, on a box whose swap is exhausted
+
+The shape this window met: `demo/restart-limit-behaviour.test.mjs` FAILs in the full suite and passes everywhere else. It is **shape 3 (contention)**, not a content defect, and the runbook's own rule is what says so: *"A red is a defect only if it survives a single, quiet run."* Measured at that tree — host **Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0**, read in the same command as the numbers; **16 cores**, `MemAvailable` **12.5–13.1 GB**, **`SwapFree` 108–120 kB of `SwapTotal` 8,388,604 kB** (zram, essentially exhausted), **627 processes** on the box while the suite ran:
+
+| the run | exact command | verdict | wall | `.err` |
+|---|---|---|---|---|
+| full suite, `--jobs 4` | `timeout 300 node scripts/test.mjs --all --jobs 4` | **366/367, exit 1**, the one red `demo/restart-limit-behaviour.test.mjs` — **2 of 2 attempts red** (its checks: `charged 5, not 3 -- restarts=4`, and once `restartLimit 5 + 5 crashes: ENDS with restart_limit`) | 174.2 s / 175.6 s | 1,209–1,223 B (the runner's own report, incl. the `time` line) |
+| full suite, `--jobs 2` | `timeout 420 node scripts/test.mjs --all --jobs 2` | **367/367, exit 0, 0 `FAILED` lines** (PROVENANCE `tree=983b91e72`, `dependencySet=built-pin`, pi-durable 1.5.1) | **295.2 s** | 14 B = the `time` wrapper's own line |
+| the file alone | `node demo/restart-limit-behaviour.test.mjs` | exit **0**, 0 FAIL — **2 of 2 green** | **1.39 s** each | 0 B |
+| its area alone | `timeout 150 node scripts/test.mjs --area broker --jobs 4` | **84 tests, exit 0, 0 `FAILED`** — **2 of 2 green** | 52.8 s / 53.5 s | 0 B |
+
+**Why the counts drift, read from the demo:** the fixture plants a fixed number of crashes and then **observes** them — `demo/restart-limit-behaviour.test.mjs:91` a 50 ms `sleep`, `:96-97` the poll loop, `:170` reads `restarts` from `harness.getTask`, and `:147` carries the ruled comment *"ROADMAP 375: the death is set AT the observation, not after `until` returns"*. Under four-way load with swap thrashing, the observation lands before the last crash settles, so the demo reads **4 restarts where the fixture planted 5**. The assertion is exact-equality on a **load-sensitive** observation; the harness behaviour it guards (a limit of 3 bites, an unset limit defaults to 5) is unchanged — the same check on the run END would be load-insensitive.
+
+**The rule for a session that meets this red, in order:** (1) run the file alone and its own area — if both are green, DO NOT call it a defect and DO NOT raise the timeout; (2) read `/proc/meminfo`'s `SwapFree` and `ps -e | wc -l` **in the same command** as the re-run, and say which box state the verdict was taken on; (3) when the box is swap-saturated, `--jobs 2` is the honest gate and its wall (295.2 s vs 174.2 s) must be quoted with the flag, since a jobs-4 green and a jobs-2 green are not the same measurement; (4) the fix — an assertion that reads the count at the END of the run, or a fixture that waits for the crash to settle — is a **seat's** row (the demo belongs to the team's suite, and `docs/runbooks/slow-loop.md` is the diagnose path); the delegate records the shape and the numbers, and does not weaken an exact assertion to buy a green.
