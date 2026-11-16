@@ -14,6 +14,13 @@
 //   node tools/pointer-prose-cut-test.mjs --tool .spike/prechange-prose/tools/pointer-prose-cut.mjs
 //   -> exit 1 with `Cannot find module` on every spawn.
 //
+// RED FIRST, leg 2 (2026-11-16 — pitfall 429: a `--json` REFUSAL printed NOTHING, so the tool gave a scripted
+// reader no way to tell a refusal from a crash): stage the pre-change `tools/` and run THIS test against it —
+//   mkdir -p .spike/pc-red3 && git archive HEAD tools scripts | tar -x -C .spike/pc-red3
+//   node tools/pointer-prose-cut-test.mjs --tool "$(pwd)/.spike/pc-red3/tools/pointer-prose-cut.mjs"
+//   -> **exit 1, 51 ok / 30 FAIL** (`.spike/ppc-red-1.out`); every failure reads `status=1 stdout=""`, which is
+//   the silent refusal witnessed rather than described. The pre-change test alone re-counts at 49 checks.
+//
 // CLOSED SET OF OUTCOMES pinned below, every one on a FIXTURE pointer pair in a throwaway tmpdir repo (no store,
 // no network, no model — the mocked plane the rest of the tranche runs on):
 //   (a) a call without `--writes` PLANS: exit 0, names the chunks and the predicted slice delta, writes NOTHING;
@@ -26,6 +33,9 @@
 //       and a chunk ALREADY VERBATIM in the archive (pitfall 412's half-cut) each REFUSE: exit 1, NOTHING written;
 //   (e) the space flag form exits 2 (an ignored flag is a false green, pitfall 394);
 //   (f) `--json` prints ONE machine document and never claims a write it did not make.
+//   (g) `--json` on a REFUSAL (SELFDEV pitfall 429): every non-zero exit — a refusal AND a usage error alike —
+//       prints that same machine document, naming the refusal `kind` a caller can branch on, claiming `written:
+//       false`, and saying `nothing_written: true`; and it still writes NOTHING to either file.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
@@ -265,6 +275,44 @@ try {
   }
   check("a WRITE through --json says written: true", doc2 && doc2.written === true, JSON.stringify(doc2));
   check("--json still exits 0 on the write", jsonWrite.status === 0, `status=${jsonWrite.status}`);
+
+  // (g) `--json` on a REFUSAL — SELFDEV pitfall 429. A `--json` instrument that REFUSES and prints NOTHING gives
+  // the caller no way to tell a refusal from a silence: measured at `600e09a39`, the live call
+  // `node tools/pointer-prose-cut.mjs --cuts=.spike/cuts-106.json --dry-run --json` exited 1 with **0 B** of stdout,
+  // while the SAME call without `--json` printed `FINDING end-anchor-absent …` + `nothing written`. The machine
+  // reader of a refusing instrument therefore saw "no output, non-zero" — the same shape as a crash — and a
+  // session that scripted the cut could not tell WHICH refusal it hit, or that nothing was written, from the JSON.
+  // The rule: every non-zero exit owes the machine document, carrying its findings and an honest `written` flag.
+  const liveBefore = live();
+  const archBefore = arch();
+  const refusals = [
+    ["an absent anchor", missing, "anchor-absent"],
+    ["an ambiguous anchor", amb, "anchor-ambiguous"],
+    ["a clause outside the digest slice", prose, "outside-the-slice"],
+    ["a pointer TABLE ROW", row, "row-not-prose"],
+    ["a cut that does not shrink", grow, "no-shrink"],
+    ["a replacement that opens a heading", head, "repl-carries-a-heading"],
+    ["two overlapping cuts", overlap, "overlapping-cuts"],
+  ];
+  for (const [label, spec, kind] of refusals) {
+    const rf = run([`--cuts=${spec}`, "--json"]);
+    let d = null;
+    try {
+      d = JSON.parse(rf.stdout);
+    } catch {
+      d = null;
+    }
+    check(`--json on ${label} prints one machine document rather than silence`, rf.status !== 0 && d !== null, `status=${rf.status} stdout=${JSON.stringify(rf.stdout)}`);
+    check(`  it names the refusal kind (${kind}) so the caller can branch on it`, d !== null && (d.findings ?? []).some((f) => f.kind === kind), JSON.stringify({ kinds: (d ?? {}).findings }));
+    check(`  it claims written: false, so no reader mistakes a refusal for a cut`, d !== null && d.written === false, JSON.stringify(d));
+    check(`  it says nothing was written, machine-readably (nothing_written)`, d !== null && d.nothing_written === true, JSON.stringify(d));
+  }
+  check("a --json refusal wrote NOTHING to the pointer", live() === liveBefore, `live ${bytes(live())} vs ${bytes(liveBefore)}`);
+  check("a --json refusal wrote NOTHING to the archive", arch() === archBefore, `arch ${bytes(arch())} vs ${bytes(archBefore)}`);
+  const spaceJson = run(["--cuts", cuts, "--json"]);
+  check("the space form with --json still exits 2 and names the form it wants in the document", spaceJson.status === 2 && /`=` form/.test(spaceJson.stdout) && spaceJson.stdout.startsWith("{"), `status=${spaceJson.status} out=${JSON.stringify(spaceJson.stdout)}`);
+  const noCutsJson = run(["--json"]);
+  check("a call with no --cuts still exits 2 and says so machine-readably", noCutsJson.status === 2 && noCutsJson.stdout.startsWith("{") && noCutsJson.stdout.includes("--cuts"), `status=${noCutsJson.status} out=${JSON.stringify(noCutsJson.stdout)}`);
 
   console.log(`\npointer-prose-cut test: ${failures === 0 ? "PASS" : `${failures} FAIL(s)`}`);
   process.exit(failures === 0 ? 0 : 1);

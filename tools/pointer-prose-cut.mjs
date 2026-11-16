@@ -48,6 +48,14 @@
 //      and searched AFTER `from`, so a long paragraph is named by its ends rather than retyped; `repl` (default
 //      "") is what stays in the live file. The cut file is a session artifact — keep it in gitignored `.spike/`
 //      and delete nothing: the archive copy is the record.
+//      `--json` prints EXACTLY ONE machine document on EVERY exit — a plan, a write, a refusal, a proof failure
+//      and a usage error alike (SELFDEV pitfall 429, and pitfall 394's "an ignored flag is a false green" with
+//      the roles reversed): the document carries `findings[]` (each with a `kind` a caller can branch on), the
+//      honest pair `written` / `nothing_written`, the `slices` byte counts read from clockin's own `pointerSection`,
+//      the `exit` code and its own `cost_s`. A refusal that prints NOTHING is a SILENT non-zero exit: the reader
+//      cannot tell which refusal it hit, cannot tell a refusal from a crash, and cannot tell that nothing was
+//      written — measured at `600e09a39` as exit 1 / 0 B of stdout, while the SAME call without `--json` printed
+//      `FINDING end-anchor-absent …` + `nothing written`.
 //
 // COST: 0.04 s wall for a planning pass over the LIVE pointer (`--cuts=.spike/cuts-75.json --dry-run`, one cut, exit
 //       0, `.err` 0 B — the tool's own `cost:` line reads 0.01 s, the wall adds node startup); 0.04 s wall for a refusal
@@ -58,7 +66,8 @@
 //       0.01 s is what this call reports about ITSELF. No store, no network, no model. Re-measure rather than trust this line.
 //
 // Exit: 0 = the plan wrote nothing (a planning pass) or the write's proofs all held;
-//       1 = a refusal (see the FINDING it prints) or a proof failed — the files were written, reconcile them;
+//       1 = a refusal (the FINDING it prints — and the `findings` `--json` prints too, pitfall 429) or a proof
+//             failed — there the files WERE written, and `written: true` says so rather than hiding it;
 //       2 = usage (a space-form flag, a missing --cuts file, a cuts file that is not a JSON array).
 //
 // last_verified: 2026-11-16 — `node tools/pointer-prose-cut-test.mjs` PASS, 34 checks / 0 FAIL, 0.62 s, `.err` 0 B
@@ -67,6 +76,20 @@
 // (`git archive HEAD tools | tar -x -C .spike/prechange-prose`, which carries 0 files matching `pointer-prose-cut`)
 // exits 1 with `Cannot find module`. History of this same test on the same day, kept so the check count is not read
 // as a regression: the leg set below is the whole pin, written in one sitting.
+//
+// ADDENDUM 2026-11-16 (Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git
+// 2.56.0 — host read in the SAME command as the numbers below) — SELFDEV pitfall 429's fix landed here: `--json`
+// now prints the report on EVERY exit. The `asJson`/`say`/`report`/`finding`/`done` trio moved ABOVE the space-form
+// refusal because that refusal is the FIRST exit this tool can take, and it was the one that printed nothing
+// machine-readable; every other human `console.log` on an exit path became a `finding`. RED-FIRST, the NEW test run
+// against the pre-change `tools/` staged with `mkdir -p .spike/pc-red3 && git archive HEAD tools scripts | tar -x -C
+// .spike/pc-red3` at `--tool $(pwd)/.spike/pc-red3/tools/pointer-prose-cut.mjs` -> **exit 1, 51 ok / 30 FAIL**
+// (`.spike/ppc-red-1.out`; the 30 are exactly the new `--json`-on-a-refusal legs, and each reads `status=1 stdout=""`
+// — the silent refusal, witnessed rather than described). GREEN at this tree -> **PASS, 81 checks / 0 FAIL, 1.01 s**
+// (`.spike/ppc-green-1.out`; the tool's own `.err` 0 B — 42 B in `.spike/ppc-green-1.err` is pitfall 427's `time` wrapper).
+// Check count 34 → 49 (the pre-change test, re-counted against its own tool) → **81** — 32 legs added here, 30 of
+// them red; nothing already pinned was dropped. The `last_verified` line ABOVE is stale by that count: read it with
+// this addendum.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -102,11 +125,32 @@ const flag = (n, d = null) => {
   const hit = is.find((a) => a.startsWith(`--${n}=`));
   return hit === undefined ? d : hit.slice(n.length + 3);
 };
+
+// `--json` owes ONE machine document on EVERY exit — including a refusal and a usage error (SELFDEV pitfall 429,
+// fixed here): the human lines go to `say` and are suppressed in JSON mode, so a reason that only goes to a
+// human line is INVISIBLE to a scripted caller. A refusal that prints NOTHING is a silent non-zero exit — the
+// reader cannot tell which refusal it hit, cannot tell it from a crash, and cannot tell that nothing was written.
+// Every reason therefore becomes a `finding` the caller can branch on, and `written`/`nothing_written` are the
+// honest pair: exactly one of them is true on every exit.
+const asJson = is.includes("--json");
+const say = asJson ? () => {} : (msg) => console.log(msg);
+const report = { file: null, archive: null, cuts: [], slices: null, findings: [], written: false, nothing_written: true, saved: 0, cost_s: null };
+function finding(kind, detail = "") {
+  report.findings.push({ kind, detail });
+  say(`  FINDING ${kind}${detail ? ` — ${detail}` : ""}`);
+}
+function done(code) {
+  report.cost_s = (Date.now() - T0) / 1000;
+  report.exit = code;
+  say(`pointer-prose-cut cost: ${report.cost_s.toFixed(2)} s · host: ${hostLine()}`);
+  if (asJson) console.log(JSON.stringify(report, null, 2));
+  process.exit(code);
+}
+
 for (const name of ["cuts", "file", "archive"]) {
   if (is.some((a) => a === `--${name}`)) {
-    console.log("usage: every flag must arrive in `=` form (--cuts=.spike/cuts.json, --file=docs/NEXT.md); the space form is refused (pitfall 394)");
-    console.log(`pointer-prose-cut cost: ${((Date.now() - T0) / 1000).toFixed(2)} s · host: ${hostLine()}`);
-    process.exit(2);
+    finding("space-form-flag", "every flag must arrive in `=` form (--cuts=.spike/cuts.json, --file=docs/NEXT.md); the space form is refused, not silently defaulted (pitfall 394/398: an ignored flag is a false green)");
+    done(2);
   }
 }
 const cutsFile = flag("cuts");
@@ -114,21 +158,11 @@ const file = flag("file", "docs/NEXT.md");
 const archive = flag("archive", "docs/NEXT-ARCHIVE.md");
 const dryRun = is.includes("--dry-run");
 const writes = is.includes("--writes");
-const asJson = is.includes("--json");
-
-const say = asJson ? () => {} : (msg) => console.log(msg);
-const report = { file, archive, cuts: [], slices: null, findings: [] };
-function finding(kind, detail = "") {
-  report.findings.push({ kind, detail });
-  say(`  FINDING ${kind}${detail ? ` — ${detail}` : ""}`);
-}
-function done(code) {
-  say(`pointer-prose-cut cost: ${((Date.now() - T0) / 1000).toFixed(2)} s · host: ${hostLine()}`);
-  process.exit(code);
-}
+report.file = file;
+report.archive = archive;
 
 if (!cutsFile) {
-  console.log("usage: --cuts=<path.json> is required (a JSON array of {from,to?,repl?} cuts); a cut is a session artifact, keep it in gitignored .spike/");
+  finding("missing-cuts", "usage: --cuts=<path.json> is required (a JSON array of {from,to?,repl?} cuts); a cut is a session artifact, keep it in gitignored .spike/");
   done(2);
 }
 
@@ -136,11 +170,11 @@ let spec;
 try {
   spec = JSON.parse(readFileSync(cutsFile, "utf8"));
 } catch (e) {
-  console.log(`cannot read the cut spec ${cutsFile}: ${e.message}`);
+  finding("cut-spec-unreadable", `cannot read the cut spec ${cutsFile}: ${e.message} — nothing in the plan can be resolved, so nothing is attempted`);
   done(1);
 }
 if (!Array.isArray(spec) || !spec.length) {
-  console.log(`usage: ${cutsFile} must hold a NON-EMPTY JSON array of cuts`);
+  finding("cut-spec-not-an-array", `${cutsFile} must hold a NON-EMPTY JSON array of cuts`);
   done(2);
 }
 
@@ -148,14 +182,14 @@ let pre;
 try {
   pre = readFileSync(file, "utf8");
 } catch (e) {
-  console.log(`cannot read ${file}: ${e.message}`);
+  finding("pointer-unreadable", `cannot read ${file}: ${e.message} — a cut into a file that is not there is not a cut`);
   done(1);
 }
 let archPre;
 try {
   archPre = readFileSync(archive, "utf8");
 } catch (e) {
-  console.log(`cannot read ${archive}: ${e.message}`);
+  finding("archive-unreadable", `cannot read ${archive}: ${e.message} — a cut moves text OUT of the live file INTO the archive, so an archive that cannot be read means the moved bytes have nowhere to land`);
   done(1);
 }
 
@@ -263,6 +297,8 @@ const saved = edits.reduce((n, e) => n + Buffer.byteLength(e.chunk) - Buffer.byt
 const psPost = pointerSection(planned);
 const slicePre = Buffer.byteLength(ps.lines.join("\n"));
 const slicePost = psPost.start < 0 ? -1 : Buffer.byteLength(psPost.lines.join("\n"));
+report.saved = saved;
+report.slices = { pre: slicePre, post: slicePost };
 
 say(`  cuts: ${edits.length}, ${saved} B would leave the live file (slice text ${slicePre} B -> ${slicePost} B)`);
 for (const e of edits) say(`    ${Buffer.byteLength(e.chunk)} B out: ${e.chunk.slice(0, 100)}${e.chunk.length > 100 ? "…" : ""}`);
@@ -291,7 +327,6 @@ if (dryRun || !writes) {
       ? "  DRY RUN: nothing written — a planning pass names no removals and proves no cut; run with --writes to apply this plan"
       : "  PLANNING PASS: nothing written — this tool writes only when `--writes` is given, so re-running the pointer's block cannot cut a doc by accident; add --writes to apply this plan",
   );
-  if (asJson) console.log(JSON.stringify({ ...report, written: false, saved, slicePre, slicePost }, null, 2));
   done(0);
 }
 
@@ -308,6 +343,10 @@ if (block.split("\n").some((l) => ROW.test(l))) {
   done(1);
 }
 
+// From here the bytes ARE on disk, so `written` becomes true BEFORE the proofs run: a proof failure means
+// "written and wrong", not "not written", and the caller must be able to tell the two apart (pitfall 412).
+report.written = true;
+report.nothing_written = false;
 writeFileSync(file, planned);
 const archBase = archPre.endsWith("\n") ? archPre : archPre + "\n";
 writeFileSync(archive, archBase + block);
@@ -366,5 +405,5 @@ if (!ok) {
   say("a proof failed — the files were written, so reconcile them before anything else trusts this tree");
   done(1);
 }
-if (asJson) console.log(JSON.stringify({ ...report, written: true, saved, slicePre, sliceNow }, null, 2));
+report.slices.post = sliceNow;
 done(0);
