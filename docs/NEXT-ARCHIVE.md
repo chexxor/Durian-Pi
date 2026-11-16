@@ -15771,3 +15771,7 @@ docs-area runs at this window's pointer states — `.spike/docs-93.out` 60.0 s a
 (docs-area runs at the states they carry — `.spike/docs-99.out` 60.2 s at the tree `58bd20fbf` lands on, `.spike/docs-98.out` 60.3 s at `c7d89df3b`, `.spike/docs-97.out` 60.4 s at `ef4d27b1` — all **8/8 exit 0**, `.err` 0 B, 60.0-60.4 s; `demo/runbook-diagnose.test.mjs` is the area's slow member (59.9 s); the older runs and the toolchain area's tally VERBATIM in the archive
 
 — **19,895 B** of `DIGEST_BUDGET_BYTES = 20000`, 105 B headroom (the READ MAP counts every docs/SELFDEV.md `## ` heading (~58 B, re-read); this window's prose moved VERBATIM to the archive; §44 / pitfall 414 name that history)
+
+**Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 18 B of slice text and therefore of the clock-in digest):**
+
+**The docs-area pair this window's docs-only carriers owe (§39), measured at the states they carry:** `timeout 200 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 59-61 s exit 0 `.err` 0 B** (its per-state runs and artifacts, the toolchain tally and the area's slow member are VERBATIM in the archive).
