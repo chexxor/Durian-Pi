@@ -39,6 +39,22 @@
 //   node tools/registration-ledger-gap.mjs --fixture=<rows.json> # a rows document {items:[...]} (test plane, no store)
 //   node tools/registration-ledger-gap.mjs --ledger=<path>       # a stand-in for docs/ROADMAP.md (fixture ledgers)
 //   node tools/registration-ledger-gap.mjs --json .spike/gap.json [--quiet]
+//   BOTH spellings are ONE option (`--fixture path` and `--fixture=path`); ask for stdout explicitly as `--json -`.
+//
+// ADDENDUM 2026-11-16 (delegate, goal mwh73rd1-izyq72 — SELFDEV pitfall 428's LAST hand reader: this file's `flagPath`
+// took ONLY the `=` form and refused the space form at a bespoke **exit 4** no other instrument speaks, and its hand
+// `--json` block routed a bare `--json` onto stdout while printing a report the caller was not asked for. Both are
+// gone: this tool imports tools/argv-contract.mjs, so a call it cannot honour REFUSES **by name at exit 2** (never 1,
+// which on these instruments already means "measured FAIL") and exit 4 no longer exists. RED-FIRST, measured in the
+// SAME command as the host line below (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node
+// v24.22.1), by driving the pinned test at a STAGE of the PRE-change tools/ —
+//   mkdir -p .spike/pc-red5 && git archive HEAD tools scripts src cli.mjs | tar -x -C .spike/pc-red5
+//   node tools/registration-ledger-gap-test.mjs --tool "$(pwd)/.spike/pc-red5/tools/registration-ledger-gap.mjs"
+//   -> **exit 1, 18 ok / 7 FAIL in 0.35 s** (`.spike/pc-red-led2.out`): the space form exited **4**, a bare `--json`
+//   printed the report on stdout at exit 1, `--zzz=1` printed a green-shaped verdict, and `--quiet=1` invented a
+//   truthiness. GREEN at this tree: `node tools/registration-ledger-gap-test.mjs` exits 0 and the `toolchain` area
+//   carries this file (the stage must carry `src/` too — this tool imports `../src/queueclass.mjs` by a path RELATIVE
+//   TO ITSELF).
 //
 // Measured cost, re-run before quoting: **1.1-2.3 s** against the live store — the SAME call measured 1.10 s / 1.141 s
 // wall at `660dd94d`, **1.50 s on its own cost line / 1.544 s wall** at the clean tree `dee33d7d6`, and **2.31 s** at the
@@ -74,6 +90,13 @@
 //      **43/43 in 28.4 s, exit 0, `.err` 0 B**, carrying `PASS tools/registration-ledger-gap-test.mjs (0.2s)`, PROVENANCE
 //      `tree=dee33d7d6` (`.spike/area-toolchain-dee33d7d.out`); `node scripts/test.mjs --all --jobs 4` -> **366/366 in
 //      176.1 s, exit 0, `.err` 0 B** (`.spike/suite-dee33d7d.out`). `last_verified: 2026-11-16` by those calls.
+//   4. the cost band, WIDENED IN PLACE by a fourth data point at this window's tree: `DURIG_DB=./selfdev.sqlite timeout
+//      60 node tools/registration-ledger-gap.mjs` -> **cost 15.74 s on the tool's own line / 15.78 s shell wall, exit
+//      0, `.err` 0 B** (`.spike/reggap-live.out`; census unchanged: `live 1200 = 1024 work + 5 notice + 171
+//      registration`, `terminal registration 299`, 380 registered items, `DUPLICATES 0`). The 1.1-2.3 s band above is
+//      reproduced at three trees and NOT at this one, so the honest band on this rig is **1.1-15.8 s**: the drift is the
+//      same shape as SELFDEV §37's `watch --once` (one call, several orders), and a header that quotes one number is a
+//      7-fold lie. Quote the number AND the tree you measured it on.
 //
 // READ-ONLY by construction: it runs the CLI's own reader and `readFileSync` of the ledger. It mints nothing,
 // transitions nothing, writes no row — the pass itself is `pm`'s verb (docs/WORK-ITEM-LIFECYCLE.md), and a
@@ -82,40 +105,23 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { classifyRow, isTerminalRow, isRegistrationItem, isNoticeItem } from "../src/queueclass.mjs";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-const flagPath = (name) => {
-	const re = new RegExp(`^--${name}=(.+)$`);
-	for (let i = 0; i < argv.length; i++) {
-		const m = re.exec(argv[i]);
-		if (m) return m[1];
-	}
-	const i = argv.indexOf(`--${name}`);
-	// the space form is REFUSED on sight (SELFDEV pitfall 394: a tool that prints a flag form it rejects
-	// teaches the next session a command it cannot run)
-	if (i >= 0) {
-		console.error(`--${name} needs the = form (use --${name}=<path>)`);
-		process.exit(4);
-	}
-	return null;
-};
-const fixture = flagPath("fixture");
-const ledgerPath = flagPath("ledger") ?? "docs/ROADMAP.md";
-const quiet = argv.includes("--quiet");
-let jsonOut = null;
-{
-	const i = argv.indexOf("--json");
-	if (i >= 0) {
-		// pitfall 394's other half: an instrument must refuse a flag form it does not read, not ignore it
-		const next = argv[i + 1];
-		if (!next || next.startsWith("--")) {
-			console.error("--json needs an output path (use --json <path>; the bare form is not implemented)");
-			// documented and refused, but a JSON-only caller may still want stdout: honor stdout, say so
-			jsonOut = "-";
-			console.error("--json -> stdout (no path given)");
-		} else jsonOut = next;
-	}
-}
+// ONE option reader for the tools/ plane (tools/argv-contract.mjs). The hand reader this replaces took only the
+// `=` form for its paths and REFUSED `--fixture <path>` at a bespoke exit 4 (SELFDEV pitfall 394's rule: a tool
+// must refuse a flag form it does not read — but a bespoke exit code teaches the next session nothing), and it
+// answered a bare `--json` by routing the document onto stdout. Now both spellings are ONE option, `--json -` asks
+// for stdout by name, and every bad call refuses BY NAME at exit 2 (SELFDEV pitfall 426's class).
+const o = parseOpts(argv, {
+	value: ["fixture", "ledger", "json"],
+	bool: ["quiet"],
+	usage: "--fixture <rows.json> · --ledger <path> · --json <out.json> · --quiet",
+});
+const fixture = o.get("fixture");
+const ledgerPath = o.get("ledger", "docs/ROADMAP.md");
+const quiet = o.has("quiet");
+const jsonOut = o.get("json");
 const t0 = Date.now();
 
 // The SAME three registry forms roadmap-queue-coverage.mjs matches (docs/SELFDEV.md documents that matching

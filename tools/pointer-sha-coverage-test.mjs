@@ -14,7 +14,23 @@
 // FAILING-FIRST: before `tools/pointer-sha-coverage.mjs` existed the spawn exited non-zero with
 // "Cannot find module", so every assertion here failed.
 //
+// RED FIRST, leg 2 (2026-11-16 — SELFDEV pitfall 428's LAST TWO hand readers): the tool grew its own four-line
+// argv reader instead of importing tools/argv-contract.mjs, so its option set was unmeasured. Stage the PRE-change
+// tools/ and run THIS test against it —
+//   mkdir -p .spike/pc-red5 && git archive HEAD tools scripts src cli.mjs | tar -x -C .spike/pc-red5
+//   node tools/pointer-sha-coverage-test.mjs --tool "$(pwd)/.spike/pc-red5/tools/pointer-sha-coverage.mjs"
+//   -> **exit 1, 17 ok / 6 FAIL** (`.spike/ptr-red3.out`, 0.7 s, host Linux / Fedora Linux 45 (Forty Five) / kernel
+//      7.2.15-300.fc45.x86_64 / node v24.22.1, read in the SAME command): case (8) witnesses the `=` form refusing
+//      at 2 while the space form exited 1 (two commands, two verdicts), `--zzz=1` exiting 1 as a MEASUREMENT, and a
+//      valueless `--base` falling back to `HEAD~1` and auditing 1 commit while exiting 0. GREEN at this tree: **23 ok
+//      / 0 FAIL / exit 0 in 0.7 s**. The legs below pin the two spellings against EACH OTHER (same exit, same range,
+//      same holes) rather than against a fixed exit, because case (6) has already added a merge and a carrier to the
+//      fixture repo by then — a fixed premise would be a leg of the wrong shape, and one leg of this file's own check
+//      signature (`check(label, condition, detail)`, the OPPOSITE order from tools/registration-ledger-gap-test.mjs's
+//      `check(condition, label, detail)`) was the trap that made three of them print `ok true` and pass forever.
+//
 // Run: node tools/pointer-sha-coverage-test.mjs  (exit 0 = pass)
+//      node tools/pointer-sha-coverage-test.mjs --tool <path>  (drives a STAGE of the tool — the red-first leg)
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,10 +45,18 @@ function check(label, condition, detail = "") {
 	}
 }
 
+// The `--tool` seam is what makes the RED-FIRST evidence above repeatable: a STAGE of the tool (a pre-change
+// tools/ unpacked into .spike/) is drivable against the same fixtures, so the legs below fail on the defect rather
+// than being asserted. Copy of the idiom shipped by tools/pointer-prose-cut-test.mjs.
+const targv = process.argv.slice(2);
+const TOOL = (() => {
+	const given = targv.includes("--tool") ? targv[targv.indexOf("--tool") + 1] : "tools/pointer-sha-coverage.mjs";
+	return given.startsWith("/") || /^[A-Za-z]:[\\\/]/.test(given) ? given : join(process.cwd(), given);
+})();
 const base = mkdtempSync(join(tmpdir(), "durig-pointer-coverage-"));
 const repo = join(base, "repo");
 const pointer = join(repo, "docs", "NEXT.md");
-const tool = join(process.cwd(), "tools", "pointer-sha-coverage.mjs");
+const tool = TOOL;
 
 const git = (...args) =>
 	spawnSync("git", ["-C", repo, ...args], { encoding: "utf8" });
@@ -192,6 +216,73 @@ try {
 	const t0 = Date.now();
 	run();
 	check("runs in under 2 s", Date.now() - t0 < 2000, `${Date.now() - t0} ms`);
+
+	// (8) ONE option reader (tools/argv-contract.mjs). SELFDEV pitfall 426's class on THIS tool: a reader that
+	// takes only one spelling makes the other a SILENT DEFAULT (or, here, a refusal the next session cannot
+	// work around), and an option nobody knows is DROPPED while the verdict still prints green. The legs below
+	// pin the three things the migration must hold: the two spellings are ONE option, an unknown option REFUSES
+	// by name at exit 2, and an option given no value REFUSES rather than falling back to a narrower range.
+	{
+		const completeTable = [
+			"# pointer", "", "| sha | shipped |", "|---|---|",
+			`| \`${c1}\` | the base |`, `| \`${c2}\` | the middle |`, "",
+		];
+		writeFileSync(pointer, completeTable.join("\n"));
+		// The two spellings run against the SAME repo state and the SAME table, so the pin is "one option, one
+		// verdict" rather than a fixed exit: case (6) above has already added a merge and a carrier to this repo,
+		// so the range here is not the range case (2) audited, and asserting 0 would be a premise of the wrong shape.
+		const eqForm = spawnSync(
+			process.execPath,
+			[tool, `--base=${c0}`, `--file=${pointer}`, "--json"],
+			{ encoding: "utf8", cwd: repo },
+		);
+		const spForm = spawnSync(
+			process.execPath,
+			[tool, "--base", c0, "--file", pointer, "--json"],
+			{ encoding: "utf8", cwd: repo },
+		);
+		const parse = (s) => {
+			try { return JSON.parse(s); } catch { return null; }
+		};
+		const eqJson = parse(eqForm.stdout);
+		const spJson = parse(spForm.stdout);
+		check(
+			"the `=` form is ONE option with the space form (same exit)",
+			eqForm.status === spForm.status,
+			`eq=${eqForm.status} space=${spForm.status} stderr=${String(eqForm.stderr).slice(0, 200)}`,
+		);
+		check(
+			"and the SAME range audited — a `=` form that narrowed the range is the false green of pitfall 398",
+			eqJson && spJson && eqJson.rangeCommits === spJson.rangeCommits && eqJson.tableRows === spJson.tableRows,
+			`eq range=${eqJson?.rangeCommits} rows=${eqJson?.tableRows} | space range=${spJson?.rangeCommits} rows=${spJson?.tableRows}`,
+		);
+		check(
+			"and the same holes reported",
+			eqJson && spJson && JSON.stringify(eqJson.missing) === JSON.stringify(spJson.missing),
+			`${String(eqForm.stdout).slice(0, 200)} vs ${String(spForm.stdout).slice(0, 200)}`,
+		);
+		const unknown = spawnSync(
+			process.execPath,
+			[tool, "--zzz=1", "--base", c0, "--file", pointer],
+			{ encoding: "utf8", cwd: repo },
+		);
+		check(
+			"an option this tool does not take REFUSES by name (exit 2)",
+			unknown.status === 2,
+			`status=${unknown.status} — a silent drop makes the verdict a measurement of something else`,
+		);
+		check(
+			"the refusal names its cause in the grep-able shape",
+			String(unknown.stderr).includes("REFUSED cause:"),
+			`${String(unknown.stderr).slice(0, 300)}`,
+		);
+		const valueless = spawnSync(process.execPath, [tool, "--base"], { encoding: "utf8", cwd: repo });
+		check(
+			"an option given no value REFUSES (exit 2), not a fallback range",
+			valueless.status === 2,
+			`status=${valueless.status} stdout=${String(valueless.stdout).slice(0, 160)}`,
+		);
+	}
 } finally {
 	rmSync(base, { recursive: true, force: true });
 }

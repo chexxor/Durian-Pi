@@ -23,9 +23,11 @@
 //      running this tool BEFORE a commit gets the WHOLE cadence in one call (pitfall 384: HEAD can
 //      never name itself in the commit that carries it). The already-paid leg reads the TABLE's ROWS,
 //      not the file: a live pointer names commits in PROSE too, and prose is not a row (pitfall 425).
-//      because the audit it calls, `tools/pointer-sha-coverage.mjs`, takes only the space form and
-//      silently ignores `--base=` (pitfall 398: that false green audited 37 of 197 commits and still
-//      exited 0). This tool hands the value to the audit in the form the audit actually reads.
+//      because the audit it calls, `tools/pointer-sha-coverage.mjs`, TOOK only the space form and silently
+//      ignored `--base=` (pitfall 398: that false green audited 37 of 197 commits and still exited 0). FIXED
+//      IN PLACE 2026-11-16 (goal mwh73rd1-izyq72): the audit now reads tools/argv-contract.mjs, so `--base 8b5a19e1`
+//      and `--base=8b5a19e1` are ONE option and an option the audit does not take refuses by name at exit 2; THIS
+//      tool still hands space-form values, which both spellings read, so its behaviour here did not change.
 //      `--dry-run` prints the rows and changes nothing: this tool writes into a live doc, so a
 //      planning pass is available and its refusal-to-write is stated, not implied.
 //

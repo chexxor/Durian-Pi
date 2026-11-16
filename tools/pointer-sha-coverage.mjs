@@ -15,6 +15,12 @@
 //
 // COST: 0.3-0.6 s (git log + one file read; no store, no network, no model). Re-measured 2026-11-14
 // with the merge-coverage rule: 0.35 s on a 243-commit range.
+// ADDENDUM 2026-11-16 (delegate, goal mwh73rd1-izyq72): the cost MOVES with the range, so quote the range with the
+// number — `timeout 60 node tools/pointer-sha-coverage.mjs --base 8b5a19e1` at this tree measured **2.35 s** over
+// **367** range commits (exit 0, verdict `every range commit is named`, carrier exempt `6feafd8d7`; host Linux / Fedora
+// Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1, read in the SAME command). Band on this rig
+// for a 243-367-commit range: **0.35-2.35 s**. The `--json` leg costs the same (parsing changes nothing), and a refusal
+// costs ~0.03 s because the shared reader runs BEFORE any work, which is also why a refusal cannot half-measure.
 //
 // THE POINTER IS CUT. When docs/NEXT.md hits its 200-line cap its older blocks move VERBATIM to
 // docs/NEXT-ARCHIVE.md, so a range that reaches past the cut has no chance of closing if the tool reads
@@ -31,35 +37,48 @@
 // only for display and for prefix-matching a table row. Verified at `16f70cf8` on Linux, Fedora Linux
 // 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1: before the fix exit 1 / 80 holes in
 // 1.4 s; after, exit 0 (187 range commits, 45 + 201 rows, 0 holes / 0 ordering defects) in 1.4 s.
-// Run: node tools/pointer-sha-coverage.mjs [--base <sha>] [--file docs/NEXT.md] [--archive docs/NEXT-ARCHIVE.md] [--json]
-//      Flags take the SPACE form ONLY: `--base=8b5a19e1` is now REFUSED (exit 2). It used to be
-//      ignored, the range silently fell back to merge-base(origin/main, HEAD), and the tool audited
-//      37 of 197 commits while still exiting 0 — a FALSE green (measured 2026-11-15 at `247a6211a`).
+// ADDENDUM 2026-11-16 (delegate, goal mwh73rd1-izyq72 — SELFDEV pitfall 428's census of hand-written argv
+// readers, 2 left → 0): this file grew its OWN four-line reader, which read only the space form and ignored
+// everything else. Two lies followed, both witnessed rather than asserted: the header's Run line claimed the
+// `=` form REFUSED with a message telling the next session to retype, and an option the tool did not know
+// (`--zzz=1`) was DROPPED silently while the audit still printed its verdict and exited green. This tool now
+// imports tools/argv-contract.mjs — the ONE reader for the tools/ plane — so both spellings are ONE option,
+// and anything it cannot honour REFUSES by name at exit 2 (never 1: on these instruments exit 1 already means
+// "measured FAIL", and a reader cannot tell a typo from a measurement). RED-FIRST for the migration, measured
+// on this host (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1, read in
+// the SAME command): stage the PRE-change tools/ and drive the pinned test at the stage —
+//   mkdir -p .spike/pc-red5 && git archive HEAD tools scripts src cli.mjs | tar -x -C .spike/pc-red5
+//   node tools/pointer-sha-coverage-test.mjs --tool "$(pwd)/.spike/pc-red5/tools/pointer-sha-coverage.mjs"
+//   -> **exit 1, 5 FAIL** (`.spike/pc-red-ptr.out`, 0.2 s): case (8) below witnesses the `=` form refusing at
+//      2, `--zzz=1` exiting 1 as a measurement, and a valueless `--base` falling back to `HEAD~1` and auditing
+//      1 commit while exiting 0. GREEN at this tree: `node tools/pointer-sha-coverage-test.mjs` exits 0 and the
+//      `toolchain` area carries this file.
+//
+// Run: node tools/pointer-sha-coverage.mjs [--base <ref>] [--file <path>] [--archive <path>] [--no-archive] [--json]
+//      BOTH spellings of every option work and are ONE option: `--base 8b5a19e1` and `--base=8b5a19e1`. An option
+//      this tool does not take, a FLAG given a value, and an option given no value each REFUSE by name at exit 2.
 //      `node tools/pointer-row-for-predecessor.mjs` is the batch closer for the holes this reports.
 // Use --no-archive to ignore the archive. Exit 0 = every range commit is named (or is the carrier),
 // 1 = holes / out-of-order rows, 2 = usage.
 
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-// A flag in `=` form is a TYPO, not a value: `--base=8b5a19e1` was silently ignored here, the range
-// fell back to `merge-base(origin/main, HEAD)`, and the tool audited 37 of 197 commits while still
-// exiting 0 — a FALSE green (measured 2026-11-15 at `247a6211a`, SELFDEV pitfall 398's mirror image
-// of pitfall 394, where `what-to-test.mjs` REFUSED the space form). Refuse the wrong form loudly.
-const badForm = argv.filter((a) => /^--(base|file|archive)=/.test(a));
-if (badForm.length) {
-  console.error(`pointer-sha-coverage: ${badForm.join(" ")} must use the space form (e.g. --base 8b5a19e1); the equals form used to be ignored silently and narrowed the range`);
-  process.exit(2);
-}
-const flag = (name, fallback = null) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : fallback;
-};
-const asJson = argv.includes("--json");
-const file = flag("file", "docs/NEXT.md");
+// ONE option reader for the tools/ plane. The hand reader this replaces read only `--name value`, which made
+// `--base=8b5a19e1` a retype-tax and `--zzz=1` a silent drop: measured 2026-11-15 at `247a6211a`, the tool audited
+// 37 of 197 commits and still exited 0 — a FALSE green (SELFDEV pitfall 398, mirror image of pitfall 394). The
+// imported reader answers both spellings as ONE option and refuses what it cannot honour by NAME at exit 2.
+const o = parseOpts(argv, {
+	value: ["base", "file", "archive"],
+	bool: ["json", "no-archive"],
+	usage: "--base <ref> · --file <path> · --archive <path> · --no-archive · --json",
+});
+const asJson = o.has("json");
+const file = o.get("file", "docs/NEXT.md");
 // `--no-archive` ignores the archive; `--archive <path>` points it elsewhere.
-const archiveFile = argv.includes("--no-archive") ? null : flag("archive", "docs/NEXT-ARCHIVE.md");
+const archiveFile = o.has("no-archive") ? null : o.get("archive", "docs/NEXT-ARCHIVE.md");
 
 if (!existsSync(file)) {
 	console.error(`pointer-sha-coverage: no such pointer file: ${file}`);
@@ -68,7 +87,7 @@ if (!existsSync(file)) {
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 
-let base = flag("base", null);
+let base = o.get("base");
 let baseLabel = "--base";
 if (!base) {
 	try {

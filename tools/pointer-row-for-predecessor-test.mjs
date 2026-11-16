@@ -191,16 +191,35 @@ try {
   const spaceForm = runCloser(["--base", c0, "--file=docs/NEXT.md", "--no-archive"]);
   check("the closer refuses the space form", spaceForm.status === 2, `status=${spaceForm.status}`);
   check("and names the form it wants", (spaceForm.stdout + spaceForm.stderr).includes("`=` form"), spaceForm.stdout + spaceForm.stderr);
-  const equalsAudit = runAudit([`--base=${c0}`, "--file", "docs/NEXT.md"]);
+  // CORRECTED IN PLACE 2026-11-16 (goal mwh73rd1-izyq72): the leg below used to assert the AUDIT refuses the
+  // `=` form — that was the audit's OWN hand reader, which took only the space form and refused the `=` form at
+  // exit 2 (pitfall 398). The audit now imports tools/argv-contract.mjs, so `--base=X` and `--base X` are ONE
+  // option and BOTH read the same range; what the audit refuses is an option it does not take. A test of the
+  // CLOSER that pins the AUDIT's option contract is a second spelling of another instrument's rule — the class
+  // SELFDEV pitfall 431 names — and the migration turned it red rather than deleting it, which is why it moved
+  // to the contract the audit actually has.
+  const eqRun = runAudit([`--base=${c0}`, "--file", "docs/NEXT.md", "--no-archive", "--json"]);
+  const spRun = runAudit(["--base", c0, "--file", "docs/NEXT.md", "--no-archive", "--json"]);
+  const parseDoc = (s) => {
+    try { return JSON.parse(s); } catch { return null; }
+  };
+  const eqDoc = parseDoc(eqRun.stdout);
+  const spDoc = parseDoc(spRun.stdout);
   check(
-    "the audit refuses the `=` form too (it used to fall back to merge-base and report a FALSE green over a narrowed range)",
-    equalsAudit.status === 2,
-    `status=${equalsAudit.status}\n${equalsAudit.stdout}${equalsAudit.stderr}`,
+    "the audit takes BOTH spellings of its own option as ONE (same exit)",
+    eqRun.status === spRun.status,
+    `eq=${eqRun.status} space=${spRun.status} stderr=${String(eqRun.stderr).slice(0, 200)}`,
   );
   check(
-    "the refusal says what the fallback used to do",
-    (equalsAudit.stdout + equalsAudit.stderr).includes("space form"),
-    equalsAudit.stdout + equalsAudit.stderr,
+    "and the SAME range audited (a `=` form that narrowed the range is pitfall 398's false green)",
+    eqDoc !== null && spDoc !== null && eqDoc.base === spDoc.base && eqDoc.rangeCommits === spDoc.rangeCommits,
+    `eq base=${eqDoc?.base} range=${eqDoc?.rangeCommits} | space base=${spDoc?.base} range=${spDoc?.rangeCommits}`,
+  );
+  const unknownRun = runAudit(["--zzz=1", "--base", c0, "--file", "docs/NEXT.md", "--no-archive"]);
+  check(
+    "and an option it does NOT take REFUSES by name at exit 2",
+    unknownRun.status === 2 && String(unknownRun.stderr).includes("REFUSED cause:"),
+    `status=${unknownRun.status} stderr=${String(unknownRun.stderr).slice(0, 200)}`,
   );
 
   // (8) `--order` closes an ORDERING defect in the SAME call: a mechanical permutation of the

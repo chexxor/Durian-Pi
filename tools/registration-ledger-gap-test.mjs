@@ -17,11 +17,39 @@
 // so the test costs milliseconds and never reads ./selfdev.sqlite (the same mocked plane as the tranche's other
 // red-first demos — a store read in a demo is a different lane with a declared cost).
 //
+// RED FIRST, leg 2 (2026-11-16 — SELFDEV pitfall 428's last hand reader): this tool took ONLY the `=` form for
+// its paths and REFUSED the space form at a bespoke exit 4 no other tool speaks, and routed a bare `--json` to
+// stdout while saying it had. Stage the PRE-change tools/ and drive THIS test at it —
+//   mkdir -p .spike/pc-red5 && git archive HEAD tools scripts src cli.mjs | tar -x -C .spike/pc-red5
+//   node tools/registration-ledger-gap-test.mjs --tool "$(pwd)/.spike/pc-red5/tools/registration-ledger-gap.mjs"
+//   -> **exit 1, 18 ok / 7 FAIL in 0.35 s** (`.spike/pc-red-led2.out`, host Linux / Fedora Linux 45 (Forty Five) /
+//      kernel 7.2.15-300.fc45.x86_64 / node v24.22.1, read in the SAME command): case 6 witnesses the space form
+//      exiting **4** and printing NOTHING, a bare `--json` printing the report on stdout at exit 1, `--zzz=1` printing
+//      a green-shaped verdict, and `--quiet=1` inventing a truthiness. GREEN at this tree: **25 ok / 0 FAIL / exit 0
+//      in 0.4 s**. The stage must carry `src/` as well as `tools/` — this tool imports `../src/queueclass.mjs` by a
+//      path RELATIVE TO ITSELF, so a tools/-only stage fails `Cannot find module`, which is the red evidence, not a bug.
+//      Two traps this file's own legs had to be corrected for, both of the same class: its `check(condition, label,
+//      detail)` takes the condition FIRST (the OPPOSITE order from tools/pointer-sha-coverage-test.mjs), and Node 24's
+//      spawnSync result names the exit `status` (`exitCode` is undefined there — `Object.keys` measured `status,
+//      signal,output,pid,stdout,stderr`), so a leg reading only `exitCode` compares `undefined === 2` and passes
+//      forever. `code(r)` below is the one accessor every leg uses.
+//
 // Run: node tools/registration-ledger-gap-test.mjs  (exit 0 = pass)
+//      node tools/registration-ledger-gap-test.mjs --tool <path>  (drives a STAGE of the tool — the red-first leg)
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const targv = process.argv.slice(2);
+// The `--tool` seam: a pre-change STAGE of tools/ (unpacked into .spike/) is drivable against the same fixtures,
+// so the legs below fail on the defect instead of being asserted. The stage must carry src/ too — this tool imports
+// ../src/queueclass.mjs by a path RELATIVE TO ITSELF, and `git archive HEAD tools scripts src cli.mjs` provides it.
+const TOOL = (() => {
+	const given = targv.includes("--tool") ? targv[targv.indexOf("--tool") + 1] : "tools/registration-ledger-gap.mjs";
+	return given.startsWith("/") || /^[A-Za-z]:[\\\/]/.test(given) ? given : join(process.cwd(), given);
+})();
 
 const dir = mkdtempSync(`${tmpdir()}/reggap-`);
 let ok = 0;
@@ -39,19 +67,27 @@ function ledger(name, text) {
 }
 
 function run(rows, led) {
-	const out = `${dir}/out.json`;
-	const r = spawnSync(process.execPath, ["tools/registration-ledger-gap.mjs", `--fixture=${rows}`, `--ledger=${led}`, "--json", out], { encoding: "utf8" });
+	return runWith(rows, led, [`--fixture=${rows}`, `--ledger=${led}`, "--json", `${dir}/out.json`], `${dir}/out.json`);
+}
+function runWith(rows, led, args, outPath) {
+	const r = spawnSync(process.execPath, [TOOL, ...args], { encoding: "utf8" });
 	let parsed = null;
-	try { parsed = JSON.parse(spawnRead(out)); } catch { /* the FAIL lines name it */ }
+	try { parsed = JSON.parse(spawnRead(outPath)); } catch { /* the FAIL lines name it */ }
 	return { code: r?.exitCode ?? r?.status, out: r?.stdout ?? "", err: r?.stderr ?? "", json: parsed };
 }
 function spawnRead(p) {
 	try { return readFileSync(p, "utf8"); } catch { return ""; }
 }
 
-function check(cond, why) {
+function code(r) {
+	// Node 24's spawnSync result names the exit `status` (`exitCode` is undefined there — measured at this window's
+	// run: Object.keys(spawnSync(...)) = status,signal,output,pid,stdout,stderr), so a leg that reads only `exitCode`
+	// compares undefined to 2 and passes NOTHING. One accessor for every leg in this file.
+	return r?.exitCode ?? r?.status;
+}
+function check(cond, why, detail = "") {
 	if (cond) ok++;
-	else fails.push(why);
+	else fails.push(`${why}${detail ? ` — ${String(detail).slice(0, 400)}` : ""}`);
 }
 
 // --- case 1: a clean ledger. Two live registration rows name items the ledger already carries.
@@ -130,6 +166,60 @@ function check(cond, why) {
 	check(r.code === 1, "a gap in a one-row fixture still exits 1");
 	check((r.json?.missingFromLedger ?? []).every((x) => typeof x.rowId === "number"), "the gap names the ROW id, so pm can act on it");
 	check(/DENOMINATOR/i.test(r.out), "the names-not-foreign-keys caveat prints");
+}
+
+// --- case 6: ONE option reader (tools/argv-contract.mjs). SELFDEV pitfall 426's class again, on the tool that
+// refused its own alternative spelling at a bespoke exit 4: a session that types `--fixture <path>` got a verdict
+// of 4 that no other instrument speaks, and a caller that asked for `--json` with no path got a document glued
+// onto a report it was not asked for. The migration imports the shared reader, so both spellings are ONE option
+// and every bad call refuses BY NAME at exit 2.
+{
+	const rows = fixture("forms", [
+		{ id: 60, status: "queued", registration: true, subject: "REGISTER ROADMAP 812 missing from the ledger" },
+	]);
+	const led = ledger("forms", "**1. nothing relevant\n");
+	const eqPath = `${dir}/out-eq.json`;
+	const rEq = runWith(rows, led, [`--fixture=${rows}`, `--ledger=${led}`, "--json", eqPath], eqPath);
+	check(rEq.code === 1, "the `=` form still decides on a gap (exit 1)", `code=${rEq.code} err=${rEq.err.slice(0, 160)}`);
+	const spPath = `${dir}/out-sp.json`;
+	const rSp = runWith(rows, led, ["--fixture", rows, "--ledger", led, "--json", spPath], spPath);
+	check(
+		rSp.code === rEq.code,
+		"the SPACE form is ONE option with the `=` form (same exit)",
+		`space=${rSp.code} eq=${rEq.code} err=${rSp.err.slice(0, 160)}`,
+	);
+	check(
+		JSON.stringify(rSp.json) === JSON.stringify(rEq.json) && rSp.json?.counts?.registration === 1,
+		"and prints the same report",
+		`${JSON.stringify(rSp.json)} vs ${JSON.stringify(rEq.json)}`,
+	);
+	const bare = spawnSync(process.execPath, [TOOL, `--fixture=${rows}`, `--ledger=${led}`, "--json"], { encoding: "utf8" });
+	check(
+		code(bare) === 2,
+		"a bare `--json` REFUSES by name (exit 2) instead of routing stdout",
+		`exit=${code(bare)} stdout=${String(bare.stdout).slice(0, 120)} stderr=${String(bare.stderr).slice(0, 200)}`,
+	);
+	check(
+		String(bare.stderr).includes("REFUSED cause:"),
+		"the refusal names its cause",
+		String(bare.stderr).slice(0, 200),
+	);
+	const unknown = spawnSync(process.execPath, [TOOL, "--zzz=1", `--fixture=${rows}`, `--ledger=${led}`, "--json", eqPath], { encoding: "utf8" });
+	check(
+		code(unknown) === 2,
+		"an option this tool does not take REFUSES (exit 2), not a green verdict",
+		`exit=${code(unknown)}`,
+	);
+	check(
+		String(unknown.stderr).includes("unknown option --zzz"),
+		"and it names the option by name",
+		String(unknown.stderr).slice(0, 200),
+	);
+	check(
+		code(spawnSync(process.execPath, [TOOL, "--quiet=1", `--fixture=${rows}`, `--ledger=${led}`], { encoding: "utf8" })) === 2,
+		"--quiet is a FLAG: giving it a value REFUSES",
+		"a tool that invents a truthiness for a flag has no measured verdict",
+	);
 }
 
 rmSync(dir, { recursive: true, force: true });
