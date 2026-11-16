@@ -363,6 +363,54 @@ pays the clock-in digest (pitfall 392); a cut of table rows pays **ZERO** digest
 
 **Headroom is the NEXT window's debt, not this one's:** 187 of 199 passing maximums, and each cadence commit adds 1-2 table rows, so cut BEFORE the breach turns red rather than after.
 
+## The cap cut is ONE call now — `tools/pointer-table-trim.mjs` (and the half-cut it exists to catch)
+
+**Symptom:** `node demo/next-pointer.test.mjs` exits 1 with `docs/NEXT.md must stay a pointer: 201 lines exceeds
+the 200-line cap`, or `tools/doc-integrity-guard.mjs` prints `HARD POINTER`. Paying the cap BY HAND cost FOUR
+separate cuts in one window (2026-11-16: `82d5bebbf`, `9fb43e341`, `f69dd23d0`, plus one left on disk UNFINISHED),
+and the unfinished one is the trap this instrument exists to catch: `docs/NEXT-ARCHIVE.md` gained a `**Moved VERBATIM**`
+block whose CUT was never applied, so four row lines were VERBATIM in **both** files — `demo/next-pointer.test.mjs`,
+`tools/pointer-sha-coverage.mjs` and `tools/doc-integrity-guard.mjs` all stayed exit 0 over it. A fifth shape of
+pitfall 398 (a doc that passes every gate while lying): the archive CLAIMS a move the live file never made.
+
+**The call:**
+
+```bash
+node tools/pointer-table-trim.mjs --base=8b5a19e1 --to=185                    # 2.3 s, exit 0/1 — a PLAN: names the rows, writes NOTHING
+node tools/pointer-table-trim.mjs --base=8b5a19e1 --to=185 --writes          # the cut: moves the rows, proves the move, exit 0
+```
+
+Without `--writes` the call only plans, so an instrument that re-runs the pointer's `Run these first` block
+(`tools/cost-claim-audit.mjs` spawns those lines) cannot perform a cut by accident — and that audit REFUSES a
+line carrying `--writes` (`FORBIDDEN_SUB`), because a measurement never writes a doc.
+
+**What the tool guarantees, each one checked against the bytes on disk AFTER the write** (runbook Do step 1:
+never trust a write's return value, count after it): `head + the moved rows + tail`, rebuilt from the file as it
+is NOW by re-inserting at the position the removed block started, equals the pre-cut file EXACTLY; the archive's
+older bytes are intact (append-only); each moved row is in the archive exactly once; no moved row survives in
+the live file; the live file keeps its link to the archive. It REFUSES, writing nothing, when a row line is
+VERBATIM in both files (the half-cut above), when more lines are owed than there are table rows (a cut moves ROWS,
+never the pointer's prose), and when `--base=` is given and the ORDER audit reports an ordering defect — because
+this tool moves the FIRST rows, and "first = oldest" is the audit's derivation, never re-spelled here.
+
+**Cost and host, measured 2026-11-16:** 2.34 s for the writing pass over the LIVE pointer (`node tools/pointer-table-trim.mjs
+--base=8b5a19e1 --to=185 --writes` → 16 rows moved, exit 0, `.err` 0 B), 2.29 s for the same call as a plan, 0.25 s
+for a refusal; the pinned test `node tools/pointer-table-trim-test.mjs` PASS, **47 checks / 0 FAIL, 0.661 s, `.err` 0 B**
+(fixture pointers in a throwaway tmpdir repo — no store, no network, no model), registered in the `toolchain` area of
+`demo/test-areas.json`. Red-first: point the test at the pre-change `tools/` (`git archive HEAD tools | tar -x -C
+.spike/prechange-trim`, which carries **0** files matching `pointer-table-trim`) → exit 1, 33 FAIL, 3 × `Cannot find module`
+(`.spike/trim-red.out`). All on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0.
+
+**The two counts the tool keeps straight:** the cap is `split("\n")`, so 201 lines is ONE over and `wc -l` 200 already
+fails (Do step 5); and a TABLE ROW costs the clock-in digest ZERO bytes, because the digest slice is the `## NEXT SESSION`
+block and the table sits above it (§43 NINTH/TENTH, re-proven 2026-11-16) — so a rows-only cut buys the LINE cap and
+nothing else, while a PROSE cut is what pays the byte budget (pitfall 392).
+
+**last_verified:** 2026-11-16 by `node tools/pointer-table-trim-test.mjs` (exit 0, 47 checks / 0 FAIL, 0.661 s) plus the
+live cut above (`docs/NEXT.md` 201 → 185 split lines, 126 → 110 table rows, 16 rows / 8,824 B moved into the archive, proof
+byte-exact over a 63,200 B pre-cut file) and `node demo/next-pointer.test.mjs` exit 0 after it.
+
+
 ## If it fails
 
 Nothing here writes, so there is nothing to roll back except your own edits: `git checkout -- <path>` restores a doc you

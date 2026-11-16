@@ -386,6 +386,7 @@
       "tools/pool-gate-live-probe-test.mjs",
       "tools/pointer-sha-coverage-test.mjs",
       "tools/pointer-row-for-predecessor-test.mjs",
+      "tools/pointer-table-trim-test.mjs",
       "tools/registration-ledger-gap-test.mjs",
         "tools/cost-claim-audit-test.mjs",
       "demo/second-local-provider.test.mjs",
