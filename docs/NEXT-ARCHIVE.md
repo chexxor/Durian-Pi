@@ -15726,3 +15726,7 @@ the derivation fix alone is a PAIRED read at one disk state with only `scripts/c
 ; SOURCED prints BLOCKs and `--start --dry-run` REFUSES a lease (§40 / pitfall 402) — re-measure, do not quote it
 
 ; the census row and `cli.mjs check` are DECLARED exit 1, so a firing rule HOLDS
+
+**Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 123 B of slice text and therefore of the clock-in digest):**
+
+Suite **370**, and the toolchain area the `tools/` paths in this window owe: **47/47 in 25.7 s exit 0 `.err` 0 B** at `1690d835f` (the area's own gains VERBATIM in the archive).
