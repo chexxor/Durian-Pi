@@ -15475,3 +15475,23 @@ Shipped evidence (VERBATIM in
 one fleet band, so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`,
 1.5 s, exit 1 — the rate is wall-clock relative and slides by the MINUTE, pitfall 398 / §35).
 **(2) the fleet CHANNEL is REFUSED, so no broker window exists:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming four provider rules (§40 / pitfall 402) — funding, pins and LAN hardware are the operator’s. The **ledger** half is the delegate’s and free: `node tools/broker-keepalive.mjs --once --no-restart` (1.7 s, exit 0, `selfdev.sqlite` byte-identical) keeps its window honest, and `mint refusals: 0` stays a **measured zero** (pitfall 403). The full shipped wording is VERBATIM in `docs/NEXT-ARCHIVE.md` below.
+
+## Pointer prose moved VERBATIM out of the `## NEXT SESSION` slice — 2026-11-16 (delegate, tree `ab5c4f1b6`)
+
+`node scripts/clockin.mjs --budget 1` printed `digest is 20025 B`, over `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`), because the new SELFDEV pitfall-407 heading entered the digest; the slice's superseded Tallies paragraph was cut by positional index (`python3 .spike/cut-43g.py`) out of `docs/NEXT.md` and replaced IN PLACE by the per-area tallies measured AT `tree=ab5c4f1b6`, proof `pre[:start] + block + pre[end:] == pre`. The shipped wording lives here, VERBATIM, so the tree-`6063d1b56` full-suite tally it carried stays readable:
+
+**Tallies (measured AT `tree=6063d1b56`, the tree the PREVIOUS commit carries — §39's rule):** `timeout 560 node scripts/test.mjs --all --jobs 4` → **366/366 in 170.5 s, exit 0 (captured), `.err` 0 B**, PROVENANCE `tree=6063d1b56` (`.spike/suite-6063d1b.out`); `--area docs --jobs 4` **8/8 in 71.4 s exit 0**, `--area toolchain --jobs 4` **43/43 in 30.0 s exit 0** (`PASS tools/registration-ledger-gap-test.mjs (0.2s)`). **Load flake (§43 FOURTH):** at `tree=adba860d9` this command came **365/366 exit 1 `.err` 1,157 B**, one `FAILED: demo/restart-limit-behaviour.test.mjs` (green standalone 5/5, `rig` 98/98 twice) — §43's FOURTH addendum gives the three reads (~190 s) that disambiguate a RED like that before any code touch. Suite **366** (provenance `git=366 disk=366`); older tallies superseded, re-measured never reused (pitfall 404).
+
+### Pointer slice prose moved VERBATIM out of the `## NEXT SESSION` slice — 2026-11-16 (delegate, tree `ab5c4f1b6`)
+
+Cut by `python3 .spike/cut-43g-b.py` on the live file with the positional proof `pre[:start] + block + post[end:] == post` per cut (never retyped), to pay `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`) after the SELFDEV pitfall-407 heading entered the digest. Both facts stay readable here and in `docs/runbooks/session-start-cost.md` §43:
+
+**The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band.
+its SIXTH addendum the contract re-measures, its SEVENTH the per-area tallies a docs commit owes at ITS tree (102 s); SELFDEV pitfalls 399–407.
+
+### Pointer slice prose moved VERBATIM out of the `## NEXT SESSION` slice — 2026-11-16, second cut (delegate, tree `ab5c4f1b6`)
+
+Cut by `python3 .spike/cut-43g-c.py` with the same positional proof per cut, to pay `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`). Both readings stay here and in `docs/SELFDEV.md` pitfall 398's fix addendum:
+
+; piped into `head -1` it exits 3 = TRUNCATED (pipe-safety, pitfall 398's fix addendum)
+— `main` is this pointer's own commit over the chain named in the table above
