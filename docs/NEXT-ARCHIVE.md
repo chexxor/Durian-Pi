@@ -15495,3 +15495,19 @@ Cut by `python3 .spike/cut-43g-c.py` with the same positional proof per cut, to 
 
 ; piped into `head -1` it exits 3 = TRUNCATED (pipe-safety, pitfall 398's fix addendum)
 — `main` is this pointer's own commit over the chain named in the table above
+
+### Pointer Tallies paragraph superseded — moved VERBATIM out of the `## NEXT SESSION` slice, 2026-11-16 (delegate, tree `68c096cf1`)
+
+Cut by `python3 .spike/cut-43h.py` with the positional proof `pre[:start] + block + pre[end:] == pre`, replaced IN PLACE by the per-area pair measured at the clean tree `68c096cf1`; the wording it carried (the pair at `tree=ab5c4f1b6`, 70.8 s / 30.9 s, `.err` 26 B / 13 B, and the load-flake sentence) stays here, VERBATIM:
+
+**Tallies (measured AT `tree=ab5c4f1b6`, the tree the PREVIOUS commit carries — §39's rule: a DOCS-only commit owes the PER-AREA pair at ITS own tree):** `timeout 150 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 70.8 s, exit 0**; `timeout 90 node scripts/test.mjs --area toolchain --jobs 4` → **43/43 in 30.9 s, exit 0**, `PASS tools/registration-ledger-gap-test.mjs (0.3s)` — both PROVENANCE `tree=ab5c4f1b6` (`.spike/area-docs-ab5c4f1.out`, `.spike/area-toolchain-ab5c4f.out`; their `.err` 26 B/13 B are `/usr/bin/time`'s report line, **0 B from the runner** — CONTENT is the falsifier, pitfall 407). The pair is **102 s** against 165–170 s for the FULL suite, which a docs commit does not owe: newest green FULL suite stays `tree=6063d1b56` **366/366 in 170.5 s exit 0 `.err` 0 B** (§43 FIFTH). Suite **366** (`git=366 disk=366`); superseded tallies VERBATIM in `docs/NEXT-ARCHIVE.md`.
+
+### Pointer `Run these first` comments trimmed — the removed wording VERBATIM, 2026-11-16 (delegate, tree `68c096cf1`)
+
+Cut by `python3 .spike/cut-43h-b.py` with the positional proof per cut (`pre[:start] + block + post[end:] == post`) to pay `DIGEST_BUDGET_BYTES = 20000` (`scripts/clockin.mjs:46`) after the new Tallies paragraph entered the slice. Every reading stays here, and in `docs/runbooks/session-start-cost.md` §34/§35/§41 and SELFDEV pitfall 403:
+
+the cap's PRICE (runbook §35): 516 of 1,144 in-window (window-relative, pitfall 398) work mints would be refused
+
+, the mint-refusal read path, and the budget back-test (12 new legs)
+
+: one store census appended, `--no-restart` never stops/starts a broker, `selfdev.sqlite` stays byte-identical, $0
