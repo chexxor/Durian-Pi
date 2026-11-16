@@ -15511,3 +15511,9 @@ the cap's PRICE (runbook §35): 516 of 1,144 in-window (window-relative, pitfall
 , the mint-refusal read path, and the budget back-test (12 new legs)
 
 : one store census appended, `--no-restart` never stops/starts a broker, `selfdev.sqlite` stays byte-identical, $0
+
+### The pointer's ahead-count made a READ rather than a constant — 2026-11-16 (delegate, tree `c7de222e8`)
+
+Measured in the same commands as this turn's gate passes: `git rev-list --count origin/main..HEAD` -> **7** at `ab5c4f1b6`, **8** at `68c096cf1`, **9** at `68922fbbb`, **10** at `c7de222e8`, while `git ls-remote --refs origin main` stayed `066f1ed64def777db32c2151a6ebcabaedccb444  refs/heads/main` and the delegate ran no push verb (SELFDEV pitfall 406 names the reading; pitfall 398 names the staleness shape: a count that moves with the pointer's OWN commits cannot be quoted as a constant, so the slice now names the command and `N`). The pointer line whose constant was replaced, VERBATIM:
+
+**State the team is in:** the tranche is **landed in the shared tree**; **no push by the delegate**: `git ls-remote --refs origin main` measured `066f1ed64` = GitHub's `refs/heads/main`; `main` ahead **8** (`git rev-list --count origin/main..HEAD` at this tree), and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store** (the row counts and their status split moved VERBATIM to `docs/NEXT-ARCHIVE.md`, re-printed by the census in 1.5 s). **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` — then §43's two reads and the residuals; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
