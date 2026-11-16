@@ -15632,3 +15632,16 @@ The FULL suite here is green at `--jobs 2` (**367/367 in 295.2 s exit 0, `.err` 
 
 > the carrier tally per §42; a `tools/` path owes the FULL suite at its tree, a DOCS commit the pair §39/D319 reserves
 
+
+**Cut VERBATIM — the 5 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 320 B of slice text and therefore of the clock-in digest):**
+
+the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43, 1.1–2.3 s),
+and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43), and the block's costs below are MEASURED, not inherited (§43 TENTH).
+
+**Run these first** (costs re-measured AT the tree `f803e5e26` carries (ONE audit call, `.spike/audit-final2.out`) by `node tools/cost-claim-audit.mjs --budget 300` (`.spike/audit-final2.out`: **0 OFF** of 13 measured, worst x1.02, audit 67.6 s; default `--budget 240` leaves the suite line UNMEASURED): re-measure with that one call):
+
+**Tallies (a `tools/` path owes the FULL suite at the tree it carries (§42)):** the superseded full-suite tally is VERBATIM in `docs/NEXT-ARCHIVE.md`; THIS commit's fresh read is 368/368 in 175.8 s at PROVENANCE `tree=f803e5e26` (commit not yet landed when it ran) **The pair this DOCS commit owes, at the tree it carries:** `timeout 200 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 66.5 s exit 0 `.err` 0 B**, `timeout 150 node scripts/test.mjs --area toolchain --jobs 4` → **45/45 in 28.2 s exit 0 `.err` 0 B** (the area grew to 45 members with this instrument's pin). The FULL-suite-vs-`--jobs` contention finding (pitfall 411) and every superseded wording here are VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **368**. **Digest a read:** **19,902 B** of `DIGEST_BUDGET_BYTES = 20000`; the slice is `## NEXT SESSION` → next `## ` (`scripts/clockin.mjs:44-46`, `:73-78`), so block prose pays bytes and a table row pays a LINE toward `POINTER_CAP_LINES = 200` and ZERO bytes.
+
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (its § map, pitfall range and loop costs VERBATIM in the archive) — read it before hand-querying the store; SELFDEV pitfalls 399–412.
+
+**Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.

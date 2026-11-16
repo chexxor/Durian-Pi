@@ -118,6 +118,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `983b91e72` | docs(NEXT+SELFDEV+runbooks+DECISIONS+ARCHIVE): the mint-rate SANITY leg priced at 1f34c1f4c, the pointer's costs ONE audit call, the digest made a READ — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 983b91e72`) |
 | `f803e5e26` | docs(NEXT+SELFDEV+DECISIONS+runbooks+ARCHIVE): the mint-rate leg's docs land, the digest mechanism CORRECTED in place, a full-suite red CLASSIFIED as contention — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s f803e5e26`) |
 | `805da57a6` | feat(tools): the pointer's line cap is ONE call that MOVES rows VERBATIM and proves the move — a claimed cut that was never applied REFUSES — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 805da57a6`) |
+| `bff677f6d` | docs(NEXT): the audit's numbers name the tree they were measured on, and the cadence row for 805da57a6 — the digest read re-numbered to the measurement — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s bff677f6d`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -133,14 +134,13 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 
 **Current item:** the **queue-backlog tranche (D315, ROADMAP 376-380, goal mwh73rd1-izyq72) is shipped, gated, and the
 sweep ran** — notices are not claimable work and are acknowledged mechanically, the view names work / notice / registration
-/ awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked and the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43, 1.1–2.3 s),
-and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43), and the block's costs below are MEASURED, not inherited (§43 TENTH). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
+/ awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked and the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43), shipped evidence is VERBATIM in the archive, and the block costs below are MEASURED, not inherited. The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
 `queue-pressure`, `pool-dead-gate` (#7660 queued in the POOL, requires docs, no seat advertises it), `ready-ref-stale`
 (`item-3570-recut` ready to land and past its 24 h SLA — age `<N>` h **at measurement**, wall-clock relative), plus
 `registration-as-work` at `fix-now` on the **16** queued registration ids (`check` names them; the list is VERBATIM in
 `docs/NEXT-ARCHIVE.md`).
 
-**Run these first** (costs re-measured AT the tree `f803e5e26` carries (ONE audit call, `.spike/audit-final2.out`) by `node tools/cost-claim-audit.mjs --budget 300` (`.spike/audit-final2.out`: **0 OFF** of 13 measured, worst x1.02, audit 67.6 s; default `--budget 240` leaves the suite line UNMEASURED): re-measure with that one call):
+**Run these first** (costs re-measured AT the tree `bff677f6d` carries by ONE audit call — `node tools/cost-claim-audit.mjs --budget 300` (`.spike/audit-70.out`: **0 OFF** of 13 measured, worst x1.10, audit 66.65 s; default `--budget 240` leaves the suite and the audit own line UNMEASURED): re-measure with that one call):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
@@ -162,15 +162,15 @@ node tools/pointer-table-trim.mjs --base=8b5a19e1 --to=185   # 0.13-2.3 s, exit 
 node tools/cost-claim-audit.mjs                      # ~80 s, exit 0/1 — THIS block's costs re-measured, tolerance 2 (§43 TENTH / pitfall 409)
 ```
 
-**Tallies (a `tools/` path owes the FULL suite at the tree it carries (§42)):** the superseded full-suite tally is VERBATIM in `docs/NEXT-ARCHIVE.md`; THIS commit's fresh read is 368/368 in 175.8 s at PROVENANCE `tree=f803e5e26` (commit not yet landed when it ran) **The pair this DOCS commit owes, at the tree it carries:** `timeout 200 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 66.5 s exit 0 `.err` 0 B**, `timeout 150 node scripts/test.mjs --area toolchain --jobs 4` → **45/45 in 28.2 s exit 0 `.err` 0 B** (the area grew to 45 members with this instrument's pin). The FULL-suite-vs-`--jobs` contention finding (pitfall 411) and every superseded wording here are VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **368**. **Digest a read:** **19,902 B** of `DIGEST_BUDGET_BYTES = 20000`; the slice is `## NEXT SESSION` → next `## ` (`scripts/clockin.mjs:44-46`, `:73-78`), so block prose pays bytes and a table row pays a LINE toward `POINTER_CAP_LINES = 200` and ZERO bytes.
+**Tallies (a `tools/` path owes the FULL suite at the tree it carries (§42)):** THIS commit read **369/369 in 165.9 s exit 0, 0 `FAILED`, `.err` 0 B** at PROVENANCE `tree=bff677f6d` (the commit not yet landed when it ran); the 368/369 read at that same disk state was red only on `demo/restart-limit-behaviour.test.mjs`, exit **0 in 1.37 s standalone** — pitfall 411 contention, the gate was not weakened. **The pair this DOCS commit owes:** `timeout 200 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 66.9 s exit 0 `.err` 0 B**, `timeout 150 node scripts/test.mjs --area toolchain --jobs 4` → **46/46 in 27.0 s exit 0 `.err` 0 B** (46 members with this pin). Superseded wording here is VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **369**. **Digest a read:** **19,582 B** of `DIGEST_BUDGET_BYTES = 20000`; the slice is `pointerSection` (`scripts/clockin.mjs:71-79`), so prose there pays bytes and a table row pays a LINE toward `POINTER_CAP_LINES = 200` and ZERO bytes.
 
 **State the team is in:** the tranche is **landed in the shared tree**; **no push by the delegate**: `git ls-remote --refs origin main` and `git rev-list --count origin/main..HEAD` are **re-read every turn** — quote neither (pitfall 408), and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store**. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the pointer-row call (it owes the row for the commit that carried this pointer), then the `Run these first` block; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 **Blocker:** none for the sweep — it ran. The two residual faces are VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
-**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (its § map, pitfall range and loop costs VERBATIM in the archive) — read it before hand-querying the store; SELFDEV pitfalls 399–412.
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 — read it before hand-querying the store; SELFDEV pitfalls 399–413.
 
-**Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
+**Known red:** `node demo/offline.mjs` exits 1 (VERBATIM in the archive).
 
 **Operator decisions owed** (this window's pointer wording VERBATIM in `docs/NEXT-ARCHIVE.md`): **(e)** the provider fixes
 that gate EVERY window — fund the metered family (HTTP 402 `You need positive balance to do inference`), load or re-pin the

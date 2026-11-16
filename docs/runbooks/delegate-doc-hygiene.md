@@ -410,6 +410,67 @@ nothing else, while a PROSE cut is what pays the byte budget (pitfall 392).
 live cut above (`docs/NEXT.md` 201 → 185 split lines, 126 → 110 table rows, 16 rows / 8,824 B moved into the archive, proof
 byte-exact over a 63,200 B pre-cut file) and `node demo/next-pointer.test.mjs` exit 0 after it.
 
+## The pointer's BYTE budget is ONE call too — `tools/pointer-prose-cut.mjs` (and the zero-cost cut it refuses)
+
+**Symptom:** `node scripts/clockin.mjs --budget 1` exits **1** with
+`clockin: digest is 20,337 B, over its 20000 B budget` — the pointer grew and the digest a cold session pays grew with
+it. Paying that budget was a hand procedure five times in one window (2026-11-16: `aebebd9fc`, `b8dcceb47`,
+`.spike/cut-five.mjs`, `.spike/fix-halfcut.mjs`, `.spike/cut-tally-clause.mjs`), and `.spike/cut-tally-clause.mjs` is
+why the tool exists: it wrote the cut, failed its own rebuild check, exited 1 and archived **nothing**, so the text left
+the live file and never reached the archive — a half-cut `tools/pointer-sha-coverage.mjs`, `tools/doc-integrity-guard.mjs`
+and `scripts/clockin.mjs` all read as exit 0 (SELFDEV pitfall 412).
+
+**The two currencies, and which tool pays which:** the pointer has a **LINE** cap (`POINTER_CAP_LINES = 200`,
+`scripts/clockin.mjs:44`, read by `demo/next-pointer.test.mjs`) and the digest has a **BYTE** budget
+(`DIGEST_BUDGET_BYTES = 20000`, `scripts/clockin.mjs:46`). Table rows pay the line cap and **ZERO** digest bytes — the
+digest's slice is the `## NEXT SESSION` block and the table sits above it. Prose **inside that slice** is what pays the
+bytes. So `tools/pointer-table-trim.mjs` moves rows (cheap currency) and `tools/pointer-prose-cut.mjs` moves prose
+(the byte currency), and neither is interchangeable: a row moved by the prose tool would add a row line to the archive,
+which is the file the coverage audit compares, so the prose tool REFUSES a chunk carrying a row line; a prose clause
+above the slice is refused with `FINDING outside-the-slice` because it pays the byte budget nothing.
+
+**The call:**
+
+```bash
+node tools/pointer-prose-cut.mjs --cuts=.spike/cuts.json --dry-run   # 0.05 s, exit 0/1 — names the clauses, their bytes and the slice delta, writes NOTHING
+node tools/pointer-prose-cut.mjs --cuts=.spike/cuts.json             # the same plan; it still only writes with --writes (so a re-run of the pointer's block cannot cut)
+node tools/pointer-prose-cut.mjs --cuts=.spike/cuts.json --writes    # apply: move the clauses VERBATIM, prove the move, exit 0
+```
+
+`.spike/cuts.json` is a session artifact — a JSON array of `{"from","to","repl"}` (the `to` anchor is taken INCLUSIVE and
+searched after `from`, so a paragraph is named by its ends rather than retyped) or `{"chunk","repl"}`. `repl` defaults to
+`""` and must be SHORTER than the chunk, so the call pays bytes rather than moving text around for no reason.
+
+**What the tool proves, each against the bytes on disk AFTER the write:** the live file equals the plan applied to the
+pre-cut text (every cut is resolved in the pre-cut file's coordinates, so two overlapping cuts are refused rather than
+applied in a chain where the later anchor was chosen after the earlier cut moved the text); the archive still begins with
+its older bytes; every clause sits in the appended region exactly once and nowhere in the live file; and the digest's own
+slice — imported as `pointerSection` from `scripts/clockin.mjs:71-79`, the ONE derivation the digest uses, never
+re-spelled here — shrank by exactly the bytes moved. A proof that fails says RECONCILE, and it can only fail after a
+write: every refusal (absent anchor, ambiguous anchor, overlapping cuts, a chunk outside the slice, a chunk carrying a
+pointer row, a replacement that does not shrink, a replacement that opens a `## ` heading, a chunk already VERBATIM in
+the archive) writes nothing.
+
+**Cost and host, measured 2026-11-16 at the tree `bff677f6d` carries** (Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0, hostname-free probe in the same command): a two-clause planning
+pass over the live pointer **0.05 s** wall, exit 0, `.err` 0 B; a refusal **0.04–0.05 s**, exit 1, `.err` 0 B; the pinned
+`node tools/pointer-prose-cut-test.mjs` **49 checks / 0 FAIL, 0.60 s**, `.err` 0 B (fixture pointer pairs in a throwaway
+tmpdir repo — no store, no network, no model), registered in the `toolchain` area of `demo/test-areas.json` (45 → 46
+members, suite 368 → 369). Red-first: `git archive HEAD tools | tar -x -C .spike/prechange-prose` carries **0** files
+matching `pointer-prose-cut`, and the same test pointed there exits **1** with **33 FAIL** and **3 × `Cannot find module`**
+(in the check details on stdout; `.err` 0 B). `node scripts/clockin.mjs --budget 1` (**12.6 s**) stays the reader's verdict
+for the WHOLE digest — the tool proves the slice, the digest's reader proves the digest.
+
+**The falsifier-building trap this session hit (SELFDEV pitfall 413):** a half-cut is a clause VERBATIM in the ARCHIVE *and*
+still in the LIVE file. Cut the clause first and you get `anchor-absent`, not `half-cut` — the chunk is unique in the
+pre-cut file by construction — so a fixture that only duplicates an archive entry is not a half-cut. Build the pair from a
+pristine pointer plus an archive that already claims it.
+
+**last_verified:** 2026-11-16 by `node tools/pointer-prose-cut-test.mjs` (exit 0, 49 checks / 0 FAIL, 0.60 s, `.err` 0 B),
+the `toolchain` area `timeout 150 node scripts/test.mjs --area toolchain --jobs 4` (46/46, exit 0, 27.0 s, `.err` 0 B), and
+the live digest read `node scripts/clockin.mjs --budget 1` (exit 1 by design at budget 1, digest 19,902 B of
+`DIGEST_BUDGET_BYTES = 20000`, slice lines 133–187 of 187). `last_verified:` in this runbook's front matter is NOT raised:
+the sha-citation and heredoc legs were not re-run.
 
 ## If it fails
 
