@@ -37,12 +37,22 @@
 // Exact command (the cost is printed at the end):
 //   DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs
 //   node tools/queue-pressure.mjs --db ./selfdev.sqlite --window-days 7 --band-per-seat 10 [--json out.json]
+//   BOTH SPELLINGS ARE ONE OPTION: `--json=out.json` and `--json out.json`. Measured defect 2026-11-16 at
+//   `04e099a1f`: the space-only parser silently DROPPED the `=` form — `node tools/queue-pressure.mjs
+//   --json=.spike/flag-form-proof.json` printed 2,219 B of report, `.err` 0 B, exit 1, and left NO file
+//   (`ls: cannot access .spike/flag-form-proof.json`, 1.42 s) — so the JSON a reader planned from did not
+//   exist while the exit code read like a real verdict. An unknown option, a missing value, an empty value
+//   and a non-number now REFUSE.
 //   node tools/queue-pressure.mjs --snapshot .spike/queue-raw.json   # a `cli.mjs queue --json --no-body` capture, ~0.5 s
 //   DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # + the budget back-test: 3.3 s, and
 //      a SECOND bounded read (`cli.mjs queue --json`, bodies, ~32 MB) because the whole-document form carries no
 //      mintRefusals census; `--mint-burst-cap <n>` prices a candidate cap and prints it as an OVERRIDE.
 //
-// Exit code: 0 when open work is inside the band AND the window is not growing past the fleet; 1 otherwise. A
+// Exit code: 0 when open work is inside the band AND the window is not growing past the fleet; 1 otherwise — and
+// **2 for a refusal** (an unknown option, an option given no value, an empty value, a non-number, a boolean given
+// a value). 2 is NOT a verdict: 1 already means "the band rule says pressure", and a reader who cannot tell "measured"
+// from "typed a typo" cannot tell a FAIL from a green — that is the false-clean half of pitfall 405 (an ignored flag
+// is a false CLEAN), pinned by the flag-form legs of `demo/queue-pressure.test.mjs`. A
 // window "growing past the fleet" means it net-grew by at least ONE FULL FLEET BAND (src/queueclass.mjs
 // pressureVerdict) — a net +4 on a two-seat rig is a Tuesday, not a crisis. That is the gate — "the backlog is
 // growing" becomes a measured verdict that fails, not prose — and `check`'s queue-pressure rule reads the SAME
@@ -52,6 +62,19 @@
 // Cost ADDENDUM 2026-11-16 at the commit that lands the mint-rate SANITY leg: the store read stays the whole cost
 // — `node tools/queue-pressure.mjs --db ./selfdev.sqlite` printed 1.949 s self / 1.99 s wall, exit 1 (the band FAIL),
 // stderr 0 bytes, and the SANITY leg is arithmetic over rows the read already returned (NO second store read).
+// Cost ADDENDUM 2026-11-16 at the commit that lands the FLAG-FORM refusal: the parser is one pass over argv, so the
+// cost shape is UNCHANGED — measured in one window on this box, each number beside the command that printed it:
+// `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --json=.spike/flag-form-proof.json` → exit 1, 1.378 s wall,
+// report 8,310 B, `.err` 0 B (the `=` form now WRITES, where the pre-change run left NO file at 1.42 s); honouring the
+// `=` form on the numbers too — `--json=.spike/qp-eq-99.json --band-per-seat=1 --window-days=3` → exit 1, band of 12 =
+// 1/seat × 12 seats, report 8,289 B, `.err` 0 B; a refusal exits 2 naming the option — `--json=` → `REFUSED cause:--json= was
+// given an EMPTY value`, `--jsonx=1` → `unknown option --jsonx`, `--band-per-seat=abc` → `is not a number`, `--price-budget=true`
+// → `is a FLAG, not an option`, each with the known-option list on stderr. `node demo/queue-pressure.test.mjs` exit 0 /
+// **86 checks** (the 11 flag-form legs are new; the 75 pinned before are kept) / 9.26 s / `.err` 0 B, and its RED witness is
+// numbers, not a word: the SAME demo against the PRE-change tool read exit 1 / **9 failures** / 11.92 s / `.err` 0 B
+// (artifacts `.spike/qp-red-1.out` and `.spike/qp-green-1.out`). Host of every number here: Linux, Fedora Linux 45 (Forty Five),
+// kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. `last_verified: 2026-11-16`, verified by that store read (both
+// spellings), by that 86-check demo, and by the toolchain area and the FULL suite run at the tree this change lands on.
 // `last_verified: 2026-11-16`, verified by that call, by `node demo/queue-pressure.test.mjs` (exit 0 / 75 checks /
 // 7.87 s / stderr 0 bytes) and by the FULL suite `node scripts/test.mjs --all --jobs 4` → 367/367 in 171.3 s, exit 0,
 // 0 FAILED lines, stderr 0 bytes at the tree that commit lands (the gate a tools/ path owes: docs/runbooks/session-start-cost.md
@@ -78,26 +101,74 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { ageBuckets, classifyRow, pressureVerdict, queueShape, mintRefusalCensus, bandVerdict, isNoticeItem, isTerminalRow, mintedBySeat, NORMALIZE_SUBJECT, lineageOf } from "../src/queueclass.mjs";
 import { queuePressureSettings } from "../src/config.mjs";
 
+// ONE OPTION, TWO SPELLINGS — `--db=x` and `--db x` are the same option (measured 2026-11-16 at `04e099a1f`:
+// the old `opt()` matched only the SPACE form, so `node tools/queue-pressure.mjs --json=.spike/x.json` printed
+// 2,219 B of report to stdout, `.err` 0 B, exit 1, and wrote NO file — `ls .spike/x.json` -> `No such file`.
+// That is pitfall 405's shape from the other side: an IGNORED flag is a false green, because the run is
+// indistinguishable from the one that honoured it, so a plan built from "the JSON I asked for" is built from
+// nothing. A spelling this tool does not know, an option given no value, an empty value, and a non-number
+// where a number was asked for all REFUSE — and they exit **2**, not 1, because exit 1 already means "the band
+// rule says pressure"; a reader who cannot tell "measured" from "typed a typo" cannot tell a FAIL from a green.
+// The refusal text is the same shape tools/keycheck.mjs ships (`REFUSED cause:`).
 const argv = process.argv.slice(2);
-const opt = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
+const VALUE_OPTS = new Set(["db", "snapshot", "json", "window-days", "band-per-seat", "mint-burst-cap"]);
+const BOOL_OPTS = new Set(["price-budget"]);
+const OPTION_LIST = "--db <path> · --snapshot <queue-capture> · --json <out-file> · --window-days <n> · --band-per-seat <n> · --mint-burst-cap <n> · --price-budget";
+const opt = new Map();
+const flags = new Set();
+const die = (cause) => {
+	console.error(`REFUSED cause:${cause}`);
+	console.error(`known options: ${OPTION_LIST}`);
+	process.exit(2);
 };
-const DB = opt("db", process.env.DURIG_DB || "./selfdev.sqlite");
-const SNAPSHOT = opt("snapshot", null);
-const OUT = opt("json", null);
-const WINDOW_DAYS = Math.max(1, Number(opt("window-days", 7)) || 7);
+for (let i = 0; i < argv.length; i++) {
+	const a = String(argv[i]);
+	const eq = a.indexOf("=");
+	const name = eq < 0 ? a.slice(2) : a.slice(2, eq);
+	if (!a.startsWith("--")) die(`a bare argument ${JSON.stringify(argv[i])} is not one of this tool's options — it would have been dropped, and a dropped option is a verdict measured on something else`);
+	if (BOOL_OPTS.has(name)) {
+		if (eq >= 0) die(`--${name} is a FLAG, not an option: write --${name} alone (there is no --${name}=false; omit it to not price the budget)`);
+		flags.add(name);
+		continue;
+	}
+	if (!VALUE_OPTS.has(name)) die(`unknown option --${name} — it would have been dropped and its default used. This tool takes: ${OPTION_LIST}`);
+	let value;
+	if (eq >= 0) {
+		value = a.slice(eq + 1);
+		if (value === "") die(`--${name}= was given an EMPTY value — name a value or drop the option (an empty path is not a report)`);
+	} else {
+		const next = argv[i + 1];
+		if (next === undefined || String(next).startsWith("--")) die(`--${name} was given no value${next === undefined ? "" : ` — the next token ${next} looks like another option`} — an unset option and a typo'd one used to print the same report`);
+		value = String(next);
+		i += 1;
+	}
+	opt.set(name, value);
+}
+const get = (name) => (opt.has(name) ? opt.get(name) : null);
+const num = (name) => {
+	const raw = get(name);
+	if (raw === null) return null;
+	const n = Number(raw);
+	if (!Number.isFinite(n)) die(`--${name} ${raw} is not a number — NaN in the band/cap arithmetic would print a verdict no reader could tell was broken`);
+	return n;
+};
+const DB = get("db") ?? (process.env.DURIG_DB || "./selfdev.sqlite");
+const SNAPSHOT = get("snapshot");
+const OUT = get("json");
+const WINDOW_DAYS = Math.max(1, num("window-days") ?? 7);
 const settings = queuePressureSettings();
-const BAND = opt("band-per-seat", undefined) === undefined ? settings.bandPerSeat : Number(opt("band-per-seat"));
-const CAP = opt("mint-burst-cap", undefined) === undefined ? settings.mintBurstCap : Number(opt("mint-burst-cap"));
-const CAP_OVERRIDE = opt("mint-burst-cap", undefined) !== undefined;
+const bandGiven = num("band-per-seat");
+const BAND = bandGiven === null ? settings.bandPerSeat : bandGiven;
+const capGiven = num("mint-burst-cap");
+const CAP = capGiven === null ? settings.mintBurstCap : capGiven;
+const CAP_OVERRIDE = capGiven !== null;
 // `--mint-burst-cap` exists for the back-test: pricing a knob means ASKING what a different cap would have
 // refused, and the knob itself is the operator's to raise (src/config.mjs) — so the tool states the rig's own
 // cap and says when the run overrode it, rather than pretending an override is the fleet's setting.
 // `--price-budget` asks the OTHER question about the same knobs: not "did the gate bite" (the ledger above)
 // but "is the cap sized to this fleet". It is a COUNTERFACTUAL over the mints the store recorded, so it never
 // changes the exit code — the verdict stays the band/growth verdict, and a priced budget is not pressure.
-const PRICE = argv.includes("--price-budget");
+const PRICE = flags.has("price-budget");
 
 const t0 = Date.now();
 

@@ -29,9 +29,15 @@
 // git 2.56.0). The `mint-rate SANITY` red witness is a measured artifact, not a word: the PRE-change tool (`git archive HEAD tools src | tar -x
 // -C .spike/prechange-qp80`, pre-change proven by `grep -c 'mint-rate SANITY' .spike/prechange-qp80/tools/queue-pressure.mjs` -> 0)
 // prints NO sanity line (grep count 0) while the shipped tool prints it (count 1), both on the SAME 3-row capture, both exit 0, both `.err` 0 bytes.
+// Cost ADDENDUM 2026-11-16 at the flag-form legs: `node demo/queue-pressure.test.mjs` exit 0 / **86 checks** (75 + the 11
+// new flag-form legs; nothing pinned before was dropped) / 9.26 s / `.err` 0 B at `.spike/qp-green-1.out`. The RED witness is
+// numbers, not a word (docs/failing-first-recipe.md says a red-first claim without numbers cannot be re-verified): the SAME
+// demo against the PRE-change `tools/queue-pressure.mjs` read exit 1 / **9 failures** / 11.92 s / `.err` 0 B at
+// `.spike/qp-red-1.out`, the nine findings all on the `=`-form legs (`--json=<path>` left NO file; `--json=`, `--jsonx=1`,
+// `--band-per-seat` with no value, `--band-per-seat=abc`, `--price-budget=true` ran the DEFAULT instead of refusing).
 // Measured on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0.
 import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -494,6 +500,55 @@ const sanityQ = (() => {
 })();
 check("the same rows with `queued` intakes read BLIND 0 — the leg answers to the data, not to a constant", sanityQ !== null && sanityQ.blind === 0 && sanityQ.bornInWindow === 7 && sanityQ.visibleMints === 7 && sanityQ.shareOfBlind === 0, JSON.stringify({ blind: sanityQ?.blind, born: sanityQ?.bornInWindow, visible: sanityQ?.visibleMints, share: sanityQ?.shareOfBlind }));
 check("...and the sanity leg never changes the gate's verdict (this fixture is inside the raised band either way)", sanityRun.code === 0 && sanityRunQ.code === 0, `${sanityRun.code}/${sanityRunQ.code}`);
+
+console.log("\n=== FLAG FORMS: `--name=value` and `--name value` are ONE option; an option nobody knows REFUSES ===");
+// THE DEFECT THIS PINS, reproduced at HEAD 04e099a1f (Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64,
+// node v24.22.1, git 2.56.0, host read in the same command as the numbers): the RED witness is
+// `rm -f .spike/flag-form-proof.json; DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --json=.spike/flag-form-proof.json`
+// -> stdout 2,219 B of the report as PROSE, `.err` 0 B, exit 1, and `ls .spike/flag-form-proof.json` ->
+// `No such file or directory` (1.42 s). `opt()` matched only `--name`, so the `=` form was SILENTLY IGNORED:
+// the run is INDISTINGUISHABLE from the one that honoured it, and its exit code reads exactly like a band
+// verdict. That is the false-green side of pitfall 405 (an ignored flag is a false CLEAN): a session that
+// asks for the machine-readable report gets prose, and "the JSON says 1,024 open" becomes a sentence about
+// nothing. So BOTH spellings are ONE option, an unknown option REFUSES, and a refusal is exit 2 — NOT 1,
+// which already means "the gate found pressure". A reader who cannot tell "measured" from "typed a typo"
+// cannot tell a FAIL from a green.
+const eqForm = join(dir, "flag-form-report.json");
+const eqRun = await tool([`--json=${eqForm}`, `--db=${db}`, `--band-per-seat=500`, `--window-days=7`], { DURIG_DB: db });
+const spForm = join(dir, "flag-form-space.json");
+const spRun = await tool(["--json", spForm, "--db", db, "--band-per-seat", "500", "--window-days", "7"], { DURIG_DB: db });
+const eqReport = (() => {
+	try {
+		return JSON.parse(readFileSync(eqForm, "utf8"));
+	} catch {
+		return null;
+	}
+})();
+const spReport = (() => {
+	try {
+		return JSON.parse(readFileSync(spForm, "utf8"));
+	} catch {
+		return null;
+	}
+})();
+check("`--json=<path>` writes the report the reader asked for — the FILE exists and parses", eqReport !== null && existsSync(eqForm), `${eqRun.code}: ${eqRun.stderr.slice(0, 200)} file ${existsSync(eqForm) ? "present" : "ABSENT — the `=` form was ignored"}`);
+check("...and the `=` form is the SAME option: same rows/split/plan/verdict as the space form", eqReport !== null && spReport !== null && eqReport.rows === spReport.rows && JSON.stringify(eqReport.split) === JSON.stringify(spReport.split) && JSON.stringify(eqReport.plan) === JSON.stringify(spReport.plan) && JSON.stringify(eqReport.pressure) === JSON.stringify(spReport.pressure), `${eqRun.code}/${spRun.code} ${JSON.stringify({ eq: eqReport?.split, sp: spReport?.split })}`);
+check("...and neither form writes the other form's file (one path per spelling, not one shared default)", eqReport !== null && spReport !== null && JSON.parse(readFileSync(eqForm, "utf8")).plan.acknowledgeNotices.ids.length === JSON.parse(readFileSync(spForm, "utf8")).plan.acknowledgeNotices.ids.length, `${eqRun.code}/${spRun.code}`);
+check("...and the exit code is the VERDICT under either spelling (band 500 -> inside band)", eqRun.code === 0 && spRun.code === 0, `${eqRun.code}/${spRun.code}`);
+const eqBandRun = await tool([`--db=${db}`, `--band-per-seat=2`], { DURIG_DB: db });
+check("...and a raised/ lowered band as `--band-per-seat=N` moves the verdict like the space form does", eqBandRun.code === 1, `${eqBandRun.code}: ${eqBandRun.stdout.slice(0, 200)}`);
+const badJson = await tool([`--json=`, `--db=${db}`], { DURIG_DB: db });
+check("`--json=` with no path REFUSES instead of printing a verdict and writing nothing", badJson.code === 2 && /REFUSED/.test(badJson.stderr) && /--json/.test(badJson.stderr), `${badJson.code}: ${(badJson.stderr || badJson.stdout).slice(0, 300)}`);
+const unknownFlag = await tool([`--jsonx=1`, `--db=${db}`], { DURIG_DB: db });
+check("an option nobody knows REFUSES by name instead of running the default", unknownFlag.code === 2 && /REFUSED/.test(unknownFlag.stderr) && /unknown option --jsonx/.test(unknownFlag.stderr), `${unknownFlag.code}: ${unknownFlag.stderr.slice(0, 400)}`);
+const missingValue = await tool(["--db", db, "--band-per-seat"], { DURIG_DB: db });
+check("`--band-per-seat` with NO value REFUSES instead of silently taking the rig's band", missingValue.code === 2 && /REFUSED/.test(missingValue.stderr) && /--band-per-seat/.test(missingValue.stderr), `${missingValue.code}: ${(missingValue.stderr || missingValue.stdout).slice(0, 300)}`);
+const nanBand = await tool([`--band-per-seat=abc`, `--db=${db}`], { DURIG_DB: db });
+check("a non-number band REFUSES instead of arithmetic on NaN", nanBand.code === 2 && /REFUSED/.test(nanBand.stderr) && /abc/.test(nanBand.stderr), `${nanBand.code}: ${nanBand.stderr.slice(0, 300)}`);
+const boolForm = await tool([`--price-budget=true`, `--db=${db}`], { DURIG_DB: db });
+check("`--price-budget` is a FLAG, not an option — `=true` REFUSES rather than inventing a truthiness", boolForm.code === 2 && /REFUSED/.test(boolForm.stderr) && /price-budget/.test(boolForm.stderr), `${boolForm.code}: ${boolForm.stderr.slice(0, 300)}`);
+const bareBool = await tool(["--price-budget", "--db", db], { DURIG_DB: db });
+check("...and the bare flag still prices the budget (the fix did not eat the old spelling)", bareBool.code === 1 && /mint-budget PRICE/.test(bareBool.stdout), `${bareBool.code}: ${bareBool.stdout.slice(0, 300)}`);
 
 await storage.close(BACKGROUND_CONTEXT);
 
