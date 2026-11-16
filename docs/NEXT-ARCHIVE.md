@@ -15530,3 +15530,9 @@ timeout 560 node scripts/test.mjs --all --jobs 4          # 170.5 s, 366/366, ex
 node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED (broker down, 3 provider BLOCKs, keys out of tree, pitfall 386); SOURCED 24.9 s exit 0 = **4** BLOCKs at `ad35570d3` — the METERS and the model pin, NOT the keys (pitfall 402); `--start --dry-run` SOURCED 8.4 s exit 1 = a lease is REFUSED, so no broker window (§40)
 
 §43 the registration→ledger gap read in 1.1–2.3 s, its SIXTH/SEVENTH addenda the contract re-measures and the docs-commit per-area pair (102 s);
+
+## 2026-11-16T02:5xZ — the pointer's remote-ref reading made a READ, not a constant (SELFDEV pitfall 408): the superseded `**State the team is in:**` fragments moved VERBATIM out of the `## NEXT SESSION` slice of `docs/NEXT.md` (positional replace by `python3 .spike/cut-43l.py`, never retyped; the two fragments, as they stood at `940b36a6`'s predecessor):
+
+`git ls-remote --refs origin main` measured `066f1ed64` = GitHub's `refs/heads/main`; `main` ahead of `origin/main` by **N** commits (`git rev-list --count origin/main..HEAD` at the measurement)
+
+(the counts and their status split are VERBATIM in `docs/NEXT-ARCHIVE.md`)
