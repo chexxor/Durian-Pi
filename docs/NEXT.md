@@ -109,6 +109,8 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `b11df9b26` | docs(close-out): the provider CHANNEL is measured, and a refused lease is reported as REFUSED (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s b11df9b26`) |
 | `60840ae9d` | docs(queue): the fleet ledger refreshes WITHOUT a broker, and the verdict `check` quotes FLIPS — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 60840ae9d`) |
 | `be5165f79` | docs(queue): the owed carrier tally closed at 60840ae9d, and an instrument's ignored flag is a false CLEAN — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s be5165f79`) |
+| `b2f4d4833` | docs(queue): the carrier tally recorded at the tree it CARRIES on, and §42 names both numbers — cadence row named from git's own subject line (`git log -1 --format=%s b2f4d4833`), pitfall 384 |
+| `660dd94d5` | tools/registration-ledger-gap.mjs — the ROADMAP-ledger pass is MEASURED: 0 items missing, 138 rows name nothing (goal mwh73rd1-izyq72, task-6's clause) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 660dd94d5`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -125,10 +127,7 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 **Current item:** the **queue-backlog tranche (D315, ROADMAP 376-380, goal mwh73rd1-izyq72) is shipped, gated, and the
 sweep ran** — notices are not claimable work and are acknowledged mechanically, the view names work / notice / registration
 / awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked,
-and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence (VERBATIM in
-`docs/NEXT-ARCHIVE.md`): task-2's red-first **RED 4 failing checks / exit 1 / 0.13 s** at `93e0044a` = `8bd56720^` vs
-**GREEN exit 0 / 0.15 s** at HEAD; task-3's pin is section C2 of `demo/status-view-bound.test.mjs` (**2.3 s exit 0**,
-`--area readapi` **7/7**). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
+and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
 `queue-pressure`, `pool-dead-gate` (#7660 queued in the POOL, requires docs, no seat advertises it), `ready-ref-stale`
 (`item-3570-recut` ready to land and past its 24 h SLA — age `<N>` h **at measurement**, wall-clock relative), plus
 `registration-as-work` at `fix-now` on the **16** queued registration ids (`check` names them; the list is VERBATIM in
@@ -154,7 +153,7 @@ node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED (bro
 timeout 560 node scripts/test.mjs --all --jobs 4          # 171.4 s, 364/364, exit 0 (captured), PROVENANCE tree=e1c4cfe5c (.spike/suite-e1c4cfe5.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
 ```
 
-**Tallies (measured at `60840ae9d` and at `be5165f79`, §42):** `node scripts/test.mjs --area docs --jobs 4` → **8/8 in 64.2 s, exit 0, `.err` 0 B** (the runner stamps `PROVENANCE tree=60840ae9d` inside it); the derived loop → **16/16 PASS in 56.9 s, exit 0**; no full-suite run names this tree; superseded tallies VERBATIM in `docs/NEXT-ARCHIVE.md`.
+**Tallies (at tree=`660dd94d`, the tree the `tools/` carrier closed on, §43):** `timeout 120 node scripts/test.mjs --area toolchain --jobs 4` → **43/43 in 25.8 s, exit 0**, `PASS tools/registration-ledger-gap-test.mjs (0.2s)`, PROVENANCE `tree=660dd94d5` (`.spike/area-toolchain-660dd94d.out`); the SAME call BEFORE `demo/test-areas.json` mapped that member was **41/42 in 27.7 s exit 1** (`FAILED: demo/test-areas.test.mjs` — membership is DATA and the rule that fires lives in this area); `node tools/instrument-provenance.mjs --quiet` prints `suite members: git=366 disk=366`; no full-suite run names this tree; superseded tallies VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 **State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above (the chain's shas and their path counts are VERBATIM in the commit table above and in `docs/NEXT-ARCHIVE.md`); **nothing pushed** (the push grant is the operator's) and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` — then the residuals; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
@@ -162,11 +161,11 @@ timeout 560 node scripts/test.mjs --all --jobs 4          # 171.4 s, 364/364, ex
 **(1) a TRUE band failure:** 1,024 open work rows against a band of 120 (`10/seat × 12 seats`) and `net +<N> in 7 d` at least
 one fleet band, so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`,
 1.5 s, exit 1 — the rate is wall-clock relative and slides by the MINUTE, pitfall 398 / §35).
-**(2) the fleet CHANNEL is REFUSED, so no broker window exists — but only HALF of that is the operator\'s:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming provider rules (funding the metered family, the local model pin, the LAN box — the block list VERBATIM in §40 and SELFDEV pitfall 402); funding, pins and hardware are the operator\'s. The **ledger** half is the delegate\'s and costs 1.7 s free: `node tools/broker-keepalive.mjs --once --no-restart` (exit 0, `selfdev.sqlite` byte-identical, no broker, $0) keeps its window honest — quote the ledger\'s sentence WITH its span and snapshot count, because it FLIPS within a day on an unchanged store, and it is **CLASS-BLIND**, so the class answer a fleet decision needs is the census\'s (§41 / pitfall 403). `mint refusals: 0 … of 0 on the ledger` stays a **measured zero**: MINTING is the half a grant gates, ledger freshness is not (full wording VERBATIM in the archive below).
+**(2) the fleet CHANNEL is REFUSED, so no broker window exists:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming four provider rules (§40 / pitfall 402) — funding, pins and LAN hardware are the operator’s. The **ledger** half is the delegate’s and free: `node tools/broker-keepalive.mjs --once --no-restart` (1.7 s, exit 0, `selfdev.sqlite` byte-identical) keeps its window honest, and `mint refusals: 0` stays a **measured zero** (pitfall 403). The full shipped wording is VERBATIM in `docs/NEXT-ARCHIVE.md` below.
 
-**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§42 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
 name their flags, §38 the byte budget, §39 per-area tallies, §40 a broker window's refusals, §41 refreshing the ledger
-WITHOUT a broker, §42 the carrier tally closed at a tree that had never been tallied); SELFDEV pitfalls 399–404.
+WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1 s); SELFDEV pitfalls 399–405.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 

@@ -1233,3 +1233,53 @@ The store stayed byte-identical across both runs — `stat -c '%y %s' selfdev.sq
 **66.3 s + 56.6 s** of a docs window instead of a 171 s suite (§39's point, priced). A docs commit therefore owes
 TWO numbers, not one: the tally at the tree it CLOSES on (the row's tree) and the tally at the tree it CARRIES on
 (its own); naming only the first is how a docs session comes to believe its own change was never run.
+
+## 43. HOW MUCH OF THE ROADMAP-LEDGER PASS THE REGISTRATION ROWS ACTUALLY ASK FOR — one bounded census, 1.1 s, and the answer is ZERO items (2026-11-15, delegate at `660dd94d`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — host measured in the SAME command as every number below)
+
+A seat told "write the 171 registration rows into `docs/ROADMAP.md`" spends the window discovering there is nothing to
+write, and the queue row stays open on a question that had no number. The question is a measurement, so it became an
+instrument (AGENTS.md rule 2: promote, do not leave it in `.spike/`).
+
+| the read | command | what it printed | wall clock | exit | `.err` |
+|---|---|---|---|---|---|
+| the gap | `timeout 60 DURIG_DB=./selfdev.sqlite node tools/registration-ledger-gap.mjs > .spike/reggap-meas-660dd94d.out 2> .spike/reggap-meas-660dd94d.err` | `queue rows 7742 · live 1200 = 1024 work + 5 notice + 171 registration · terminal registration 299`; `naming a ROADMAP item 33 · naming NO item 138 · item ALREADY in the ledger 33 · item NOT in the ledger 0`; `DUPLICATES … 0 items`; `THE GAP: none`; `read shape: flagless live rows 1200`; `live registration rows by status: held=135 claimed=3 deferred=17 queued=16`; ledger side = 380 registered items | **1.1 s** (the tool's own cost line) / 1.14 s shell `time` | **0** | 42 B = the shell `time` builtin only, 0 B of tool stderr |
+| its pin | `timeout 60 node tools/registration-ledger-gap-test.mjs > .spike/reggap-green-660dd94d.out 2> .spike/reggap-green-660dd94d.err` | **17 ok, 0 FAIL**, `REGISTRATION LEDGER GAP TEST PASS`, store-free (`--fixture=` + `--ledger=`) | **0.17 s** | **0** | 42 B = `time` only, 0 B tool stderr |
+
+**What the answer is, and what it is NOT.** The 171 live registration rows do not ask for a bulk ledger write: **33** name
+a `ROADMAP <n>` that is **already** in the 380-item registry, **0** name an item the registry is missing, and **138**
+name NO item at all (they are parked intent — subjects read `BACKLOG — hold, do not start`, `CODEmode TIER T0 (BACKLOG …)`).
+Duplicates over the LIVE rows are **0** (a `DUPLICATES` count only appears once terminal rows are folded in). So the
+residual of that pass is a **de-duplication ruling** and a home for 138 itemless rows — pm's verbs, not a seat's edit.
+**DENOMINATOR, printed by the tool and never silent:** it counts NAMES (`ROADMAP <n>` in a subject), not foreign keys —
+a row that registers an item without writing that phrase is invisible here. Same caveat as `tools/roadmap-queue-coverage.mjs`,
+read in the other direction.
+
+**The read-shape fact the tool prints rather than assumes:** `flagless 1200` of 1200 live rows — NEITHER CLI read carries
+the structural `registration` flag (`cli.mjs queue --json --no-body` row keys are `id from to subject optimizedVia status
+transitions resultSummary`, and the whole-document form is flagless too), so any classification from a CLI read runs on
+`src/queueclass.mjs`'s pattern fallback (`REGISTRATION_RE`, line 32 at this commit). A HAND pattern-match measured
+**180** of 1,200 where `classifyRow` says **171** — the 9 are notice subjects carrying registration words, because a
+notice is checked BEFORE a registration (`src/queueclass.mjs:25`). A tool that reports class counts must name WHICH read
+it used, or its count is a pattern count wearing a class name (SELFDEV pitfall 405).
+
+**Red-first provenance for the pin** (`docs/failing-first-recipe.md` METHOD 1 — test first, confirm RED, then implement,
+NO git revert verb): the test was written before the tool and exited **1 / 14 FAIL / 0.16 s** at `tree=b2f4d4833`
+(`.spike/reggap-red.out`, `.err` 0 B); re-measured against the finished tool at `tree=660dd94d` it exits **0 / 17 ok**
+(0.17 s, `.err` 0 B).
+
+**The carrier tally `660dd94d` owed, and the one repair it forced.** `660dd94d` is a `tools/` commit, so §39 says it owes
+per-area tallies at its own tree. Running the area BEFORE the manifest knew about the new member is the failure mode:
+`timeout 120 node scripts/test.mjs --area toolchain --jobs 4` → **41/42 in 27.7 s, exit 1**, `FAILED: demo/test-areas.test.mjs`,
+naming it — `manifest does not cover the suite: "tools/registration-ledger-gap-test.mjs" is on disk but not mapped to any
+area (add it to demo/test-areas.json)`. Membership is DATA in `demo/test-areas.json` and the rule that fires lives in the
+`toolchain` area itself, so mapping the member there is the fix: after it, **43/43 in 25.8 s, exit 0**, `PASS tools/registration-ledger-gap-test.mjs (0.2s)`,
+PROVENANCE `tree=660dd94d5` (`.spike/area-toolchain-660dd94d.out`). `node tools/instrument-provenance.mjs --quiet` then prints
+**`suite members: git=366 disk=366`** and `PROVENANCE CLEAN` in 0.4 s, exit 0, `.err` 0 B — the count moved from the
+**365** §42 quoted at `60840ae9d`, which is pitfall 404's point re-fired: a suite tally is re-measured at the tree it is
+quoted for, never reused.
+
+**The two backlog verdicts still disagree on this store, and both are true** (§41/§42, restated here because the ledger
+pass is what an operator reads next): `node tools/backlog-burn.mjs` quotes the fleet ledger `876 rows closed, -284 open
+rows in the window -> backlog shrinking` over a 5,221-min span, while the class-aware census says `net +681 in 7 d …
+GROWING` (work-only +382). `cli.mjs check` QUOTES the first inside the FAILING `queue-pressure` finding. Say which
+question, span and class a rate answered before choosing either word.

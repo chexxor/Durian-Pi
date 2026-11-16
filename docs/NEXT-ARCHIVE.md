@@ -15444,3 +15444,16 @@ the sentence `check` QUOTES flipped on this store and this day from `390 rows cl
 2,964 min) to `876 rows closed, -284 open rows -> backlog shrinking`. It is **CLASS-BLIND** (§41 / pitfall 403): the class answer —
 the census — still reads `net +691 … GROWING` overall and **work-only +382 over 7 d**. `mint refusals: 0 in 7 d (burst 0, lineage 0,
 duplicate 0) of 0 on the ledger` stays a **measured zero**: MINTING is the half a grant gates, ledger freshness is not.
+
+## 2026-11-16T00:41Z — the pointer pays its slice byte budget for the §43 facts: the shipped-evidence clause and the superseded Tallies paragraph moved VERBATIM out of the `## NEXT SESSION` slice of `docs/NEXT.md` (extracted by `node .spike/cut-43.mjs`, positional index on the live file, never retyped). Proof: head + moved + tail is byte-identical to the pre-cut file.
+
+Shipped evidence (VERBATIM in
+`docs/NEXT-ARCHIVE.md`): task-2's red-first **RED 4 failing checks / exit 1 / 0.13 s** at `93e0044a` = `8bd56720^` vs
+**GREEN exit 0 / 0.15 s** at HEAD; task-3's pin is section C2 of `demo/status-view-bound.test.mjs` (**2.3 s exit 0**,
+`--area readapi` **7/7**).
+
+**Tallies (measured at `60840ae9d` and at `be5165f79`, §42):** `node scripts/test.mjs --area docs --jobs 4` → **8/8 in 64.2 s, exit 0, `.err` 0 B** (the runner stamps `PROVENANCE tree=60840ae9d` inside it); the derived loop → **16/16 PASS in 56.9 s, exit 0**; no full-suite run names this tree; superseded tallies VERBATIM in `docs/NEXT-ARCHIVE.md`.
+
+## 2026-11-16T00:4xZ — the pointer pays its slice byte budget a second time for the §43 facts (digest reached 20,201 B over `DIGEST_BUDGET_BYTES = 20000`): the `**(2) the fleet CHANNEL is REFUSED…` residual paragraph moved VERBATIM out of the `## NEXT SESSION` slice of `docs/NEXT.md` (extracted by `python3 .spike/cut-43b.py`, positional index on the live file, never retyped; proof: `pre[:start] + block + pre[end:] == pre`). The pointer keeps the tightened wording plus the two commands; the shipped wording lives here.
+
+**(2) the fleet CHANNEL is REFUSED, so no broker window exists — but only HALF of that is the operator\'s:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming provider rules (funding the metered family, the local model pin, the LAN box — the block list VERBATIM in §40 and SELFDEV pitfall 402); funding, pins and hardware are the operator\'s. The **ledger** half is the delegate\'s and costs 1.7 s free: `node tools/broker-keepalive.mjs --once --no-restart` (exit 0, `selfdev.sqlite` byte-identical, no broker, $0) keeps its window honest — quote the ledger\'s sentence WITH its span and snapshot count, because it FLIPS within a day on an unchanged store, and it is **CLASS-BLIND**, so the class answer a fleet decision needs is the census\'s (§41 / pitfall 403). `mint refusals: 0 … of 0 on the ledger` stays a **measured zero**: MINTING is the half a grant gates, ledger freshness is not (full wording VERBATIM in the archive below).
