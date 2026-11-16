@@ -40,14 +40,21 @@
 //       node tools/tranche-evidence.mjs --table=<rows.json>   # a fixture table (the demo's seam)
 //      `--json=<path>` writes the machine-readable report to that path (the tool writes nowhere else).
 //
-// COST: measured by TWO runs of THIS tool at the clean tree `e474eb006` carries (2026-11-16, host read in the
-// same call as each measurement, never quoted from memory):
-//   `node tools/tranche-evidence.mjs --json=.spike/tranche-run-3.json` → exit 0, 10 rows, 0 mismatched, own
-//   cost 111.15 s (children 111.1 s), tool stderr 0 B — per row census 1.43 s (expect 1, the band rule firing)
-//   · gate-sanity 6.71 s · notices 0.28 s · view 2.14 s · readapi 5.12 s · check-area 8.98 s · rig-area 20.64 s
-//   · burn-verdict 0.03 s · docs-area 60.54 s (8/8) · cli-check 5.28 s (exit 1, 772 B of its own stderr = the
+// COST: measured by TWO runs of THIS tool at the clean tree `530d79cb7` carries (2026-11-16, host read in the
+// same call as each measurement, never quoted from memory; the PRIOR pair of runs at the tree `e474eb006` carries
+// printed 111.15 s / 49.95 s — superseded, not explained, a re-read rather than a re-derivation):
+//   `node tools/tranche-evidence.mjs --json=.spike/tranche-run-D.json` → exit 0, 10 rows, 0 mismatched, own
+//   cost 110.48 s (children 110.5 s), tool stderr 0 B — per row census 1.36 s (expect 1, the band rule firing)
+//   · gate-sanity 6.53 s · notices 0.27 s · view 2.11 s · readapi 5.10 s · check-area 9.00 s · rig-area 20.59 s
+//   · burn-verdict 0.03 s · docs-area 60.15 s (8/8) · cli-check 5.34 s (exit 1, 772 B of its own stderr = the
 //   provider-slot refusals, which is why its exit is DECLARED 1 and still HOLDS).
-//   `node tools/tranche-evidence.mjs --skip=docs-area` → exit 0, 9 rows, 0 mismatched, own cost 49.95 s.
+//   `node tools/tranche-evidence.mjs --skip=docs-area --json=.spike/tranche-run-D2.json` → exit 0, 9 rows,
+//   0 mismatched, own cost 49.72 s (children 49.7 s).
+// So the WHOLE set is ~110 s and the fast loop is ~50 s: the 60 s docs row is most of the slow form's price, and
+// the tool adds only ~0.1 s of spawn overhead on top of its children. Re-run rather than quote — these are one
+// run's walls. THE FAST FORM CAN PRINT exit 1 WITHOUT A REGRESSION: contention can kill one member of an area
+// (SELFDEV pitfall 421) — a mismatched row prints its OWN last words and the named pin then passes standalone
+// twice at the same tree; re-run THAT row standalone before believing the red, and never weaken the row.
 // So the WHOLE set is ~111 s and the fast loop is ~50 s: the 60 s docs row is most of the slow form's price, and
 // the tool adds only ~0.1 s of spawn overhead on top of its children. Re-run rather than quote — these are one
 // run's walls. Host measured on: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
@@ -56,10 +63,11 @@
 // Exit: 0 = every row held; 1 = at least one row did not (or a row was killed by the bound);
 //       2 = usage (a flag in the space form, an unknown flag, a `--only`/`--skip` name matching no row).
 //
-// last_verified: 2026-11-16 at tree `e474eb006` — the pinned demo `node tools/tranche-evidence-test.mjs` exits
-// 0 in 1.63 s (34 checks, 0 FAIL, stderr 0 B; its recorded RED is exit 1 in 0.289 s, 31 FAIL lines naming the
-// missing tool — see that file's header, METHOD 1 of docs/failing-first-recipe.md), and the tool's own contract
-// set is proven by the run above (10 rows, 0 mismatched, store mtime/size unchanged across the call).
+// last_verified: 2026-11-16 at tree `530d79cb7` — the pinned demo `node tools/tranche-evidence-test.mjs` exits
+// 0 (34 checks, 0 FAIL, stderr 0 B; its recorded RED is exit 1, 31 FAIL lines naming the missing tool — see
+// that file's header, METHOD 1 of docs/failing-first-recipe.md), and the tool's own contract set is proven by
+// the run above (10 rows, 0 mismatched; `stat -c '%y %s' selfdev.sqlite` read before and after the call — the
+// store did not move).
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
