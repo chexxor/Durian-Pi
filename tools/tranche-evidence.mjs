@@ -60,6 +60,17 @@
 // run's walls. Host measured on: **Linux**, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
 // node v24.22.1, git 2.56.0.
 //
+// ADDENDUM 2026-11-16 (delegate, the queue-backlog window — the band above is a FLOOR, not a ceiling; the
+// number is re-read, never widened by eye): the SAME tool at the trees this window carries printed **142.86 s**
+// (`node tools/tranche-evidence.mjs --json=.spike/tranche-118.json` at the tree `8a57d3bb1` carries → exit 0,
+// 10 rows / 0 mismatched, `.err` 0 B: census 4.03 s · gate-sanity 11.12 s · notices 0.36 s · view 2.76 s ·
+// readapi 6.16 s · check-area 17.98 s · rig-area 26.04 s · burn-verdict 0.04 s · docs-area 66.42 s (8/8) ·
+// cli-check 7.95 s) and **128.55 s** (`--json=.spike/tranche-119.json` at the tree `50d4ae9d0` carries → exit 0,
+// same 10 rows, every row HOLDS, `.err` 0 B, store `stat -c '%y %s'` unchanged before and after). So the honest
+// band for the WHOLE set on this box is **110–143 s**, NOT ~110 s: the price slides with the area costs it
+// re-runs (`check-area` 9.00 → 17.98 s and `docs-area` 60.15 → 66.42 s as the docs and runbook counts grew —
+// §39/§43 name that mechanism), so a `timeout` on this call must round up ABOVE the ceiling: `timeout 250`.
+//
 // Exit: 0 = every row held; 1 = at least one row did not (or a row was killed by the bound);
 //       2 = usage (a flag in the space form, an unknown flag, a `--only`/`--skip` name matching no row).
 //
