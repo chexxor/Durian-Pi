@@ -389,6 +389,7 @@
       "tools/pointer-row-for-predecessor-test.mjs",
       "tools/pointer-table-trim-test.mjs",
       "tools/pointer-prose-cut-test.mjs",
+      "demo/latency-budget-no-data.test.mjs",
       "tools/registration-ledger-gap-test.mjs",
       "tools/cost-claim-audit-test.mjs",
       "tools/tranche-evidence-test.mjs",

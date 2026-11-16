@@ -12,6 +12,32 @@
 // seat, D11). It quotes no message body.
 //
 //   node tools/latency-budget.mjs --db ./selfdev.sqlite [--rig rig.selfdev.json] [--top 12] [--json]
+//
+// COST (measured 2026-11-16 on Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+// git 2.56.0 — host read in the SAME command as the numbers): **9.6 s** over the LIVE store (94,584 generations,
+// 76,006 tool tasks, 2,810 compactions, 686 KB of report) and **0.5 s** over an empty store. No store WRITE, no
+// network, no model, $0. Re-measure rather than quote.
+//
+// A STORE WITH NOTHING TO COUNT PRINTS n/a, NOT A CRASH AND NOT A NUMBER (the rule this change added).
+// Two shapes reach that state, and both are named rather than printed as a zero:
+//   (a) no `pi.generation` entries — an empty or fresh store. Before the guard this died: `Math.min(...[])` is
+//     Infinity, and `new Date(Infinity).toISOString()` threw `RangeError: Invalid time value` (measured exit 1,
+//     0 B of stdout, 772 B of stack, `timeout 60 node tools/latency-budget.mjs --db .spike/empty-gen.sqlite`);
+//   (b) no DONE rows among the rows `cli.mjs status` CARRIES — the view is BOUNDED (200 rows here, all non-terminal),
+//     so the whole ITEM half of the report is blind EVEN ON THE LIVE STORE, and before the guard every share there
+//     printed `NaN%` and every max printed `-Infinityh`, which reads as "the rig spends no time on items".
+// Now: every rate prints `n/a (denominator is 0)` or `n/a (n=0)`, two `SANITY:` lines name WHICH half is blind and
+// where the data actually is, `--json` carries `span: null` and `measurable: { generations, doneRows }`, and the
+// exit code stays 0 — "this store has no data" is a measurement OF the store, not a failure of the instrument.
+// Pinned by demo/latency-budget-no-data.test.mjs (the `toolchain` area): RED against the pre-change tool reads
+// 4 ok / **14 FAIL** (`.spike/lb-red-1.out`, the live store's `NaN%` among them), GREEN at this tree reads
+// **18 checks / 0 FAIL, 15.5 s** (`.spike/lb-green-2.out` — ~10 s of it is the live-store leg).
+//
+// last_verified: 2026-11-16 — the demo above is the gate; the LIVE run re-read here is exit 0 in 9.6 s with
+// `store span: 2026-10-11T20:22:56.500Z -> 2026-11-15T08:28:46.902Z = 828.1h` and model-call p50 31ms p95 8.1s
+// p99 1.6m max 2.0h (`.spike/lb-live-1.out`). The machine half of the live report still agrees with
+// `docs/runbooks/slow-loop.md`; the ITEM half is now KNOWN BLIND on a bounded view and says so — a session that
+// needs item latency reads the store's `queueItems[].transitions` (or `cli.mjs queue --json`, ~22 MB) itself.
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -47,6 +73,13 @@ const H = (v) => (v / 3600000).toFixed(1) + "h";
 const MIN = (v) => (v / 60000).toFixed(1) + "m";
 // one formatter that scales, so a p99 of 128 s never prints as "0.0h"
 const D = (v) => (v < 1000 ? v + "ms" : v < 60000 ? (v / 1000).toFixed(1) + "s" : v < 3600000 ? (v / 60000).toFixed(1) + "m" : (v / 3600000).toFixed(1) + "h");
+// A RATE WITH NO DENOMINATOR IS NOT A MEASUREMENT. `NaN%` and `-Infinityh` are numbers on the page, and a
+// reader of a wall-clock budget reads them as "the rig spent no time" — the same false-measurement shape as
+// pitfall 429's silence, one level down. These helpers name the empty case instead, so a store with no
+// generations, no DONE rows or no usage rows says what it CANNOT claim.
+const R = (num, den, dp = 1) => den > 0 ? `${(100 * num / den).toFixed(dp)}%` : "n/a (denominator is 0)";
+const MAXH = (a) => a.length ? H(Math.max(...a)) : "n/a (n=0)";
+const LAT = (a) => a.length ? `p50 ${D(pct(a, 0.5))} p95 ${D(pct(a, 0.95))} p99 ${D(pct(a, 0.99))} max ${D(Math.max(...a))}` : "n/a (n=0)";
 
 const items = [];
 for (const it of status.queueItems || []) {
@@ -188,7 +221,7 @@ for (const g of gens) {
 	e.d += g.d;
 }
 const long = gens.filter((g) => g.d >= 600000).sort((a, b) => b.d - a.d);
-const spanLo = Math.min(...gens.map((g) => g.s));
+const spanLo = gens.length ? Math.min(...gens.map((g) => g.s)) : null;
 const spanHi = Math.max(...gens.map((g) => g.e));
 const seatNames = new Map((status.seats || []).map((s) => [s.conversationId, s.name]));
 
@@ -208,18 +241,20 @@ P(`WALL-CLOCK BUDGET  ${new Date().toISOString()}  store=${DB}  cost=${elapsed()
 P(`  thresholds/patterns used: transition events queued|released|deferred->claimed = WAIT, claimed->done = WORK, claimed->held = HELD;`);
 P(`    task kinds ${'"pi.generation" | "pi.tool" | "pi.compaction"'} (stored WITH quotes); durationMs = endedAt-startedAt;`);
 P(`    long tail = a generation of >= ${600000} ms; prompt tokens = usage.input + usage.cacheRead; cap source = durig.config{.default}.json`);
-P(`  store span: ${new Date(spanLo).toISOString()} -> ${new Date(spanHi).toISOString()} = ${H(spanHi - spanLo)} of elapsed rig time`);
+P(`  store span: ${gens.length ? `${new Date(spanLo).toISOString()} -> ${new Date(spanHi).toISOString()} = ${H(spanHi - spanLo)} of elapsed rig time` : `no "pi.generation" entries in ${DB} — nothing to span; the MACHINE sections below print n/a rather than crashing`}`);
+P(`  SANITY: gens=${gens.length} toolTasks=${toolTasks.length} compactions=${compactions.length} — a store with 0 tasks answers NOTHING about the machine half, so read the n/a lines as "no data", never as "the rig is fast"`);
 P(`  DURIG_MAX_CONCURRENT_SEATS: durig.config.json=${JSON.stringify(capFor("durig.config.json"))} durig.config.default.json=${JSON.stringify(capFor("durig.config.default.json"))} (precedence and merge: src/config.mjs loadConfig)`);
 
 P(`\n1. ITEM LATENCY (from \`cli.mjs status\` transitions; ${items.length} rows, ${done.length} done, ${nonterm.length} non-terminal)`);
+if (!done.length) P(`  SANITY: 0 DONE rows among the ${items.length} rows \`cli.mjs status\` CARRIES (the view is bounded — it carried 200 non-terminal rows here and no terminal one), so the item-latency half of this report is blind on a bounded view; the store's own \`queueItems[].transitions\` hold the done rows, reachable at ~22 MB via \`cli.mjs queue --json\`. Say so rather than print a zero and a share with no denominator as if the rig were idle`);
 const totWait = sum(done, (x) => x.wait),
 	totWork = sum(done, (x) => x.work),
 	totHeld = sum(done, (x) => x.held),
 	totAll = sum(done, (x) => x.total);
-P(`  queue->done across all done items: ${H(totAll)} (median ${MIN(pct(done.map((x) => x.total), 0.5))}, p95 ${H(pct(done.map((x) => x.total), 0.95))}, max ${H(Math.max(...done.map((x) => x.total)))})`);
-for (const [k, v] of [["WAIT  claimable, unclaimed", totWait], ["WORK  claimed->done", totWork], ["HELD  claimed->held", totHeld]]) P(`  ${k.padEnd(26)} ${H(v).padStart(8)}  = ${(100 * v / totAll).toFixed(1)}% of item latency`);
+P(`  queue->done across all done items: ${H(totAll)} (median ${MIN(pct(done.map((x) => x.total), 0.5))}, p95 ${H(pct(done.map((x) => x.total), 0.95))}, max ${MAXH(done.map((x) => x.total))})`);
+for (const [k, v] of [["WAIT  claimable, unclaimed", totWait], ["WORK  claimed->done", totWork], ["HELD  claimed->held", totHeld]]) P(`  ${k.padEnd(26)} ${H(v).padStart(8)}  = ${R(v, totAll)} of item latency`);
 const re = done.filter((x) => x.claims > 1);
-P(`  re-claimed done rows: ${re.length} (${(100 * re.length / done.length).toFixed(1)}%) hold ${(100 * sum(re, (x) => x.total) / totAll).toFixed(1)}% of item latency; median ${H(pct(re.map((x) => x.total), 0.5))} vs single-claim median ${MIN(pct(done.filter((x) => x.claims <= 1).map((x) => x.total), 0.5))}`);
+P(`  re-claimed done rows: ${re.length} (${R(re.length, done.length)} hold ${R(sum(re, (x) => x.total), totAll)} of item latency; median ${H(pct(re.map((x) => x.total), 0.5))} vs single-claim median ${MIN(pct(done.filter((x) => x.claims <= 1).map((x) => x.total), 0.5))}`);
 for (const st of ["held", "deferred", "claimed", "queued"]) {
 	const a = nonterm.filter((r) => r.status === st).map((r) => Date.now() - r.last);
 	if (a.length) P(`  parked ${st}: n=${a.length} since-last-transition median=${H(pct(a, 0.5))} max=${H(Math.max(...a))}`);
@@ -247,25 +282,25 @@ for (const [n, v] of [...timeAt].sort((a, b) => a[0] - b[0])) if (v > 60000) P(`
 P(`  generation duration buckets (n, share of generation busy time):`);
 for (const [lo, hi] of buckets) {
 	const a = gens.filter((g) => g.d >= lo && g.d < hi);
-	P(`    ${String(lo / 1000).padStart(4)}s-${hi === Infinity ? "inf" : String(hi / 1000) + "s"}: n=${String(a.length).padStart(6)} (${(100 * a.length / gens.length).toFixed(2)}% of runs)  ${H(sum(a, (x) => x.d)).padStart(8)} (${(100 * sum(a, (x) => x.d) / gsum).toFixed(1)}% of busy time)`);
+	P(`    ${String(lo / 1000).padStart(4)}s-${hi === Infinity ? "inf" : String(hi / 1000) + "s"}: n=${String(a.length).padStart(6)} (${R(a.length, gens.length, 2)} of runs)  ${H(sum(a, (x) => x.d)).padStart(8)} (${R(sum(a, (x) => x.d), gsum)} of busy time)`);
 }
-P(`  LONG TAIL (>=10 min): ${long.length} generations hold ${H(sum(long, (x) => x.d))} = ${(100 * sum(long, (x) => x.d) / gsum).toFixed(1)}% of generation busy time`);
+P(`  LONG TAIL (>=10 min): ${long.length} generations hold ${H(sum(long, (x) => x.d))} = ${R(sum(long, (x) => x.d), gsum)} of generation busy time`);
 P(`    "events the conversation produced inside its own window" is the discriminator between WORK and IN FLIGHT:`);
 for (const g of long.slice(0, TOP)) P(`      gen #${g.id} seat=${(seatNames.get(g.cid) || g.cid).padEnd(10)} ${MIN(g.d).padStart(9)} events=${String(inWindow(g.cid, g.s, g.e)).padStart(3)} outcome=${g.outcome} ${g.err}`);
 const modelD = toolTasks.filter((t) => t.callKind === "model").map((x) => x.d);
 const realToolD = toolTasks.filter((t) => t.callKind !== "model").map((x) => x.d);
-P(`  model-call latency (n=${modelD.length}): p50 ${D(pct(modelD, 0.5))} p95 ${D(pct(modelD, 0.95))} p99 ${D(pct(modelD, 0.99))} max ${D(Math.max(...modelD))}`);
-P(`  real tool-call latency (n=${realToolD.length}): p50 ${D(pct(realToolD, 0.5))} p95 ${D(pct(realToolD, 0.95))} p99 ${D(pct(realToolD, 0.99))} max ${D(Math.max(...realToolD))}`);
-P(`  compaction latency: n=${compactions.length} p50 ${D(pct(compactions.map((x) => x.d), 0.5))} p95 ${D(pct(compactions.map((x) => x.d), 0.95))} max ${D(Math.max(...compactions.map((x) => x.d)))}`);
+P(`  model-call latency (n=${modelD.length}): ${LAT(modelD)}`);
+P(`  real tool-call latency (n=${realToolD.length}): ${LAT(realToolD)}`);
+P(`  compaction latency: n=${compactions.length} ${LAT(compactions.map((x) => x.d))}`);
 
 P(`\n3. PROVIDER WASTE (generations that ended without a completed outcome)`);
 for (const [k, v] of [...errs].sort((a, b) => b[1].n - a[1].n).slice(0, TOP)) P(`  n=${String(v.n).padStart(6)}  ${H(v.d).padStart(8)} busy  ${k}`);
 const errN = sum([...errs.values()], (v) => v.n),
 	errD = sum([...errs.values()], (v) => v.d);
-P(`  total: ${errN} of ${gens.length} generations (${(100 * errN / gens.length).toFixed(1)}%) ended in an error, holding ${H(errD)} = ${(100 * errD / gsum).toFixed(1)}% of generation busy time`);
+P(`  total: ${errN} of ${gens.length} generations (${R(errN, gens.length)}) ended in an error, holding ${H(errD)} = ${R(errD, gsum)} of generation busy time`);
 
 P(`\n4. CONTEXT AND PREFILL (assistant usage rows in entries)`);
-P(`  assistant turns ${turns}; fresh input tokens ${tokFresh}; cacheRead tokens ${tokCache}; cache hit ${(100 * tokCache / (tokCache + tokFresh)).toFixed(1)}%; output tokens ${tokOut}`);
+P(`  assistant turns ${turns}; fresh input tokens ${tokFresh}; cacheRead tokens ${tokCache}; cache hit ${R(tokCache, tokCache + tokFresh)}; output tokens ${tokOut}`);
 P(`  prompts over 150,000 tokens: ${over150k}; largest prompt ${maxPrompt} tokens (declared window per seat: see \`cli.mjs status\` .context.window)`);
 
 P(`\n5. TOOL TIME (entry toolResult durationMs, printed WITH the zeros that made 217 findable)`);
@@ -282,7 +317,8 @@ P(`run in ${elapsed()} (read-only)`);
 if (JSONOUT)
 	console.log(
 		JSON.stringify({
-			span: [spanLo, spanHi],
+			span: spanLo === null ? null : [spanLo, spanHi],
+			measurable: { generations: gens.length > 0, doneRows: done.length > 0 },
 			items: { rows: items.length, done: done.length, nonterm: nonterm.length, waitMs: totWait, workMs: totWork, heldMs: totHeld, totalMs: totAll },
 			generations: gens.length,
 			generationBusyMs: gsum,
