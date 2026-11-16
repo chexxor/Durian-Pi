@@ -107,6 +107,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `3e282602d` | docs(runbook): §39 — a docs commit owes per-area tallies at ITS tree, and the 108 s that proves it (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 3e282602d`) |
 | `ad35570d3` | fix(tools): broker-serve stops crashing when a reader closes stdout — the pipe shape gets a number — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s ad35570d3`) |
 | `b11df9b26` | docs(close-out): the provider CHANNEL is measured, and a refused lease is reported as REFUSED (goal mwh73rd1-izyq72) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s b11df9b26`) |
+| `60840ae9d` | docs(queue): the fleet ledger refreshes WITHOUT a broker, and the verdict `check` quotes FLIPS — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 60840ae9d`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -152,26 +153,19 @@ node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED (bro
 timeout 560 node scripts/test.mjs --all --jobs 4          # 171.4 s, 364/364, exit 0 (captured), PROVENANCE tree=e1c4cfe5c (.spike/suite-e1c4cfe5.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
 ```
 
-**Tallies:** the four carrier areas are tallied per area at the shipping tree (`docs/runbooks/session-start-cost.md` §39); no full-suite run names this tree; superseded tallies VERBATIM in `docs/NEXT-ARCHIVE.md`.
+**Tallies (measured at `60840ae9d`, §42):** `node scripts/test.mjs --area docs --jobs 4` → **8/8 in 64.2 s, exit 0, `.err` 0 B** (the runner stamps `PROVENANCE tree=60840ae9d` inside it); the derived loop → **16/16 PASS in 56.9 s, exit 0**; no full-suite run names this tree; superseded tallies VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 **State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above (the chain's shas and their path counts are VERBATIM in the commit table above and in `docs/NEXT-ARCHIVE.md`); **nothing pushed** (the push grant is the operator's) and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` — then the residuals; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 **Blocker:** none for the sweep — it ran. Two residuals, both MEASURED at this commit, and neither is an outage of the rig's.
-**(1) a TRUE band failure:** 1,024 open work rows against a band of 120 (`10/seat × 12 seats`) and `net +693 in 7 d` at least
+**(1) a TRUE band failure:** 1,024 open work rows against a band of 120 (`10/seat × 12 seats`) and `net +<N> in 7 d` at least
 one fleet band, so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`,
 1.5 s, exit 1 — the rate is wall-clock relative and slides by the MINUTE, pitfall 398 / §35).
-**(2) the fleet CHANNEL is REFUSED, so no broker window exists — but only HALF of that is operator-gated:** `node tools/broker-serve.mjs --start
---dry-run` SOURCED exits **1** in **8.8 s** naming four rules (the block list is quoted VERBATIM in §40 and in SELFDEV
-pitfall 402) — funding the metered family, provider pins and LAN hardware are the operator's. The **ledger** half is free: `node tools/broker-keepalive.mjs --once --no-restart` (1.7 s, exit 0, store
-byte-identical) appended a store census, so the window is now **127/127 snapshots over 5,221 min** with its newest **2 min** old, and
-the sentence `check` QUOTES flipped on this store and this day from `390 rows closed, +166 open rows -> backlog GROWING` (newest
-2,964 min) to `876 rows closed, -284 open rows -> backlog shrinking`. It is **CLASS-BLIND** (§41 / pitfall 403): the class answer —
-the census — still reads `net +691 … GROWING` overall and **work-only +382 over 7 d**. `mint refusals: 0 in 7 d (burst 0, lineage 0,
-duplicate 0) of 0 on the ledger` stays a **measured zero**: MINTING is the half a grant gates, ledger freshness is not.
+**(2) the fleet CHANNEL is REFUSED, so no broker window exists — but only HALF of that is the operator\'s:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming provider rules (funding the metered family, the local model pin, the LAN box — the block list VERBATIM in §40 and SELFDEV pitfall 402); funding, pins and hardware are the operator\'s. The **ledger** half is the delegate\'s and costs 1.7 s free: `node tools/broker-keepalive.mjs --once --no-restart` (exit 0, `selfdev.sqlite` byte-identical, no broker, $0) keeps its window honest — quote the ledger\'s sentence WITH its span and snapshot count, because it FLIPS within a day on an unchanged store, and it is **CLASS-BLIND**, so the class answer a fleet decision needs is the census\'s (§41 / pitfall 403). `mint refusals: 0 … of 0 on the ledger` stays a **measured zero**: MINTING is the half a grant gates, ledger freshness is not (full wording VERBATIM in the archive below).
 
-**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§41 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§42 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
 name their flags, §38 the byte budget, §39 per-area tallies, §40 a broker window's refusals, §41 refreshing the ledger
-WITHOUT a broker); SELFDEV pitfalls 399–403.
+WITHOUT a broker, §42 the carrier tally closed at a tree that had never been tallied); SELFDEV pitfalls 399–404.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 

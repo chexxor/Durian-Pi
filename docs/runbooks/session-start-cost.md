@@ -1165,3 +1165,60 @@ format fact, not a reading error. Growing `snapshot()` to carry the census split
 would let `tools/backlog-burn.mjs` print a WORK-only rate — a `tools/`-plane change (§39's loop: `--area toolchain`
 42/42, ~28 s; the derived guard set is the cheaper claim), owned by a seat/pm, not by the delegate, and older lines
 missing the field must read as "class unknown", never as zero.
+
+## 42. THE OWED CARRIER TALLY AT A CLOSED TREE, AND THE FOUR CLAIMS RE-VERIFIED IN ~6 s — 64.2 s + 56.9 s for the tally, 6 s for the claims (2026-11-15, delegate at `60840ae9d`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — host measured in the SAME command as every number below)
+
+§39 says a docs commit owes per-area tallies AT the tree it closes on. The tree `60840ae9d` closed on had NEVER been
+tallied — the previous window shipped the four doc gates and stopped before the area runs, so the tally claim it left
+behind was owed, not met. It is closed here in TWO calls, each into an artifact that names the tree:
+
+| the tally | command | what it printed | wall clock | exit | `.err` |
+|---|---|---|---|---|---|
+| the `docs` area | `timeout 300 node scripts/test.mjs --area docs --jobs 4` | **8/8 passed in 64.2 s**, slowest `demo/runbook-diagnose.test.mjs` 64.1 s (all of it), and the runner stamps `PROVENANCE tree=60840ae9d branch=main node=v24.22.1 host=linux 7.2.15-300.fc45.x86_64 pi-durable=1.5.1` inside the artifact | 64.2 s | 0 | 0 B |
+| the derived guard loop | `timeout 180 node tools/what-to-test.mjs --paths=docs/NEXT.md,docs/NEXT-ARCHIVE.md,docs/SELFDEV.md,docs/runbooks/session-start-cost.md --run --direct-only` | **16/16 PASS**, `all derived tests passed`, 32 guards considered (16 direct + 16 mention), `changed: 4 path(s) · doc-only: YES` | 56.9 s | 0 | 0 B |
+
+Artifacts `.spike/area-docs-60840ae9d.out` and `.spike/what-to-test-60840ae9d.out` (each with its `.err`). The asymmetry
+worth recording: **`scripts/test.mjs` prints the PROVENANCE line itself, so the tree is stamped by the tool, not by the
+scribe; `tools/what-to-test.mjs` does NOT**, so that artifact carries the tree in its FILE NAME only. A tally with
+neither is un-checkable (§39); a tally whose tree drifted is pitfall 398's staleness shape.
+
+**The tranche's four shipped claims, re-verified at this tree** (one bounded call each — the point of re-running them
+is that the pointer's `Run these first` costs were measured at OLDER trees, and a drifted cost is the same class of
+lie as an unstamped tally, pitfall 384):
+
+- `node demo/notice-not-work.test.mjs` → **exit 0, `NOTICE-NOT-WORK TEST PASS (0 failures)`** — task-2's clause (a notice
+  is not claimable work, the mint gate refuses it, the recipient's next read acknowledges it with no seat turn) plus
+  the §10 cap-refusal legs (`the cap refusal is committed as a transition-shaped event`, `the ledger is still bounded
+  at 100, so the cap cannot become a second queue`, `no row was minted by the cap refusal`).
+- `node demo/status-view-bound.test.mjs` → **exit 0**, printing exactly 160 B: `STATUS VIEW BOUND OK (fixture 400 rows:
+  unbounded 747,627 B -> bounded view 428,201 B shown=200 droppedTerminal=100; --full-queue refused with a count, exit 1)`.
+  Read it as the FIXTURE half of task-3; the live half is the footer below.
+- `node cli.mjs watch --once --human` → **exit 0**, and the footer names the buckets instead of one number:
+  `of the 1200 live rows: 1024 work (537 in the claim lane) · 5 notices (not work) · 171 ROADMAP registrations · 286 awaiting you`.
+  The three CLASS buckets sum to the live count EXACTLY (1024 + 5 + 171 = 1200), so `awaiting you` is an ATTRIBUTE of a
+  bucket, not a fourth addend — a footer that summed all four would print 1,486 for 1,200 rows.
+- `cli.mjs check rig.selfdev.json --json` → **exit 1, 31 checks / 131 findings / 3 errors** — `queue-pressure` (out of
+  band: 1024 open work vs a band of 120, `net +686 in 7 d` ≥ one full band, and the finding QUOTES the fleet ledger's
+  own sentence with its span: `"876 rows closed, -284 open rows in the window -> backlog shrinking" — the fleet LEDGER
+  over 2026-11-12T08:35:19.154Z -> 2026-11-15T23:36:44.027Z (5221 min window, 127 of 127 snapshots)`), `pool-dead-gate`
+  (#7660 requires docs, no seat advertises it), `ready-ref-stale` (`item-3570-recut` 33 h against a 24 h SLA — wall-clock
+  relative, never a constant). `.err` 772 B = two provider-registration refusals (`catalog-refused`, `registration-refused`),
+  not a crash. **The net inside that finding moved `+691` → `+686` across calls the SAME day** (§35 / pitfalls 398/403:
+  the window is anchored to the wall clock and slides by the MINUTE) — quote it beside the command that printed it.
+
+**Handing `--paths=` to an instrument that does not read one is a false CLEAN — the fourth face of the flag-family trap
+(SELFDEV pitfall 404).** `node tools/instrument-provenance.mjs --paths=<artifact>`, `--paths=/definitely/not/a/path`
+and `--nonsense-xyz` all print the SAME 2,178 B census and exit **0** with `PROVENANCE CLEAN (cite drift 2 — soft)`;
+its header documents exactly `--quiet` and `--strict-cites`. What this call DOES prove, and the only three questions it
+answers: **suite membership is clean — `git=365 disk=365`** (no member vanished from the declared roots — ROADMAP 233's
+silent-shrink fact), ROADMAP cites resolve 433 distinct paths with **100 unresolved reported SOFT** (hard only under
+`--strict-cites`), and the pinned member count. Bite the count: the suite is **365** members while the pointer's tallies
+quote **363** (`tree=16f70cf8`, `tree=880cf030`) and **364** (`tree=e1c4cfe5c`), so a suite tally is re-measured at the
+tree it is quoted for, never reused.
+
+**The pointer's two caps, measured BEFORE the edit that follows (§38/§401 — a slice edit costs BYTES, a table row costs a
+LINE):** at `60840ae9d` the closer `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` ran in
+**3.8 s, exit 0**, over **277 range commits** (carrier exempt `60840ae9d`), wrote **1 row at line 109**, re-audited **0
+holes / 0 ordering defects**, and left the digest UNCHANGED at **19,894 B of `DIGEST_BUDGET_BYTES = 20000`** while
+`wc -l docs/NEXT.md` went **188 → 189** of the 200-line cap — the row costs a line and ZERO bytes, which is §33/pitfall
+392's fact re-proven on a 277-commit range.
