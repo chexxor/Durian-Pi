@@ -118,6 +118,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `dee33d7d6` | docs(NEXT): the pointer states the PUSH state from a measurement, not from the delegate's own verbs — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s dee33d7d6`) |
 | `adba860d9` | docs+tools: close the §39 carrier tallies at tree=dee33d7d6, correct the promoted tool's two header lies, register SELFDEV pitfall 406 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s adba860d9`) |
 | `6063d1b56` | docs+tools: the load-flake disambiguation, the cost line widened again, and the pointer back inside its byte budget — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 6063d1b56`) |
+| `f7254d92d` | docs: the §39 carrier tallies CLOSED at tree=6063d1b56, and the pointer's byte budget shown where it was paid — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s f7254d92d`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -169,7 +170,7 @@ timeout 560 node scripts/test.mjs --all --jobs 4          # 170.5 s, 366/366, ex
 
 **Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
 name their flags, §38 the byte budget, §39 per-area tallies, §40 a broker window's refusals, §41 refreshing the ledger
-WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1–2.3 s, its FOURTH addendum the load-flake disambiguation); SELFDEV pitfalls 399–406.
+WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1–2.3 s, its FOURTH/SIXTH addenda the load flake and the contract re-measures); SELFDEV pitfalls 399–406.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
