@@ -14,6 +14,8 @@
 // RAM climbs while nothing is running / `ps` shows dozens of node processes with 0 CPU time".
 // Cost: 0.04 s (reads /proc; opens no store, runs no git) on the host above.
 // Exit codes: 0 = scan ok; 2 = unsupported platform; 1 = --strict and leaks found.
+// A MODE THAT MIXES PROSE AND A DOCUMENT IS A DEFECT: `--json` prints the JSON document and nothing else
+// on stdout (fixed in this tree — see the seam in main() and the measured docs-area red it removes).
 //
 // RE-VERIFIED 2026-11-14 (delegate, Linux, Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
 // git 2.56.0): the scan found **15** orphans holding **594.5 MB** RSS (9 `demo/broker.test.mjs` runners, oldest
@@ -27,7 +29,7 @@
 // usage:
 //   node tools/process-leak-scan.mjs                          # list suspects with age, RSS and verdict
 //   node tools/process-leak-scan.mjs --kill                   # SIGTERM the confirmed orphans, report survivors
-//   node tools/process-leak-scan.mjs --json                   # machine-readable tail
+//   node tools/process-leak-scan.mjs --json                   # machine-readable ONLY (no prose on stdout)
 //   node tools/process-leak-scan.mjs --strict                 # exit 1 if any orphan is found
 //   node tools/process-leak-scan.mjs --pattern 'demo/x\.test' --min-age 300
 //   node tools/process-leak-scan.mjs --max-supervised-age 1800   # treat a supervised runner older than 30 min as hung
@@ -167,12 +169,22 @@ async function main() {
 	const orphans = suspects.filter((s) => !s.keep);
 	const mbHeld = orphans.reduce((a, s) => a + s.rssKb, 0) / 1024;
 
-	console.log(`process leak scan  pattern=${pattern}  min-age=${minAgeS}s  scanned=${pids.length} pids  (HZ=${HZ}, uptime ${Math.round(uptimeSec)}s)`);
+	// `--json` prints ONLY the JSON document: the prose above it is a HUMAN report, and prose on stdout
+	// makes machine mode unparseable. The rig checks that very property — `demo/runbook-diagnose.test.mjs` asserts
+	// every `--json` Diagnose line in the runbooks parses, and `stdoutIsJson` (src/runbookdiagnose.mjs:414) parses
+	// from the FIRST brace to the end — so the defect READ flipped with process state (measured 2026-11-16, Linux
+	// Fedora Linux 45, kernel 7.2.15-300.fc45.x86_64, node v24.22.1: the docs area ran 8/8 exit 0 standalone and
+	// 7/8 exit 1 with `process-leak-reap.md: --json output is not parseable: node tools/process-leak-scan.mjs --json`
+	// on the run where the scan printed a suspect whose `cmd` contains a brace). A mode that mixes prose and a
+	// document is the false-green shape this rig keeps hitting: in machine mode the human line is suppressed, and
+	// the JSON alone is the document.
+	const human = json ? (m) => {} : (m) => console.log(m);
+	human(`process leak scan  pattern=${pattern}  min-age=${minAgeS}s  scanned=${pids.length} pids  (HZ=${HZ}, uptime ${Math.round(uptimeSec)}s)`);
 	for (const s of suspects) {
-		console.log(`  pid ${String(s.pid).padEnd(7)} age ${String(s.ageS + "s").padEnd(10)} rss ${(s.rssKb / 1024).toFixed(1)} MB  ${s.keep ? "KEPT: " + s.keep : "ORPHAN"}  ${s.cmd}`);
+		human(`  pid ${String(s.pid).padEnd(7)} age ${String(s.ageS + "s").padEnd(10)} rss ${(s.rssKb / 1024).toFixed(1)} MB  ${s.keep ? "KEPT: " + s.keep : "ORPHAN"}  ${s.cmd}`);
 	}
-	console.log(`  ${orphans.length} orphan(s) holding ${mbHeld.toFixed(2)} MB RSS`);
-	if (!orphans.length) console.log("  clean — no reparented test runner older than the min age");
+	human(`  ${orphans.length} orphan(s) holding ${mbHeld.toFixed(2)} MB RSS`);
+	if (!orphans.length) human("  clean — no reparented test runner older than the min age");
 
 	if (kill && orphans.length) {
 		let sent = 0, failed = 0;
@@ -186,8 +198,8 @@ async function main() {
 			await new Promise((r) => setTimeout(r, 500));
 		}
 		const still = orphans.filter((s) => existsSync(`/proc/${s.pid}`));
-		console.log(`  SIGTERM sent to ${sent} (failed ${failed}); ${still.length} still alive after 10 s`);
-		for (const s of still) console.log(`  still alive: pid ${s.pid} — ${s.cmd}`);
+		human(`  SIGTERM sent to ${sent} (failed ${failed}); ${still.length} still alive after 10 s`);
+		for (const s of still) human(`  still alive: pid ${s.pid} — ${s.cmd}`);
 	}
 
 	if (json) console.log(JSON.stringify({ ok: true, pattern, minAgeS, scanned: pids.length, suspects: suspects.length, orphans: orphans.length, mbHeld: Number(mbHeld.toFixed(1)), list: orphans }));
