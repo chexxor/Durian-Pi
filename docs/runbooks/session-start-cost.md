@@ -1283,3 +1283,25 @@ pass is what an operator reads next): `node tools/backlog-burn.mjs` quotes the f
 rows in the window -> backlog shrinking` over a 5,221-min span, while the class-aware census says `net +681 in 7 d …
 GROWING` (work-only +382). `cli.mjs check` QUOTES the first inside the FAILING `queue-pressure` finding. Say which
 question, span and class a rate answered before choosing either word.
+
+**§43 ADDENDUM (2026-11-16T00:5xZ, delegate at `b5b1f8cbb`; Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0 — host measured in the SAME command as every number below): the carrier tally AT the tree the docs commit CARRIES, and the FULL suite, which a manifest edit obliges.**
+`demo/test-areas.json` is a suite-control path, so `tools/what-to-test.mjs` stopped calling this commit doc-only and said so
+literally: `changed: 5 path(s) · doc-only: no` and `not doc-only: 1 non-doc path(s) changed, so the pre-landing gate is the FULL
+suite`. Its derived loop still ran first and passed — **19 direct guards (37 considered: 19 direct + 18 family mention), `all
+derived tests passed`, exit 0, 63.8 s**, `.err` 0 B (`.spike/derived-b5b1f8c.out`) — and it then named the gate the areas cannot
+answer. Measured at `tree=b5b1f8cbb` (this pointer's own commit), each into an artifact whose PROVENANCE the runner stamps:
+
+| the tally | command | verdict | wall clock | exit | `.err` |
+|---|---|---|---|---|---|
+| FULL suite | `timeout 560 node scripts/test.mjs --all --jobs 4` | **366/366 passed**, slowest `demo/runbook-diagnose.test.mjs` 67.4 s | **167.9 s** | **0** | **0 B** |
+| `docs` area | `timeout 200 node scripts/test.mjs --area docs --jobs 4` | **8/8 passed** | 70.8 s | 0 | 0 B |
+| `toolchain` area | `timeout 120 node scripts/test.mjs --area toolchain --jobs 4` | **43/43 passed**, `PASS tools/registration-ledger-gap-test.mjs (0.2s)` | 30.4 s | 0 | 0 B |
+
+The suite COUNT is the fact that bites (pitfall 404): **366** members at this tree, against the 365 §42 quoted at `60840ae9d`
+and the 363/364 tallies further back — so a quoted tally names its tree AND its member count. The doc gates at the same tree,
+one bounded pass: `tools/pointer-sha-coverage.mjs --base 8b5a19e1` exit 0 over 281 range commits (verdict `every range commit is
+named`, carrier exempt `b5b1f8cbb`), `demo/next-pointer.test.mjs` exit 0, `tools/doc-integrity-guard.mjs` 0 hard / 25 soft exit 0,
+`node scripts/clockin.mjs` exit 0 with the digest at **19,853 B of `DIGEST_BUDGET_BYTES = 20000`** (147 B headroom) and `wc -l
+docs/NEXT.md` 183 of the 200-line cap. **Cadence, measured:** `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD
+--order` ran exit 0 in ~4 s BEFORE each commit and wrote the row the coming commit owes (2 rows at `b5b1f8cbb`, 1 row at the next),
+each re-audit printing **0 holes / 0 ordering defects**, `.err` 0 B.
