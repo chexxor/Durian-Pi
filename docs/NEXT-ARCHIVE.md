@@ -15712,3 +15712,7 @@ the derivation fix alone is a PAIRED read at one disk state with only `scripts/c
 **Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 63 B of slice text and therefore of the clock-in digest):**
 
  The two residual faces are VERBATIM in `docs/NEXT-ARCHIVE.md`.
+
+**Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 47 B of slice text and therefore of the clock-in digest):**
+
+ (its per-area pair is VERBATIM in the archive)
