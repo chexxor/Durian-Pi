@@ -15465,3 +15465,13 @@ Shipped evidence (VERBATIM in
 ## 2026-11-16T01:1xZ — the pointer pays its slice byte budget a third time so the PUSH state can be stated truthfully: the redundant parenthetical `(the chain's shas and their path counts are VERBATIM …)` moved VERBATIM out of the `## NEXT SESSION` slice (positional regex cut by `python3 .spike/pushfix-43f.py`; the post-cut file equals the pre-cut file minus exactly that substring). The commit table carries the shas anyway.
 
 (the chain's shas and their path counts are VERBATIM in the commit table above and in `docs/NEXT-ARCHIVE.md`)
+
+## Pointer prose moved VERBATIM out of the `## NEXT SESSION` slice — 2026-11-16 (delegate, tree `adba860d9`)
+
+`node scripts/clockin.mjs --budget 1` printed `digest is 20465 B`, over `DIGEST_BUDGET_BYTES = 20000` (scripts/clockin.mjs:46), so the Blocker's two residual paragraphs were MOVED (not retyped) into this archive file: the extracted block is 901 B, the pointer keeps a 640 B summary, and the proof run before the write was `pre[:start] + block + pre[end] == pre` on the whole file (62144 B read). Host Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0. The block, verbatim:
+
+
+**(1) a TRUE band failure:** 1,024 open work rows against a band of 120 (`10/seat × 12 seats`) and `net +<N> in 7 d` at least
+one fleet band, so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`,
+1.5 s, exit 1 — the rate is wall-clock relative and slides by the MINUTE, pitfall 398 / §35).
+**(2) the fleet CHANNEL is REFUSED, so no broker window exists:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming four provider rules (§40 / pitfall 402) — funding, pins and LAN hardware are the operator’s. The **ledger** half is the delegate’s and free: `node tools/broker-keepalive.mjs --once --no-restart` (1.7 s, exit 0, `selfdev.sqlite` byte-identical) keeps its window honest, and `mint refusals: 0` stays a **measured zero** (pitfall 403). The full shipped wording is VERBATIM in `docs/NEXT-ARCHIVE.md` below.

@@ -40,11 +40,13 @@
 //   node tools/registration-ledger-gap.mjs --ledger=<path>       # a stand-in for docs/ROADMAP.md (fixture ledgers)
 //   node tools/registration-ledger-gap.mjs --json .spike/gap.json [--quiet]
 //
-// Measured cost, re-run before quoting: **1.1-1.5 s** against the live store — the SAME call measured 1.10 s / 1.141 s
-// wall at `660dd94d` and **1.50 s on its own cost line / 1.544 s wall** at the clean tree `dee33d7d6` (2026-11-16), one
-// full `cli.mjs queue` read of ~18 MB of JSON, no second read, and the cost DRIFTS with broker state the way SELFDEV
-// §37's `watch --once` (1.5 s or 10.9 s) does, so a header that quotes ONE number is a 26% lie on a call that has two;
-// 0.01-0.03 s against a fixture; the pinned demo `node tools/registration-ledger-gap-test.mjs` 0.17-0.21 s. Live call
+// Measured cost, re-run before quoting: **1.1-2.3 s** against the live store — the SAME call measured 1.10 s / 1.141 s
+// wall at `660dd94d`, **1.50 s on its own cost line / 1.544 s wall** at the clean tree `dee33d7d6`, and **2.31 s** at the
+// clean tree `adba860d9` (2026-11-16): one full `cli.mjs queue` read of ~18 MB of JSON, no second read, and the cost
+// DRIFTS with broker state the way SELFDEV §37's `watch --once` (1.5 s or 10.9 s) does — so a header that quotes ONE
+// number is a 26-75% lie on a call that has several, and a header that quotes a NARROW range is falsified by the very
+// next tree; the range below is what three clean-tree calls showed, not an optimum. 0.01-0.03 s against a fixture; the
+// pinned demo `node tools/registration-ledger-gap-test.mjs` 0.17-0.21 s. Live call
 // at `b2f4d4833` (host measured in the same command): **exit 0** — `live 1200 = 1024 work +
 // 5 notice + 171 registration`, `terminal registration 299`, `naming a ROADMAP item 33 · naming NO item 138 ·
 // item ALREADY in the ledger 33 · item NOT in the ledger 0`, `DUPLICATES 0`, `flagless 1200`. Host it was first
@@ -61,8 +63,9 @@
 // corrected IN PLACE here, no second tool written:
 //   1. `DURIG_DB=./selfdev.sqlite timeout 60 node tools/registration-ledger-gap.mjs` -> **cost 1.50 s (the tool's own
 //      line), 1.544 s shell wall, exit 0, `.err` 0 B** (`.spike/reggap-clean-dee33d7d.out`); the same call at `660dd94d`
-//      measured 1.10 s / 1.141 s. **Quote the range and re-measure.** Note the binder order: `timeout 60 DURIG_DB=… node`
-//      exits **127 in 0.002 s** (pitfall 396), the env prefix must precede the binder.
+//      measured 1.10 s / 1.141 s, and at the NEXT clean tree `adba860d9` it measured **2.31 s** (`.spike/reggap-adba860.out`,
+//      exit 0, `.err` 0 B, same census). **Quote the range and re-measure** — the range in the line above was widened to
+//      1.1-2.3 s by that third data point, in place, the same session that wrote it.
 //   2. the DUPLICATES line: this tree prints `DUPLICATES the pass would write twice: 0 items`, as it did at `660dd94d`
 //      and at `b2f4d4833`. The claim of `13 such items` is reproduced by NO run on this store — `rg "126 x3"` hits only
 //      this header — so it was an unsourced claim about an older snapshot. Falsifier: ONE bounded call, above.
