@@ -21,8 +21,8 @@
 //      cannot fix one); with it the move is mechanical and no row text is retyped.
 //      `--for=HEAD` also pays the row the NEXT commit will owe for the commit that is HEAD now, so
 //      running this tool BEFORE a commit gets the WHOLE cadence in one call (pitfall 384: HEAD can
-//      never name itself in the commit that carries it).
-//      This tool takes ONLY the `=` form (`--base=8b5a19e1`, `--file=…`) and REFUSES the space form,
+//      never name itself in the commit that carries it). The already-paid leg reads the TABLE's ROWS,
+//      not the file: a live pointer names commits in PROSE too, and prose is not a row (pitfall 425).
 //      because the audit it calls, `tools/pointer-sha-coverage.mjs`, takes only the space form and
 //      silently ignores `--base=` (pitfall 398: that false green audited 37 of 197 commits and still
 //      exited 0). This tool hands the value to the audit in the form the audit actually reads.
@@ -49,6 +49,17 @@
 // the row texts are the ones that came in). History of this same test on the same day, kept so the
 // check count is not read as a regression: 24 checks at `4ea4101b7`, 31 checks at `27d27d2ef`, 38 now
 // — the test grew with the `--order` legs; nothing that was pinned before was dropped.
+//
+// ADDENDUM 2026-11-16 (Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1,
+// git 2.56.0 — probe `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`,
+// measured in the same command as the numbers below): the `--for` already-paid leg moved from a FILE-WIDE
+// `includes` to the TABLE's ROWS — a live pointer names commits in prose, and prose is not a row (SELFDEV
+// pitfall 425, and the pair-of-spellings shape of pitfall 398 with the roles reversed). The pinned test grew
+// leg 6b for exactly that fixture: RED first **exit 1, 3 FAIL / 39 ok, 1.10 s** (`.spike/prow-test-80.out`,
+// `.err` 0 B), then after the leg moved **PASS, 42 checks, 0 FAIL, 1.111 s** (`.spike/prow-test-81.out`, `.err`
+// 0 B) — so the check count is 24 → 31 → 38 → 42, each step named by the legs it added, nothing dropped. The
+// `tools/` path owes the areas at the tree it lands on, and they are named there rather than duplicated here:
+// the `toolchain` area and the FULL suite at the tree this fix landed on are in `docs/NEXT.md`'s Tallies block.
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -171,9 +182,15 @@ const rowText = (sha, subject) =>
   `| \`${sha}\` | ${(subject || "").replace(/\|/g, "\\|")} — cadence row named from git's own subject line (\`git log -1 --format=%s ${sha}\`), pitfall 384 |`;
 const rows = missing.map((m) => rowText(m.sha, m.subject));
 if (forRow) {
-  const text = readFileSync(file, "utf8");
-  if (text.includes(`\`${forRow.sha}\``)) {
-    console.log(`  --for=${forRef} already has a row (${forRow.sha}) — not added twice`);
+  // The dedup leg reads the TABLE's ROWS, never the whole file: a LIVE pointer NAMES commits in prose
+  // (a `Run these first` intro re-pointed at the state an audit ran on, a tally line, a decision title),
+  // so a file-wide `includes` read that prose as "the row is already there", paid nothing, and the NEXT
+  // commit's audit reported a hole the closer had claimed was paid. Measured 2026-11-16 at `1690d835f`:
+  // line 137 of docs/NEXT.md names `1690d835f` in prose and NO row does, so `--for=HEAD` suppressed the
+  // row (SELFDEV pitfall 425; pinned by tools/pointer-row-for-predecessor-test.mjs leg 6b).
+  const rowShas = readFileSync(file, "utf8").split("\n").filter(isRow).map(shaOfRow);
+  if (rowShas.some((s) => s.startsWith(forRow.sha) || forRow.sha.startsWith(s))) {
+    console.log(`  --for=${forRef} already has a row in the table (${forRow.sha}) — not added twice`);
   } else {
     rows.push(forRow.text);
   }

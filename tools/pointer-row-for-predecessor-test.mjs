@@ -154,6 +154,39 @@ try {
   check("a second --for pass does not add the row twice", paidAgain.stdout.includes("already has a row"), paidAgain.stdout);
   check("and it exits 0", paidAgain.status === 0, `status=${paidAgain.status}`);
 
+  // (6b) The dedup leg reads ROWS, not the whole file. A live pointer NAMES commits in prose (a
+  // `Run these first` intro re-pointed at the state an audit ran on, a tally line, a decision title),
+  // so a file-wide `includes` reads that prose as "the row is already there" and the closer pays
+  // nothing — then the NEXT commit's audit reports a hole the closer claimed was paid (pitfall 425).
+  writeFileSync(
+    pointer,
+    tableOf([`| \`${c1}\` | the first row |`, `| \`${c2}\` | the second row |`, `| \`${c3}\` | the third row |`]) +
+      `\n**Run these first** (costs re-measured AT the state \`${c4}\` carries by ONE audit call):\n`,
+  );
+  const proseNamed = runCloser([`--base=${c0}`, "--file=docs/NEXT.md", "--no-archive", "--for=HEAD"]);
+  check(
+    "prose that names the commit does NOT stand in for its row (the closer still adds it)",
+    proseNamed.stdout.includes("rows to add, in commit order (oldest first, the table's order): 1"),
+    proseNamed.stdout,
+  );
+  check(
+    "and it does not claim the row is already there",
+    !proseNamed.stdout.includes("already has a row"),
+    proseNamed.stdout,
+  );
+  const proseLines = readFileSync(pointer, "utf8").split("\n");
+  const rowForC4 = proseLines.find((l) => l.startsWith(`| \`${c4}\` |`));
+  check(
+    "the row for the commit that cannot name itself now exists",
+    rowForC4 !== undefined && rowForC4.includes(subjects[4]),
+    proseLines.join("\n"),
+  );
+  check(
+    "the close is proven by the audit again",
+    proseNamed.stdout.includes("re-audit verdict: 0 hole(s), 0 ordering defect(s)"),
+    proseNamed.stdout,
+  );
+
   // (7) The flag form is REFUSED, not silently defaulted — by the closer, and by the audit it calls.
   const spaceForm = runCloser(["--base", c0, "--file=docs/NEXT.md", "--no-archive"]);
   check("the closer refuses the space form", spaceForm.status === 2, `status=${spaceForm.status}`);
