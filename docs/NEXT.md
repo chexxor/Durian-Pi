@@ -120,6 +120,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `805da57a6` | feat(tools): the pointer's line cap is ONE call that MOVES rows VERBATIM and proves the move — a claimed cut that was never applied REFUSES — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 805da57a6`) |
 | `bff677f6d` | docs(NEXT): the audit's numbers name the tree they were measured on, and the cadence row for 805da57a6 — the digest read re-numbered to the measurement — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s bff677f6d`) |
 | `cef6b5ffd` | feat(tools): the pointer's BYTE budget is ONE call that moves PROSE VERBATIM and proves the move — a clause outside the digest slice REFUSES — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s cef6b5ffd`) |
+| `543048816` | feat(clockin): the digest's archive line stops printing a whole pointer row — a pointer row pays ZERO digest bytes, and 877 B of cold-start come back — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 543048816`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -169,7 +170,7 @@ node tools/cost-claim-audit.mjs                      # ~80 s, exit 0/1 — THIS 
 
 **Blocker:** none for the sweep — it ran. The two residual faces are VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
-**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§44 — read it before hand-querying the store; SELFDEV pitfalls 399–414.
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§44 — read it before hand-querying the store; SELFDEV pitfalls 399–415.
 
 **Known red:** `node demo/offline.mjs` exits 1 (VERBATIM in the archive).
 
