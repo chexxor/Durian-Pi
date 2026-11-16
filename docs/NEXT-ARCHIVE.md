@@ -15645,3 +15645,7 @@ and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet led
 **Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (its § map, pitfall range and loop costs VERBATIM in the archive) — read it before hand-querying the store; SELFDEV pitfalls 399–412.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
+
+## Superseded pointer wording (2026-11-16, delegate at the commit whose rows this pointer carries) — moved VERBATIM out of docs/NEXT.md as of the commit after `cef6b5ffd`
+
+**Tallies (a `tools/` path owes the FULL suite at the tree it carries (§42)):** THIS commit read **369/369 in 165.9 s exit 0, 0 `FAILED`, `.err` 0 B** at PROVENANCE `tree=bff677f6d` (the commit not yet landed when it ran); the 368/369 read at that same disk state was red only on `demo/restart-limit-behaviour.test.mjs`, exit **0 in 1.37 s standalone** — pitfall 411 contention, the gate was not weakened. **The pair this DOCS commit owes:** `timeout 200 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 66.9 s exit 0 `.err` 0 B**, `timeout 150 node scripts/test.mjs --area toolchain --jobs 4` → **46/46 in 27.0 s exit 0 `.err` 0 B** (46 members with this pin). Superseded wording here is VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **369**. **Digest a read:** **19,582 B** of `DIGEST_BUDGET_BYTES = 20000`; the slice is `pointerSection` (`scripts/clockin.mjs:71-79`), so prose there pays bytes and a table row pays a LINE toward `POINTER_CAP_LINES = 200` and ZERO bytes.

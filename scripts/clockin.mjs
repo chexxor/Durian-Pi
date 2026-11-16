@@ -74,7 +74,12 @@ export function pointerSection(text) {
 	if (at < 0) return { lines: [], start: -1, end: -1, fileLines: lines.length, tail: 0, archive: null };
 	const next = lines.findIndex((l, i) => i > at && /^## /.test(l));
 	const end = next < 0 ? lines.length : next;
-	const archive = lines.find((l) => /ARCHIVE\.md/i.test(l)) ?? null;
+	// LAST mention, not FIRST: the file's own pointer to the verbatim history closes the file, while the
+	// first match in a live docs/NEXT.md (measured 2026-11-16 at main cef6b5ffd) is a 956 B TABLE ROW that
+	// happens to name the archive — `find` printed that whole row into the digest, so a pointer row paid ~1 KB
+	// of the DIGEST_BUDGET_BYTES silently, and the number moved every time the table shifted. `pop` costs
+	// nothing here and makes the line the digest prints the short bottom link (86 B).
+	const archive = lines.filter((l) => /ARCHIVE\.md/i.test(l)).pop() ?? null;
 	return { lines: lines.slice(at, end), start: at + 1, end, fileLines: lines.length, tail: lines.length - end, archive };
 }
 

@@ -49,10 +49,13 @@
 //      "") is what stays in the live file. The cut file is a session artifact — keep it in gitignored `.spike/`
 //      and delete nothing: the archive copy is the record.
 //
-// COST: 0.31 s for a planning pass over the LIVE pointer (four cuts, one refused); 0.36 s for the same plan
-//       WITH `--writes` (measured 2026-11-16 on Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64,
-//       node v24.22.1, git 2.56.0 at `bff677f6d`); 0.24 s for a refusal. The import of `pointerSection` costs 0.03 s.
-//       No store, no network, no model. Re-measure rather than trust this line.
+// COST: 0.04 s wall for a planning pass over the LIVE pointer (`--cuts=.spike/cuts-75.json --dry-run`, one cut, exit
+//       0, `.err` 0 B — the tool's own `cost:` line reads 0.01 s, the wall adds node startup); 0.04 s wall for a refusal
+//       (exit 1, `no-shrink`, own line 0.01 s) — measured 2026-11-16 at `cef6b5ffd` on Linux, Fedora Linux 45 (Forty
+//       Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0, host read in the SAME command. SUPERSEDED,
+//       NOT EXPLAINED: the 0.31 s plan / 0.36 s write / 0.24 s refusal reads at `bff677f6d` measured the SAME file with
+//       no code change between the two trees, so the gap is the box, not the tool — a cost line names its tree, and
+//       0.01 s is what this call reports about ITSELF. No store, no network, no model. Re-measure rather than trust this line.
 //
 // Exit: 0 = the plan wrote nothing (a planning pass) or the write's proofs all held;
 //       1 = a refusal (see the FINDING it prints) or a proof failed — the files were written, reconcile them;
