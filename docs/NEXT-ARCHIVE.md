@@ -15657,3 +15657,9 @@ the derivation fix alone is a PAIRED read at one disk state with only `scripts/c
 **Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 411 B of slice text and therefore of the clock-in digest):**
 
 **The per-area pair the `543048816` carrier owes (§39):** `timeout 200 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 66.1 s exit 0 `.err` 0 B**, `timeout 150 node scripts/test.mjs --area toolchain --jobs 4` → **46/46 in 27.2 s exit 0 `.err` 0 B** — the toolchain area is where `demo/clockin-digest.test.mjs` lives (26.6 s of the area's 27.2 s), so it is the area that carrier's `scripts/clockin.mjs` edit owes (its standalone re-run after the edit: PASS, exit 0, 25.9 s).
+
+**Cut VERBATIM — the 2 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 86 B of slice text and therefore of the clock-in digest):**
+
+**The `543048816` carrier's per-area pair (§39) is VERBATIM in the archive.
+
+§44 / pitfall 414 give the paired digest read and the 956 B row the derivation used to print.
