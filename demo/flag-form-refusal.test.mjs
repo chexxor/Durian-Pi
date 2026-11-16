@@ -32,10 +32,11 @@
 // exactly why a refusal cannot half-measure.
 //
 // WHAT THIS DEMO DOES NOT CLAIM, said here rather than silently:
-//   - `tools/claim-order.mjs` is OUT. Its argv surface is not a plain option list (`--seat impl` and
-//     `--seat=impl=priority_first` are one token carrying its own payload) and `demo/claim-order-measure.test.mjs`
-//     IMPORTS the module, so that file is not just a CLI. Its `--json` write path IS defective
-//     (measured: `--json=<path>` exits 0 in 7.06 s and writes nothing) — an owed leg, not a silent pass.
+//   - `tools/claim-order.mjs` was OUT for a year and is now IN, with its own section below: its argv surface is
+//     not a plain option list (`--seat` is ONE repeatable option whose value carries an optional `=strategy`), so
+//     the shared reader needed a `multi` leg rather than a second four-line reader, and its `--json` write path
+//     was measured defective on the file that read only the space form (`--json=<path>` exit 0, NO file; `--json`
+//     alone died with a TypeError at exit 1, and `--zzz=1` printed the full report). It is pinned here, not excused.
 //   - `tools/pointer-sha-coverage.mjs` and `tools/registration-ledger-gap.mjs` are OUT because neither has a
 //     SILENT default to close: both already refuse the form they do not read (measured: coverage `--base=8b5a19e1`
 //     → exit 2 naming the option; reg-gap `--json <path>` honours the space form and writes 399 B). What they
@@ -125,6 +126,8 @@ writeFileSync(join(sessDir, "2026-11-16T00-00-session-a.jsonl"), JSON.stringify(
 }) + "\n");
 
 const BASE = {
+  // claim-order reads the queue through the CLI's read views, so the fixture store is enough for it.
+  "claim-order": ["--db", db],
   "channel-preflight": ["--db", db, "--rig", rigPath],
   "queue-drain-audit": ["--db", db],
   "store-behaviour-gate": [],
@@ -207,6 +210,42 @@ check("latency-budget: the `--json` BOOL is still ACCEPTED (a bool is not a file
 const tierBare = await tool("tier-token-calibration", ["--include-notices"]);
 const tierPlain = await tool("tier-token-calibration", []);
 check("tier-token-calibration: the bare `--include-notices` flag is still accepted (same verdict)", tierBare.code === tierPlain.code && !/REFUSED/.test(tierBare.stderr), `${tierBare.code}/${tierPlain.code} ${tierBare.stderr.slice(0, 200)}`);
+
+console.log("\n=== claim-order: the option that carries its OWN payload obeys the same contract ===");
+// `--seat` is repeatable and its value may carry a strategy (`--seat=impl=priority_first`), so it is the one
+// option on this plane that is not a plain flag/value — the shared reader grew a `multi` leg for it, and a
+// repeated option that OVERWROTE instead of accumulating would measure one seat while the caller asked for two.
+const coEqPath = join(dir, "claim-order-eq.json");
+const coSpPath = join(dir, "claim-order-sp.json");
+const coEqRun = await tool("claim-order", ["--seat", "impl", `--json=${coEqPath}`]);
+const coSpRun = await tool("claim-order", ["--seat=impl", "--json", coSpPath]);
+check("claim-order: `--json=<path>` WRITES the report (the space-only reader left the file absent)",
+  existsSync(coEqPath) && statSync(coEqPath).size > 0, `${coEqRun.code} ${coEqRun.stdout.slice(0, 120)} ${coEqRun.stderr.slice(0, 200)}`);
+check("claim-order: the OLD spelling `--json <path>` still writes (the fix did not eat it)",
+  existsSync(coSpPath) && statSync(coSpPath).size > 0, `${coSpRun.code} ${coSpRun.stderr.slice(0, 200)}`);
+const coEqJson = parseOf(coEqPath);
+const coSpJson = parseOf(coSpPath);
+check("claim-order: both spellings PARSE and report the SAME top-level keys",
+  coEqJson !== null && coSpJson !== null && keys(coEqJson) === keys(coSpJson), `${keys(coEqJson)} vs ${keys(coSpJson)}`);
+check("claim-order: `--seat impl` and `--seat=impl` are ONE seat (same verdict under either spelling)",
+  coEqJson !== null && coSpJson !== null && coEqJson.reports.map((r) => r.seat).join() === coSpJson.reports.map((r) => r.seat).join() && coEqRun.code === coSpRun.code,
+  `${coEqJson?.reports?.map((r) => r.seat).join()} vs ${coSpJson?.reports?.map((r) => r.seat).join()} codes ${coEqRun.code}/${coSpRun.code}`);
+const coMultiPath = join(dir, "claim-order-multi.json");
+const coMulti = await tool("claim-order", ["--seat", "impl", "--seat=pm", `--json=${coMultiPath}`]);
+const coMultiJson = parseOf(coMultiPath);
+check("claim-order: `--seat impl --seat=pm` reports BOTH seats (a repeated option accumulates, not overwrites)",
+  coMultiJson !== null && coMultiJson.reports.length === 2 && coMultiJson.reports.map((r) => r.seat).sort().join() === "impl,pm",
+  `${coMulti.code} ${coMultiJson?.reports?.length ?? "no file"} ${coMulti.stdout.slice(0, 120)}`);
+const coPay = await tool("claim-order", ["--seat=impl=priority_first"]);
+check("claim-order: the payload form `--seat=impl=priority_first` still names the seat and its strategy",
+  coPay.code === 0 && /^impl: resolved strategy=priority_first/m.test(coPay.stdout) && !/REFUSED/.test(coPay.stderr),
+  `${coPay.code} ${coPay.stdout.slice(0, 160)} ${coPay.stderr.slice(0, 160)}`);
+const coNoVal = await tool("claim-order", ["--json"]);
+check("claim-order: `--json` with NO value REFUSES at exit 2 (the pre-change file died with a TypeError at exit 1)",
+  refused(coNoVal) && /--json/.test(coNoVal.stderr), `${coNoVal.code} ${coNoVal.stdout.slice(0, 120)} ${coNoVal.stderr.slice(0, 200)}`);
+const coSeatEmpty = await tool("claim-order", ["--seat="]);
+check("claim-order: an EMPTY `--seat=` REFUSES (the pre-change scanner accepted it and reported no seat)",
+  refused(coSeatEmpty), `${coSeatEmpty.code} ${coSeatEmpty.stderr.slice(0, 200)}`);
 
 console.log(failures === 0 ? `\nFLAG FORM TEST PASS (0 failures)` : `\nFLAG FORM TEST FAIL (${failures} failures)`);
 process.exit(failures === 0 ? 0 : 1);

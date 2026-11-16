@@ -31,15 +31,22 @@
 
 const REFUSE_EXIT = 2;
 
-// spec: { value: [...], bool: [...], numeric: [...], positional: false, usage: "--db <path> · --json <out>" }
+// spec: { value: [...], bool: [...], numeric: [...], multi: [...], positional: false, usage: "--db <path> · --json <out>" }
+// `multi` names options that may be given more than ONCE (`--seat impl --seat pm` asks about two seats); they are
+// still strings until a caller asks, and a name in `multi` is implicitly a value option, so a tool cannot
+// half-declare it. A repeated option that OVERWROTE instead of accumulated is the same class as a dropped one:
+// the report was measured over one seat while the caller asked for two.
 // `numeric` names options whose value must be a number; they are still read as strings until `num()` asks.
 function parseOpts(argv, spec = {}) {
   const value = new Set(spec.value ?? []);
   const bool = new Set(spec.bool ?? []);
   const numeric = new Set(spec.numeric ?? []);
+  const multi = new Set(spec.multi ?? []);
+  for (const m of multi) value.add(m);
   const positional = spec.positional === true;
   const usage = spec.usage ?? "(this tool takes no options)";
   const opt = new Map();
+  const all = new Map();
   const flags = new Set();
   const rest = [];
   const die = (cause) => {
@@ -79,6 +86,7 @@ function parseOpts(argv, spec = {}) {
       const n = Number(val);
       if (!Number.isFinite(n)) die(`--${name} ${val} is not a number — NaN in the arithmetic would print a verdict no reader could tell was broken`);
     }
+    if (multi.has(name)) all.set(name, [...(all.get(name) ?? []), val]);
     opt.set(name, val);
   }
   const num = (name, dflt) => {
@@ -89,6 +97,8 @@ function parseOpts(argv, spec = {}) {
   };
   return {
     get: (name, dflt = null) => (opt.has(name) ? opt.get(name) : dflt),
+    // Every value given for a `multi` option, in the order the caller gave them; [] when none were.
+    all: (name) => all.get(name) ?? [],
     has: (name) => flags.has(name),
     num,
     rest,

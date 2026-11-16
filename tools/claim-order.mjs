@@ -19,8 +19,29 @@
 // Usage:
 //   node tools/claim-order.mjs [--db ./selfdev.sqlite] [--seat impl --seat devtools] [--json out.json]
 //   node cli.mjs queue --json | node tools/claim-order.mjs --stdin --seat impl
-// Exit: 0 always (a measurement is not a fault). 2 = the read failed or no seat was resolvable.
+//   every option honours BOTH spellings — `--db p` and `--db=p` are one option, and `--seat`, `--seat=impl`
+//   and `--seat=impl=priority_first` are one repeatable option (the name, optionally the strategy to measure
+//   against); an option this tool does not take REFUSES.
+// Exit: 0 = the measurement ran. 2 = a REFUSED option (the shared reader's exit code, SELFDEV pitfall 428:
+// never 1, because on these instruments 1 already means "measured FAIL"), a failed read, or no seat resolvable.
+//
+// Cost (measured on Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git
+// 2.56.0 — host read in the SAME command as the numbers, hostname-free probe of pitfall 396): the LIVE store
+// `DURIG_DB=./selfdev.sqlite node tools/claim-order.mjs --seat impl --json=.spike/co-live-2.json` → exit 0,
+// **9.01 s**, 954 B of report written, `.err` 0 B (the 7,742-row store is the cost: two CLI read views). A
+// REFUSAL costs **0.14 s** (`node tools/claim-order.mjs --zzz=1` → exit 2, 374 B of `REFUSED cause:` text) —
+// the reader runs BEFORE the tool does any work, which is why a refusal cannot half-measure. The fixture-store
+// legs in `demo/flag-form-refusal.test.mjs` run 0.13-0.14 s each. Re-measure rather than trust these numbers.
+//
+// last_verified: 2026-11-16 — the verdict gate `node demo/claim-order-measure.test.mjs` (which IMPORTS this
+// module) PASS **13 checks, 0.31 s, `.err` 0 B**; the flag gate `node demo/flag-form-refusal.test.mjs` PASS
+// **64 checks / 0 FAIL / 13.29 s** at the tree that carries this change (`.spike/ff-green-3.out`; the 44 B in
+// that `.err` file is the `time` wrapper's own real/user/sys lines, SELFDEV pitfall 427), RED first with the SAME
+// demo run against the pre-change tree staged by `git archive HEAD tools src cli.mjs scripts | tar -x -C
+// .spike/pc-red2` → exit 1, **56 ok / 8 FAIL / 16.93 s** (`.spike/ff-red-4.out`) — the 8 failures are exactly
+// this file's legs, so this change closed 8 red legs and did not regress the 56 that were already green.
 import { spawnSync } from "node:child_process";
+import { parseOpts } from "./argv-contract.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolveStrategy, orderCandidates, effectivePriority, DEFAULT_STRATEGY } from "../src/workstrategy.mjs";
 import { selectNextWork } from "../src/rig.mjs";
@@ -93,13 +114,18 @@ function reportLine(r) {
 // Guarded so the demo can `import` the report without the CLI running against a store (#7272).
 function main() {
 	const argv = process.argv.slice(2);
-	const opt = (name, dflt) => {
-		const i = argv.indexOf(`--${name}`);
-		return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
-	};
-
-	if (argv.includes("--help")) {
-		console.log("usage: node tools/claim-order.mjs [--db ./selfdev.sqlite] [--seat <name> | --seat=<name>=<strategy>]... [--json <out>] [--stdin]");
+	// The ONE reader for the tools/ plane. The four-line reader this replaces made `--json=path` and
+	// `--db=path` SILENT DEFAULTS (measured before this change: `--json=.spike/co.json` exited 0 in 7.06 s
+	// writing NOTHING, and a typo'd option printed the same report as an honoured run), and its `--seat`
+	// scanner read only tokens that START with `--seat`, so an unknown `--seatx` was accepted as a seat name.
+	const o = parseOpts(argv, {
+		value: ["db", "cli", "json", "team", "seat"],
+		bool: ["stdin", "help"],
+		multi: ["seat"],
+		usage: "--db <path> · --cli <file> · --seat <name[=strategy]> (repeatable) · --team <strategy> · --json <out> · --stdin · --help",
+	});
+	if (o.has("help")) {
+		console.log(`usage: node tools/claim-order.mjs ${o.usage}`);
 		return 0;
 	}
 
@@ -111,29 +137,24 @@ function main() {
 
 	// `--seat impl` or `--seat=impl=priority_first`: the name, and optionally the strategy to measure
 	// against. In `--stdin` mode there is no seats document to read, so the strategy has to be supplied.
-	const requestedSeats = () => {
-		const out = [];
-		for (let i = 0; i < argv.length; i += 1) {
-			if (!argv[i].startsWith("--seat")) continue;
-			const inline = argv[i].slice("--seat".length).replace(/^=/, "");
-			const value = inline || argv[i + 1] || "";
-			if (!value) continue;
-			const [name, strategy] = value.split("=");
-			out.push({ name, strategy: strategy ?? null });
-		}
-		return out;
-	};
+	// `--seat impl` or `--seat=impl=priority_first`: the name, and optionally the strategy to measure
+	// against. In `--stdin` mode there is no seats document to read, so the strategy has to be supplied.
+	const requestedSeats = () =>
+		o.all("seat").map((v) => {
+			const [name, ...rest] = v.split("=");
+			return { name, strategy: rest.length ? rest.join("=") : null };
+		});
 
-	if (argv.includes("--stdin")) {
+	if (o.has("stdin")) {
 		items = parseCliJson(readFileSync(0, "utf8")).items ?? []; // fd 0 read synchronously: process.stdin is not iterable here
 		for (const { name, strategy } of requestedSeats()) {
 			seatStrategies[name] = strategy;
 			seatNames.push(name);
 		}
-		teamStrategy = opt("team", DEFAULT_STRATEGY);
+		teamStrategy = o.get("team", DEFAULT_STRATEGY);
 	} else {
-		const db = opt("db", "./selfdev.sqlite");
-		const cli = opt("cli", "cli.mjs");
+		const db = o.get("db", "./selfdev.sqlite");
+		const cli = o.get("cli", "cli.mjs");
 		const env = { ...process.env, DURIG_DB: db };
 		const q = spawnSync(process.execPath, [cli, "queue", "--json"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, env });
 		if (q.status !== 0 || !q.stdout) {
@@ -168,9 +189,10 @@ function main() {
 		now,
 	}));
 	for (const r of reports) console.log(reportLine(r));
-	if (argv.includes("--json")) {
-		writeFileSync(argv[argv.indexOf("--json") + 1], JSON.stringify({ now: new Date(now).toISOString(), teamStrategy, reports }, null, 2) + "\n");
-		console.log(`wrote ${argv[argv.indexOf("--json") + 1]}`);
+	const jsonOut = o.get("json");
+	if (jsonOut !== null) {
+		writeFileSync(jsonOut, JSON.stringify({ now: new Date(now).toISOString(), teamStrategy, reports }, null, 2) + "\n");
+		console.log(`wrote ${jsonOut}`);
 	}
 	return 0;
 }
