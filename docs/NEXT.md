@@ -115,6 +115,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `066f1ed64` | docs(close-out): the carrier tallies at the tree they CARRY (full suite 366/366 in 167.9 s), and a suite-manifest edit is not doc-only — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 066f1ed64`) |
 | `02129ec4a` | docs(NEXT): the Current item states task-6's clause as the MEASURED number (0 ROADMAP-ledger items missing), and pays its cadence row — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 02129ec4a`) |
 | `a9ceb96ce` | docs(close-out): the four doc gates and the three pinned demos re-measured at the FINAL tree, and the pointer names §43's two reads first — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s a9ceb96ce`) |
+| `dee33d7d6` | docs(NEXT): the pointer states the PUSH state from a measurement, not from the delegate's own verbs — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s dee33d7d6`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -130,7 +131,7 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 
 **Current item:** the **queue-backlog tranche (D315, ROADMAP 376-380, goal mwh73rd1-izyq72) is shipped, gated, and the
 sweep ran** — notices are not claimable work and are acknowledged mechanically, the view names work / notice / registration
-/ awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked and the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43, 1.1 s),
+/ awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked and the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43, 1.1–1.5 s),
 and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
 `queue-pressure`, `pool-dead-gate` (#7660 queued in the POOL, requires docs, no seat advertises it), `ready-ref-stale`
 (`item-3570-recut` ready to land and past its 24 h SLA — age `<N>` h **at measurement**, wall-clock relative), plus
@@ -154,10 +155,10 @@ node scripts/test.mjs --area rig --jobs 4                 # 22.1 s, 98/98
 node cli.mjs check rig.selfdev.json --json                # 7.4 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
 node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED (broker down, 3 provider BLOCKs, keys out of tree, pitfall 386); SOURCED 24.9 s exit 0 = **4** BLOCKs at `ad35570d3` — the METERS and the model pin, NOT the keys (pitfall 402); `--start --dry-run` SOURCED 8.4 s exit 1 = a lease is REFUSED, so no broker window (§40); piped into `head -1` it exits 3 = TRUNCATED (pipe-safety, pitfall 398's fix addendum)
-timeout 560 node scripts/test.mjs --all --jobs 4          # 167.9 s, 366/366, exit 0 (captured), PROVENANCE tree=b5b1f8cbb (.spike/suite-b5b1f8c.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
+timeout 560 node scripts/test.mjs --all --jobs 4          # 176.1 s, 366/366, exit 0 (captured), PROVENANCE tree=dee33d7d6 (.spike/suite-dee33d7d.out, .err 0 B); older tallies VERBATIM in docs/NEXT-ARCHIVE.md
 ```
 
-**Tallies (measured AT `tree=b5b1f8cbb`, this pointer’s own commit — §39 says a docs commit owes tallies at the tree it CARRIES, and this is that tree):** `timeout 560 node scripts/test.mjs --all --jobs 4` → **366/366 in 167.9 s, exit 0 (captured), `.err` 0 B**, PROVENANCE `tree=b5b1f8cbb` (`.spike/suite-b5b1f8c.out`); `--area docs --jobs 4` **8/8 in 70.8 s exit 0**, `--area toolchain --jobs 4` **43/43 in 30.4 s exit 0** (`PASS tools/registration-ledger-gap-test.mjs (0.2s)`); the derived loop for the five changed paths → **19 direct guards all pass, exit 0, 63.8 s** (`.spike/derived-b5b1f8c.out`). Suite members are **366** now — the 363/364 tallies in the archive are superseded and were re-measured, never reused (pitfall 404).
+**Tallies (measured AT `tree=dee33d7d6`, the CLEAN tree this window started from — the tree the PREVIOUS commit CARRIES, §39's rule):** `timeout 560 node scripts/test.mjs --all --jobs 4` → **366/366 in 176.1 s, exit 0 (captured), `.err` 0 B**, PROVENANCE `tree=dee33d7d6` (`.spike/suite-dee33d7d.out`); `--area docs --jobs 4` **8/8 in 68.8 s exit 0**, `--area toolchain --jobs 4` **43/43 in 28.4 s exit 0** (`PASS tools/registration-ledger-gap-test.mjs (0.2s)`); suite members **366** — the 167.9 s tally at `tree=b5b1f8cbb` and the 363/364 tallies are superseded, re-measured never reused (pitfall 404).
 
 **State the team is in:** the tranche is **landed in the shared tree** — `main` is this pointer's own commit over the chain named in the table above; **no push by the delegate**: `git ls-remote --refs origin main` measured `066f1ed64` — the remote carries 2 of this window's 4 commits; `main` ahead 2 and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store:** notices 461 → 5, 171 registrations parked (`held` 135 / `queued` 16 / `deferred` 17 / `claimed` 3), 1024 open work rows still out of band. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` — then §43's two reads and the residuals; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
@@ -169,7 +170,7 @@ one fleet band, so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./
 
 **Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
 name their flags, §38 the byte budget, §39 per-area tallies, §40 a broker window's refusals, §41 refreshing the ledger
-WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1 s); SELFDEV pitfalls 399–405.
+WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1–1.5 s); SELFDEV pitfalls 399–406.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 

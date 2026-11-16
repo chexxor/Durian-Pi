@@ -16,7 +16,9 @@
 //   3. the GAP: live registration rows naming an item that `docs/ROADMAP.md`'s registry does NOT carry —
 //      this is the pass's real worklist, with the ROW id and the item number, which is what `pm` needs;
 //   4. the DUPLICATES: registry items named by more than one live registration row — a ledger copy those rows
-//      would write twice (measured 2026-11-15: 13 such items, worst 126 x3, 130 x3, 217 x3);
+//      would write twice (**0 items on the live store — re-measured 2026-11-16 at the clean tree `dee33d7d6`; the
+//      header used to claim `13 such items, worst 126 x3, 130 x3, 217 x3`, which NO run on this store reproduces and
+//      which this same header's own live-call line already contradicted; the addendum below names the falsifier**);
 //   5. the READ-SHAPE fact, printed never silent: NEITHER CLI read carries the structural flag — `cli.mjs
 //      queue --json --no-body` prints keys id/from/to/subject/optimizedVia/status/transitions/resultSummary,
 //      and the full `cli.mjs queue` read measured `flagless 1200 of 1200` live rows (2026-11-15), so from a
@@ -38,9 +40,12 @@
 //   node tools/registration-ledger-gap.mjs --ledger=<path>       # a stand-in for docs/ROADMAP.md (fixture ledgers)
 //   node tools/registration-ledger-gap.mjs --json .spike/gap.json [--quiet]
 //
-// Measured cost, re-run before quoting: 1.39 s against the live store (one full `cli.mjs queue` read, ~18 MB
-// of JSON, no second read); 0.01-0.03 s against a fixture; the pinned demo `node tools/registration-ledger-gap-test.mjs`
-// 0.178 s. Live call at `b2f4d4833` (host measured in the same command): **exit 0** — `live 1200 = 1024 work +
+// Measured cost, re-run before quoting: **1.1-1.5 s** against the live store — the SAME call measured 1.10 s / 1.141 s
+// wall at `660dd94d` and **1.50 s on its own cost line / 1.544 s wall** at the clean tree `dee33d7d6` (2026-11-16), one
+// full `cli.mjs queue` read of ~18 MB of JSON, no second read, and the cost DRIFTS with broker state the way SELFDEV
+// §37's `watch --once` (1.5 s or 10.9 s) does, so a header that quotes ONE number is a 26% lie on a call that has two;
+// 0.01-0.03 s against a fixture; the pinned demo `node tools/registration-ledger-gap-test.mjs` 0.17-0.21 s. Live call
+// at `b2f4d4833` (host measured in the same command): **exit 0** — `live 1200 = 1024 work +
 // 5 notice + 171 registration`, `terminal registration 299`, `naming a ROADMAP item 33 · naming NO item 138 ·
 // item ALREADY in the ledger 33 · item NOT in the ledger 0`, `DUPLICATES 0`, `flagless 1200`. Host it was first
 // measured on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0
@@ -48,6 +53,24 @@
 // below; RED-FIRST numbers: the demo was written FIRST and exited **1 with 14 FAIL at tree=b2f4d4833 in
 // 0.157 s** (docs/failing-first-recipe.md METHOD 1 — order of operations, no git revert), then **17 ok / 0 FAIL
 // / exit 0 in 0.178 s** against this file.
+//
+// ADDENDUM 2026-11-16 (delegate, CLEAN tree `dee33d7d6` — `git status --short -- .` named only the pre-existing
+// untracked `docs/reviews/basic-world-model-implementation-for-agent-team.md`; host measured in the SAME command as
+// every number below with the hostname-free probe of pitfall 396: Linux, Fedora Linux 45 (Forty Five), kernel
+// `7.2.15-300.fc45.x86_64`, node v24.22.1, `git version 2.56.0`) — two of this header's numbers were lies, both
+// corrected IN PLACE here, no second tool written:
+//   1. `DURIG_DB=./selfdev.sqlite timeout 60 node tools/registration-ledger-gap.mjs` -> **cost 1.50 s (the tool's own
+//      line), 1.544 s shell wall, exit 0, `.err` 0 B** (`.spike/reggap-clean-dee33d7d.out`); the same call at `660dd94d`
+//      measured 1.10 s / 1.141 s. **Quote the range and re-measure.** Note the binder order: `timeout 60 DURIG_DB=… node`
+//      exits **127 in 0.002 s** (pitfall 396), the env prefix must precede the binder.
+//   2. the DUPLICATES line: this tree prints `DUPLICATES the pass would write twice: 0 items`, as it did at `660dd94d`
+//      and at `b2f4d4833`. The claim of `13 such items` is reproduced by NO run on this store — `rg "126 x3"` hits only
+//      this header — so it was an unsourced claim about an older snapshot. Falsifier: ONE bounded call, above.
+//   3. the demo and the area, re-measured at this tree: `node tools/registration-ledger-gap-test.mjs` -> **17 ok / 0 FAIL
+//      / exit 0, 0.21 s wall** (`.spike/reggap-test-dee33d7d.out`); `node scripts/test.mjs --area toolchain --jobs 4` ->
+//      **43/43 in 28.4 s, exit 0, `.err` 0 B**, carrying `PASS tools/registration-ledger-gap-test.mjs (0.2s)`, PROVENANCE
+//      `tree=dee33d7d6` (`.spike/area-toolchain-dee33d7d.out`); `node scripts/test.mjs --all --jobs 4` -> **366/366 in
+//      176.1 s, exit 0, `.err` 0 B** (`.spike/suite-dee33d7d.out`). `last_verified: 2026-11-16` by those calls.
 //
 // READ-ONLY by construction: it runs the CLI's own reader and `readFileSync` of the ledger. It mints nothing,
 // transitions nothing, writes no row — the pass itself is `pm`'s verb (docs/WORK-ITEM-LIFECYCLE.md), and a
