@@ -129,6 +129,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `71f9f58b9` | docs(runbooks+NEXT): the census and the FAILING check rule re-measured at 2d1b7033d; cadence row for 2d1b7033d — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 71f9f58b9`) |
 | `297bc26f7` | docs(runbooks+NEXT): the backlog DIRECTION disagreement survives a FRESH ledger, so the caveat that blames staleness is falsified; cadence row for 71f9f58b9 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 297bc26f7`) |
 | `205cbcad0` | docs(runbooks+NEXT): the census's mint RATE is blind to a row parked at intake — source-pinned and measured; plus pitfall 384's cadence row for 297bc26f7 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 205cbcad0`) |
+| `4e49081ba` | docs(DECISIONS+NEXT): D320 — a MINT is what the ONE mint path wrote (`held` at intake counts), so the census's mint rate is not blind to parked registrations; plus the cadence row for 205cbcad0 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 4e49081ba`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -179,7 +180,7 @@ node tools/cost-claim-audit.mjs                      # ~80 s, exit 0/1 — THIS 
 **Blocker:** none for the sweep — it ran. Two residuals, both MEASURED at this commit, and neither is an outage of the rig's.
 The two residual faces — the band is over BY ARITHMETIC (`queue-pressure` exit 1, re-measure it in 2.3 s) and the provider CHANNEL is REFUSED (`node tools/broker-serve.mjs --status` 1.1 s unsourced, `--start --dry-run` SOURCED exit 1) — VERBATIM in `docs/NEXT-ARCHIVE.md`; funding, model pins and LAN hardware are the operator’s, the **ledger** half is free (`node tools/broker-keepalive.mjs --once --no-restart` 2.1 s exit 0, store byte-identical).
 
-**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (its § map, the pitfall range and the loop costs VERBATIM in `docs/NEXT-ARCHIVE.md` below) — read it before hand-querying the store; SELFDEV pitfalls 399–409.
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (its § map, the pitfall range and the loop costs VERBATIM in `docs/NEXT-ARCHIVE.md` below) — read it before hand-querying the store; SELFDEV pitfalls 399–410.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
