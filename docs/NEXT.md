@@ -121,6 +121,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `b1fecefde` | docs(SELFDEV+NEXT): pitfall 408 — a remote ref moves inside the session reading it; the pointer's remote reading made a READ — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s b1fecefde`) |
 | `9cf8b83ef` | docs(tools/README): the what-to-test row's cost claim made true IN PLACE — 0.13 s PLAN vs 66.3 s RUN, plus the cadence row for b1fecefd — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 9cf8b83ef`) |
 | `db7150652` | docs(runbooks): §43 NINTH — the digest's POINTER slice is a 56-line WINDOW and a table CUT moves it; plus the derived-tier gate for a README edit — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s db7150652`) |
+| `fb36568a2` | docs(NEXT): the 200-line cap paid by a §43 NINTH-safe cut (8 rows after the first ARCHIVE.md bearer), plus the cadence row for db715065 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s fb36568a2`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -137,42 +138,43 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 **Current item:** the **queue-backlog tranche (D315, ROADMAP 376-380, goal mwh73rd1-izyq72) is shipped, gated, and the
 sweep ran** — notices are not claimable work and are acknowledged mechanically, the view names work / notice / registration
 / awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked and the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43, 1.1–2.3 s),
-and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
+and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43), and the block's costs below are MEASURED, not inherited (§43 TENTH). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
 `queue-pressure`, `pool-dead-gate` (#7660 queued in the POOL, requires docs, no seat advertises it), `ready-ref-stale`
 (`item-3570-recut` ready to land and past its 24 h SLA — age `<N>` h **at measurement**, wall-clock relative), plus
 `registration-as-work` at `fix-now` on the **16** queued registration ids (`check` names them; the list is VERBATIM in
 `docs/NEXT-ARCHIVE.md`).
 
-**Run these first** (measured on this box 2026-11-15 at `ef21d221c` unless a line says otherwise; re-measure rather than trust):
+**Run these first** (costs measured AT `fb36568a2` on 2026-11-16 by `node tools/cost-claim-audit.mjs` (`.spike/audit-c1.out`) — block order, tol 2, 12 of 13 priced claims measured; re-measure with that one call rather than trust the numbers):
 
 ```bash
 cd /home/chexxor/Git/Durian-Pi
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 1.5 s, exit 1 — the census, the per-DAY rate, the band verdict, the plan pm runs, AND `mint refusals:` (the fan-out budget's read path)
-DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 2.8 s, exit unchanged — the cap's PRICE (§35 states the pair and its per-MINUTE drift): re-measure, never quote it
-node tools/backlog-burn.mjs                              # 0.04 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
-node tools/broker-keepalive.mjs --once --no-restart      # 1.7 s, exit 0 — REFRESH that ledger with NO broker (§41 / SELFDEV pitfall 403): one store census appended; no broker, no store write, $0 (§41 / SELFDEV pitfall 403)
-node demo/notice-not-work.test.mjs                        # 0.28 s, exit 0 — notices are not work, the mint gate, the ack plan
-node demo/status-view-bound.test.mjs                       # 2.3 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
-node scripts/test.mjs --area readapi --jobs 4              # 5.1 s, 7/7 — the AREA task-3 names; the pin lives here (the area's slow member is `demo/read-no-create-store.test.mjs`, not the pin)
-node demo/queue-pressure.test.mjs                         # 6.8 s, exit 0, 67 checks — the gate: inside PASS / out FAIL / growing FAIL / floor, the finding QUOTES the ledger verdict
-node scripts/test.mjs --area check --jobs 4               # 8.8 s, 18/18 — the new rule plus doc-count-drift and starter
-node scripts/test.mjs --area rig --jobs 4                 # 22.1 s, 98/98
-node cli.mjs check rig.selfdev.json --json                # 7.4 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs   # 2.3 s, exit 1 — the census, the per-DAY rate, the band verdict, the plan pm runs, AND `mint refusals:` (the fan-out budget's read path)
+DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs --price-budget   # 4 s, exit unchanged — the cap's PRICE (§35 states the pair and its per-MINUTE drift): re-measure, never quote it
+node tools/backlog-burn.mjs                              # 0.05 s, exit 0 — the fleet LEDGER's verdict, the sentence `check` now QUOTES (pitfall 390)
+node tools/broker-keepalive.mjs --once --no-restart      # 2.1 s, exit 0 — REFRESH that ledger with NO broker (§41 / SELFDEV pitfall 403): one store census appended; no broker, no store write, $0 (§41 / SELFDEV pitfall 403)
+node demo/notice-not-work.test.mjs                        # 0.4 s, exit 0 — notices are not work, the mint gate, the ack plan
+node demo/status-view-bound.test.mjs                       # 3.1 s, exit 0 — section C2: the census NAMES work/notice/registration (task-3's pin)
+node scripts/test.mjs --area readapi --jobs 4              # 7.9 s, 7/7 — the AREA task-3 names; the pin lives here (the area's slow member is `demo/read-no-create-store.test.mjs`, not the pin)
+node demo/queue-pressure.test.mjs                         # 7.5 s, exit 0, 67 checks — the gate: inside PASS / out FAIL / growing FAIL / floor, the finding QUOTES the ledger verdict
+node scripts/test.mjs --area check --jobs 4               # 13.6 s, 18/18 — the new rule plus doc-count-drift and starter
+node scripts/test.mjs --area rig --jobs 4                 # 29.5 s, 98/98
+node cli.mjs check rig.selfdev.json --json                # 8.2 s, exit 1 — 3 errors: queue-pressure + pool-dead-gate + ready-ref-stale; 31 checks; the queue-pressure finding now NAMES the mint-gate refusals
 set -a; . "$HOME/.config/durig/env"; set +a               # keys live OUT OF TREE (mode 0600); the rig never sources them
-node tools/broker-serve.mjs --status                      # 0.9 s UNSOURCED (broker down, keys out of tree); SOURCED prints BLOCKs and `--start --dry-run` REFUSES a lease (§40 / pitfall 402) — re-measure, do not quote it
-timeout 300 node scripts/test.mjs --all --jobs 4          # ~172 s, 366/366, exit 0, PROVENANCE tree=617561fb5 (.spike/suite2-617561.out, .err 0 B); §43 EIGHTH states the ladder
+node tools/broker-serve.mjs --status                      # 1.1 s UNSOURCED (broker down, keys out of tree); SOURCED prints BLOCKs and `--start --dry-run` REFUSES a lease (§40 / pitfall 402) — re-measure, do not quote it
+timeout 300 node scripts/test.mjs --all --jobs 4          # 194.6 s, 367/367, exit 0, 0 FAILED, PROVENANCE tree=fb36568a2 (.spike/suite-costaudit.out, .err 45 B = the `time` wrapper's own line, pitfall 407); the gate a tools/ path owes (§43 EIGHTH's ladder)
+node tools/cost-claim-audit.mjs                      # ~80 s, exit 0/1 — THIS block re-measured in block order (a claim OFF tolerance 2 means the block lies); re-run inside its own block it reads NOT MEASURED (budget) — the budget check cuts the recursion (§43 TENTH / pitfall 409)
 ```
 
-**Tallies (measured AT `tree=617561fb5` — this pointer's tree; §39/D319: a DOCS-only commit owes the PER-AREA pair at its tree, a `tools/` path owes the FULL suite):** `timeout 150 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 67.6 s exit 0 `.err` 0 B**; `timeout 90 node scripts/test.mjs --area toolchain --jobs 4` → **43/43 in 26.9 s exit 0 `.err` 0 B** (pair **94.5 s**, PROVENANCE `tree=617561fb5`); the gate this commit owes — `timeout 300 node scripts/test.mjs --all --jobs 4` → **366/366 in 172.4 s exit 0 `.err` 0 B** at that SAME tree (a first run of that command/tree came **365/366** naming `demo/restart-limit-behaviour.test.mjs`; §43 FOURTH's three bounded reads — standalone 3/3 exit 0, `rig` 98/98 in 27.5 s, second suite green — disambiguate BEFORE any code touch). **Ladder at ONE tree: selector PLAN 0.13 s < derived direct tier 66.3 s (19 guards) < pair 94.5 s < suite 172.4 s** — `tools/what-to-test.mjs`'s "sub-second" claim was FALSE by ~2 orders of magnitude, corrected IN PLACE (§43 EIGHTH); artifacts and the `tools/README.md` drift row are in §43 EIGHTH. Superseded wording VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **366** (`git=366 disk=366`).
+**Tallies (the gate a `tools/` path owes is the FULL suite AT the tree it carries; §39/D319 reserves the per-area pair for a DOCS-only commit):** `timeout 300 node scripts/test.mjs --all --jobs 4` → **367/367 in 194.6 s exit 0, 0 `FAILED` lines**, PROVENANCE `tree=fb36568a2` (`.spike/suite-costaudit.out`; `.err` 45 B = the `time` wrapper's own report line, pitfall 407, not tool stderr); `node tools/instrument-provenance.mjs --quiet` → **`suite members: git=367 disk=367`** exit 0. Superseded wording VERBATIM in `docs/NEXT-ARCHIVE.md`; Suite **367**.
 
 **State the team is in:** the tranche is **landed in the shared tree**; **no push by the delegate**: `git ls-remote --refs origin main` and `git rev-list --count origin/main..HEAD` are **re-read every turn** — pitfall 408: both move inside the reading session, so neither is quotable (at this commit the count printed **0**, the ref equals HEAD, advanced OUTSIDE the delegate's verbs), and **no broker lease ran in this window** (no seat woken, $0 spend). **The sweep is DONE in the store**. **No row is claimed by the delegate** — queue transitions are pm's verbs (AGENTS.md). **What the next session runs first:** the `Run these first` block above, then the pointer cadence in ONE call — `node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order` — then §43's two reads and the residuals; full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
 **Blocker:** none for the sweep — it ran. Two residuals, both MEASURED at this commit, and neither is an outage of the rig's.
-**(1) TRUE band failure:** 1,024 open work vs a band of 120 (`10/seat × 12 seats`), so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`, 1.5 s, exit 1; the rate is wall-clock relative). **(2) the fleet CHANNEL is REFUSED:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming four provider rules (§40 / pitfall 402) — funding, pins and LAN hardware are the operator’s; the **ledger** half is free: `node tools/broker-keepalive.mjs --once --no-restart` 1.7 s exit 0, `selfdev.sqlite` byte-identical. Full wording VERBATIM in `docs/NEXT-ARCHIVE.md` below.
+**(1) TRUE band failure:** 1,024 open work vs a band of 120 (`10/seat × 12 seats`), so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`, 2.3 s, exit 1; the rate is wall-clock relative). **(2) the fleet CHANNEL is REFUSED:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming four provider rules (§40 / pitfall 402) — funding, pins and LAN hardware are the operator’s; the **ledger** half is free: `node tools/broker-keepalive.mjs --once --no-restart` 2.1 s exit 0, `selfdev.sqlite` byte-identical. Full wording VERBATIM in `docs/NEXT-ARCHIVE.md` below.
 
 **Runbook index:** `docs/runbooks/session-start-cost.md` §32–§43 (§35 prices the mint cap, §36 its knob CURVE, §37 costs
 name their flags, §38 the byte budget, §39 per-area tallies, §40 a broker window's refusals, §41 refreshing the ledger
-WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1–2.3 s, its SIXTH–EIGHTH addenda the contract re-measures, the per-area pair (94.5 s), and the three-loop ladder (0.13 s PLAN < 66.3 s direct < 94.5 s pair < 172.4 s suite); SELFDEV pitfalls 399–407.
+WITHOUT a broker, §42 the owed carrier tally at its tree, §43 the registration→ledger gap read in 1.1–2.3 s and the instrument that MEASURES a pointer's cost claims, its SIXTH–TENTH addenda the contract re-measures, the per-area pair, the three-loop ladder, and that audit; SELFDEV pitfalls 399–409.
 
 **Known red:** `node demo/offline.mjs` exits 1 — full wording VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
