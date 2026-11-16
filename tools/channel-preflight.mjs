@@ -30,17 +30,22 @@ import { RESERVATION_STALE_MS } from "../src/genlockreserve.mjs";
 import { BROKER_HEARTBEAT_TIMEOUT_MS } from "../src/storeownership.mjs";
 import { selectWakes } from "../src/driver.mjs";
 import { resolveSeatRoot, classifyGitRoot } from "../src/seatroot.mjs";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-const opt = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
-};
-const DB = opt("db", "./selfdev.sqlite");
-const RIG = opt("rig", "./rig.selfdev.json");
-const SNAPSHOT = opt("queue-snapshot", null);
-const RECENT = Number(opt("recent", 30)) || 30;
-const OUT = opt("json", null);
+// ONE reader for the tools/ plane (tools/argv-contract.mjs). The four-line reader this replaces made
+// `--json=<path>` a SILENT DEFAULT: measured exit 0, a full 11,325 B report, `.err` 109 B and NOTHING written
+// (SELFDEV pitfall 426). Unknown options now REFUSE at exit 2 and name the option.
+const o = parseOpts(argv, {
+	value: ["db", "rig", "queue-snapshot", "recent", "json"],
+	numeric: ["recent"],
+	usage: "--db <path> · --rig <path> · --queue-snapshot <capture> · --recent <n> · --json <out>",
+});
+const DB = o.get("db", "./selfdev.sqlite");
+const RIG = o.get("rig", "./rig.selfdev.json");
+const SNAPSHOT = o.get("queue-snapshot");
+const RECENT = o.num("recent", 30);
+const OUT = o.get("json");
 const t0 = Date.now();
 const ms = () => Date.now() - t0;
 const note = (m) => process.stderr.write(`[channel-preflight ${ms()}ms] ${m}\n`);

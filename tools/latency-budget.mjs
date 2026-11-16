@@ -15,15 +15,22 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-const arg = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 ? argv[i + 1] : dflt;
-};
+// ONE reader for the tools/ plane (tools/argv-contract.mjs): the four-line reader this replaces made
+// `--json=<path>` and `--zzz=1` SILENT — the report printed, the exit code did not move, and the reader asked for
+// a file that never appeared (SELFDEV pitfall 426).
+const o = parseOpts(argv, {
+	value: ["db", "top"],
+	bool: ["json"],
+	numeric: ["top"],
+	usage: "--db <path> · --top <n> · --json",
+});
+const arg = (name, dflt) => o.get(name, dflt);
 const DB = arg("db", "./selfdev.sqlite");
-const TOP = Number(arg("top", 12));
-const JSONOUT = argv.includes("--json");
+const TOP = arg("top", 12);
+const JSONOUT = o.has("json");
 const t0 = Date.now();
 
 // ---------- currency 1: the item, from the rig's own read (never from a delta-encoded SQL probe) ----------

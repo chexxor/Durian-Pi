@@ -42,13 +42,18 @@
 import { execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { writeFileSync } from "node:fs";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-const opt = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
-};
-const has = (name) => argv.includes(`--${name}`);
+// ONE reader for the tools/ plane (tools/argv-contract.mjs): `--json=<path>` on the four-line reader this
+// replaces printed a 1,937 B report at exit 0/2 and wrote NOTHING (SELFDEV pitfall 426).
+const o = parseOpts(argv, {
+	value: ["db", "json"],
+	bool: ["include-notices"],
+	usage: "--db <path> · --json <out> · --include-notices",
+});
+const opt = (name, dflt) => o.get(name, dflt);
+const has = (name) => o.has(name);
 
 const DB = opt("db", "./selfdev.sqlite");
 const OUT = opt("json", null);

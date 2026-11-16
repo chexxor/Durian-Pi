@@ -330,6 +330,7 @@
       "demo/check-evidence.test.mjs",
       "demo/check-pool-gate.test.mjs",
       "demo/queue-pressure.test.mjs",
+      "demo/flag-form-refusal.test.mjs",
       "demo/check.test.mjs",
       "demo/checkup-citation.test.mjs",
       "demo/commit-message-encoding.test.mjs",

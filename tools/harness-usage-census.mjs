@@ -23,23 +23,23 @@
 //   node tools/harness-usage-census.mjs <dir> --top 30                           # widen the tool-name table
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-const flag = (name) => {
-	const i = argv.indexOf(`--${name}`);
-	if (i < 0) return null;
-	argv.splice(i, 1);
-	return true;
-};
-const opt = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	if (i < 0) return dflt;
-	const v = argv[i + 1];
-	argv.splice(i, 2);
-	return v;
-};
+// ONE reader for the tools/ plane (tools/argv-contract.mjs). The reader this replaces MUTATED argv and then
+// guessed the positionals from what was left; now the positional list is what the parser saw, and an option
+// this census does not take REFUSES at exit 2 instead of silently narrowing the corpus (SELFDEV pitfall 426).
+const o = parseOpts(argv, {
+	value: ["tools", "top"],
+	bool: ["sessions"],
+	numeric: ["top"],
+	positional: true,
+	usage: "<session-dir> [<session-dir> ...] · --tools a,b,c · --sessions · --top <n>",
+});
+const flag = (name) => o.has(name);
+const opt = (name, dflt) => o.get(name, dflt);
 
-const dirs = argv.filter((a) => !a.startsWith("--"));
+const dirs = o.rest;
 if (!dirs.length) {
 	console.error("usage: node tools/harness-usage-census.mjs <session-dir> [<session-dir> ...] [--tools a,b] [--sessions] [--top N]");
 	process.exit(2);

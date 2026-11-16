@@ -21,19 +21,22 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { parseOpts } from "./argv-contract.mjs";
 
 const argv = process.argv.slice(2);
-const opt = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
-};
-const flags = new Set(argv.filter((a) => a.startsWith("--") && !argv[argv.indexOf(a) + 1]));
-void flags;
-const DB = opt("db", "./selfdev.sqlite");
-const FLOOR = Math.max(4, Number(opt("floor", 7)) || 7);
-const OTHER = opt("other-store", null);
-const SNAPSHOT = opt("snapshot", null);
-const OUT = opt("json", null);
+// ONE reader for the tools/ plane (tools/argv-contract.mjs). The four-line reader this replaces made
+// `--json=<path>` a SILENT DEFAULT: measured exit 0, 303 ms, and NO file written, while the space form wrote
+// 649 B (SELFDEV pitfall 426). The dead `flags` set it grew is gone: the reader answers flags, argv guessing does not.
+const o = parseOpts(argv, {
+	value: ["db", "floor", "other-store", "snapshot", "json"],
+	numeric: ["floor"],
+	usage: "--db <path> · --floor <n> · --other-store <path> · --snapshot <capture> · --json <out>",
+});
+const DB = o.get("db", "./selfdev.sqlite");
+const FLOOR = Math.max(4, o.num("floor", 7));
+const OTHER = o.get("other-store");
+const SNAPSHOT = o.get("snapshot");
+const OUT = o.get("json");
 const TERMINAL = new Set(["done", "cancelled"]);
 
 const t0 = Date.now();

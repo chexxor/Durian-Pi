@@ -38,14 +38,19 @@ import { existsSync, lstatSync, mkdirSync, rmSync, writeFileSync } from "node:fs
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { parseOpts } from "./argv-contract.mjs";
 
 const ROOT = resolve(fileURLToPath(import.meta.url), "../..");
 const argv = process.argv.slice(2);
-const flag = (name) => argv.includes(`--${name}`);
-const opt = (name, dflt) => {
-	const i = argv.indexOf(`--${name}`);
-	return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : dflt;
-};
+// ONE reader for the tools/ plane (tools/argv-contract.mjs): both flag spellings are ONE option, and an option
+// this gate does not take REFUSES at exit 2 instead of running a silent default (SELFDEV pitfall 426).
+const o = parseOpts(argv, {
+	value: ["cli", "verbs", "json", "target"],
+	bool: ["allow-existing"],
+	usage: "--cli <path> · --verbs <status,queue,ps,show> · --target <abs-scratch-path> · --allow-existing · --json <out>",
+});
+const flag = (name) => o.has(name);
+const opt = (name, dflt) => o.get(name, dflt);
 
 const CLI = resolve(ROOT, opt("cli", "cli.mjs"));
 const VERBS = (opt("verbs", "status,queue,ps,show") || "")
