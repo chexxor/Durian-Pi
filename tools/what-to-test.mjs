@@ -39,6 +39,14 @@
 //   `last_verified: 2026-11-15` by `node tools/what-to-test.mjs --run --base=508d1ea25` (it refuses to run
 //    >25 derived guards — exit 2 — which is the point: a 35-guard set is the full gate's job).
 //
+// ADDENDUM (2026-11-16, delegate at `9a94b37c5`; host measured in the SAME command as the numbers: Linux,
+// Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
+//   3. **`--direct-only` is not sub-second — the usage line claimed it was, and it is off by ~2 orders of
+//      magnitude.** The honest shape is MINUTES. Measured, one bounded call at the clean tree `9a94b37c5`:
+//      `node tools/what-to-test.mjs --paths=docs/NEXT.md,docs/NEXT-ARCHIVE.md,docs/SELFDEV.md,docs/DECISIONS.md,docs/runbooks/session-start-cost.md --direct-only --run` → exit **0**, **19 direct guards**, `all derived tests passed`, **wall 66.29 s** (artifact `.spike/derived-direct-docs.out`; its `.err` carried 13 B = one `/usr/bin/time` report line, 0 B from this tool — read the CONTENT of `.err`, not its size, SELFDEV pitfall 407). The 66.29 s is the SUM of the 19 per-test times the tool prints (they add to 65.8 s): `demo/clockin-digest.test.mjs` 27.9 s, `demo/local-slot-gate.test.mjs` 11.1 s, `demo/queue-compat-args.test.mjs` 8.0 s, `demo/queue-row-read.test.mjs` 4.3 s, `demo/broker-serve-pipe-safe.test.mjs` 3.6 s, `demo/config.test.mjs` 3.0 s and 13 more under 2 s — i.e. a "did I break the pointer / a runbook?" loop reads as instant when it is not, which is why the claim is now dated with its measurement. Only the WORDING changed: no behaviour and no assertion moves, and the `NEVER LAND ON THE SUBSET` banner still refuses a derived set as the landing gate.
+//   4. **which loop to pay for a change this size, all measured on this box**: direct guards **66.3 s** < the per-area pair **97.3 s** (`--area docs` 69.1 s + `--area toolchain` 28.2 s, `docs/runbooks/session-start-cost.md` §43) < the FULL suite **170.5 s** for 366 tests. A DOCS-only commit owes the PAIR, not the suite (D319 in `docs/DECISIONS.md` — the unit of verification follows the unit of change); a `tools/` change owes the suite. The 66.3 s is ONE change set's wall clock, NOT a rate — do not quote it as a constant for another path set, and re-measure before choosing a loop.
+//   `last_verified: 2026-11-16` by the `--direct-only` command above (exit 0) and by `node tools/what-to-test.mjs --paths=src/seatguard.mjs --json` (exit 0, selection only — no `--run`, so nothing here calls it a gate).
+//
 //   node tools/what-to-test.mjs                 classify the working tree (staged + unstaged + untracked)
 //   node tools/what-to-test.mjs --base=main     classify a whole branch vs its merge-base with main
 //   node tools/what-to-test.mjs --run           run the selected guards now (sequential, 120 s each)
@@ -63,8 +71,10 @@ const USAGE = `usages:
   node tools/what-to-test.mjs                 classify the working tree (staged + unstaged + untracked)
   node tools/what-to-test.mjs --base=<ref>    classify everything HEAD changed since the merge-base with <ref>
   node tools/what-to-test.mjs --run           run the derived guard set now, then report (direct tier first)
-  node tools/what-to-test.mjs --direct-only   run only the DIRECT guards (the sub-second "did I break the
-                                              pointer / a runbook?" check; a doc edit does not stop here)
+  node tools/what-to-test.mjs --direct-only   run only the DIRECT guards (the cheapest "did I break the
+                                              pointer / a runbook?" loop — MINUTES, not sub-second: 19 direct
+                                              guards measured 66.3 s on a 5-path docs change set at 9a94b37c5,
+                                              host Fedora Linux 45, node v24.22.1; a doc edit does not stop here)
   node tools/what-to-test.mjs --paths=<p,..>  classify these paths instead of the working tree (plan before editing)
   node tools/what-to-test.mjs --json          one JSON document
   node tools/what-to-test.mjs --no-scan       skip the control-byte / zero-width scan of changed text files`;
