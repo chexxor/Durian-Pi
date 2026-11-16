@@ -122,6 +122,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `cef6b5ffd` | feat(tools): the pointer's BYTE budget is ONE call that moves PROSE VERBATIM and proves the move — a clause outside the digest slice REFUSES — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s cef6b5ffd`) |
 | `543048816` | feat(clockin): the digest's archive line stops printing a whole pointer row — a pointer row pays ZERO digest bytes, and 877 B of cold-start come back — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 543048816`) |
 | `19d6762f4` | docs(NEXT): the cadence row for 543048816 in commit order, and the SELFDEV pitfall range amended to 399-415 in place — rows-only pays the clock-in digest ZERO bytes (re-read unchanged at 19,450 B of DIGEST_BUDGET_BYTES = 20000) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 19d6762f4`) |
+| `79dc9b830` | docs(NEXT+ARCHIVE): pay the cadence row for 19d6762f4, re-point the pointer's `Run these first` at the audit measured at the tree it carries, and pay the clock-in digest budget by a VERBATIM move — the digest 19,850 B -> 19,435 B of DIGEST_BUDGET_BYTES = 20000 (pointer-prose-cut proof: slice 8,499 -> 8,045 B, archive +962 B), four docs-area runs agree 59.9-60.4 s, the four doc gates exit 0 — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 79dc9b830`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -171,7 +172,7 @@ node tools/cost-claim-audit.mjs                      # ~80 s, exit 0/1 — THIS 
 
 **Blocker:** none for the sweep — it ran. The two residual faces are VERBATIM in `docs/NEXT-ARCHIVE.md`.
 
-**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§44 — read it before hand-querying the store; SELFDEV pitfalls 399–415.
+**Runbook index:** `docs/runbooks/session-start-cost.md` §32–§45 — read it before hand-querying the store; SELFDEV pitfalls 399–417.
 
 **Known red:** `node demo/offline.mjs` exits 1 (VERBATIM in the archive).
 
