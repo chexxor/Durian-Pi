@@ -112,6 +112,7 @@ Every commit in `8b5a19e1..HEAD`, oldest first:
 | `b2f4d4833` | docs(queue): the carrier tally recorded at the tree it CARRIES on, and §42 names both numbers — cadence row named from git's own subject line (`git log -1 --format=%s b2f4d4833`), pitfall 384 |
 | `660dd94d5` | tools/registration-ledger-gap.mjs — the ROADMAP-ledger pass is MEASURED: 0 items missing, 138 rows name nothing (goal mwh73rd1-izyq72, task-6's clause) — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 660dd94d5`) |
 | `b5b1f8cbb` | docs(close-out): §43 + pitfall 405 — the ROADMAP-ledger gap is MEASURED (0 items), and an unmapped tools/ member made the toolchain area RED — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s b5b1f8cbb`) |
+| `066f1ed64` | docs(close-out): the carrier tallies at the tree they CARRY (full suite 366/366 in 167.9 s), and a suite-manifest edit is not doc-only — cadence row of pitfall 384: the commit that carries the pointer cannot name itself, so the NEXT commit owes this row; text from git's own subject line (`git log -1 --format=%s 066f1ed64`) |
 
 **Broker windows. A window is a LEASE leased from OUTSIDE: `--max-duration` is checked only at the top of the
 broker loop (`src/broker.mjs` `maxDurationMs > 0` → line 2261 at `f4a475e6e`; the NUMBER drifts with the file, the SYMBOL does not — pitfall 398), so a pass in flight starves it. Open a window as `nohup timeout --signal=TERM
@@ -127,7 +128,7 @@ echo "$PRETTY_NAME") && node -v && git --version`.
 
 **Current item:** the **queue-backlog tranche (D315, ROADMAP 376-380, goal mwh73rd1-izyq72) is shipped, gated, and the
 sweep ran** — notices are not claimable work and are acknowledged mechanically, the view names work / notice / registration
-/ awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked,
+/ awaiting-operator, the mint path has a fan-out budget whose refusals are **recorded AND read**, registrations are parked and the ROADMAP-ledger pass is MEASURED (0 items missing, 138 name nothing — §43, 1.1 s),
 and "the backlog is growing" is a FAILING `check` rule that QUOTES the fleet ledger. Shipped evidence, the red-first pair and task-3's pin are VERBATIM in `docs/NEXT-ARCHIVE.md`; the new LEDGER read is one call, 1.1 s (§43). The queue the next session acts on is `cli.mjs check rig.selfdev.json --json` (exit 1, **3 errors**):
 `queue-pressure`, `pool-dead-gate` (#7660 queued in the POOL, requires docs, no seat advertises it), `ready-ref-stale`
 (`item-3570-recut` ready to land and past its 24 h SLA — age `<N>` h **at measurement**, wall-clock relative), plus
