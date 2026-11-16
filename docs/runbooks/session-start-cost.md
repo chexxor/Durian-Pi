@@ -1222,3 +1222,14 @@ LINE):** at `60840ae9d` the closer `node tools/pointer-row-for-predecessor.mjs -
 holes / 0 ordering defects**, and left the digest UNCHANGED at **19,894 B of `DIGEST_BUDGET_BYTES = 20000`** while
 `wc -l docs/NEXT.md` went **188 → 189** of the 200-line cap — the row costs a line and ZERO bytes, which is §33/pitfall
 392's fact re-proven on a 277-commit range.
+
+**The same two tallies re-run at the tree that CARRIES this section** (`tree=be5165f79`, the commit whose row is in
+the pointer table): `timeout 300 node scripts/test.mjs --area docs --jobs 4` → **8/8 in 66.3 s, exit 0, `.err` 0 B**
+(slowest `demo/runbook-diagnose.test.mjs` 66.2 s, and the runner stamps `PROVENANCE tree=be5165f79 branch=main
+node=v24.22.1 host=linux 7.2.15-300.fc45.x86_64 pi-durable=1.5.1` inside `.spike/area-docs-be5165f7.out`), and the
+derived loop → **16/16 `all derived tests passed`, exit 0 in 56.6 s, `.err` 0 B** (`.spike/what-to-test-be5165f7.out`).
+The store stayed byte-identical across both runs — `stat -c '%y %s' selfdev.sqlite` = `2026-11-15 02:28:46.948765114
+-0600 810074112` — which is the proof that a carrier tally is a READ, not a mutation, and that the two loops cost
+**66.3 s + 56.6 s** of a docs window instead of a 171 s suite (§39's point, priced). A docs commit therefore owes
+TWO numbers, not one: the tally at the tree it CLOSES on (the row's tree) and the tally at the tree it CARRIES on
+(its own); naming only the first is how a docs session comes to believe its own change was never run.
