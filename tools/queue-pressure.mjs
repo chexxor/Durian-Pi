@@ -28,6 +28,12 @@
 //      fan-out rate 100 is not a pathological-fan-out stop, it is a halt on real work; the lineage rule refused
 //      6 (0.5%), i.e. it is priced. A cap nobody can price is the same class of lie as a limit nobody reads.
 //
+//   8. `mint-rate SANITY` — "is the mint rate the whole row set?" NO while rows can be minted parked: `burnRate`
+//      counts a row's FIRST `queued` transition, and `src/rig.mjs` writes the intake of a HELD/registration mint as
+//      `held`, so a parked mint is born invisible to the rate the band rule and `check`'s `queue-pressure` finding quote.
+//      Measured 2026-11-16 on this rig: `minted 1688` against `1721` rows born inside 7 d — **33 blind rows (19 registrations),
+//      a 1.9 % undercount** that moves `netOpen` DOWN. This tool NAMES the blind set (delegate plane, the base predicate
+//      untouched); the fix belongs at the ONE definition of "minted", and `demo/queue-pressure.test.mjs` pins the numbers.
 // Exact command (the cost is printed at the end):
 //   DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs
 //   node tools/queue-pressure.mjs --db ./selfdev.sqlite --window-days 7 --band-per-seat 10 [--json out.json]
@@ -43,6 +49,13 @@
 // function, so the two cannot disagree. The mint-refusal line does NOT change this verdict: a refusal is the gate
 // WORKING (it stopped a mint), not pressure; only a saturated ledger changes what the number means (FLOOR vs count).
 //
+// Cost ADDENDUM 2026-11-16 at the commit that lands the mint-rate SANITY leg: the store read stays the whole cost
+// — `node tools/queue-pressure.mjs --db ./selfdev.sqlite` printed 1.949 s self / 1.99 s wall, exit 1 (the band FAIL),
+// stderr 0 bytes, and the SANITY leg is arithmetic over rows the read already returned (NO second store read).
+// `last_verified: 2026-11-16`, verified by that call, by `node demo/queue-pressure.test.mjs` (exit 0 / 75 checks /
+// 7.87 s / stderr 0 bytes) and by the FULL suite `node scripts/test.mjs --all --jobs 4` → 367/367 in 171.3 s, exit 0,
+// 0 FAILED lines, stderr 0 bytes at the tree that commit lands (the gate a tools/ path owes: docs/runbooks/session-start-cost.md
+// §43 EIGHTH). Host of every number: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1.
 // Measured cost, re-run before quoting: 1.3-2.0 s against the live store (the queue read is the whole cost; the
 // `mintRefusals` census adds ~436 B to that read, not a second read); 0.5-0.9 s against a snapshot capture;
 // 2.6-3.4 s with `--price-budget` (the bodies-carrying read is 1.3 s / ~32 MB of it). Host it was first measured
@@ -182,6 +195,39 @@ const shape = queueShape(items);
 const seats = readSeats();
 const verdict = pressureVerdict(shape, items, { perSeat: BAND, seats: seats.length, windowDays: WINDOW_DAYS });
 const { band, burn } = verdict;
+// THE MINT-RATE SANITY — the rate line below counts rows whose FIRST `queued` transition is inside the window
+// (`burnRate`, src/queueclass.mjs). A row minted straight into a PARK is BORN and invisible to that rate: `src/rig.mjs`
+// writes the intake transition as `event: mintHeld ? "held" : "queued"` with `mintHeld = held || registration`, so a
+// ROADMAP registration minted HELD has no `queued` transition anywhere. The age line already admits those rows
+// (`no-queued-event=N`); the rate line silently drops them, and an undercount of MINTS moves `netOpen` DOWN — it
+// makes the backlog read calmer than the fleet is. This line names the blind set rather than hiding it. It is a
+// DELEGATE-PLANE read: the base `burnRate` is UNCHANGED here (its intake definition, its header claim at `:174-176`
+// and the band rule that reads it are a seat's change, pinned by demo/queue-pressure.test.mjs + demo/notice-not-work.test.mjs —
+// landing either silently turns those RED, which is the gate working, not a regression to relax).
+const rateSanity = (() => {
+	const cut = Date.now() - WINDOW_DAYS * 86400000;
+	const firstAny = (it) => (it.transitions ?? [{}])[0]?.at ?? null;
+	const anyQueued = (it) => (it.transitions ?? []).some((t) => t.event === "queued");
+	const born = items.filter((it) => { const at = firstAny(it); return at && Date.parse(at) >= cut; });
+	const blind = born.filter((it) => !anyQueued(it));
+	const statuses = {};
+	for (const it of blind) statuses[it.status] = (statuses[it.status] ?? 0) + 1;
+	const netOpenIfCounted = burn.netOpen + blind.length;
+	return {
+		windowDays: WINDOW_DAYS,
+		visibleMints: burn.minted,
+		bornInWindow: born.length,
+		blind: blind.length,
+		blindRegistration: blind.filter((it) => classifyRow(it) === "registration").length,
+		blindNotice: blind.filter(isNoticeItem).length,
+		blindStatuses: statuses,
+		shareOfBlind: born.length ? Math.round((blind.length / born.length) * 1000) / 10 : 0,
+		netOpenIfCounted,
+		verdictIfCounted: netOpenIfCounted > 0 ? "GROWING" : "SHRINKING",
+		verdictFlips: (netOpenIfCounted > 0 ? "GROWING" : "SHRINKING") !== burn.verdict,
+		note: "the RATE is a floor while rows can be minted parked; counting a row's FIRST transition of any kind is the base change a seat owns (src/queueclass.mjs burnRate + src/rig.mjs intake event), with the demo pair that pins exact fixture counts",
+	};
+})();
 const ages = ageBuckets(items.filter((it) => !["done", "cancelled"].includes(it.status)));
 // THE BUDGET BACK-TEST — the counterfactual, on the delegate plane, over the SHIPPED predicates.
 // Precedence mirrors `mintGate` (src/rig.mjs): duplicate, then burst, then lineage. A mint the replay refuses
@@ -270,6 +316,7 @@ const report = {
 	awaitingOperator: shape.awaitingOperator,
 	agesOfLiveRows: ages,
 	window: burn,
+	mintRateSanity: rateSanity,
 	pressure: { fail: verdict.fail, reasons: verdict.reasons, growthFloor: verdict.growthFloor },
 	band,
 	openWorkBySeat: shape.openWorkBySeat,
@@ -308,6 +355,7 @@ line(`  notice    ${JSON.stringify(shape.noticeByStatus)}   — a protocol ack, 
 line(`  reg       ${JSON.stringify(shape.registrationByStatus)}   — ROADMAP ledger copies parked in the queue`);
 line(`  ages of live rows: ${Object.entries(ages).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 line(`  mint ${burn.minted} (${burn.mintedWork} work, ${burn.mintedNotice} notice) vs close ${burn.closed} (${burn.closedWork} work, ${burn.closedNotice} notice) -> net ${burn.netOpen > 0 ? "+" : ""}${burn.netOpen} (${burn.perDay.minted}/d minted, ${burn.perDay.closed}/d closed, ${burn.perDay.netOpen}/d net): ${burn.verdict}`);
+line(`  mint-rate SANITY: that rate sees ${rateSanity.visibleMints} of ${rateSanity.bornInWindow} rows BORN inside the ${rateSanity.windowDays} d window — ${rateSanity.blind} were minted straight into a park (${rateSanity.blindRegistration} ROADMAP registration(s), ${rateSanity.blindNotice} notice(s); statuses ${Object.entries(rateSanity.blindStatuses).map(([k, v]) => `${k}=${v}`).join(" ")}; ${rateSanity.shareOfBlind}% of the mints it should count). Counting a row's FIRST transition of any kind would move netOpen ${burn.netOpen >= 0 ? "+" : ""}${burn.netOpen} -> ${rateSanity.netOpenIfCounted >= 0 ? "+" : ""}${rateSanity.netOpenIfCounted} (verdict ${rateSanity.verdictIfCounted}${rateSanity.verdictFlips ? ", WHICH FLIPS — the FAIL below depends on a rate that cannot see these rows" : ", unchanged"}); the age line above names the same rows as the literal no-queued-event=N bucket. The base burnRate predicate is NOT changed by this tool (a seat owns its intake definition, pinned by demo/queue-pressure.test.mjs + demo/notice-not-work.test.mjs); the rate is a FLOOR while rows can be minted parked.`);
 line(`  awaiting operator: ${shape.awaitingOperator} work rows parked on a human answer`);
 line(`  open work per seat: ${Object.entries(shape.openWorkBySeat).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}=${v}`).join(" ")}`);
 line(`  oldest live rows: ${oldest.slice(0, 5).map((r) => `#${r.id} ${r.status}`).join(" | ")}`);

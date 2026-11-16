@@ -23,6 +23,12 @@
 // which ran `tools/self-merge-sla.mjs`'s landingHealth over the LIVE repo (55 refs, a merge-tree per ref) inside a
 // fixture that has no business reading the live repo. `last_verified: 2026-11-15`, `node demo/queue-pressure.test.mjs`
 // exit 0 / 43 checks / 2.7 s, `.err` 0 bytes.
+// Cost ADDENDUM 2026-11-16 at `88dbaacde` (the mint-rate SANITY legs landed): `node demo/queue-pressure.test.mjs`
+// exit 0 / 75 checks / 7.87 s / `.err` 0 bytes; the FULL suite at the tree this commit lands read 367/367 in
+// 171.3 s exit 0 with 0 FAILED lines and stderr 0 bytes (host Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1,
+// git 2.56.0). The `mint-rate SANITY` red witness is a measured artifact, not a word: the PRE-change tool (`git archive HEAD tools src | tar -x
+// -C .spike/prechange-qp80`, pre-change proven by `grep -c 'mint-rate SANITY' .spike/prechange-qp80/tools/queue-pressure.mjs` -> 0)
+// prints NO sanity line (grep count 0) while the shipped tool prints it (count 1), both on the SAME 3-row capture, both exit 0, both `.err` 0 bytes.
 // Measured on: Linux, Fedora Linux 45 (Forty Five), kernel 7.2.15-300.fc45.x86_64, node v24.22.1, git 2.56.0.
 import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
@@ -435,6 +441,59 @@ const priceStoreRun = await tool(["--db", db, "--price-budget"], { DURIG_DB: db 
 check("a store with no mints inside the window replays 0 and still exits on the band verdict", /replayed: 0 /.test(priceStoreRun.stdout) && priceStoreRun.code === 1, `${priceStoreRun.code}: ${priceStoreRun.stdout.match(/.*replayed.*/)?.[0] ?? ""}`);
 check("...and names which read the bodies came from, so a reader knows the lineage leg had body text at all", /read: bodies INCLUDED — a second bounded read/.test(priceStoreRun.stdout), priceStoreRun.stdout.slice(0, 1600));
 check("...and a capture run says so too (no second read was paid)", /bodies (present in the capture|OMITTED — the lineage leg)/.test(priceRunNoBody.stdout), priceRunNoBody.stdout.slice(0, 1600));
+
+console.log("\n=== mint-rate SANITY: the mint rate is a FLOOR while rows can be minted parked ===");
+// THE CONTRACT THIS PINS (measured on the live store 2026-11-16: `minted 1688` against 1,721 rows BORN inside
+// 7 d — 33 blind rows, 19 of them ROADMAP registrations, a 1.9 % undercount). `burnRate` counts a row's FIRST
+// `queued` transition; `src/rig.mjs` writes the intake of a HELD / registration mint as `held`, so a row minted
+// straight into a park is BORN and INVISIBLE to the rate the band rule and `check`'s `queue-pressure` finding quote.
+// The undercount moves `netOpen` DOWN — it makes the backlog read calmer than the fleet is, which is the direction
+// that matters. The tool NAMES the blind set (delegate plane); the base predicate is untouched, so this leg pins
+// the READ, and the anti-vacuity pair below proves the leg answers to the data rather than printing a constant.
+const SANITY_NOW = new Date().toISOString();
+const mintedQueued = (id, to, subject) => ({ id, from: "pm", to, status: "queued", subject, transitions: [{ at: SANITY_NOW, event: "queued" }] });
+const mintedHeld = (id, to, subject, registration) => ({ id, from: "pm", to, status: "held", subject, ...(registration ? { registration: true } : {}), transitions: [{ at: SANITY_NOW, event: "held" }] });
+const SANITY_ROWS = [
+	mintedQueued(9301, "impl", "close src/a.mjs"),
+	mintedQueued(9302, "impl", "polish #411"),
+	mintedQueued(9303, "verifier", "verify src/a.mjs"),
+	mintedQueued(9304, "impl", "fix src/b.mjs"),
+	mintedQueued(9305, "verifier", "check src/b.mjs"),
+	mintedHeld(9306, "pm", "ROADMAP 92 (BACKLOG — hold, do not start)", true),
+	mintedHeld(9307, "impl", "parked for a human answer"),
+];
+const sanitySnap = join(dir, "mint-sanity-capture.json");
+writeFileSync(sanitySnap, JSON.stringify({ ok: true, command: "queue", items: SANITY_ROWS }));
+const sanityReport = join(dir, "mint-sanity-report.json");
+const sanityRun = await tool(["--snapshot", sanitySnap, "--band-per-seat", "500", "--json", sanityReport], { DURIG_DB: db });
+const sanity = (() => {
+	try {
+		return JSON.parse(readFileSync(sanityReport, "utf8")).mintRateSanity;
+	} catch {
+		return null;
+	}
+})();
+check("the report is machine-readable — `--json` carries mintRateSanity", sanity !== null, `${sanityRun.code}: ${sanityRun.stderr.slice(0, 300)}`);
+check("it counts 5 of 7 rows BORN inside the window — 2 were minted straight into a park", sanity?.visibleMints === 5 && sanity?.bornInWindow === 7 && sanity?.blind === 2 && sanity?.shareOfBlind === 28.6, JSON.stringify({ visible: sanity?.visibleMints, born: sanity?.bornInWindow, blind: sanity?.blind, share: sanity?.shareOfBlind }));
+check("...and says WHICH rows are blind (1 registration, 1 parked ask) and where they sit", sanity?.blindRegistration === 1 && sanity?.blindNotice === 0 && JSON.stringify(sanity?.blindStatuses) === JSON.stringify({ held: 2 }), JSON.stringify({ reg: sanity?.blindRegistration, notice: sanity?.blindNotice, statuses: sanity?.blindStatuses }));
+check("...and the rate it quotes is the shipped burn (5 minted, net +5), so the sanity leg reads the SAME derivation", sanity?.windowDays === 7, JSON.stringify(sanity?.windowDays));
+check("...and counting them would move netOpen +5 -> +7 and NOT flip this fixture's verdict", sanity?.netOpenIfCounted === 7 && sanity?.verdictIfCounted === "GROWING" && sanity?.verdictFlips === false, JSON.stringify({ netOpenIfCounted: sanity?.netOpenIfCounted, verdict: sanity?.verdictIfCounted, flips: sanity?.verdictFlips }));
+check("...and prints the numbers, not a pointer at them", /mint-rate SANITY: that rate sees 5 of 7 rows BORN inside the 7 d window — 2 were minted/.test(sanityRun.stdout), sanityRun.stdout.slice(0, 1600));
+// ANTI-VACUITY: the SAME 7 rows with the two parks re-labelled as ordinary `queued` intakes must read BLIND 0 —
+// a leg that printed its live-store numbers regardless of the rows would pass here.
+const SANITY_ROWS_QUEUED = SANITY_ROWS.map((it) => ({ ...it, transitions: it.transitions.map((t, k) => (k === 0 && t.event === "held") ? { ...t, event: "queued" } : t) }));
+const sanitySnapQ = join(dir, "mint-sanity-capture-queued.json");
+writeFileSync(sanitySnapQ, JSON.stringify({ ok: true, command: "queue", items: SANITY_ROWS_QUEUED }));
+const sanityRunQ = await tool(["--snapshot", sanitySnapQ, "--band-per-seat", "500", "--json", sanityReport], { DURIG_DB: db });
+const sanityQ = (() => {
+	try {
+		return JSON.parse(readFileSync(sanityReport, "utf8")).mintRateSanity;
+	} catch {
+		return null;
+	}
+})();
+check("the same rows with `queued` intakes read BLIND 0 — the leg answers to the data, not to a constant", sanityQ !== null && sanityQ.blind === 0 && sanityQ.bornInWindow === 7 && sanityQ.visibleMints === 7 && sanityQ.shareOfBlind === 0, JSON.stringify({ blind: sanityQ?.blind, born: sanityQ?.bornInWindow, visible: sanityQ?.visibleMints, share: sanityQ?.shareOfBlind }));
+check("...and the sanity leg never changes the gate's verdict (this fixture is inside the raised band either way)", sanityRun.code === 0 && sanityRunQ.code === 0, `${sanityRun.code}/${sanityRunQ.code}`);
 
 await storage.close(BACKGROUND_CONTEXT);
 
