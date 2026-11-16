@@ -15716,3 +15716,13 @@ the derivation fix alone is a PAIRED read at one disk state with only `scripts/c
 **Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 47 B of slice text and therefore of the clock-in digest):**
 
  (its per-area pair is VERBATIM in the archive)
+
+**Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 45 B of slice text and therefore of the clock-in digest):**
+
+ (`.spike/tc-80.out`: the area gained the tranche pin and the fixed closer pin, 1.2–1.6 s)
+
+**Cut VERBATIM — the 2 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-16 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 196 B of slice text and therefore of the clock-in digest):**
+
+; SOURCED prints BLOCKs and `--start --dry-run` REFUSES a lease (§40 / pitfall 402) — re-measure, do not quote it
+
+; the census row and `cli.mjs check` are DECLARED exit 1, so a firing rule HOLDS
