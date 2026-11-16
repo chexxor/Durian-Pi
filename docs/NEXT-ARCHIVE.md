@@ -15558,3 +15558,6 @@ The `Run these first` full-suite line, VERBATIM:
 ```
 timeout 300 node scripts/test.mjs --all --jobs 4          # ~172 s, 366/366, exit 0, PROVENANCE tree=617561fb5 (.spike/suite2-617561.out, .err 0 B); §43 EIGHTH states the ladder
 ```
+## 2026-11-16T07:3xZ — the pointer pays its slice byte budget for the §39 per-area pair the docs close-out owes: the pointer's residual-faces line moved VERBATIM out of the `## NEXT SESSION` slice of `docs/NEXT.md` (extracted by positional index with `.spike/cut-43u.mjs`, never retyped; proof: re-substituting the block below into the post-cut file rebuilds the pre-cut file byte-for-byte). The slice keeps the tightened line; the shipped wording lives here.
+
+**(1) TRUE band failure:** 1,024 open work vs a band of 120 (`10/seat × 12 seats`), so `queue-pressure` FAILs by arithmetic (re-measure `DURIG_DB=./selfdev.sqlite node tools/queue-pressure.mjs`, 2.3 s, exit 1; the rate is wall-clock relative). **(2) the fleet CHANNEL is REFUSED:** `node tools/broker-serve.mjs --start --dry-run` SOURCED exits **1** naming four provider rules (§40 / pitfall 402) — funding, pins and LAN hardware are the operator’s; the **ledger** half is free: `node tools/broker-keepalive.mjs --once --no-restart` 2.1 s exit 0, `selfdev.sqlite` byte-identical. Full wording VERBATIM in `docs/NEXT-ARCHIVE.md` below.
