@@ -67,7 +67,7 @@
 // readapi 6.16 s · check-area 17.98 s · rig-area 26.04 s · burn-verdict 0.04 s · docs-area 66.42 s (8/8) ·
 // cli-check 7.95 s) and **128.55 s** (`--json=.spike/tranche-119.json` at the tree `50d4ae9d0` carries → exit 0,
 // same 10 rows, every row HOLDS, `.err` 0 B, store `stat -c '%y %s'` unchanged before and after). So the honest
-// band for the WHOLE set on this box is **110–147 s** — widened IN PLACE twice, 2026-11-16 and again 2026-11-17,
+// band for the WHOLE set on this box is **110–148 s** — widened IN PLACE three times, 2026-11-16, then 2026-11-17
 // band is a measurement and a fourth data point that falls outside it is a lie, not a rounding: `timeout 250 node
 // tools/tranche-evidence.mjs --json=.spike/tranche-131.json` at the tree `f1ab2a3ed` carries → **exit 0, 10 rows /
 // 0 mismatched, cost 146.13 s** (children 146.1 s, `.err` 0 B), per row census 3.45 s · gate-sanity 12.96 s ·
@@ -85,8 +85,19 @@
 // tree `8ec6d58ab` carries printed **146.96 s** (0.96 s ABOVE the old 146 s ceiling), `--json=.spike/tranche-142.json`
 // at the tree `91da243b4` carries **144.83 s**, and `--json=.spike/tranche-147.json` at the tree `44ed2b704` carries
 // **137.65 s** — all three exit 0, 10 rows / 0 mismatched, tool `.err` **0 B**, every row `HOLDS`. So the honest band is
-// **110–147 s** and the bound is still `timeout 250`. The `docs-area` child is the price that slides (`65.08 s` this
+// **110–147 s** AT THAT TREE (the NEXT window widened it again — read the addendum below); the bound is still `timeout 250`. The
+// `docs-area` child is the price that slides (`65.08 s` this
 // window against `60.15 s` in the pair above) as the runbook count grows; re-measure this tool, never read this block.
+//
+// ADDENDUM 2026-11-17 (delegate, the NEXT pointer re-prove window — same host line, read in the SAME call as the number
+// below): the CEILING moved by ONE again, because the newest point fell OUTSIDE the band the window above recorded —
+// `timeout 250 node tools/tranche-evidence.mjs --json=.spike/tranche-152.json` at the tree the 2026-11-17 pointer
+// carries printed **cost 147.99 s** (children 148 s), exit 0, **10 rows / 0 mismatched**, tool `.err` **0 B**, every
+// row `HOLDS`, per row census 1.86 s · gate-sanity 12.13 s · notices 0.29 s · view 2.50 s · readapi 6.30 s · check-area
+// 19.56 s · rig-area 26.60 s · burn-verdict 0.04 s · docs-area 71.47 s · cli-check 7.23 s — **0.99 s** ABOVE the
+// 147 s ceiling, so the honest band is now **110–148 s** and `timeout 250` still rounds ABOVE the ceiling. The `docs-area`
+// child is what moved here (`71.47 s` against `65.08 s` above), which is the runbook-count mechanism of §39/§43, not a
+// regression in this tool.
 //
 // Exit: 0 = every row held; 1 = at least one row did not (or a row was killed by the bound);
 //       2 = usage (a flag in the space form, an unknown flag, a `--only`/`--skip` name matching no row).
