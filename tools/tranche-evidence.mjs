@@ -67,7 +67,7 @@
 // readapi 6.16 s · check-area 17.98 s · rig-area 26.04 s · burn-verdict 0.04 s · docs-area 66.42 s (8/8) ·
 // cli-check 7.95 s) and **128.55 s** (`--json=.spike/tranche-119.json` at the tree `50d4ae9d0` carries → exit 0,
 // same 10 rows, every row HOLDS, `.err` 0 B, store `stat -c '%y %s'` unchanged before and after). So the honest
-// band for the WHOLE set on this box is **110–146 s** — widened IN PLACE 2026-11-16 by a FOURTH run, because the
+// band for the WHOLE set on this box is **110–147 s** — widened IN PLACE twice, 2026-11-16 and again 2026-11-17,
 // band is a measurement and a fourth data point that falls outside it is a lie, not a rounding: `timeout 250 node
 // tools/tranche-evidence.mjs --json=.spike/tranche-131.json` at the tree `f1ab2a3ed` carries → **exit 0, 10 rows /
 // 0 mismatched, cost 146.13 s** (children 146.1 s, `.err` 0 B), per row census 3.45 s · gate-sanity 12.96 s ·
@@ -75,6 +75,18 @@
 // docs-area 65.53 s · cli-check 7.63 s — NOT ~110 s: the price slides with the area costs it
 // re-runs (`check-area` 9.00 → 17.98 s and `docs-area` 60.15 → 66.42 s as the docs and runbook counts grew —
 // §39/§43 name that mechanism), so a `timeout` on this call must round up ABOVE the ceiling: `timeout 250`.
+//
+// ADDENDUM 2026-11-17 (delegate, the pointer re-prove window — host **Linux**, Fedora Linux 45 (Forty Five), kernel
+// `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0, read in the SAME call as each measurement below; `stat -c '%y
+// %s' selfdev.sqlite` = `2026-11-16 13:12:12.113902193 -0600 810074112` identical before and after every call below, and
+// `grep -c "2026-11-1[67]" selfdev.sqlite.spend.jsonl` = 0 → **$0**, no lease, no row transitioned, no seat woken):
+// the CEILING moved by ONE because a measurement fell OUTSIDE the old band, and a band that excludes its own newest
+// point is a lie, not a rounding — `timeout 250 node tools/tranche-evidence.mjs --json=.spike/tranche-135.json` at the
+// tree `8ec6d58ab` carries printed **146.96 s** (0.96 s ABOVE the old 146 s ceiling), `--json=.spike/tranche-142.json`
+// at the tree `91da243b4` carries **144.83 s**, and `--json=.spike/tranche-147.json` at the tree `44ed2b704` carries
+// **137.65 s** — all three exit 0, 10 rows / 0 mismatched, tool `.err` **0 B**, every row `HOLDS`. So the honest band is
+// **110–147 s** and the bound is still `timeout 250`. The `docs-area` child is the price that slides (`65.08 s` this
+// window against `60.15 s` in the pair above) as the runbook count grows; re-measure this tool, never read this block.
 //
 // Exit: 0 = every row held; 1 = at least one row did not (or a row was killed by the bound);
 //       2 = usage (a flag in the space form, an unknown flag, a `--only`/`--skip` name matching no row).
