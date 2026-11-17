@@ -67,7 +67,12 @@
 // readapi 6.16 s · check-area 17.98 s · rig-area 26.04 s · burn-verdict 0.04 s · docs-area 66.42 s (8/8) ·
 // cli-check 7.95 s) and **128.55 s** (`--json=.spike/tranche-119.json` at the tree `50d4ae9d0` carries → exit 0,
 // same 10 rows, every row HOLDS, `.err` 0 B, store `stat -c '%y %s'` unchanged before and after). So the honest
-// band for the WHOLE set on this box is **110–143 s**, NOT ~110 s: the price slides with the area costs it
+// band for the WHOLE set on this box is **110–146 s** — widened IN PLACE 2026-11-16 by a FOURTH run, because the
+// band is a measurement and a fourth data point that falls outside it is a lie, not a rounding: `timeout 250 node
+// tools/tranche-evidence.mjs --json=.spike/tranche-131.json` at the tree `f1ab2a3ed` carries → **exit 0, 10 rows /
+// 0 mismatched, cost 146.13 s** (children 146.1 s, `.err` 0 B), per row census 3.45 s · gate-sanity 12.96 s ·
+// notices 0.36 s · view 3.22 s · readapi 6.68 s · check-area 19.85 s · rig-area 26.42 s · burn-verdict 0.03 s ·
+// docs-area 65.53 s · cli-check 7.63 s — NOT ~110 s: the price slides with the area costs it
 // re-runs (`check-area` 9.00 → 17.98 s and `docs-area` 60.15 → 66.42 s as the docs and runbook counts grew —
 // §39/§43 name that mechanism), so a `timeout` on this call must round up ABOVE the ceiling: `timeout 250`.
 //
