@@ -266,7 +266,10 @@ writeFileSync(rigPath, JSON.stringify(SPEC));
 // the BASE surface, so the fixture names its own config: `DURIG_CONFIG` is precedence 1 in src/config.mjs,
 // and arming NOTHING keeps the exit code about the fixture store alone.
 const fixtureConfig = join(dir, "durig.config.json");
-writeFileSync(fixtureConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
+// THE RUNBOOK READ IS A CONFIG KEY TOO (2026-11-17): "" = OFF, so the fixture's `check` runs judge only the
+// synthetic rig they build — the live tree's stale runbooks are not part of this audit (src/config.mjs
+// `runbookDirSetting`; the rules report UNKNOWN with their reason rather than inheriting findings).
+writeFileSync(fixtureConfig, JSON.stringify({ DURIG_EXTENSIONS: "", DURIG_RUNBOOKS: "" }));
 const up = await cli(["up", rigPath], { DURIG_DB: db, DURIG_CONTEXT_WINDOW: JSON.stringify({ "faux/model-a": 65536, "faux/model-b": 40960 }) });
 check("`up` built the rig", up.code === 0, up.stderr.slice(0, 300));
 

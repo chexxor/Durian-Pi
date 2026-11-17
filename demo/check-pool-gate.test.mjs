@@ -40,7 +40,9 @@ const dir = mkdtempSync(join(tmpdir(), "durig-pool-gate-"));
 // it, and `check` exits 0" assertion below. A pool-gate fixture is a BASE rig, so it declares its own config:
 // `DURIG_CONFIG` is precedence 1 in src/config.mjs.
 const baseConfig = join(dir, "base-config.json");
-writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
+// THE RUNBOOK READ IS A CONFIG KEY TOO (2026-11-17): "" = OFF, so this fixture's `check` run does not read the
+// live tree's runbooks (see src/config.mjs `runbookDirSetting`); the three runbook rules report UNKNOWN instead.
+writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "", DURIG_RUNBOOKS: "" }));
 
 let failures = 0;
 function check(label, ok, detail = "") {

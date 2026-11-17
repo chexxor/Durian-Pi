@@ -36,7 +36,11 @@ const dir = mkdtempSync(join(tmpdir(), "durig-starter-"));
 // repo. The starter rig is the BASE surface (`durian-core` ships with NO armed extension, durig.config.example.json),
 // so the fixture says so: `DURIG_CONFIG` is precedence 1 in src/config.mjs.
 const baseConfig = join(dir, "base-config.json");
-writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
+// THE RUNBOOK READ IS A CONFIG KEY TOO (2026-11-17): "" = OFF. This fixture's starter rig lives INSIDE the repo
+// root and `cli.mjs check` runs with that cwd, so leaving the read on would put the live tree's 57 stale runbooks
+// into the starter's audit and break the assertion below that the starter has no findings of its own. "" keeps the
+// three runbook rules UNKNOWN-with-a-reason (src/config.mjs `runbookDirSetting`).
+writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "", DURIG_RUNBOOKS: "" }));
 
 /** Run cli.mjs against a scratch database and return its parsed JSON. */
 function cli(args, dbName) {

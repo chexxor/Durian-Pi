@@ -126,6 +126,16 @@ export const CONFIG_KEYS = [
 	"DURIG_PRESSURE_WINDOW_DAYS",
 	"DURIG_OPTIMIZE",
 	"DURIG_EXTENSIONS",
+	// WHERE the runbook-health rules read (2026-11-17, the queue-backlog tranche). `cli.mjs check` RUNS
+	// `runbook-front-matter` / `runbook-unverified` / `runbook-stale` by reading a directory, and a rule
+	// that reads a HARDCODED path is a rule a FIXTURE cannot turn off: the fixture rigs in demo/check.test.mjs
+	// and demo/starter.test.mjs spawn `cli.mjs` with cwd at the REPO ROOT, so the live tree's 57 stale
+	// runbooks entered a synthetic fixture's findings and broke "CLI findings match the pure audit".
+	// A config key is how this rig already answers that for extensions (`DURIG_EXTENSIONS: ""` in the SAME
+	// fixture configs), so the runbook read follows the same convention. The empty string means OFF:
+	// the reader returns null and the three rules report UNKNOWN with their reason - never a pass,
+	// never a silent clean. `runbookDirSetting` (below) is the one reader of this key.
+	"DURIG_RUNBOOKS",
 	"DURIG_LOCAL_BASE_URL",
 	"DURIG_LOCAL_MODEL",
 	"DURIG_LOCAL_CONTEXT",
@@ -880,6 +890,10 @@ export function describeConfig({ config, source }) {
 		// Where the continuation-note mirrors live (D240). Reported as a path, never as its contents, so this
 		// summary stays safe to print (secrets rule above).
 		DURIG_NOTES_DIR: config.DURIG_NOTES_DIR ?? ".durig/notes (default)",
+		// Where `check` reads the runbook set from (2026-11-17). Reported so a rig that turned the runbook
+		// rules OFF is visible: "" means OFF, and the three rules print UNKNOWN with their reason rather
+		// than judging anything. This is the seam that makes "a permanently-UNKNOWN rule" observable.
+		DURIG_RUNBOOKS: runbookDirSetting(config),
 		DEEPINFRA_API_KEY: config.DEEPINFRA_API_KEY ? "set" : "unset",
 	};
 }
@@ -918,6 +932,28 @@ export const SEAT_RESTART_LIMIT = 3;
 export const DEFAULT_MINT_BURST_CAP = 100;
 export const DEFAULT_BAND_PER_SEAT = 10;
 export const DEFAULT_PRESSURE_WINDOW_DAYS = 7;
+
+/**
+ * WHERE the runbook-health rules read, and OFF.
+ *
+ * `cli.mjs check` supplies the three runbook rules by reading a directory; hardcoding that directory means
+ * no caller can say "this rig has no runbooks to judge", and the fixture demos (which spawn `cli.mjs` with
+ * cwd at the repo root) then inherit the live tree's findings into a synthetic audit. The empty string is
+ * OFF, and OFF is not clean: the caller supplies no rows, so `auditRig` reports the three rules UNKNOWN
+ * with their reason (#5767's unknown-vs-skipped distinction).
+ *
+ * Returns the SETTING, not a resolved path: the tree `check` runs in is decided by the caller (`cli.mjs`),
+ * so one default definition here cannot disagree with a second one there.
+ *
+ * @param {Record<string,unknown>} [config]
+ * @returns {string} the directory to read, or "" for OFF.
+ */
+export const DEFAULT_RUNBOOK_DIR = "docs/runbooks";
+
+export function runbookDirSetting(config = {}) {
+	const raw = config?.DURIG_RUNBOOKS ?? process.env.DURIG_RUNBOOKS ?? DEFAULT_RUNBOOK_DIR;
+	return String(raw ?? DEFAULT_RUNBOOK_DIR).trim();
+}
 
 export function queuePressureSettings(config = {}) {
 	const readPositiveInt = (raw, dflt, name) => {

@@ -341,6 +341,7 @@
       "demo/metrics.test.mjs",
       "demo/ownership.test.mjs",
       "demo/provenance.test.mjs",
+      "demo/check-runbook-judged.test.mjs",
       "demo/runbook-frontmatter.test.mjs",
       "demo/starter.test.mjs",
       "demo/suite-env.test.mjs"

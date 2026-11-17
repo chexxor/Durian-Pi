@@ -38,6 +38,13 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+// ONE mechanism for "is this runbook stale?" (2026-11-17, the queue-backlog tranche): the reader lives in
+// src/runbookhealth.mjs, which also feeds the `cli.mjs check` runbook rules, so the digest and `check` cannot
+// spell that question differently. This replaced a probe here that spawned ONE `git log` PER NAMED PATH (~500
+// spawns over 62 dated runbooks) and read the ambiguous BARE `--since=<YYYY-MM-DD>`, which git parses to a
+// boundary INSIDE the day (measured on this box: a commit at 2026-11-08T21:16:28-06:00 is dropped by
+// `--since=2026-11-08` and kept by `--since=2026-11-08T00:00`).
+import { runbookStalenessReport } from "../src/runbookhealth.mjs";
 
 // The live file is read WHOLE by every session that follows it, so its length is a cost every later
 // session pays. demo/next-pointer.test.mjs caps docs/NEXT.md at the same number.
@@ -146,46 +153,21 @@ export function queueCounts(items) {
 	return counts;
 }
 
-/** Runbook staleness: a dated `last_verified` older than a git change to a file the runbook names. */
+/**
+ * Runbook staleness — a dated `last_verified` older than a git change to a file the runbook NAMES, now
+ * answered by ONE reader (src/runbookhealth.mjs `runbookStalenessReport`). The return shape is kept
+ * exactly — {dated, stale: [{file, last, changed}], probeFailures} — because the digest below prints it
+ * and demo/clockin-digest.test.mjs asserts it. A `probeFailures` above 0 means the staleness leg could
+ * not run, which the digest prints as its own state rather than as "nothing is stale".
+ *
+ * WHY THE PROBE HERE DIED AND THE CALLER SURVIVED (D328's rule — where two spellings of one question
+ * disagree, one of them dies): measured at `main` `2195382fe` on this box, the two spellings disagreed
+ * by three runbooks, and the difference was git's BARE-DATE `--since` parse rather than any judgement.
+ * After the refactor the agreement is by construction; measured here it is `dated 62 | stale 57` on
+ * BOTH surfaces (`.spike/rbdisagree-2.out`, exit 0, empty symmetric difference).
+ */
 export function staleRunbooks({ root = process.cwd() }) {
-	const dir = resolve(root, "docs/runbooks");
-	if (!existsSync(dir)) return { dated: 0, stale: [], probeFailures: 0 };
-	const rows = [];
-	let probeFailures = 0;
-	const names = readdirSync(dir)
-		.filter((n) => n.endsWith(".md") && n !== "_template.md" && n !== "README.md")
-		.sort();
-	for (const f of names) {
-		const text = readFileSync(resolve(dir, f), "utf8");
-		const fm = text.match(/^---\s*\n([\s\S]*?)\n---/);
-		if (!fm) continue;
-		// Frontmatter is read with a regex, not a YAML parse: the one key this probe needs is scalar,
-		// and a dependency-free read keeps this tool usable from a bare checkout.
-		const lv = (fm[1].match(/^last_verified:\s*"?([0-9]{4}-[0-9]{2}-[0-9]{2})"?/m) || [])[1];
-		if (!lv) continue;
-		const changed = [];
-		for (const p of new Set(
-			text.slice(fm[0].length).match(/(?:src|docs|scripts|demo)\/[\w./-]+\.\w+/g) || [],
-		)) {
-			if (!existsSync(resolve(root, p))) continue;
-			try {
-				const out = execFileSync(
-					"git",
-					["-C", root, "log", "--format=%H", `--since=${lv}`, "--", p],
-					{
-						encoding: "utf8",
-						stdio: ["ignore", "pipe", "ignore"],
-						timeout: 10000,
-					},
-				).trim();
-				if (out) changed.push(p);
-			} catch {
-				probeFailures += 1; // a failed probe is NOT "not stale"
-			}
-		}
-		rows.push({ file: f, last: lv, changed });
-	}
-	return { dated: rows.length, stale: rows.filter((r) => r.changed.length > 0), probeFailures };
+	return runbookStalenessReport({ root });
 }
 
 /**

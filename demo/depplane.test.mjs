@@ -200,7 +200,19 @@ try {
         // `check` exited 1 and the "json check carries the measured plane as data" assertion below failed. The rule's
         // declared override is `DURIG_SELF_MERGE_SLA_HOURS` (extensions/self-merge.mjs), so the fixture sets an SLA no
         // ref can exceed — the rule stays armed, its verdict stops being about the host repo.
-        env: { ...process.env, DURIG_PROVIDER: "faux", DURIG_DB: join(scratch, "no-store.sqlite"), DURIG_SELF_MERGE_SLA_HOURS: "1000000" },
+        // THE RUNBOOK RULES RUN WHERE THIS SPAWN SITS (found 2026-11-17 at `2195382fe`): this fixture spawns
+        // `cli.mjs check` with `cwd: ROOT`, i.e. the live repo, so the live `docs/runbooks` set entered a
+        // audit of a rig that lives in the SCRATCH — 57 `runbook-stale` findings at severity error, and
+        // `check` exited 1 for a reason that has nothing to do with the dependency plane. The rig file's
+        // location is not the scope: the read is scoped by the config key, so this fixture turns it OFF
+        // exactly as it declares the other fixture state above.
+        env: {
+          ...process.env,
+          DURIG_PROVIDER: "faux",
+          DURIG_DB: join(scratch, "no-store.sqlite"),
+          DURIG_SELF_MERGE_SLA_HOURS: "1000000",
+          DURIG_RUNBOOKS: "",
+        },
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";

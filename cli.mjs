@@ -63,7 +63,7 @@ import {
   compilePersona,
   registerSeat,
 } from "./src/rig.mjs";
-import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings, progressSettings } from "./src/config.mjs"
+import { compactionReport, compactionSettings, declaredContextWindow, describeConfig, loadConfig, loadShippedDefaults, runbookDirSetting, streamSettings, tierTokenTable, usableContextBudget, DEFAULT_TIER_TOKENS, runControlSettings, progressSettings } from "./src/config.mjs"
 import { DEFAULT_STRATEGY, PRIORITY_VALUES, assertWorkStrategy, effectivePriority, priorityLeaseText, strategyNames } from "./src/workstrategy.mjs"
 // The per-seat consumption measure, reused by `compact` so the verb can state the seat's token count
 // against the policy it just ran under (#4898) instead of reporting only "an entry was/was not written".
@@ -90,6 +90,7 @@ import { readTextIntegrity, trackedChangedPaths } from "./src/textintegrity.mjs"
 import { readCommitMessages } from "./src/commitmsg.mjs";
 import { readCitations } from "./src/citation.mjs";
 import { readDocCountClaims } from "./src/doccounts.mjs";
+import { readRunbookHealth, runbookStalenessReport } from "./src/runbookhealth.mjs";
 import { activeSet, dependencyProvenance, formatDependencyProvenance, formatProvenance, gitProvenance } from "./src/provenance.mjs"
 import { readDependencyPlane } from "./src/depplane.mjs"
 import { readFleetLedger } from "./src/fleetledger.mjs"
@@ -1137,6 +1138,11 @@ async function cmdInit() {
     // store, so init and `check` cannot disagree about a not-yet-created rig.
     stored: { reason: "absent" },
     modelsBySeat: resolveModelsBySeat(starterSpec),
+    // THE RUNBOOKS ARE DELIBERATELY NOT SUPPLIED HERE. `init` audits the STARTER rig it is about to scaffold, not
+    // the tree it lands in; judging the live tree's runbooks against a rig that does not exist yet would report
+    // findings about the wrong thing. `check` is the surface that judges runbooks, against the live tree, and it
+    // supplies them there — so `init` leaves the three rules UNKNOWN with their reason, exactly as a fixture dir
+    // (no docs/runbooks) leaves them.
   });
   if (audit.findings.length > 0) {
     fail(
@@ -3821,6 +3827,30 @@ async function cmdCheck(rigFile, human, rest = []) {
   // differently (#5047). The read is bounded (src/fleetledger.mjs, newest 4 MiB) and the ledger is the fleet's own
   // record — it stops being appended while the broker is down, which the rule states as a caveat rather than hiding.
   const fleetLedger = readFleetLedger({ root: process.cwd() });
+  // THE RUNBOOK-HEALTH SEAM (2026-11-17, the queue-backlog tranche). A RULE LISTED IN `RULES` IS NOT A RULE THAT
+  // RUNS — the CALLER decides whether a pure judge gets data. `src/checkup.mjs` declares runbook-front-matter /
+  // runbook-unverified / runbook-stale and judges all three, but `check` never supplied them, so all three printed
+  // `{"status":"unknown","why":"no runbook data was supplied, so no runbook can be judged"}` forever: the
+  // maintenance policy in docs/runbooks/README.md ("run the Verify step, then set last_verified") was enforceable
+  // nowhere a commit passes through, and a permanently-UNKNOWN rule is how a doc rots without being seen. Measured
+  // on this box (Linux, Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0):
+  // the read costs 0.4-1.3 s over 65 runbook files / 62 dated and takes ONE `git log` spawn for the WHOLE set
+  // (clockin's older probe spawned one per NAMED path, ~500 of them), and the live tree reads `dated 62 | stale 57`,
+  // the same numbers the clock-in digest prints because the digest now derives from this same reader.
+  // THE DIRECTORY IS A CONFIG KEY, NOT A CONSTANT (2026-11-17). A fixture that spawns `cli.mjs check` with
+  // cwd at the repo root would otherwise read the LIVE runbook set into a synthetic audit — demo/check.test.mjs
+  // asserts "CLI findings match the pure audit", and the pure audit is handed no runbook data, so the live tree's
+  // 57 stale runbooks broke a fixture that never mentions runbooks. `DURIG_RUNBOOKS: ""` in that fixture's own
+  // config (the same convention as `DURIG_EXTENSIONS: ""` there) turns the read OFF; OFF supplies null rows,
+  // so the three rules report UNKNOWN with their reason — never a pass, never a silent clean. A rig whose
+  // runbook directory cannot be read returns null the same way (a scaffold, a temp-dir fixture). `gitProbeFailures > 0`
+  // also supplies null, NOT the rows: "could not look" must not read as "judged, nothing stale".
+  const runbookHealth = readRunbookHealth({ root: process.cwd(), dir: runbookDirSetting(CFG) });
+  const runbooks = runbookHealth && runbookHealth.gitProbeFailures === 0 ? runbookHealth.runbooks : null;
+  if (runbookHealth && runbookHealth.gitProbeFailures > 0)
+    console.error(
+      `note: runbook staleness could not be measured (${runbookHealth.gitProbeFailures} git probe(s) failed) - the three runbook rules report UNKNOWN, not a pass`,
+    );
   // THE EXTENSION-PLANE CHECK SEAM (D212). A team's own landing-hygiene rule is customization, so it lives in
   // an extension, not in src/checkup.mjs. Each loaded extension may declare `checks: [{id, severity, what,
   // run(ctx)}]`; the audit folds them in exactly like a base rule. A rule that throws or cannot measure is
@@ -3875,6 +3905,7 @@ async function cmdCheck(rigFile, human, rest = []) {
     extensionFindings,
     extensionSkipped,
     fleetLedger,
+    runbooks,
   });
   const seatCount = (spec.seats ?? []).length;
   if (human) {

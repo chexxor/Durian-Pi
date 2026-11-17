@@ -22,7 +22,11 @@ const dir = mkdtempSync(join(tmpdir(), "durig-check-"));
 // "CLI findings match the pure audit" assertion below. These fixture rigs are BASE rigs (no extension armed),
 // so the fixture declares its own config: `DURIG_CONFIG` is precedence 1 in src/config.mjs.
 const baseConfig = join(dir, "base-config.json");
-writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "" }));
+// THE RUNBOOK READ IS A CONFIG KEY TOO (2026-11-17): `cli.mjs check` supplies the three runbook rules by reading
+// a directory, and it runs here with cwd at the repo root, so the live tree's stale runbooks would enter this
+// synthetic audit and break the assertion below that CLI findings match the pure audit (which is handed no runbook
+// data). "" = OFF: the reader returns null and the three rules report UNKNOWN with their reason, never a pass.
+writeFileSync(baseConfig, JSON.stringify({ DURIG_EXTENSIONS: "", DURIG_RUNBOOKS: "" }));
 const durigDir = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 
 const CONSTITUTION = "# Team culture\n\nGround every claim in a retrieved passage.\n";
