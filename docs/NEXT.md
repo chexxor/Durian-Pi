@@ -138,6 +138,8 @@ is the last ` PASS ` line (pitfall 304), never the pid. **The broker was DOWN fo
 `7.2.15-300.fc45.x86_64`, node **v24.22.1**, git 2.56.0 — probe: `uname -s && uname -r && (. /etc/os-release &&
 echo "$PRETTY_NAME") && node -v && git --version`.
 
+**Goal ledger (goal mwh73rd1-izyq72) — what is IN and the ONE command that proves each clause**, because the registry's task checkboxes read 0/8: `get_goal` / `update_goal` are NOT exposed in this session (SELFDEV pitfall 385 — on this rig the completion auditor's ground truth is the DOCS, not the checkbox, so the map lives here). Notices are not claimable work and are acked mechanically → `node demo/notice-not-work.test.mjs` · the view NAMES work / notice / registration / awaiting-operator → `node demo/status-view-bound.test.mjs` · mint-time fan-out budget (duplicate + burst cap + lineage, refusals recorded AND read) → `node scripts/test.mjs --area rig --jobs 4` · registration rows vs the ROADMAP ledger → `node tools/registration-ledger-gap.mjs` · "the backlog is growing" is a `check` rule that FAILS → `node cli.mjs check rig.selfdev.json --json` (exit 1) · the census that prices it → `node tools/queue-pressure.mjs` · the promoted instrument → `node tools/check-summarize.mjs` · every clause re-proven in ONE bounded call → `node tools/tranche-evidence.mjs` (10 rows / 0 mismatched = all hold).
+
 ## NEXT SESSION
 
 **Current item:** the **queue-backlog tranche (D315, ROADMAP 376-380, goal mwh73rd1-izyq72) is shipped, gated, and the
