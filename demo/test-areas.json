@@ -393,6 +393,7 @@
       "demo/latency-budget-no-data.test.mjs",
       "tools/registration-ledger-gap-test.mjs",
       "tools/cost-claim-audit-test.mjs",
+      "tools/check-summarize-test.mjs",
       "tools/tranche-evidence-test.mjs",
       "demo/second-local-provider.test.mjs",
       "demo/spend-cap-guard.test.mjs",
