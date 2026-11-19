@@ -108,3 +108,57 @@ export function assessStoreOwnership(dbPath, { now = Date.now() } = {}) {
 	}
 	return { owned: liveBroker || genlocks.length > 0, broker: liveBroker ? broker : null, genlocks, reasons };
 }
+
+/**
+ * The TUI entrypoint's decision: `open` | `attach` | `refuse`. ONE rule, no override (#4006).
+ *
+ * WHY THIS IS A DECISION AND NOT A FLAG. `tui.mjs` used to be only a WRITER: owned -> refuse. That
+ * left the operator with no way to be IN the session the broker already drives, so the operator
+ * stopped the broker to look at it — and a stop is a writer hand-over, not a view. The library has
+ * the shape for the view: pi-durable `docs/spec.md:838-847` says a process that only shows a session
+ * another one drives opens it with `HarnessOptions.readOnly: true` — "Every commit with writes rejects
+ * with `ReadOnlySession` before it reaches Storage, so the Session stays healthy" — and README:127
+ * says SQLite locks keep that open safe beside the writer. So the refusal becomes a BRANCH:
+ * a live broker means ATTACH (read-only viewer), nothing owning it still means OPEN (writer).
+ *
+ * THE ONE-HANDLE RULE THIS ENFORCES (spec.md:4371 "`Harness` instances must never own the same
+ * Session concurrently"). Measured on this rig (`.spike/probe-attach2.out`): a second NON-readOnly
+ * open on a separate `openNodeSqliteStorage` handle is ALLOWED by the library and DOES write (store
+ * 4,096 -> 122,880 B), so the library does not stop a second writer — ONLY THIS VERDICT DOES. A
+ * live generation holder is not a session to attach to: a generation is a transient in-flight run,
+ * not the resident driver, so `--attach` REFUSES there rather than waiting for one.
+ *
+ * Read-only: nothing here writes, and nothing here opens a store "to check".
+ *
+ * @param {string} dbPath
+ * @param {{attach?:boolean, now?:number, ownership?:Object}} `attach` is what the user asked for;
+ *   `ownership` may be passed in to avoid re-reading the state files.
+ * @returns {{action:"attach"|"open"|"refuse", broker:Object|null, ownership:Object, reasons:string[]}}
+ */
+export function tuiOpenVerdict(dbPath, { attach = false, now = Date.now(), ownership = assessStoreOwnership(dbPath, { now }) } = {}) {
+	if (!attach) {
+		if (!ownership.owned) return { action: "open", broker: null, ownership, reasons: [] };
+		return {
+			action: "refuse",
+			broker: ownership.broker,
+			ownership,
+			reasons: [...ownership.reasons, "this entrypoint opened a SECOND writer; pass --attach to view that session read-only instead"],
+		};
+	}
+	if (!ownership.broker) {
+		return {
+			action: "refuse",
+			broker: null,
+			ownership,
+			reasons: ownership.genlocks.length > 0
+				? [...ownership.reasons, "a generation is not the resident driver: there is no session to attach to, and opening here would be a second writer"]
+				: ["nothing owns this store, so there is no session to attach to — --attach names the store a BROKER drives (serve --db <path>)"],
+		};
+	}
+	return {
+		action: "attach",
+		broker: ownership.broker,
+		ownership,
+		reasons: [`the broker (pid ${ownership.broker.pid}) drives it — attaching as a read-only viewer (readOnly Harness), never a second writer`],
+	};
+}

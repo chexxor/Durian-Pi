@@ -182,6 +182,20 @@ class DurableSessionCore {
 	// message events; this set keeps a re-rendered window from re-emitting them.
 	#seenEntryIds = new Set();
 
+	/** An ATTACHED (read-only) surface refuses its acts BY NAME and names the route that works.
+	 * pi-durable would throw `ReadOnlySession` here anyway (spec.md:838 "every call that enables
+	 * scheduling rejects with `ReadOnlySession`"), but that text names neither the operator's action
+	 * nor where the act goes. An attached client's acts belong in the BROKER's in-process pass: the
+	 * intent spool (`<db>.broker.inbox`, src/broker.mjs `writeIntent`, drained by the broker's own
+	 * writer) and the queue seams src/queue-manage.mjs `queueManageSpool`/`queueDiscussSpool`.
+	 */
+	#assertWritable(action) {
+		if (this.#parts.readOnly !== true) return;
+		throw new DurableAdapterError(
+			`${action} cannot run from an ATTACHED client: this session is a read-only viewer of the session the broker drives — one Harness owns a Session (pi-durable spec.md:4371). Send it through the broker: src/broker.mjs writeIntent (the <db>.broker.inbox spool), or src/queue-manage.mjs queueManageSpool / queueDiscussSpool.`,
+		);
+	}
+
 	constructor(parts) {
 		this.#parts = parts;
 		this.#context = parts.context;
@@ -260,6 +274,7 @@ class DurableSessionCore {
 	}
 
 	async prompt(text, options = {}) {
+		this.#assertWritable("prompt (operator input)");
 		const content = toUserContent(text, options.images);
 		await this.#parts.conversation.submit({ type: "input", content }, this.#context);
 		if (options.streamingBehavior === undefined) await this.#parts.conversation.waitForIdle(this.#context);
@@ -271,6 +286,7 @@ class DurableSessionCore {
 	}
 
 	async abort() {
+		this.#assertWritable("abort");
 		await this.#parts.conversation.abort(this.#context);
 	}
 
@@ -281,6 +297,7 @@ class DurableSessionCore {
 	abortCompaction() {
 		// A cooperative abort of the conversation's live tasks is how durable stops a
 		// running compaction; the host shell has no compaction of its own to abort.
+		this.#assertWritable("abortCompaction");
 		void this.#parts.conversation.abort(this.#context);
 	}
 
@@ -337,10 +354,12 @@ class DurableSessionCore {
 	}
 
 	async steer(text) {
+		this.#assertWritable("steer");
 		await this.#parts.conversation.submit({ type: "input", content: text, whenBusy: "steer" }, this.#context);
 	}
 
 	async followUp(text) {
+		this.#assertWritable("followUp");
 		await this.#parts.conversation.submit({ type: "input", content: text, whenBusy: "followUp" }, this.#context);
 	}
 
@@ -384,6 +403,7 @@ class DurableSessionCore {
 	}
 
 	async compact(instructions) {
+		this.#assertWritable("compact");
 		// The TUI's /compact passes the custom-instructions string directly.
 		const text = typeof instructions === "string" ? instructions : instructions?.customInstructions;
 		this.#compacting = true;
@@ -396,6 +416,7 @@ class DurableSessionCore {
 	}
 
 	async waitForIdle() {
+		this.#assertWritable("waitForIdle");
 		await this.#parts.conversation.waitForIdle(this.#context);
 	}
 
@@ -635,9 +656,27 @@ export async function createDurableTuiRuntime(options) {
 	// Tools reach files and processes only through this environment, and the Harness
 	// builds it per call from the conversation agent's cwd.
 	const env = options.env ?? ((target) => new NodeExecutionEnv({ cwd: target.cwd ?? options.cwd }));
+	// THE ATTACH SEAM (task-5, D212 "grow the seam"). The base was missing the read-only open, so an
+	// operator who wanted to be IN the session the broker drives had to stop the broker. pi-durable
+	// already has the shape: `HarnessOptions.readOnly` (docs/spec.md:838-847) opens a VIEWER of a
+	// session another process drives — a commit with writes rejects with `ReadOnlySession` before it
+	// reaches Storage, a scheduling call rejects, and reads/watches work. Measured here
+	// (.spike/probe-attach2.out): a viewer open on a SEPARATE `openNodeSqliteStorage` handle writes
+	// nothing to the store (mtime/size unchanged), keeps the writer committing, and reads the writer's
+	// LATER commits. It is NOT safe on the same in-process Storage object (probe v1 poisoned the first
+	// Session: `SessionFailed` at vendor/pi-main/packages/durable/dist/session/session.js:1432), so
+	// the rule is ONE Storage handle per process, and src/storeownership.mjs `tuiOpenVerdict` is what
+	// makes a second WRITER impossible — the library allows it (a second non-readOnly open wrote 119x
+	// the store), this verdict is the enforcement.
 	const harness = await durable.Harness.open(
 		storage,
-		{ models, registry, env, ...(options.settings === undefined ? {} : { settings: options.settings }) },
+		{
+			models,
+			registry,
+			env,
+			...(options.settings === undefined ? {} : { settings: options.settings }),
+			...(options.readOnly === true ? { readOnly: true } : {}),
+		},
 		context,
 	);
 	const agentModel = options.agentModel ?? { provider: "faux", modelId: "faux-1" };
@@ -648,6 +687,7 @@ export async function createDurableTuiRuntime(options) {
 	const core = new DurableSessionCore({
 		ca,
 		cwd: options.cwd,
+		readOnly: options.readOnly === true,
 		hostSession,
 		hostSessionManager,
 		harness,

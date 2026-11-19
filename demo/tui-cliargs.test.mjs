@@ -58,6 +58,30 @@ try {
 		check("the known set contains --db, --select and the help forms", KNOWN_FLAGS.has("--db") && KNOWN_FLAGS.has("--select") && KNOWN_FLAGS.has("--help"));
 	}
 
+	console.log("\n=== `--attach` IS ACCEPTED, AND IS NOT A VALUE FLAG ===");
+	{
+		const parsed = parseTuiArgs(["--attach", "--db", "/tmp/x.sqlite"]);
+		check("--attach parses", parsed.attach === true && parsed.errors.length === 0, JSON.stringify(parsed));
+		check("--attach carries the ASK (the entrypoint decides, src/storeownership.mjs enforces)",
+			parsed.attach === true, String(parsed.attach));
+		const eq = parseTuiArgs(["--db=/tmp/y.sqlite", "--attach"]);
+		check("--attach works in either order and in the = form", eq.attach === true && eq.db === "/tmp/y.sqlite", JSON.stringify(eq));
+		const needsValue = parseTuiArgs(["--attach", "--db"]);
+		check("--attach is NOT a value flag: it does not swallow the next token (the --db after it still needs a value)",
+			needsValue.errors.some((e) => /--db.*needs a value/.test(e)) && needsValue.attach === true,
+			JSON.stringify(needsValue));
+		const omitted = parseTuiArgs(["--db", "/tmp/z.sqlite"]);
+		check("omitting --attach is not an error (the writer path still exists)",
+			omitted.attach === false && omitted.errors.length === 0, JSON.stringify(omitted));
+		check("--attach is in the KNOWN set the refusal lists",
+			KNOWN_FLAGS.has("--attach"), [...KNOWN_FLAGS].join(" "));
+		const bad = parseTuiArgs(["--attachh"]);
+		check("a near-miss is still REFUSED and the known-flag list now names --attach",
+			bad.errors.length === 1 && /--attachh/.test(bad.errors[0] ?? "") && /--attach/.test(bad.errors[0] ?? ""),
+			bad.errors[0]);
+		void omitted; void eq; void parsed; void needsValue;
+	}
+
 	console.log("\n=== AND THE ENTRYPOINT ACTUALLY USES THE PARSER (structural) ===");
 	{
 		// tui.mjs is an entrypoint: importing it runs a program, so this is a source assertion and is
@@ -67,6 +91,7 @@ try {
 		check("tui.mjs calls parseTuiArgs", /parseTuiArgs\s*\(/.test(tui), "not called");
 		check("tui.mjs exits on parse errors (a flag is never silently ignored)", /parsed\.errors\.length\s*>\s*0/.test(tui) && /process\.exit\(1\)/.test(tui), "no exit on errors");
 		check("tui.mjs wires --select through argValue", /argValue\("--select"\)|parsed\[[^\]]*select[^\]]*\]/.test(tui) || /"select"/.test(tui), "select not wired");
+		check("tui.mjs wires --attach through the verdict", /attach:\s*parsed\.attach/.test(tui), "attach not wired");
 	}
 
 	console.log(

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createDurableTuiRuntime } from "./adapter.mjs";
 import { loadPiAi } from "./imports.mjs";
 
-export async function bootDurableTui({ responses = [], fauxOptions = {}, cwd, storage, settings } = {}) {
+export async function bootDurableTui({ responses = [], fauxOptions = {}, cwd, storage, settings, readOnly } = {}) {
 	const ai = await loadPiAi();
 	const faux = ai.fauxProvider(fauxOptions);
 	if (responses.length > 0) faux.setResponses(responses);
@@ -21,6 +21,7 @@ export async function bootDurableTui({ responses = [], fauxOptions = {}, cwd, st
 		agentModel: { provider: "faux", modelId: "faux-1" },
 		...(storage === undefined ? {} : { storage }),
 		...(settings === undefined ? {} : { settings }),
+		...(readOnly === undefined || readOnly === false ? {} : { readOnly: true }),
 	});
 	return { ...result, faux, models, cwd: workDir, agentDir };
 }

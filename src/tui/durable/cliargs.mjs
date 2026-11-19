@@ -14,22 +14,23 @@
 // name it, rather than discarding it.
 
 /** Every flag this entrypoint understands. Anything else is an error. */
-export const KNOWN_FLAGS = new Set(["--db", "--select", "--help", "-h"]);
+export const KNOWN_FLAGS = new Set(["--db", "--select", "--attach", "--help", "-h"]);
 
-/** Flags that take a value (the next token, or the text after `=`). */
+/** Flags that take a value (the next token, or the text after `=`). `--attach` is NOT one. */
 const VALUE_FLAGS = new Set(["--db", "--select"]);
 
 /**
  * Parse `tui.mjs` argv.
  *
  * @param {string[]} argv
- * @returns {{db:string|null, select:string|null, help:boolean, errors:string[]}}
+ * @returns {{db:string|null, select:string|null, attach:boolean, help:boolean, errors:string[]}}
  */
 export function parseTuiArgs(argv = []) {
 	const errors = [];
 	let db = null;
 	let select = null;
 	let help = false;
+	let attach = false;
 	for (let i = 0; i < argv.length; i++) {
 		const token = String(argv[i]);
 		if (!token.startsWith("-")) {
@@ -46,6 +47,14 @@ export function parseTuiArgs(argv = []) {
 			help = true;
 			continue;
 		}
+		// `--attach` is an ASK, not an override (#4006). It does not force the entrypoint into the
+		// store; it says "the broker drives this store, so view that session read-only". src/storeownership.mjs
+		// `tuiOpenVerdict` decides attach/open/refuse, and REFUSES an attach nothing owns — a flag that
+		// promised access the store would not allow is the same kind of lie as a discarded flag.
+		if (name === "--attach") {
+			attach = true;
+			continue;
+		}
 		if (!VALUE_FLAGS.has(name)) continue;
 		let value;
 		if (eq >= 0) value = token.slice(eq + 1);
@@ -60,5 +69,5 @@ export function parseTuiArgs(argv = []) {
 		if (name === "--db") db = value;
 		if (name === "--select") select = value;
 	}
-	return { db, select, help, errors };
+	return { db, select, attach, help, errors };
 }

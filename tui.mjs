@@ -5,13 +5,19 @@
 // two run at once with NO shared writer because this entrypoint FAILS CLOSED when a broker — or a
 // live generation — owns its store (src/storeownership.mjs; the D42 / F24 second-writer collision).
 //
+// THE ATTACH PATH (task-5 of the merge plan, D212 "grow the seam"). A live broker no longer just
+// blocks this entrypoint: `--attach` makes it a VIEWER of the session the broker already drives
+// (pi-durable `readOnly` Harness, docs/spec.md:838) instead of asking the operator to stop the
+// broker in order to look at it. Without `--attach` the old refusal still fires, and it names
+// `--attach`. One rule, no override: src/storeownership.mjs `tuiOpenVerdict` decides open|attach|refuse.
+//
 // Store: `--db <path>` or DURIAN_PI_TUI_DB (DURIG_TUI_DB is the D103 deprecated alias). The default
 // is `session.sqlite` beside this file, deliberately AWAY from the rig store — never selfdev.sqlite.
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDurableTuiRuntime } from "./src/tui/durable/adapter.mjs";
 import { createRealHost } from "./src/tui/durable/real-host.mjs";
-import { assessStoreOwnership } from "./src/storeownership.mjs";
+import { assessStoreOwnership, tuiOpenVerdict } from "./src/storeownership.mjs";
 import { parseTuiArgs } from "./src/tui/durable/cliargs.mjs";
 
 // Keep the TUI's own startup checks quiet; the provider extension still loads and registers, and
@@ -24,7 +30,13 @@ const args = process.argv.slice(2);
 // entrypoint used to ignore `--select`, which `enter.mjs` had been passing for a whole item.
 const parsed = parseTuiArgs(args);
 if (parsed.help) {
-	console.log("tui [--db <path>] [--select <seat>]\n  --db      the store to open (default: session.sqlite beside this file)\n  --select  the seat this session is opened FOR (carried, not resolved here)\n  --help    this text");
+	console.log(
+		"tui [--db <path>] [--select <seat>] [--attach]\n" +
+			"  --db      the store to open (default: session.sqlite beside this file)\n" +
+			"  --select  the seat this session is opened FOR (carried, not resolved here)\n" +
+			"  --attach  view a store a LIVE BROKER already drives, read-only — never a second writer (needs --db)\n" +
+			"  --help    this text",
+	);
 	process.exit(0);
 }
 if (parsed.errors.length > 0) {
@@ -38,6 +50,18 @@ function argValue(name) {
 // D103 ships the new name; DURIG_TUI_DB is accepted as the deprecated alias with a warning. This is
 // a single-var shim, not a general alias mechanism — the D103 loader owns the DURIG_* -> DURIAN_PI_*
 // mapping (#2109).
+// An ATTACH must NAME a store: there is deliberately no default store for an attach, because the
+// default `session.sqlite` beside this file is a store NOTHING drives — attaching to it would be a
+// lie about which session the operator is looking at. Mirrors src/tui/durable/attach.mjs
+// `resolveSeatStore`, which refuses a default store for the same reason (#4006-era).
+if (parsed.attach && !(argValue("--db") || process.env.DURIAN_PI_TUI_DB || process.env.DURIG_TUI_DB)) {
+	console.error(
+		"tui: --attach names a store; there is deliberately no default store for an attach. " +
+			"Pass --db <path> (the store the broker is driving: serve --db <path>).",
+	);
+	process.exit(1);
+}
+
 let dbPath = argValue("--db");
 if (!dbPath && process.env.DURIG_TUI_DB && !process.env.DURIAN_PI_TUI_DB) {
 	console.error("tui: DURIG_TUI_DB is deprecated — use DURIAN_PI_TUI_DB");
@@ -48,7 +72,13 @@ dbPath ??=
 	join(dirname(fileURLToPath(import.meta.url)), "session.sqlite");
 
 // FAIL CLOSED, AND WITHOUT AN OVERRIDE (#4006). This entrypoint is a WRITER, so it must never open
-// a store a broker owns, and never open "to check".
+// a store a broker owns — and never open "to check". The ONE rule now has three outcomes
+// (src/storeownership.mjs `tuiOpenVerdict`): nothing owns it -> OPEN as a writer; a LIVE BROKER
+// owns it and `--attach` was asked -> ATTACH as a read-only viewer; anything else -> REFUSE.
+// A second writer is not made safe by a flag: the library ALLOWS a second non-readOnly open on a
+// separate handle and it DOES write (measured in .spike/probe-attach2.out: store 4,096 -> 122,880 B),
+// so this verdict is the only thing keeping spec.md:4371 ("`Harness` instances must never own the
+// same Session concurrently") true on this rig.
 //
 // THE OLD `--own` FLAG IS GONE. It WARNED (`WARNING opening ... (operator override)`) and then opened
 // anyway — the F24/D42 two-writer collision WITH A LOG LINE, reachable in normal use, which is
@@ -68,12 +98,22 @@ if (legacyOwn) {
 	);
 }
 const ownership = assessStoreOwnership(dbPath);
-if (ownership.owned) {
+const verdict = tuiOpenVerdict(dbPath, { attach: parsed.attach, ownership });
+if (verdict.action === "refuse") {
 	console.error(
-		`tui: refusing to open ${dbPath} — ${ownership.reasons.join("; ")}. ` +
-			`Stop the broker (serve --stop) and retry; a PAUSED broker is still the owner, so a pause alone is not a release.`,
+		`tui: refusing to open ${dbPath} — ${verdict.reasons.join("; ")}. ` +
+			(parsed.attach
+				? "an attach needs the BROKER to be driving this store (serve --db <path>); a generation in flight is not a session to attach to."
+				: `Stop the broker (serve --stop) and retry; a PAUSED broker is still the owner, so a pause alone is not a release — or pass --attach to view that session read-only.`),
 	);
 	process.exit(1);
+}
+const attached = verdict.action === "attach";
+if (attached) {
+	console.log(
+		`ATTACHED — read-only viewer of the session the broker drives (pid ${verdict.broker.pid}). ` +
+			"Reading, watching, and rendering are live; acts are refused by name here — send them through the broker's inbox (<db>.broker.inbox) or src/queue-manage.mjs.",
+	);
 }
 
 const storage = await (await import("@earendil-works/pi-durable/storage/sqlite/node")).openNodeSqliteStorage(dbPath, {
@@ -95,8 +135,9 @@ const { runtime } = await createDurableTuiRuntime({
 	models: services.modelRuntime,
 	agentModel: { provider: model.provider, modelId: model.id },
 	host: { hostSession, hostSessionManager, services },
+	...(attached ? { readOnly: true } : {}),
 });
-console.log(`Durable session: ${dbPath}`);
+console.log(`Durable session: ${dbPath}${attached ? " (ATTACHED — read-only)" : ""}`);
 
 // pi's main() initializes the theme before constructing the TUI; do the same so component styling
 // matches the settings rather than library defaults.
