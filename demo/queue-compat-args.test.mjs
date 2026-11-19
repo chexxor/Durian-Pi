@@ -152,7 +152,7 @@ try {
   // offending argument, EVERY known flag, and the usage line, while stdout keeps the machine contract. The known
   // set is pinned here as an exact list: adding a flag to `QUEUE_FLAGS` without adding it here (and to §4A of
   // docs/COMMANDS-AND-THE-BROKER.md, and to the accept lines above) goes RED, which is the point.
-  const KNOWN_FLAGS = ["--json", "--id", "--human", "--list", "--sort", "--dir", "--fields", "--full-queue"];
+  const KNOWN_FLAGS = ["--json", "--id", "--human", "--list", "--sort", "--dir", "--fields", "--full-queue", "--manage", "--priority", "--reason", "--until", "--apply", "--confirm", "--discuss", "--revise"];
   const refused = cli(["queue", "--zork"]);
   assert.equal(refused.code, 1, "an unknown flag exits 1");
   assert.ok(refused.stderr.includes("--zork"), `stderr names the argument it refused: ${refused.stderr.slice(0, 300)}`);
