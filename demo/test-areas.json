@@ -106,6 +106,7 @@
       "demo/queue-ops.test.mjs",
       "demo/queue-control-spool.test.mjs",
       "demo/queue-manage-surface.test.mjs",
+      "demo/queue-pi-command.test.mjs",
       "demo/priority-directive-scope.test.mjs",
       "demo/overtaken.test.mjs",
       "demo/human-defer-lease.test.mjs",

@@ -96,21 +96,16 @@ import { readDependencyPlane } from "./src/depplane.mjs"
 import { readFleetLedger } from "./src/fleetledger.mjs"
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueMintRefusals, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus, queueListView, queueListViewText, QUEUE_SORT_KEYS, QUEUE_SORT_DIRS, QUEUE_TIE_BREAK, QUEUE_LIST_FIELDS } from "./src/readapi.mjs";
+// ROADMAP 381 — the queue VERB no longer imports the sort/field/state vocabularies or the list renderer: the
+// grammar and the view are the command core's (`src/queue-command.mjs`), and importing a vocabulary here would
+// make this file a second place that can name a state and mean it differently.
+import { readLiveState, readQueueItems, readQueueMintRefusals, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 // ROADMAP 381 task-3 — the MANAGE core and the discuss/revise hand-off. Imported, NOT shelled out: this CLI
 // branch and the in-process pi command of task-4 are two registrations of ONE core, so they cannot drift
 // apart (D334). Nothing here writes: the plan rules are `src/queueops.mjs`'s and the apply is the BROKER's
 // spool (`src/queue-manage.mjs` `queueManageSpool` writes ONE intent file and reads the outcome back).
-import {
-  MANAGE_ACTIONS,
-  MANAGE_PRIORITIES,
-  queueManagePlan,
-  queueManageRegisterText,
-  queueManageSpool,
-  queueDiscussDraft,
-  queueDiscussSpool,
-} from "./src/queue-manage.mjs";
+import { queueManageSpool, queueDiscussSpool } from "./src/queue-manage.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
 import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS, describeStoreOpenFailure } from "./src/readclient.mjs"
 import { installSignalHandlers, isStopping, stopSignalName, stoppableSleep } from "./src/signals.mjs";
@@ -1305,79 +1300,25 @@ async function cmdPs() {
 // `docs/COMMANDS-AND-THE-BROKER.md` §4A and `demo/queue-compat-args.test.mjs` can both point at, so "unknown" is
 // decidable three ways. The shape is deliberately adoptable by other read verbs — but ONLY `queue` is changed
 // here: each verb's known set is its own measurement, and #5016's non-goals forbid a verb sweep.
-const QUEUE_FLAGS = {
-  // An accepted NO-OP, not a invention: `out()` has ALWAYS printed JSON, so `--json` changes no bytes. Refusing a
-  // documented form would be a new break; the pin asserts byte-identity, not merely exit 0.
-  "--json": { kind: "noop", usage: "[--json]" },
-  // One (or a few) rows by id (#4986). Payload-scoped: the queue is ONE document, so the STORAGE read is not
-  // narrowed — what narrows is what the caller prints and therefore what a session pays for.
-  "--id": { kind: "value", usage: "[--id <id> ...]", valueName: "id" },
-  // Filters (#5016). Repeatable like `--id`; values inside a flag OR, flags AND. `--status` is validated against
-  // the CLOSED state vocabulary (src/readapi.mjs QUEUE_STATUSES, measured off the live store): `--status done2`
-  // would otherwise answer "no rows" to a typo, which is the same defect as an unknown flag — a mistake rendered
-  // as an empty success.
-  "--status": { kind: "value", usage: "[--status <state> ...]", valueName: "state", values: QUEUE_STATUSES },
-  "--to": { kind: "value", usage: "[--to <seat> ...]", valueName: "seat" },
-  // A VIEWER form (#5016): bodies out, everything else unchanged. It is NOT a quiet convenience — it prints a loud
-  // header in its own payload and on stderr, because a truncated view that does not announce itself becomes the
-  // record a later reader trusts, and acting on a subject without its body is a failure this rig has registered
-  // repeatedly. The attention/count derivation still runs over the FULL rows: projection is after derivation.
-  "--no-body": { kind: "flag", usage: "[--no-body]" },
-  // #5770 — the BOUNDED park view. `--held` is shorthand for `--status held`; `--with-gates` projects each row
-  // to ONLY the fields that answer "who parked it, on what, when do we look again" (no body, no subject); `--limit`
-  // caps how many rows are emitted. Bounded by construction: bodies are dropped, the count is capped, and an
-  // unbounded request (`--limit 0`, or above the cap) is REFUSED rather than silently dumping the store — the
-  // unbounded version of this read reached 25 MB in a devtools scratch export.
-  "--held": { kind: "flag", usage: "[--held]" },
-  "--with-gates": { kind: "flag", usage: "[--with-gates]" },
-  // #7113 — the PRIORITY LEASE readout for a human. It prints TEXT, not the JSON document, which is why the
-  // byte contract of the default form survives: nothing derived is added to the dump, a second view is added.
-  "--human": { kind: "flag", usage: "[--human]" },
-  "--limit": { kind: "value", usage: "[--limit <n>]", valueName: "n" },
-  // ROADMAP 381 — THE LIST VIEW. `--list` is a VIEW on the existing verb, NOT a new top-level verb: the scripted
-  // audit path (`cli.mjs`) and the in-process pi command (task-4) are two registrations of ONE core
-  // (`src/readapi.mjs` `queueListView` + `queueListViewText`), and a second verb would be a second core to keep
-  // in step. The four flags below only make sense inside it, so using one without `--list` is REFUSED and names
-  // `--list` — a flag that silently does nothing is the fail-open's defect class (ROADMAP 228).
-  "--list": { kind: "flag", usage: "[--list]" },
-  // The sort keys are the RIG'S OWN vocabulary — declared in the core, never free text or a comparator: an
-  // arbitrary key gets a document nobody can explain, and `--status done2` already showed what a typo costs.
-  "--sort": { kind: "value", usage: "[--sort <key> ...]", valueName: "sort key", valuesNoun: "keys", values: QUEUE_SORT_KEYS },
-  "--dir": { kind: "value", usage: "[--dir <asc|desc>]", valueName: "direction", valuesNoun: "directions", values: QUEUE_SORT_DIRS },
-  // A row's attributes, name-checked against `QUEUE_LIST_FIELDS` in the core; a comma-separated value and a
-  // repeated flag mean the same set, so `--fields` is `listValue` rather than a second spelling.
-  "--fields": { kind: "value", usage: "[--fields <field,...> ...]", valueName: "field", valuesNoun: "fields", values: QUEUE_LIST_FIELDS, listValue: true },
-  // The EXPLICIT ask for every matched row: the cap (200) is what keeps a 7,742-row store from becoming a dump,
-  // so lifting it is asked for, never defaulted.
-  "--full-queue": { kind: "flag", usage: "[--full-queue]" },
-  // ROADMAP 381 task-3 — THE MANAGE FAMILY (an ACT on the queue, not a view). Same D334/D212 reasoning as
-  // `--list`: ONE core (`src/queue-manage.mjs`) decides, TWO thin registrations print — this CLI branch and
-  // the in-process pi command of task-4. A second top-level verb would be a second core to keep in step.
-  // PROPOSE is the default; `--apply` is what writes, and only through the broker's spool. `directive` and
-  // `directive-clear` stay in the CORE (the broker applies them) but are REFUSED at this CLI, because their
-  // scope is `--seat`/`--subject` and `intent.mjs` already spells that out — the CLI does not grow scope flags.
-  "--manage": { kind: "value", usage: "[--manage <action>]", valueName: "action", valuesNoun: "actions", values: MANAGE_ACTIONS },
-  "--priority": { kind: "value", usage: "[--priority <level>]", valueName: "priority", valuesNoun: "priorities", values: MANAGE_PRIORITIES },
-  "--reason": { kind: "value", usage: "[--reason <text>]", valueName: "reason" },
-  "--until": { kind: "value", usage: "[--until <ISO-8601>]", valueName: "instant" },
-  "--apply": { kind: "flag", usage: "[--apply]" },
-  "--confirm": { kind: "flag", usage: "[--confirm]" },
-  // THE DISCUSS/REVISE HAND-OFF: it composes a sentence and spools ONE `message` into a REGISTERED seat's
-  // conversation, where the seat's OWN authorized tools do the work. It takes no queue action of its own
-  // (`queueActions: []`, asserted by the pin), so an affordance cannot quietly reorder what it handed over.
-  "--discuss": { kind: "value", usage: "[--discuss <note>]", valueName: "note" },
-  "--revise": { kind: "value", usage: "[--revise <note>]", valueName: "note" },
-};
-const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
+// THE GRAMMAR NOW LIVES IN THE COMMAND CORE — src/queue-command.mjs — and this verb IMPORTS it (ROADMAP 381,
+// D334 "ONE core, TWO registrations"). Keeping a flag table here as well would be two grammars that drift: the
+// CLI's known set is pinned by demo/queue-compat-args.test.mjs, and a second table means the in-process pi
+// command (.pi/extensions/queue-surface.js, registered from the SAME core) starts accepting an argument this
+// verb refuses the moment one of the two grows — the accepted-and-ignored class (#5071) and the fail-open's
+// defect class (ROADMAP 228). Everything the comment above describes still holds, of the core's table instead
+// of one here: known/unknown is decided by ONE visible table, and every refusal PRINTS it via queueRefusalText,
+// so "unknown" remains decidable three ways (docs/COMMANDS-AND-THE-BROKER.md §4A and the compat pin).
+import { QUEUE_FLAG_NAMES, QUEUE_USAGE, queueRefusalText, queueCommandParse, queueCommandRun } from "./src/queue-command.mjs";
 
 // What a bad argument costs: exit 1, a structured `ok:false` on STDOUT (the machine half, the shape pinned by
 // `demo/queue-compat-args.test.mjs`), and on STDERR the offending argument plus EVERY known flag (#5016: the
 // point of refusing is that the caller can correct the typo without opening the source). A refusal never prints
 // the document — that is the fail-open's cost, and it is asserted (~100 B against a 22 MB dump).
 function refuseQueueArgument(why) {
-  const known = Object.keys(QUEUE_FLAGS).join(", ");
-  process.stderr.write(`queue: ${why}\n  known flags: ${known}\n  usage: ${QUEUE_USAGE}\n`);
-  fail(`queue: ${why} (known flags: ${known})`);
+  // THE SENTENCE IS THE CORE'S (queueRefusalText) so a bad argument reads identically to a scripted caller
+  // and to a pi session; the ok:false document below is this CLI's share — D19's machine half.
+  process.stderr.write(queueRefusalText(why));
+  fail(`queue: ${why} (known flags: ${QUEUE_FLAG_NAMES.join(", ")})`);
 }
 
 // #7113 — the OPERATOR-facing priority-lease readout, reachable only through `--human`.
@@ -1455,336 +1396,51 @@ function humanQueueReadout(items, census, strategy, limit, pool = null) {
 }
 
 async function cmdQueue(args = []) {
-  const ids = [];
-  const statuses = [];
-  const to = [];
-  let noBody = false;
-  let gates = false;
-  let human = false;
-  let limit = GATE_VIEW_CAP;
-  // ROADMAP 381 task-3 — the MANAGE family's own state (an ACT, not a view; see the branch below).
-  let manage = null;
-  let handoff = null; // "discuss" | "revise"
-  let handoffNote = null;
-  let applyFlag = false;
-  let confirmFlag = false;
-  let reason = null;
-  let until = null;
-  let priority = null;
-  // ROADMAP 381 — the LIST VIEW's own state.
-  let list = false;
-  let fullQueue = false;
-  let sort = null;
-  let dir = null;
-  const fields = [];
-  // Which flags the caller actually used, so a flag that only narrows one view can be refused BY NAME when it
-  // sits beside a view it does not narrow.
-  const used = new Set();
-  // `--json` stays an accepted NO-OP for every existing form (#5063: `out()` always printed JSON). It is recorded
-  // only so the NEW list view can honour D19 — a pipe gets one JSON document, a TTY gets the human view — without
-  // changing a single byte of the forms that predate this row.
-  let jsonRequested = false;
-  // `--limit` only bounds what is PRINTED; whether the caller asked for it is recorded so a read that did not ask
-  // keeps returning every matched row (today's behaviour, asserted in demo/queue-compat-args.test.mjs).
-  let limitWasSet = false;
-  for (let i = 0; i < args.length; i += 1) {
-    const a = args[i];
-    const spec = QUEUE_FLAGS[a];
-    // A bare positional (`queue 5063`) and a misplaced flag both land here: there is no positional form to
-    // silently accept, and `main` accepting one was part of the fail-open.
-    if (!spec) refuseQueueArgument(`unknown argument ${a}`);
-    used.add(a);
-    if (spec.kind === "flag") {
-      // #5770: `--held` is a status filter (not a separate vocabulary), so it composes with `--to`/`--id`.
-      if (a === "--held") statuses.push("held");
-      else if (a === "--with-gates") gates = true;
-      else if (a === "--human") human = true;
-      else if (a === "--list") list = true;
-      else if (a === "--full-queue") fullQueue = true;
-      else if (a === "--apply") applyFlag = true;
-      else if (a === "--confirm") confirmFlag = true;
-      // An EXPLICIT `noBody` test, not a catch-all: the flag set is growing, and a catch-all silently
-      // mis-files every flag added after it — the same reason the value check below names its vocabulary.
-      else if (a === "--no-body") noBody = true;
-      continue;
-    }
-    if (spec.kind === "value") {
-      const v = args[i + 1];
-      if (v === undefined || v.startsWith("--")) refuseQueueArgument(`${a} needs a value`);
-      // A closed vocabulary is only closed if the VALUE is checked too: an unrecognized state is refused by name,
-      // with the legal set printed, rather than filtering everything out and reporting an empty queue. The noun
-      // comes from the table (`state` for `--status`, `sort key` for `--sort`, `field` for `--fields`), so the
-      // `--status` refusal stays byte-identical to what every reader quotes while `--sort` reads `(keys: …)`.
-      if (spec.values) {
-        const toks = spec.listValue ? String(v).split(",") : [v];
-        const bad = toks.filter((t) => t === "" || !spec.values.includes(t));
-        if (bad.length)
-          refuseQueueArgument(`${a} takes a ${spec.valueName}, not ${JSON.stringify(String(bad[0]))} (${spec.valuesNoun}: ${spec.values.join(", ")})`);
-      }
-      if (a === "--id") ids.push(v);
-      else if (a === "--status") statuses.push(v);
-      else if (a === "--sort") sort = v;
-      else if (a === "--dir") dir = v;
-      else if (a === "--fields") fields.push(...String(v).split(","));
-      else if (a === "--limit") {
-        // Bounded by construction: `--limit 0` is not a limit, and a limit above the cap is the unbounded dump
-        // this instrument exists to avoid. Refuse and name the cap instead of quietly printing the store.
-        const n = Number(v);
-        if (!Number.isInteger(n) || n <= 0)
-          refuseQueueArgument(`--limit must be a positive integer (1..${GATE_VIEW_CAP}); "all" is not a limit`);
-        if (n > GATE_VIEW_CAP)
-          refuseQueueArgument(`--limit ${n} exceeds the bounded park view's cap of ${GATE_VIEW_CAP}`);
-        limit = n;
-        limitWasSet = true;
-      }
-      else if (a === "--manage") manage = v;
-      else if (a === "--priority") priority = v;
-      else if (a === "--until") until = v;
-      else if (a === "--reason") reason = v;
-      else if (a === "--discuss") {
-        handoff = "discuss";
-        handoffNote = v;
-      } else if (a === "--revise") {
-        handoff = "revise";
-        handoffNote = v;
-      } else to.push(v);
-      i += 1;
-      continue;
-    }
-    if (a === "--json") jsonRequested = true;
-    // a known no-op: it changes nothing, because the document is already JSON.
-  }
-  // THE LIST VIEW AND ITS NEIGHBOURS MUST NOT SILENTLY COLLIDE (ROADMAP 381). Every one of these refusals names
-  // the flag it refused AND the flag the caller must add: refusing without a correction is how a closed surface
-  // becomes a dead end. `--fields`/`--sort`/`--dir`/`--full-queue` outside `--list` would otherwise be accepted
-  // and change nothing — an accepted flag that does nothing is the fail-open's defect class.
-  for (const f of ["--sort", "--dir", "--fields", "--full-queue"]) {
-    if (used.has(f) && !list) refuseQueueArgument(`${f} narrows the --list view only — add --list (or drop ${f}); it is not a filter on the whole-document form`);
-  }
-  if (list && gates)
-    refuseQueueArgument("--list and --with-gates are two different views; the list view already carries `gate` state, --with-gates prints the recorded gate fields — pick one");
-  if (list && noBody)
-    refuseQueueArgument("--no-body is a no-op beside --list: the list view never carries bodies, which is part of why it can carry 200 rows");
-  if (list && ids.length)
-    refuseQueueArgument("--id is the row-scoped read (body included); --list is the bounded sorted view — pick one");
-  // THE MANAGE FAMILY MUST NOT SILENTELY COLLIDE EITHER — and every one of these refusals runs BEFORE the
-  // store is read, which is what makes `--manage park` cost the store nothing (the value itself was already
-  // checked against MANAGE_ACTIONS in the table above). A flag that is accepted and changes nothing is the
-  // fail-open's defect class (ROADMAP 228), so each one names the flag the caller must add.
-  for (const f of ["--reason", "--until", "--priority", "--confirm"]) {
-    if (used.has(f) && !manage)
-      refuseQueueArgument(`${f} belongs to the --manage family — add --manage <action> (or drop ${f}); it is not a filter on the read forms`);
-  }
-  if (used.has("--apply") && !manage && !handoff)
-    refuseQueueArgument("--apply belongs to the --manage family — add --manage <action> --apply, or --discuss/--revise --apply (or drop --apply)");
-  if (used.has("--discuss") && used.has("--revise"))
-    refuseQueueArgument("--discuss and --revise are the two hand-off verbs — pick one; a note cannot be both");
-  if (manage && handoff)
-    refuseQueueArgument("--manage and --discuss/--revise are two different acts — pick one");
-  if (handoff && !to.length)
-    refuseQueueArgument("a discuss/revise hand-off needs an audience: --to <registered seat> — the note is spooled into that seat's conversation");
-  if (handoff && (list || gates || noBody || limitWasSet || fullQueue)) {
-    const collided = [(list || undefined) && "--list", gates && "--with-gates", noBody && "--no-body", limitWasSet && "--limit", fullQueue && "--full-queue"].filter(Boolean);
-    refuseQueueArgument(`--discuss/--revise is an act, not a view: it cannot carry ${collided.join(", ")} — a hand-off prints the note it sent and the broker's reply, never a row view`);
-  }
-  if (manage && (list || human || gates || noBody || limitWasSet || fullQueue)) {
-    const collided = [(list || undefined) && "--list", (human || undefined) && "--human", gates && "--with-gates", noBody && "--no-body", limitWasSet && "--limit", fullQueue && "--full-queue"].filter(Boolean);
-    refuseQueueArgument(`--manage is an act, not a view: it cannot carry ${collided.join(", ")} — it prints a CHANGE REGISTER (what changed, who did it, what it stranded)`);
-  }
-  if (manage === "directive" || manage === "directive-clear")
-    refuseQueueArgument(
-      `--manage ${manage} is in the core but not in this CLI yet: a directive is scoped by --seat and/or --subject, which this verb does not carry — use node intent.mjs queue --op queue --action ${manage} --seat <name> [--subject <substr>] --priority now --reason <text> --until <iso> [--apply]`,
-    );
-  // ROADMAP 381 task-3 — THE MANAGE FAMILY and the DISCUSS/REVISE hand-off, AHEAD of every view: an act
-  // prints a CHANGE REGISTER, not a row view, and the two must not be reachable through one call. Neither
-  // branch writes: `queueManagePlan` is PURE (it calls `src/queueops.mjs`'s plan rules), and the apply calls
-  // `queueManageSpool`, which writes ONE broker intent file and then reads the BROKER'S outcome back — so
-  // "accepted and ignored" can never be reported as "applied" (a refusal is dead-lettered, with the reason).
-  // D19 keeps its share here too: a TTY gets the human register, a pipe gets ONE JSON document.
-  if (manage) {
-    // A row-scoped act with no selection would name EVERY row in the store — a cancel of 7,742 rows is not
-    // stopped by the blast-radius rule when the caller asked for "all of it", so the act is refused BEFORE
-    // the rows are even counted. `repair-gates` (all stranded rows is its documented scope),
-    // `acknowledge-notices` (scopes by seat) and the three censuses are deliberately not row-scoped.
-    const rowScoped = manage === "cancel" || manage === "priority" || manage === "release";
-    if (rowScoped && !ids.length && !statuses.length && !to.length)
-      refuseQueueArgument(
-        `--manage ${manage} is row-scoped and would select every row in the store: name the rows with --id (repeatable), or narrow with --status/--to`,
-      );
-    const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
-    const scoped = filterQueueItems(all, { statuses, to });
-    // An explicit `--id` IS the scope; otherwise the filters are, sent as explicit ids so a PROPOSE and an
-    // APPLY act on the same set — a propose that plans one set and an apply that writes another is the
-    // record-goes-stale class. `queueops` re-checks every id against the broker's own live snapshot at apply
-    // time, so this is a scoping convenience, never a bypass.
-    const request = {
-      action: manage,
-      ...(ids.length ? { ids } : scoped.length ? { ids: scoped.map((it) => String(it.id)) } : {}),
-      ...(reason ? { reason } : {}),
-      ...(until ? { expiresAt: until } : {}),
-      ...(priority ? { priority } : {}),
-      ...(confirmFlag ? { confirm: true } : {}),
-      ...(to.length ? { seats: to } : {}),
-      from: "delegate",
-    };
-    const textForm = human || (Boolean(process.stdout.isTTY) && !jsonRequested);
-    if (applyFlag) {
-      // The apply re-plans from the broker's LIVE snapshot (src/broker.mjs `applyRequest`'s `op === "queue"`
-      // branch), so what is printed is what the broker DID, never the propose above re-printed.
-      const res = await queueManageSpool(DB_PATH, { ...request, apply: true }, { from: "delegate", requireBroker: true });
-      const head = res.reply ?? res;
-      if (textForm) process.stdout.write(queueManageRegisterText(head, { db: DB_PATH }));
-      else
-        out({
-          ok: res.ok,
-          command: "queue",
-          view: "manage",
-          mode: "apply",
-          action: manage,
-          requestId: res.requestId ?? null,
-          spool: res.spool ?? null,
-          reply: res.reply ?? null,
-          ...(res.ok ? {} : { code: res.code ?? null, refusal: res.refusal ?? null, spool_census: res.spool_census ?? null }),
-        });
-      if (!res.ok) {
-        process.stderr.write(`queue: --manage ${manage} --apply refused: ${res.code ?? "refused"} — ${res.refusal ?? "no reason given"}${res.spool_census ? ` (spool: pending=${res.spool_census.count})` : ""}\n`);
-        process.exit(1);
-      }
-      return;
-    }
-    const plan = queueManagePlan(all, request);
-    if (textForm) process.stdout.write(queueManageRegisterText(plan, { db: DB_PATH }));
-    else
-      out({
-        ok: plan.ok,
-        command: "queue",
-        view: "manage",
-        mode: "propose",
-        action: manage,
-        ...(plan.ok
-          ? {
-              verb: plan.verb,
-              proposed: plan.proposed,
-              changes: plan.changes,
-              transitions: plan.transitions,
-              strands: plan.strands,
-              ...(plan.census ? { census: plan.census } : {}),
-              ...(plan.lease ? { lease: plan.lease } : {}),
-              by: plan.by,
-              authority: plan.authority,
-              note: "propose — nothing written",
-            }
-          : { refusal: plan.refusal }),
-      });
-    if (!plan.ok) {
-      process.stderr.write(`queue: --manage ${manage} refused: ${plan.refusal}\n`);
-      process.exit(1);
-    }
-    return;
-  }
-  if (handoff) {
-    if (to.length > 1)
-      refuseQueueArgument(`a hand-off has ONE audience: --to ${to.join(" ")} names ${to.length} seats — pick one (the note lands in one seat's conversation)`);
-    const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
-    // The item is named by `--id` (or narrowed by `--status`); `--to` is the AUDIENCE, not a row filter, so
-    // it stays out of the row selection. More than one match means the note would name one row of several —
-    // an act that changes what the seat sees depending on row order is how an ambiguous hand-off becomes a
-    // wrong one.
-    const wanted = ids.length ? ids.map(String) : null;
-    const matches = wanted ? all.filter((it) => wanted.includes(String(it.id))) : statuses.length ? filterQueueItems(all, { statuses }) : [];
-    if (wanted && !matches.length)
-      refuseQueueArgument(`--discuss/--revise named no such row: ${wanted.join(", ")} — the store has ${all.length} rows, none of them those ids`);
-    if (matches.length > 1)
-      refuseQueueArgument(`a hand-off names ONE item: ${matches.length} rows match — narrow with --id <n> (or drop the filters to send a note about no item in particular)`);
-    const item = matches[0] ?? null;
-    const draft = queueDiscussDraft({ item, to: to[0], note: handoffNote ?? "", action: handoff });
-    if (!draft.ok) {
-      process.stderr.write(`queue: ${handoff} hand-off refused: ${draft.refusal}\n`);
-      process.exit(1);
-    }
-    const textForm = human || (Boolean(process.stdout.isTTY) && !jsonRequested);
-    if (!applyFlag) {
-      if (textForm) process.stdout.write(`${draft.content}\n`);
-      else
-        out({ ok: true, command: "queue", view: "handoff", mode: "propose", action: handoff, to: draft.to, item: draft.item, content: draft.content, queueActions: draft.queueActions, note: "propose — nothing sent; add --apply to spool the message" });
-      process.stderr.write(`queue: hand-off ${handoff} -> ${draft.to} — PROPOSED, nothing sent (add --apply to spool it)\n`);
-      return;
-    }
-    const res = await queueDiscussSpool(DB_PATH, draft, { from: "delegate", requireBroker: true });
-    if (textForm) process.stdout.write(`${draft.content}\n`);
-    else
-      out({ ok: res.ok, command: "queue", view: "handoff", mode: "apply", action: handoff, to: draft.to, item: draft.item, content: draft.content, queueActions: res.queueActions ?? draft.queueActions, requestId: res.requestId ?? null, spool: res.spool ?? null, reply: res.reply ?? null, ...(res.ok ? {} : { code: res.code ?? null, refusal: res.refusal ?? null }) });
-    if (!res.ok) {
-      process.stderr.write(`queue: ${handoff} hand-off refused: ${res.code ?? "refused"} — ${res.refusal ?? "no reason given"}\n`);
-      process.exit(1);
-    }
-    process.stderr.write(`queue: hand-off ${handoff} -> ${draft.to} spooled (requestId ${res.requestId}); the seat's own tools do the work — this surface wrote NO queue action.\n`);
-    return;
-  }
-  // ROADMAP 381 — THE LIST VIEW, ahead of every other form. It is a VIEW on the existing verb, not a new verb:
-  // the rows come from the SAME read every other form takes (the queue is ONE document, so the storage read stays
-  // whole), and the sorting/attributing/bounding is `queueListView` in the command core — the same module the
-  // in-process pi command registers (task-4), so the CLI verb and the pi command cannot drift apart.
-  if (list) {
-    const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
-    // The census is the READ VIEW, not the pure twin, so `attention` (which needs the row-only kinds from
-    // queue-ops.mjs) travels with the numbers: a bounded view that hides the census is this rig's registered
-    // failure (#5016), and `rows`/`counts`/`attention` are what make the boundedness visible instead of inferred.
-    const census = await readData(DB_PATH, "queue-census", {}, (storage) => readQueueCensus(storage));
-    const seatsDoc = await readData(
-      DB_PATH,
-      "document",
-      { kind: Seats.definition.kind, scope: { kind: "session" } },
-      (storage) => readSeatsDocument(storage),
-    );
-    const seatsValue = seatsDoc?.found ? seatsDoc.value : {};
-    const scoped = filterQueueItems(all, { statuses, to });
-    // An explicit `--status` means "show me those states", so it must not be second-guessed by the terminal-row
-    // drop: `--status cancelled --list` printing nothing would be the empty-success class. With no `--status`
-    // the drop stays, because 200 rows of a list a person is acting on are never 200 rows of `done`.
-    const view = queueListView(
-      scoped,
+  // THE PARSE AND EVERY COLLISION REFUSAL ARE THE CORE'S (D334). One parse call decides known/unknown,
+  // closed value vocabularies, and which views may sit beside which flags — then the verb destructures the
+  // state it needs. What stays here is only this plane's share: which store to read, and D19's human/JSON choice.
+  const parsed = queueCommandParse(args, { cap: GATE_VIEW_CAP });
+  if (!parsed.ok) refuseQueueArgument(parsed.refusal);
+  const state = parsed.state;
+  const { ids, statuses, to, noBody, gates, human, limit, limitWasSet, manage, handoff, list, jsonRequested } = state;
+  // THE MANAGE FAMILY, THE DISCUSS/REVISE HAND-OFF and the LIST VIEW are ONE call into the core (ROADMAP 381,
+  // D334): the core decides the act, reads through the seams supplied here, and returns the strings, the machine
+  // document, the stderr notes and the exit code to set. What this CLI owns is the plane's share only — the DB
+  // path, the broker's spool seam (an ACT writes ONLY through the broker, never here), and D19's choice of a
+  // human view on a TTY versus one JSON document on a pipe. Neither branch writes a store: queueManagePlan is
+  // pure, and an apply goes through queueManageSpool/queueDiscussSpool, which write ONE broker intent file
+  // and read the BROKER'S outcome back — so "accepted and ignored" can never be reported as "applied".
+  if (manage || handoff || list) {
+    const run = await queueCommandRun(
+      state,
       {
-        sort: sort ?? "age",
-        dir: dir ?? "asc",
-        limit,
-        cap: QUEUE_VIEW_ROW_CAP,
-        fullQueue,
-        fields: fields.length ? fields : null,
-        dropTerminal: statuses.length === 0,
-        now: Date.now(),
-        tierTokens: seatsValue.tierTokens ?? DEFAULT_TIER_TOKENS,
-        seatStrategies: workStrategyView(seatsValue).seats,
+        db: DB_PATH,
+        readQueue: async () => await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage)),
+        readCensus: async () => await readData(DB_PATH, "queue-census", {}, (storage) => readQueueCensus(storage)),
+        readSeats: async () => {
+          const seatsDoc = await readData(
+            DB_PATH,
+            "document",
+            { kind: Seats.definition.kind, scope: { kind: "session" } },
+            (storage) => readSeatsDocument(storage),
+          );
+          return seatsDoc?.found ? seatsDoc.value : {};
+        },
+        spool: handoff ? (request, opts) => queueDiscussSpool(DB_PATH, request, opts) : (request, opts) => queueManageSpool(DB_PATH, request, opts),
       },
     );
-    // D19: a TTY gets the human view, a pipe gets ONE JSON document. `--human` forces the text form even piped,
-    // which is also what lets a demo pin the human form without a pty.
+    // An ARGUMENT-level refusal (bad flag, a row-scoped act with no selection, an ambiguous hand-off) costs the
+    // caller the core's correction sentence plus the machine ok:false — the same path as every other bad
+    // argument. An ACT-level refusal (the broker, or the hand-off's own rules) keeps its own wording: it is not
+    // an argument problem and must not read as one.
+    if (run.argRefusal) refuseQueueArgument(run.refusal);
     const textForm = human || (Boolean(process.stdout.isTTY) && !jsonRequested);
-    if (textForm) {
-      process.stdout.write(queueListViewText(view, { db: DB_PATH }));
-    } else {
-      out({
-        ok: true,
-        command: "queue",
-        view: "list",
-        // The header is the FIRST key, so a reader meets the sort, the cap and the field list before any row.
-        header: view.header,
-        rows: census.rows,
-        counts: census.counts,
-        pool: census.pool ?? null,
-        attention: census.attention,
-        mintRefusals: census.mintRefusals ?? null,
-        ...(statuses.length || to.length ? { filter: { ...(statuses.length ? { statuses } : {}), ...(to.length ? { to } : {}) } } : {}),
-        narrowed: "payload",
-        items: view.items,
-      });
+    if (run.text !== undefined || run.json !== undefined) {
+      if (textForm) process.stdout.write(run.text);
+      else out(run.json);
     }
-    if (fullQueue && limitWasSet)
-      process.stderr.write(`queue: --full-queue supersedes --limit ${limit}; every matched row is printed.\n`);
-    if (view.header.truncated)
-      process.stderr.write(
-        `queue: --list printed ${view.header.shown} of ${view.header.matched} matched row(s) (--limit ${view.header.limit}, cap ${view.header.cap}${view.header.capApplied ? `, cap applied over ${view.header.matched} rows` : ""}); the rows/counts above are over all ${view.header.storeRows} rows in the store.\n`,
-      );
+    for (const note of run.notes ?? []) process.stderr.write(note);
+    if (run.exitCode) process.exit(run.exitCode);
     return;
   }
   // #7113 — the human lease view, before any JSON form. The scoping is the SAME filter the other forms use
