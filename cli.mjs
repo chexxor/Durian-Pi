@@ -96,7 +96,7 @@ import { readDependencyPlane } from "./src/depplane.mjs"
 import { readFleetLedger } from "./src/fleetledger.mjs"
 import { extensionNames, loadExtensions, parseExtensionList } from "./src/extensions.mjs";
 import { formatChat, formatPartial } from "./src/chatview.mjs";
-import { readLiveState, readQueueItems, readQueueMintRefusals, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus } from "./src/readapi.mjs";
+import { readLiveState, readQueueItems, readQueueMintRefusals, readQueueRow, readQueueCensus, readRigHealth, readSeatList, readSeatsDocument, readSeatRoots, seatContextMap, filterQueueItems, QUEUE_STATUSES, projectQueueView, refuseOversizedQueueRead, QUEUE_VIEW_ROW_CAP, TERMINAL_QUEUE_STATUSES, queueCensusOf, deferredBacklogRows, terminalStatusIndex, workStrategyView, poolCensus, queueListView, queueListViewText, QUEUE_SORT_KEYS, QUEUE_SORT_DIRS, QUEUE_TIE_BREAK, QUEUE_LIST_FIELDS } from "./src/readapi.mjs";
 import { gateView, GATE_VIEW_CAP } from "./src/queue-lifecycle.mjs";
 import { readNoteCensus, renderCensus } from "./src/notecensus.mjs";
 import { readData, setLocalReads, liveGenerationLeases, STORE_BUSY_TIMEOUT_MS, describeStoreOpenFailure } from "./src/readclient.mjs"
@@ -1321,6 +1321,22 @@ const QUEUE_FLAGS = {
   // byte contract of the default form survives: nothing derived is added to the dump, a second view is added.
   "--human": { kind: "flag", usage: "[--human]" },
   "--limit": { kind: "value", usage: "[--limit <n>]", valueName: "n" },
+  // ROADMAP 381 — THE LIST VIEW. `--list` is a VIEW on the existing verb, NOT a new top-level verb: the scripted
+  // audit path (`cli.mjs`) and the in-process pi command (task-4) are two registrations of ONE core
+  // (`src/readapi.mjs` `queueListView` + `queueListViewText`), and a second verb would be a second core to keep
+  // in step. The four flags below only make sense inside it, so using one without `--list` is REFUSED and names
+  // `--list` — a flag that silently does nothing is the fail-open's defect class (ROADMAP 228).
+  "--list": { kind: "flag", usage: "[--list]" },
+  // The sort keys are the RIG'S OWN vocabulary — declared in the core, never free text or a comparator: an
+  // arbitrary key gets a document nobody can explain, and `--status done2` already showed what a typo costs.
+  "--sort": { kind: "value", usage: "[--sort <key> ...]", valueName: "sort key", valuesNoun: "keys", values: QUEUE_SORT_KEYS },
+  "--dir": { kind: "value", usage: "[--dir <asc|desc>]", valueName: "direction", valuesNoun: "directions", values: QUEUE_SORT_DIRS },
+  // A row's attributes, name-checked against `QUEUE_LIST_FIELDS` in the core; a comma-separated value and a
+  // repeated flag mean the same set, so `--fields` is `listValue` rather than a second spelling.
+  "--fields": { kind: "value", usage: "[--fields <field,...> ...]", valueName: "field", valuesNoun: "fields", values: QUEUE_LIST_FIELDS, listValue: true },
+  // The EXPLICIT ask for every matched row: the cap (200) is what keeps a 7,742-row store from becoming a dump,
+  // so lifting it is asked for, never defaulted.
+  "--full-queue": { kind: "flag", usage: "[--full-queue]" },
 };
 const QUEUE_USAGE = `node cli.mjs queue ${Object.values(QUEUE_FLAGS).map((f) => f.usage).join(" ")}`;
 
@@ -1416,6 +1432,19 @@ async function cmdQueue(args = []) {
   let gates = false;
   let human = false;
   let limit = GATE_VIEW_CAP;
+  // ROADMAP 381 — the LIST VIEW's own state.
+  let list = false;
+  let fullQueue = false;
+  let sort = null;
+  let dir = null;
+  const fields = [];
+  // Which flags the caller actually used, so a flag that only narrows one view can be refused BY NAME when it
+  // sits beside a view it does not narrow.
+  const used = new Set();
+  // `--json` stays an accepted NO-OP for every existing form (#5063: `out()` always printed JSON). It is recorded
+  // only so the NEW list view can honour D19 — a pipe gets one JSON document, a TTY gets the human view — without
+  // changing a single byte of the forms that predate this row.
+  let jsonRequested = false;
   // `--limit` only bounds what is PRINTED; whether the caller asked for it is recorded so a read that did not ask
   // keeps returning every matched row (today's behaviour, asserted in demo/queue-compat-args.test.mjs).
   let limitWasSet = false;
@@ -1425,23 +1454,37 @@ async function cmdQueue(args = []) {
     // A bare positional (`queue 5063`) and a misplaced flag both land here: there is no positional form to
     // silently accept, and `main` accepting one was part of the fail-open.
     if (!spec) refuseQueueArgument(`unknown argument ${a}`);
+    used.add(a);
     if (spec.kind === "flag") {
       // #5770: `--held` is a status filter (not a separate vocabulary), so it composes with `--to`/`--id`.
       if (a === "--held") statuses.push("held");
       else if (a === "--with-gates") gates = true;
       else if (a === "--human") human = true;
-      else noBody = true;
+      else if (a === "--list") list = true;
+      else if (a === "--full-queue") fullQueue = true;
+      // An EXPLICIT `noBody` test, not a catch-all: the flag set is growing, and a catch-all silently
+      // mis-files every flag added after it — the same reason the value check below names its vocabulary.
+      else if (a === "--no-body") noBody = true;
       continue;
     }
     if (spec.kind === "value") {
       const v = args[i + 1];
       if (v === undefined || v.startsWith("--")) refuseQueueArgument(`${a} needs a value`);
       // A closed vocabulary is only closed if the VALUE is checked too: an unrecognized state is refused by name,
-      // with the legal set printed, rather than filtering everything out and reporting an empty queue.
-      if (spec.values && !spec.values.includes(v))
-        refuseQueueArgument(`${a} takes a queue state, not "${v}" (states: ${spec.values.join(", ")})`);
+      // with the legal set printed, rather than filtering everything out and reporting an empty queue. The noun
+      // comes from the table (`state` for `--status`, `sort key` for `--sort`, `field` for `--fields`), so the
+      // `--status` refusal stays byte-identical to what every reader quotes while `--sort` reads `(keys: …)`.
+      if (spec.values) {
+        const toks = spec.listValue ? String(v).split(",") : [v];
+        const bad = toks.filter((t) => t === "" || !spec.values.includes(t));
+        if (bad.length)
+          refuseQueueArgument(`${a} takes a ${spec.valueName}, not ${JSON.stringify(String(bad[0]))} (${spec.valuesNoun}: ${spec.values.join(", ")})`);
+      }
       if (a === "--id") ids.push(v);
       else if (a === "--status") statuses.push(v);
+      else if (a === "--sort") sort = v;
+      else if (a === "--dir") dir = v;
+      else if (a === "--fields") fields.push(...String(v).split(","));
       else if (a === "--limit") {
         // Bounded by construction: `--limit 0` is not a limit, and a limit above the cap is the unbounded dump
         // this instrument exists to avoid. Refuse and name the cap instead of quietly printing the store.
@@ -1456,7 +1499,87 @@ async function cmdQueue(args = []) {
       i += 1;
       continue;
     }
+    if (a === "--json") jsonRequested = true;
     // a known no-op: it changes nothing, because the document is already JSON.
+  }
+  // THE LIST VIEW AND ITS NEIGHBOURS MUST NOT SILENTLY COLLIDE (ROADMAP 381). Every one of these refusals names
+  // the flag it refused AND the flag the caller must add: refusing without a correction is how a closed surface
+  // becomes a dead end. `--fields`/`--sort`/`--dir`/`--full-queue` outside `--list` would otherwise be accepted
+  // and change nothing — an accepted flag that does nothing is the fail-open's defect class.
+  for (const f of ["--sort", "--dir", "--fields", "--full-queue"]) {
+    if (used.has(f) && !list) refuseQueueArgument(`${f} narrows the --list view only — add --list (or drop ${f}); it is not a filter on the whole-document form`);
+  }
+  if (list && gates)
+    refuseQueueArgument("--list and --with-gates are two different views; the list view already carries `gate` state, --with-gates prints the recorded gate fields — pick one");
+  if (list && noBody)
+    refuseQueueArgument("--no-body is a no-op beside --list: the list view never carries bodies, which is part of why it can carry 200 rows");
+  if (list && ids.length)
+    refuseQueueArgument("--id is the row-scoped read (body included); --list is the bounded sorted view — pick one");
+  // ROADMAP 381 — THE LIST VIEW, ahead of every other form. It is a VIEW on the existing verb, not a new verb:
+  // the rows come from the SAME read every other form takes (the queue is ONE document, so the storage read stays
+  // whole), and the sorting/attributing/bounding is `queueListView` in the command core — the same module the
+  // in-process pi command registers (task-4), so the CLI verb and the pi command cannot drift apart.
+  if (list) {
+    const all = await readData(DB_PATH, "queue", {}, (storage) => readQueueItems(storage));
+    // The census is the READ VIEW, not the pure twin, so `attention` (which needs the row-only kinds from
+    // queue-ops.mjs) travels with the numbers: a bounded view that hides the census is this rig's registered
+    // failure (#5016), and `rows`/`counts`/`attention` are what make the boundedness visible instead of inferred.
+    const census = await readData(DB_PATH, "queue-census", {}, (storage) => readQueueCensus(storage));
+    const seatsDoc = await readData(
+      DB_PATH,
+      "document",
+      { kind: Seats.definition.kind, scope: { kind: "session" } },
+      (storage) => readSeatsDocument(storage),
+    );
+    const seatsValue = seatsDoc?.found ? seatsDoc.value : {};
+    const scoped = filterQueueItems(all, { statuses, to });
+    // An explicit `--status` means "show me those states", so it must not be second-guessed by the terminal-row
+    // drop: `--status cancelled --list` printing nothing would be the empty-success class. With no `--status`
+    // the drop stays, because 200 rows of a list a person is acting on are never 200 rows of `done`.
+    const view = queueListView(
+      scoped,
+      {
+        sort: sort ?? "age",
+        dir: dir ?? "asc",
+        limit,
+        cap: QUEUE_VIEW_ROW_CAP,
+        fullQueue,
+        fields: fields.length ? fields : null,
+        dropTerminal: statuses.length === 0,
+        now: Date.now(),
+        tierTokens: seatsValue.tierTokens ?? DEFAULT_TIER_TOKENS,
+        seatStrategies: workStrategyView(seatsValue).seats,
+      },
+    );
+    // D19: a TTY gets the human view, a pipe gets ONE JSON document. `--human` forces the text form even piped,
+    // which is also what lets a demo pin the human form without a pty.
+    const textForm = human || (Boolean(process.stdout.isTTY) && !jsonRequested);
+    if (textForm) {
+      process.stdout.write(queueListViewText(view, { db: DB_PATH }));
+    } else {
+      out({
+        ok: true,
+        command: "queue",
+        view: "list",
+        // The header is the FIRST key, so a reader meets the sort, the cap and the field list before any row.
+        header: view.header,
+        rows: census.rows,
+        counts: census.counts,
+        pool: census.pool ?? null,
+        attention: census.attention,
+        mintRefusals: census.mintRefusals ?? null,
+        ...(statuses.length || to.length ? { filter: { ...(statuses.length ? { statuses } : {}), ...(to.length ? { to } : {}) } } : {}),
+        narrowed: "payload",
+        items: view.items,
+      });
+    }
+    if (fullQueue && limitWasSet)
+      process.stderr.write(`queue: --full-queue supersedes --limit ${limit}; every matched row is printed.\n`);
+    if (view.header.truncated)
+      process.stderr.write(
+        `queue: --list printed ${view.header.shown} of ${view.header.matched} matched row(s) (--limit ${view.header.limit}, cap ${view.header.cap}${view.header.capApplied ? `, cap applied over ${view.header.matched} rows` : ""}); the rows/counts above are over all ${view.header.storeRows} rows in the store.\n`,
+      );
+    return;
   }
   // #7113 — the human lease view, before any JSON form. The scoping is the SAME filter the other forms use
   // (one owner, src/readapi.mjs), and the storage read is whole either way: the queue is ONE document, so
@@ -3954,6 +4077,7 @@ usages:
   node cli.mjs queue --status <state> [--to <seat>…]  filter the printed rows; the counts/attention stay the whole store's (#5016)
   node cli.mjs queue --no-body               VIEWER form: bodies omitted, loudly headed, notices still derived over full rows (#5016)
   node cli.mjs queue --held --with-gates     bounded park census (#5770): per row id/from/to/status/stage/blockedBy/reason/resolver/reviewBy, NO bodies, capped at 200 rows, and it reports how many held rows have no recorded gate
+  node cli.mjs queue --list [--sort <key>] [--dir <asc|desc>] [--fields <f,…>] [--limit N] [--full-queue]  the ATTRIBUTED list view (ROADMAP 381): sort keys are the rig's own vocabulary (age priority seat status kind tier gate id), ties break on id asc, the header names sort+cap+fields before any row, cap 200; a TTY gets the human text view, a pipe gets one JSON document (D19)
   node cli.mjs show <id>       the same row-scoped read, as a verb
   node cli.mjs resume          (alias: doctor) advance admitted-but-not-progressing submissions
   node cli.mjs reset <seat> [handoff] [--dry-run]   (alias: clean) break a seat out of a degenerate context (writes a reset boundary); --dry-run previews it and writes nothing

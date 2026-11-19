@@ -122,9 +122,11 @@ try {
   // accepting the world. On `main` these calls exit 0 and print the whole document — that is the fail-open being
   // closed. NOTE: `--status`, `--to` and `--no-body` were UNKNOWN when this file was written (#5063) and became
   // KNOWN in #5016 — in the same change that added the accept lines just above (B2) and the rows in
-  // docs/COMMANDS-AND-THE-BROKER.md §4A. `--fields` / `--ids` stay refused: no call site uses them, and inventing a
-  // flag because it looked likely is how a tool grows two spellings for one thing.
-  for (const unknown of ["--zork", "--jsonn", "--fields", "--ids"]) {
+  // docs/COMMANDS-AND-THE-BROKER.md §4A. `--ids` stays refused: no call site uses it, and inventing a
+  // flag because it looked likely is how a tool grows two spellings for one thing. `--fields` MOVED OUT of this
+  // loop — ROADMAP 381 made it a KNOWN flag, but only inside `--list`; outside `--list` it is still refused, and
+  // the refusal must NAME `--list` so the caller learns the missing half rather than guessing (section D below).
+  for (const unknown of ["--zork", "--jsonn", "--ids"]) {
     const r = cli(["queue", unknown]);
     assert.equal(r.code, 1, `queue ${unknown} must exit 1 (unknown; not on the known list, and not a documented form)`);
     const j = JSON.parse(r.stdout);
@@ -150,7 +152,7 @@ try {
   // offending argument, EVERY known flag, and the usage line, while stdout keeps the machine contract. The known
   // set is pinned here as an exact list: adding a flag to `QUEUE_FLAGS` without adding it here (and to §4A of
   // docs/COMMANDS-AND-THE-BROKER.md, and to the accept lines above) goes RED, which is the point.
-  const KNOWN_FLAGS = ["--json", "--id", "--human"];
+  const KNOWN_FLAGS = ["--json", "--id", "--human", "--list", "--sort", "--dir", "--fields", "--full-queue"];
   const refused = cli(["queue", "--zork"]);
   assert.equal(refused.code, 1, "an unknown flag exits 1");
   assert.ok(refused.stderr.includes("--zork"), `stderr names the argument it refused: ${refused.stderr.slice(0, 300)}`);
@@ -169,6 +171,43 @@ try {
   assert.equal(positional.code, 1, "a bare positional exits 1");
   assert.ok(JSON.parse(positional.stdout).error.includes("7"), "and the refusal names the token it refused");
   assert.ok(!("items" in JSON.parse(positional.stdout)), "a refused positional never answers with the document");
+
+  // ─── D. THE LIST VIEW (the compat half of ROADMAP 381) ───
+  // This file pins only that the OLD documented forms still answer identically and that the FIVE new flags refuse
+  // correctly. The view's own content — sort order, ties, per-row attributes, the cap — is demo/queue-list-sort.test.mjs.
+  for (const narrow of [["--fields", "id"], ["--sort", "age"], ["--dir", "desc"], ["--full-queue"]]) {
+    const orphan = cli(["queue", ...narrow]);
+    assert.equal(orphan.code, 1, `queue ${narrow.join(" ")} outside --list exits 1: ${orphan.stderr.slice(0, 300)}`);
+    const oj = JSON.parse(orphan.stdout);
+    assert.equal(oj.ok, false, "the orphan is a structured ok:false");
+    assert.ok(String(oj.error).includes(narrow[0]), `the refusal names the flag it refused: ${oj.error}`);
+    assert.ok(String(oj.error).includes("--list"), `and it NAMES the missing half (--list), so the caller can correct the call: ${oj.error}`);
+    assert.ok(!("items" in oj), `an orphaned narrow never answers with the document: ${orphan.stdout.slice(0, 200)}`);
+    assert.ok(stdoutBytes(orphan) < 4096, `and it costs almost nothing: ${stdoutBytes(orphan)} B`);
+  }
+
+  const listForm = cli(["queue", "--list", "--sort", "age", "--limit", "5"]);
+  assert.equal(listForm.code, 0, `queue --list --sort age --limit 5 is a KNOWN form and exits 0: ${listForm.stderr.slice(0, 300)}`);
+  const listView = JSON.parse(listForm.stdout);
+  assert.equal(listView.ok, true, "the list view is ok:true");
+  assert.equal(listView.command, "queue", "it is the SAME verb, not a new one");
+  assert.equal(listView.view, "list", "the document announces which view it is");
+  assert.ok(listView.items.length <= 200, `the bounded view never exceeds the cap: ${listView.items.length} rows printed`);
+  assert.equal(listView.items.length, 5, "--limit 5 printed exactly 5 of the 60-row fixture (bounded, not full-store)");
+  assert.ok("sort" in listView.header, "the header names the sort, so the order is attributed before any row prints");
+  assert.deepEqual(
+    [listView.header.sort, listView.header.dir, listView.header.tieBreak],
+    ["age", "asc", "id asc"],
+    "sort key, direction and tie-break are all stated",
+  );
+  assert.ok(!(listView.items[0].body), "the list view carries no bodies — that is part of why it can carry 200 rows");
+  assert.ok(listForm.stderr.includes("--list printed"), `the bound is PRINTED, not silent: ${listForm.stderr.slice(0, 300)}`);
+
+  const badKey = cli(["queue", "--list", "--sort", "zork"]);
+  assert.equal(badKey.code, 1, "an undeclared sort key exits 1");
+  assert.ok(JSON.parse(badKey.stdout).error.includes("--sort"), "and the refusal names the bad flag BY NAME, not the vocabulary");
+  assert.ok(!("items" in JSON.parse(badKey.stdout)), "an unknown key never prints a partially-sorted document");
+  assert.ok(stdoutBytes(badKey) < 4096, `and it pays nothing: ${stdoutBytes(badKey)} B against the ${bareBytes} B dump`);
 
   // A KNOWN-but-absent id stays a loud RESULT+exit 1, not an empty queue (unchanged from #4986).
   const absent = cli(["queue", "--id", "999999"]);

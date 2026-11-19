@@ -13,17 +13,20 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { RigControl, RigQueue, Seats } from "./rig.mjs";
-import { openPoolRow, POOL_SIZE_GATE_FRACTION } from "./rig.mjs";
+import { openPoolRow, POOL_SIZE_GATE_FRACTION, deadGateIds } from "./rig.mjs";
 import { SCAN_LIMIT, readSeatPages } from "./rigstory.mjs";
 import { computeMetrics } from "./metrics.mjs";
 import { computeAttention, countMalformedToolCalls } from "./attention.mjs";
 import { failureStreak } from "./supervisor.mjs";
 import { strandedMsSetting, declaredContextWindow, compactionSettings, queuePressureSettings } from "./config.mjs";
 import { DEFAULT_TIER_TOKENS } from "./config.mjs";
-import { DEFAULT_STRATEGY, resolveStrategy } from "./workstrategy.mjs";
+import { DEFAULT_STRATEGY, resolveStrategy, effectivePriority, priorityLeaseText, PRIORITY_VALUES, NEUTRAL_PRIORITY } from "./workstrategy.mjs";
 import { contextConsumption } from "./context.mjs";
-import { queueShape, mintRefusalCensus } from "./queueclass.mjs";
+import { queueShape, mintRefusalCensus, classifyRow, lineageOf } from "./queueclass.mjs";
 import { scanEntriesForSecrets, secretNotices } from "./secretdetect.mjs";
+import { gateView } from "./queue-lifecycle.mjs";
+import { collectGateRefs } from "./heldgate.mjs";
+import { HUMAN as DEFERRED_TO_HUMAN } from "./deferlease.mjs";
 import { readGenerationSlots } from "./genlock.mjs";
 import { deriveSeatAction, partialView, peerGraph } from "./viewmodel.mjs";
 import { declaredLocalWindow, localProviderSpecs } from "./providers/local.mjs";
@@ -307,6 +310,179 @@ export function activeQueueItems(items) {
 }
 
 /**
+ * THE QUEUE LIST VIEW (ROADMAP 381 — the VIEW spine, the operator's ask 2026-11-18).
+ *
+ * WHY A DECLARED VOCABULARY INSTEAD OF A COMPARATOR OR A FIELD NAME. The operator asked to sort the queue
+ * "in the ways that matter (age, seat, status, priority, gate state, cost)". A caller that can pass an
+ * arbitrary key gets a document it cannot explain, and this rig has already refused that shape twice: `queue
+ * --zork` exited 0 printing the whole 22 MB document (ROADMAP 228, the fail-open) and `--status done2`
+ * answered "no rows" to a typo (#5016). So the keys are the RIG'S OWN vocabulary, declared here, one
+ * comparator per key, and an unknown key or field is refused BY NAME before a row is printed.
+ *
+ * THE ORDER CONTRACT, so the view is re-findable (requirement 4): every key orders by ONE value and EVERY
+ * tie breaks on `id` ASCENDING in BOTH directions — a TOTAL order, so two runs over the same store print the
+ * same sequence. A row whose sort value is MISSING sorts LAST in both directions: "no signal" is not a value,
+ * and putting it first under `--dir desc` would read as "these are the newest" for rows that have no date.
+ *
+ * Nothing here re-reads the store: the queue is ONE document, so every caller already holds the rows.
+ */
+export const QUEUE_SORT_KEYS = Object.freeze(["age", "priority", "seat", "status", "kind", "tier", "gate", "id"]);
+export const QUEUE_SORT_DIRS = Object.freeze(["asc", "desc"]);
+export const QUEUE_TIE_BREAK = "id asc";
+/** The declared orders, so an ordinal sort is a lookup and not a comparison nobody can re-derive. */
+export const QUEUE_DISPOSITIONS = Object.freeze(["work", "notice", "registration"]);
+export const QUEUE_GATE_STATES = Object.freeze(["none", "unknown", "open", "satisfied", "cancelled"]);
+export const QUEUE_LEASE_STATES = Object.freeze(["HONOURED", "INERT", "lapsed", "none"]);
+/** The attribute set a list row carries; `--fields` validates against exactly this set. */
+export const QUEUE_LIST_FIELDS = Object.freeze([
+  "id", "status", "to", "from", "subject", "disposition",
+  "queuedAt", "ageSinceQueuedMs", "lastEventAt", "ageSinceLastEventMs",
+  "priority", "priorityRaw", "priorityExpiresAt", "lease", "leaseWhy", "leaseText",
+  "tier", "tokenEstimate", "gate", "gateWhy", "blockedBy", "gateRecorded", "artifactPaths",
+  "lineage", "awaitingOperator",
+]);
+
+/** A refusal that names the token it refused and the legal set — the shape ROADMAP 228 made decidable. */
+function refuseVocabulary({ where, got, legal }) {
+  const err = new Error(`${where} ${JSON.stringify(String(got ?? ""))} is not declared (legal: ${legal.join(" ")})`);
+  err.code = "undeclared_vocabulary";
+  throw err;
+}
+
+/** Gate state as a CLOSED set, derived from the ONE blockedBy reader (`gateView`) and the ONE dead-gate rule
+ * (`deadGateIds`, src/rig.mjs). A gate id naming no row is `unknown`, NOT `open`: an ambiguous gate stays
+ * workable by the #2673 conservative default, and inventing a wait for a typo is the false-negative class.
+ * `gateRecorded` stays separate because a written park (a block, a reason, a deferral) is not a gate. */
+export function queueGateState(item, items = []) {
+  const g = gateView(item ?? {});
+  const ids = (g.blockedBy ?? []).map(String);
+  const byId = new Map((items ?? []).map((it) => [String(it?.id), String(it?.status)]));
+  const dead = deadGateIds(item, items).map(String);
+  if (!ids.length) {
+    return { state: "none", why: g.recorded ? "parked (a block/reason/deferral is written), no gate ids recorded" : "nothing recorded", blockedBy: ids, recorded: g.recorded };
+  }
+  if (dead.length) return { state: "cancelled", why: `gated on #${dead.join(", ")}: CANCELLED, can never be satisfied`, blockedBy: ids, recorded: g.recorded };
+  const seen = ids.filter((id) => byId.has(id));
+  if (!seen.length) return { state: "unknown", why: "gate ids name no row (ambiguous — workable, not blocked)", blockedBy: ids, recorded: g.recorded };
+  const open = seen.filter((id) => byId.get(id) !== "done");
+  if (open.length) return { state: "open", why: `waiting on #${open.join(", ")}`, blockedBy: ids, recorded: g.recorded };
+  return { state: "satisfied", why: "every named gate is done", blockedBy: ids, recorded: g.recorded };
+}
+
+/** The priority LEASE verdict in the operator's words (#7113): HONOURED / INERT / lapsed / none, with the
+ * WHY a human needs (which seat's resolved claim order ignores the lease). One reading of the lease —
+ * `effectivePriority` and `priorityLeaseText`, the same pair the selector and `peek_queue` call.
+ * `seatStrategies` is `workStrategyView(seatsValue).seats`: {seat: {strategy, source}}. */
+export function queueLeaseState(item, { now = Date.now(), seatStrategies = {} } = {}) {
+  if (!item?.priority) return { state: "none", why: null };
+  const eff = effectivePriority(item, now);
+  if (eff.lapsed) return { state: "lapsed", why: `the lease expired at ${eff.expiresAt}; the row ranks ${NEUTRAL_PRIORITY} again` };
+  if (eff.invalid) return { state: "INERT", why: `${JSON.stringify(String(eff.raw))} is not a priority (valid: ${PRIORITY_VALUES.join(" | ")})` };
+  const seat = item?.to ?? null;
+  const resolved = seat === null ? null : seatStrategies?.[seat];
+  if (!resolved) return { state: "INERT", why: `${seat ?? "unaddressed"} is not a registered seat, so nothing can claim this row` };
+  if (resolved.strategy !== "priority_first") return { state: "INERT", why: `${seat} claims ${resolved.strategy} (${resolved.source}), which ignores priority; the lease is recorded, not applied` };
+  return { state: "HONOURED", why: `${seat} claims ${resolved.strategy} (${resolved.source})` };
+}
+
+/** ONE attributed queue row — every attribute the operator named, derived here so no surface re-invents one.
+ * Ages come from the row's OWN transitions (the first `queued`, the latest of anything), never from a store
+ * re-scan. `awaitingOperator` is the `deferredTo === "human"` park, the same predicate src/deferlease.mjs owns. */
+export function queueRowAttributes(item, { items = [], now = Date.now(), tierTokens = DEFAULT_TIER_TOKENS, seatStrategies = {} } = {}) {
+  const transitions = item?.transitions ?? [];
+  const atOf = (t) => Date.parse(String(t?.at ?? ""));
+  const firstQueuedAt = (transitions.find((t) => String(t?.event ?? "") === "queued"))?.at ?? null;
+  const queuedAt = Date.parse(String(firstQueuedAt ?? ""));
+  const events = transitions.map(atOf).filter(Number.isFinite);
+  const lastAt = events.length ? Math.max(...events) : Number.NaN;
+  const eff = effectivePriority(item, now);
+  const tier = item?.tier ?? null;
+  const estimate = Number.isFinite(tierTokens?.[tier]) ? tierTokens[tier] : null;
+  return {
+    id: item?.id ?? null,
+    status: item?.status ?? null,
+    to: item?.to ?? null,
+    from: item?.from ?? null,
+    subject: String(item?.subject ?? ""),
+    disposition: classifyRow(item),
+    queuedAt: Number.isFinite(queuedAt) ? new Date(queuedAt).toISOString() : null,
+    ageSinceQueuedMs: Number.isFinite(queuedAt) ? Math.max(0, now - queuedAt) : null,
+    lastEventAt: Number.isFinite(lastAt) ? new Date(lastAt).toISOString() : null,
+    ageSinceLastEventMs: Number.isFinite(lastAt) ? Math.max(0, now - lastAt) : null,
+    priority: eff.priority,
+    priorityRaw: eff.raw,
+    priorityExpiresAt: eff.expiresAt,
+    lease: queueLeaseState(item, { now, seatStrategies }).state,
+    leaseWhy: queueLeaseState(item, { now, seatStrategies }).why,
+    leaseText: priorityLeaseText(item, now),
+    tier,
+    tokenEstimate: estimate,
+    gate: queueGateState(item, items).state,
+    gateWhy: queueGateState(item, items).why,
+    blockedBy: queueGateState(item, items).blockedBy,
+    gateRecorded: queueGateState(item, items).recorded,
+    artifactPaths: collectGateRefs(item).artifacts,
+    lineage: lineageOf(item),
+    awaitingOperator: item?.deferredTo === DEFERRED_TO_HUMAN,
+  };
+}
+
+/** The ONE ordinal a sort key reads, or null for "no signal" (sorted last, in both directions). */
+function queueSortValue(key, item, { items = [], now = Date.now(), tierTokens = DEFAULT_TIER_TOKENS } = {}) {
+  switch (key) {
+    case "age": {
+      const at = (item?.transitions ?? []).find((t) => String(t?.event ?? "") === "queued")?.at ?? null;
+      const ms = Date.parse(String(at ?? ""));
+      return Number.isFinite(ms) ? Math.max(0, now - ms) : null;
+    }
+    // `asc` is MOST URGENT first (rank 0 = `now`), so a priority sort reads as the fleet's own claim order.
+    case "priority": return effectivePriority(item, now).rank;
+    case "seat": return item?.to || null;
+    case "status": {
+      const i = QUEUE_STATUSES.indexOf(String(item?.status ?? ""));
+      return i < 0 ? null : i;
+    }
+    case "kind": return QUEUE_DISPOSITIONS.indexOf(classifyRow(item));
+    // The token estimate, from the rig's own tier table — the operator's "cost".
+    case "tier": return Number.isFinite(tierTokens?.[item?.tier]) ? tierTokens[item.tier] : null;
+    case "gate": return QUEUE_GATE_STATES.indexOf(queueGateState(item, items).state);
+    case "id": {
+      const n = Number(item?.id);
+      return Number.isFinite(n) ? n : null;
+    }
+    default: return null;
+  }
+}
+
+/** Order rows by a DECLARED key, ties on `id` ascending, missing values last in BOTH directions.
+ * Throws (code `undeclared_vocabulary`) on an undeclared key — the backstop for every caller, so only
+ * `cli.mjs` refuses before the read instead of after it. */
+export function sortQueueItems(items, { sort = "age", dir = "asc", now = Date.now(), tierTokens = DEFAULT_TIER_TOKENS } = {}) {
+  const all = items ?? [];
+  if (!QUEUE_SORT_KEYS.includes(sort)) refuseVocabulary({ where: "sort key", got: sort, legal: QUEUE_SORT_KEYS });
+  if (!QUEUE_SORT_DIRS.includes(dir)) refuseVocabulary({ where: "sort direction", got: dir, legal: QUEUE_SORT_DIRS });
+  const ctx = { items: all, now, tierTokens };
+  const sgn = dir === "desc" ? -1 : 1;
+  const idOf = (it) => {
+    const n = Number(it?.id);
+    return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+  };
+  return [...all].sort((a, b) => {
+    const va = queueSortValue(sort, a, ctx);
+    const vb = queueSortValue(sort, b, ctx);
+    if (va === null || vb === null) {
+      if (va === vb) return idOf(a) - idOf(b);
+      return va === null ? 1 : -1;
+    }
+    if (typeof va === "string" || typeof vb === "string") {
+      const c = String(va).localeCompare(String(vb));
+      if (c) return c * sgn;
+    } else if (va !== vb) return (va < vb ? -1 : 1) * sgn;
+    return idOf(a) - idOf(b);
+  });
+}
+
+/**
  * BOUND A QUEUE PAYLOAD FOR A VIEW (ROADMAP 331, the read-surface leg).
  *
  * The read is not the cost - the queue is ONE document, so whoever asks has already read all 6,021 rows out of
@@ -318,15 +494,20 @@ export function activeQueueItems(items) {
  * and attention are always derived from the FULL row set before projection (the #5016 rule); this function only
  * decides what travels.
  *
+ * `sort` (ROADMAP 381) orders BEFORE slicing, so the cap takes the FRONT of the requested order rather than
+ * the store's arrival order; with no `sort` the arrival order is unchanged, which is what keeps every existing
+ * caller byte-for-byte identical.
+ *
  * @param {Array<object>} items full rows
- * @param {{cap?: number, dropTerminal?: boolean}} [opts]
+ * @param {{cap?: number, dropTerminal?: boolean, sort?: string|null, dir?: string}} [opts]
  * @returns {{rows: Array<object>, shown: number, total: number, droppedTerminal: number, droppedCapped: number,
- *   bytes: {before: number, after: number}}}
+ *   bytes: {before: number, after: number}, sort?: {key, dir, tieBreak}}}
  */
-export function projectQueueView(items, { cap = QUEUE_VIEW_ROW_CAP, dropTerminal = true } = {}) {
+export function projectQueueView(items, { cap = QUEUE_VIEW_ROW_CAP, dropTerminal = true, sort = null, dir = "asc" } = {}) {
 	const rowsAll = items ?? [];
 	const active = dropTerminal ? activeQueueItems(rowsAll) : rowsAll;
-	const rows = active.slice(0, cap);
+	const ordered = sort === null ? active : sortQueueItems(active, { sort, dir });
+	const rows = ordered.slice(0, cap);
 	return {
 		rows,
 		shown: rows.length,
@@ -334,7 +515,114 @@ export function projectQueueView(items, { cap = QUEUE_VIEW_ROW_CAP, dropTerminal
 		droppedTerminal: dropTerminal ? rowsAll.length - active.length : 0,
 		droppedCapped: active.length - rows.length,
 		bytes: { before: JSON.stringify(rowsAll).length, after: JSON.stringify(rows).length },
+		...(sort === null ? {} : { sort: { key: sort, dir, tieBreak: QUEUE_TIE_BREAK } }),
 	};
+}
+
+/**
+ * THE LIST VIEW ITSELF: sort, bound, attribute, and announce the bound (requirements 2, 4 and 5).
+ *
+ * The header is returned separately from the rows so BOTH forms — the TTY text and the JSON document — name the
+ * sort key, the direction, the tie-break and the cap BEFORE any row: a bounded view that does not announce
+ * itself is the record a later reader trusts (#5016's rule, and `--no-body`'s).
+ *
+ * `limit` may not exceed `cap` (`QUEUE_VIEW_ROW_CAP`) unless `fullQueue` is set, and `fullQueue` is the
+ * EXPLICIT ask for the whole matched set — a 7,742-row print is a defect, so it is asked for, never defaulted.
+ */
+export function queueListView(items, { sort = "age", dir = "asc", limit = QUEUE_VIEW_ROW_CAP, cap = QUEUE_VIEW_ROW_CAP, fullQueue = false, fields = null, dropTerminal = true, now = Date.now(), tierTokens = DEFAULT_TIER_TOKENS, seatStrategies = {} } = {}) {
+  const all = items ?? [];
+  const fieldList = (fields ?? []).length ? fields : null;
+  for (const f of fieldList ?? []) if (!QUEUE_LIST_FIELDS.includes(f)) refuseVocabulary({ where: "field", got: f, legal: QUEUE_LIST_FIELDS });
+  const active = dropTerminal ? activeQueueItems(all) : all;
+  const ordered = sortQueueItems(active, { sort, dir, now, tierTokens });
+  const bound = fullQueue ? ordered.length : Math.min(Math.max(1, Number(limit)), cap);
+  const shown = ordered.slice(0, bound);
+  const attributed = shown.map((it) => queueRowAttributes(it, { items: all, now, tierTokens, seatStrategies }));
+  const items_out = fieldList ? attributed.map((r) => Object.fromEntries(fieldList.map((f) => [f, r[f]]))) : attributed;
+  return {
+    header: {
+      view: "list",
+      readAtMs: now,
+      sort,
+      dir,
+      tieBreak: QUEUE_TIE_BREAK,
+      cap,
+      limit: bound,
+      fullQueue: fullQueue === true,
+      matched: ordered.length,
+      shown: items_out.length,
+      truncated: ordered.length > items_out.length,
+      capApplied: !fullQueue && ordered.length > cap,
+      droppedTerminal: dropTerminal ? all.length - active.length : 0,
+      storeRows: all.length,
+      fields: fieldList ?? [...QUEUE_LIST_FIELDS],
+    },
+    items: items_out,
+  };
+}
+
+/**
+ * THE SAME VIEW AS TEXT — the human half of requirement 1 (D19: a TTY gets a human view, a pipe gets one JSON
+ * document). It renders the SAME `header` and `items` `queueListView` returned, so the two forms cannot drift: a
+ * session reading the JSON and a person reading the terminal meet one set of numbers. It is here, in the command
+ * core, rather than in `cli.mjs`, because the CLI verb and the in-process pi command (task-4) are two
+ * registrations of ONE core — a renderer invented inside `cli.mjs` is a second core that has to be re-written
+ * for the other plane.
+ *
+ * The header comes FIRST and names sort, direction, tie-break, cap and fields before any row, because a bounded
+ * view that does not announce itself is the record a later reader trusts (#5016's rule). Ages are rendered
+ * human-readable (`3.2d`) but the ISO instants stay in the JSON document, so the text form loses no row — it
+ * re-skins one.
+ *
+ * @param {{header: object, items: Array<object>}} view the exact value `queueListView` returned
+ * @param {{db?: string|null, subjectWidth?: number}} [opts]
+ * @returns {string} newline-terminated text
+ */
+export function queueListViewText(view, { db = null, subjectWidth = 80 } = {}) {
+  const h = view?.header ?? {};
+  const rows = view?.items ?? [];
+  const age = (ms) => {
+    if (!Number.isFinite(ms)) return "no record";
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m}m`;
+    const hr = Math.round(m / 60);
+    if (hr < 24 * 7) return `${hr}h`;
+    return `${Math.round((m / 60) / 24)}d`;
+  };
+  const lines = [];
+  lines.push(
+    `queue — list view${db ? `  db=${db}` : ""}  read at ${new Date(h.readAtMs ?? Date.now()).toISOString()}`,
+  );
+  lines.push(
+    `sort ${h.sort} ${h.dir} (ties ${h.tieBreak})  |  cap ${h.cap}  |  shown ${h.shown} of ${h.matched} matched row(s)  |  store holds ${h.storeRows ?? "?"} row(s), ${h.droppedTerminal} terminal dropped`,
+  );
+  lines.push(`fields ${(h.fields ?? []).join(" ")}`);
+  if (h.fullQueue) lines.push("--full-queue: every matched row is printed; the cap does not apply.");
+  for (const r of rows) {
+    const subj = String(r.subject ?? "");
+    const clipped = subj.length > subjectWidth ? `${subj.slice(0, subjectWidth)}…` : subj;
+    lines.push(
+      `#${r.id} ${r.status} ${r.from ?? "?"}->${r.to ?? "?"}  ` +
+      `age ${age(r.ageSinceQueuedMs)} since queued (at ${r.queuedAt ?? "no record"}), ${age(r.ageSinceLastEventMs)} since last event (at ${r.lastEventAt ?? "no record"})  ` +
+      `priority ${r.priority}${r.priorityRaw && r.priorityRaw !== r.priority ? ` raw=${JSON.stringify(String(r.priorityRaw))}` : ""} lease ${r.lease}${r.leaseWhy ? ` (${r.leaseWhy})` : ""}${r.leaseText ? ` ${r.leaseText}` : ""}  ` +
+      `tier ${r.tier ?? "unset"}${r.tokenEstimate != null ? ` ~${r.tokenEstimate} tok` : " (no estimate)"}  ` +
+      `gate ${r.gate}${r.gateWhy ? ` (${r.gateWhy})` : ""}${(r.blockedBy ?? []).length ? ` blockedBy #${(r.blockedBy).join(", #")}` : ""}  ` +
+      `disposition ${r.disposition}${r.awaitingOperator ? "  AWAITING OPERATOR" : ""}  ` +
+      `lineage ${r.lineage ? `${r.lineage.kind} ${JSON.stringify(String(r.lineage.named))}` : "none recorded"}` +
+      ((r.artifactPaths ?? []).length ? `  artifacts ${(r.artifactPaths).slice(0, 3).join(", ")}` : "") +
+      `  subject ${JSON.stringify(clipped)}` +
+      (subj.length > subjectWidth ? ` (a slice — read #${r.id} for the whole body)` : ""),
+    );
+  }
+  if (!rows.length) lines.push("  no row matched — the counts above are still the whole store's.");
+  if (h.truncated) {
+    lines.push(
+      `  ... ${h.matched - h.shown} matched row(s) not printed${h.capApplied ? ` (--limit ${h.limit}, cap ${h.cap})` : ""}; ask for the rest with --full-queue or filter with --status/--to.`,
+    );
+  }
+  return lines.join("\n") + "\n";
 }
 
 /**
