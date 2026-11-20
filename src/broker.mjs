@@ -573,6 +573,15 @@ export const DELEGATE = "delegate";
 export const QUEUE_CONTROL_OPS = new Set(["queue"]);
 
 /**
+ * SESSION-LEVEL input spool ops: an ATTACHED client's words address the session's OWN
+ * conversation, so there is no seat `to` and the `message` op's `unknown seat` throw is the
+ * wrong door. NOT widened to the operator/delegate plane — an attached pane is a client OF
+ * the session and its input is admitted by the session's own writer, exactly as a `message`
+ * is — but it IS audited, so every client's input leaves a trail naming who sent it.
+ */
+export const SESSION_CONTROL_OPS = new Set(["input"]);
+
+/**
  * Ops that can act on a seat OTHER than the requester: a `from=<seat>` request for one
  * of these is a cross-seat act (privilege escalation), so it is operator-only too. A
  * self-target (`to === from`) stays allowed, so a seat may still stop/reset itself.
@@ -696,7 +705,7 @@ export async function applyPauseOp(harness, { paused, by = "operator", reason = 
  * harness — rather than opening a second writer. `pause`/`unpause` (ROADMAP 131) are
  * rig-level: they carry no seat target.
  */
-export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "queue"];
+export const SPOOL_OPS = ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "queue", "input"];
 
 /** How often `pause --wait` re-checks for quiescence while the broker drains (ROADMAP 131 AC5). */
 const QUIESCE_POLL_MS = 100;
@@ -764,6 +773,39 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
       context,
     );
     return { op, seat: request.to, delivered: true };
+  }
+  if (op === "input") {
+    // SESSION-LEVEL input (the tmux-like attach surface, ROADMAP 381): an ATTACHED client aims
+    // at the session's own conversation, not at a seat, so `to` is absent and the `message` op
+    // above is the wrong door. Same single writer — the broker's own harness — so the spool file
+    // is the TRANSPORT and this leg is the ADMISSION: the client's words become one SubmissionDraft
+    // into that conversation's `pi.inbox`, which is exactly spec.md §6, and the library's admission
+    // table (idle+empty inbox -> placed, busy or non-empty -> queued) does the merging. No second
+    // process, no second writer, no new lifecycle: this is the `SPOOL_OPS` extension the header
+    // above already sanctions ("a new mutating verb EXTENDS this list … applied in-process with its
+    // own harness — rather than opening a second writer").
+    const convId = request.conversation ?? (await harness.root(context)).id;
+    const conv = await harness.conversation(convId, context);
+    if (!conv) throw new Error(`no conversation: ${convId}`);
+    const rec = await conv.submit(
+      {
+        type: "input",
+        content: String(request.content ?? ""),
+        ...(request.requestId ? { requestId: request.requestId } : {}),
+        // The admission table's own knobs, passed through so an attached client can say
+        // "queue it behind the run" or "refuse if nothing is running" instead of guessing.
+        ...(request.whenBusy ? { whenBusy: request.whenBusy } : {}),
+        ...(request.whenIdle ? { whenIdle: request.whenIdle } : {}),
+      },
+      context,
+    );
+    return {
+      op,
+      conversation: convId,
+      from: request.from ?? null,
+      delivered: true,
+      submission: rec?.id ?? null,
+    };
   }
   if (op === "stop") {
     // The broker holds the run in-process, so it can halt a seat without the
@@ -1046,12 +1088,13 @@ async function drainSpool(harness, probeStorage, { dbPath, context, onDiagnostic
     // AUDITED for every gated op (allowed and refused), then a refusal is dead-lettered
     // with a STRUCTURED code so the producer reports "refused" rather than "pending".
     const decision = authorizeSpoolRequest(request, { op });
-    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op) || QUEUE_CONTROL_OPS.has(op)) {
+    if (CONTROL_PLANE_OPS.has(op) || CROSS_SEAT_OPS.has(op) || QUEUE_CONTROL_OPS.has(op) || SESSION_CONTROL_OPS.has(op)) {
       appendGateAudit(dbPath, {
         requestId,
         op,
         from: request.from ?? null,
         to: request.to ?? request.seat ?? null,
+        conversation: request.conversation ?? null,
         sourceFile: basename(file),
         decision: decision.allowed ? "allowed" : "refused",
         code: decision.code,

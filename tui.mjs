@@ -34,7 +34,10 @@ if (parsed.help) {
 		"tui [--db <path>] [--select <seat>] [--attach]\n" +
 			"  --db      the store to open (default: session.sqlite beside this file)\n" +
 			"  --select  the seat this session is opened FOR (carried, not resolved here)\n" +
-			"  --attach  view a store a LIVE BROKER already drives, read-only — never a second writer (needs --db)\n" +
+			"  --attach  view a store a LIVE BROKER already drives, read-only — never a second writer (needs --db).\n" +
+			"            an ATTACHED pane is a client of the multiplexer: its words route into the session's pi.inbox\n" +
+			"            through the broker's spool, so N attached panes merge into one ID-ordered input stream.\n" +
+			"            abort/steer/compact still refuse by name — the broker drives the run.\n" +
 			"  --help    this text",
 	);
 	process.exit(0);
@@ -112,7 +115,10 @@ const attached = verdict.action === "attach";
 if (attached) {
 	console.log(
 		`ATTACHED — read-only viewer of the session the broker drives (pid ${verdict.broker.pid}). ` +
-			"Reading, watching, and rendering are live; acts are refused by name here — send them through the broker's inbox (<db>.broker.inbox) or src/queue-manage.mjs.",
+		"Reading, watching, and rendering are live; OPERATOR INPUT IS ROUTED into the session's `pi.inbox` " +
+			"through the broker's spool (<db>.broker.inbox), so this pane is one client of a multiplexer and " +
+			"N attached panes merge into ONE ID-ordered input stream. The acts that would DRIVE a Session " +
+			"this process does not own still refuse by name: abort, abortCompaction, steer, followUp, compact, waitForIdle.",
 	);
 }
 
@@ -135,9 +141,21 @@ const { runtime } = await createDurableTuiRuntime({
 	models: services.modelRuntime,
 	agentModel: { provider: model.provider, modelId: model.id },
 	host: { hostSession, hostSessionManager, services },
-	...(attached ? { readOnly: true } : {}),
+		...(attached
+			? {
+				readOnly: true,
+				// THE ATTACH POSTURE (D339): an ATTACHED pane is a CLIENT of src/multiplex.mjs, so it
+				// needs the broker's spool (the transport for its words), a name (so the merged stream
+				// says which pane spoke), and a re-read clock (a VIEWER watch delivers nothing across
+				// processes — measured). An owner pane pays none of this.
+				spoolDb: dbPath,
+				clientName: `pane-${process.pid}`,
+				rereadMs: 1000,
+				attachWaitMs: 20_000,
+			}
+			: {}),
 });
-console.log(`Durable session: ${dbPath}${attached ? " (ATTACHED — read-only)" : ""}`);
+console.log(`Durable session: ${dbPath}${attached ? " (ATTACHED — read-only; input routes to pi.inbox)" : ""}`);
 
 // pi's main() initializes the theme before constructing the TUI; do the same so component styling
 // matches the settings rather than library defaults.

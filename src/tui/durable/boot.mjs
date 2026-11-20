@@ -6,7 +6,11 @@ import { join } from "node:path";
 import { createDurableTuiRuntime } from "./adapter.mjs";
 import { loadPiAi } from "./imports.mjs";
 
-export async function bootDurableTui({ responses = [], fauxOptions = {}, cwd, storage, settings, readOnly } = {}) {
+// The ATTACH POSTURE travels through this seam (D339) so an attached pane is BOOTABLE by a
+// test or a host without reaching into createDurableTuiRuntime by hand: `spoolDb` is the
+// broker's inbox spool, `clientName` names this pane in the merged stream, `rereadMs` is the
+// viewer's re-read clock (0 = no timer), `attachWaitMs` bounds one routed act's round trip.
+export async function bootDurableTui({ responses = [], fauxOptions = {}, cwd, storage, settings, readOnly, spoolDb = null, clientName = null, rereadMs = 0, attachWaitMs = 20_000 } = {}) {
 	const ai = await loadPiAi();
 	const faux = ai.fauxProvider(fauxOptions);
 	if (responses.length > 0) faux.setResponses(responses);
@@ -22,6 +26,10 @@ export async function bootDurableTui({ responses = [], fauxOptions = {}, cwd, st
 		...(storage === undefined ? {} : { storage }),
 		...(settings === undefined ? {} : { settings }),
 		...(readOnly === undefined || readOnly === false ? {} : { readOnly: true }),
+		spoolDb,
+		clientName,
+		rereadMs,
+		attachWaitMs,
 	});
 	return { ...result, faux, models, cwd: workDir, agentDir };
 }

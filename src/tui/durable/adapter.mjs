@@ -20,6 +20,12 @@
 // delegated host shell, not reimplemented.
 import { loadCodingAgent, loadDurable } from "./imports.mjs";
 import { watchLive } from "../../livewatch.mjs";
+// THE ATTACH SURFACE (ROADMAP 381, D339): an ATTACHED pane is a client of the multiplexer layer,
+// and `src/multiplex.mjs` is what gives it the inbox watch + a routed act. `../../broker.mjs`
+// contributes only the RESULT channel — src/broker.mjs is declarations only (no top-level side
+// effect), so importing it into the TUI plane starts nothing and waits on nothing of its own.
+import { multiplexAttach } from "../../multiplex.mjs";
+import { awaitIntentResult } from "../../broker.mjs";
 import { DurableEventBridge } from "./bridge.mjs";
 import { isCompactionSummaryMessage, messageOfEntry, sessionEntryFromDurable } from "./translate.mjs";
 
@@ -181,6 +187,9 @@ class DurableSessionCore {
 	// stream (`watchEvents`), so committed transcript entries are now the only source of
 	// message events; this set keeps a re-rendered window from re-emitting them.
 	#seenEntryIds = new Set();
+	// THIS pane's one attached client (a viewer leg of the multiplexer), acquired lazily once a
+	// routed act needs it. null means "this pane never acted", so an owner pays nothing.
+	#attachedClient = null;
 
 	/** An ATTACHED (read-only) surface refuses its acts BY NAME and names the route that works.
 	 * pi-durable would throw `ReadOnlySession` here anyway (spec.md:838 "every call that enables
@@ -274,10 +283,72 @@ class DurableSessionCore {
 	}
 
 	async prompt(text, options = {}) {
+		// An ATTACHED pane ROUTES its words instead of refusing them. The pane IS an operator of
+		// the session; what it must not do is DRIVE a Session this process does not own. The
+		// session's own `pi.inbox` admission table (pi-durable spec.md §6) is what merges N
+		// attached clients into one ID-ordered stream — so routing is the multiplexer's whole
+		// point, and `#assertWritable` keeps refusing exactly the acts that would drive it:
+		// `abort`, `abortCompaction`, `steer`, `followUp`, `compact`, `waitForIdle`.
+		if (this.#parts.readOnly === true) return await this.#routeAttachedInput(text, options);
 		this.#assertWritable("prompt (operator input)");
 		const content = toUserContent(text, options.images);
 		await this.#parts.conversation.submit({ type: "input", content }, this.#context);
 		if (options.streamingBehavior === undefined) await this.#parts.conversation.waitForIdle(this.#context);
+	}
+
+	/** Send an ATTACHED pane's input to the broker's inbox spool and report the writer's answer.
+	 * WHY the spool rather than this handle's own submit: one Harness owns one Session (D212 "grow
+	 * the seam", D337), so a viewer handle has nothing to submit into — pi-durable would reject it
+	 * with `ReadOnlySession`. The act therefore travels as one intent file (`<db>.broker.inbox`,
+	 * the `input` member of src/broker.mjs SPOOL_OPS) and the RESIDENT writer admits it with its
+	 * own harness. Cost: one file write plus one poll of the result channel — measured 0.3 s in a
+	 * hermetic drain (demo/tui-attach-surface.test.mjs); the wait bound is the caller's (`attachWaitMs`).
+	 */
+	async #routeAttachedInput(text, options) {
+		const dbPath = this.#parts.spoolDb;
+		if (!dbPath) {
+			throw new DurableAdapterError(
+				`prompt (operator input) cannot run from an ATTACHED client with no spool: this session is a read-only viewer of the session the broker drives — one Harness owns a Session. Give the pane a spool (tui.mjs --attach --db <path>) so its words reach the broker's inbox spool (<db>.broker.inbox, src/broker.mjs writeIntent) and are admitted into pi.inbox by the resident writer.`,
+			);
+		}
+		const client = await this.#ensureAttachedClient();
+		// The requestId must be unique across PANES, not only across a pane's own acts: the
+		// harness dedupes a submission by (conversation, requestId), so two panes that both typed
+		// their first words would otherwise collapse into ONE admission (measured: a duplicate
+		// requestId made drainIntentInbox report `duplicates: 1`, one input silently lost).
+		const requestId = `attach-${this.#parts.clientName ?? "pane"}-${this.#parts.conversation.id}-${(this.#sequence += 1).toString(36)}`;
+		const draft = toUserContent(text, options.images);
+		const words = typeof draft === "string" ? draft : (draft.find((b) => b?.type === "text")?.text ?? "");
+		const acted = await client.act(words, { requestId });
+		return { spooled: acted?.spooled ?? null, requestId, outcome: await awaitIntentResult(dbPath, requestId, { timeoutMs: this.#parts.attachWaitMs ?? 20_000, intervalMs: 100 }) };
+	}
+
+	/** Lazily attach THIS pane to the multiplexer layer (src/multiplex.mjs `multiplexAttach`).
+	 * This call site is what makes the layer a surfaced product rather than a module only a demo
+	 * can reach. `docs: ["inbox"]` ONLY — `pi.live` is already watched on this handle by #start(),
+	 * and installing the same watch twice on one handle would double every broadcast event.
+	 */
+	async #ensureAttachedClient() {
+		this.#attachedClient ??= await multiplexAttach(
+			this.#parts.harness,
+			this.#parts.conversation.id,
+			{
+				// The pane's own name, so one merged stream can say which client spoke.
+				client: this.#parts.clientName ?? "operator-pane",
+				readOnly: this.#parts.readOnly === true,
+				docs: ["inbox"],
+				dbPath: this.#parts.spoolDb,
+				context: this.#context,
+			},
+		);
+		this.#disposers.push(() => {
+			try {
+				void this.#attachedClient.detach();
+			} catch {
+				// a closing Session may refuse the stop; the watch is already detached
+			}
+		});
+		return this.#attachedClient;
 	}
 
 	subscribe(listener) {
@@ -442,6 +513,17 @@ class DurableSessionCore {
 			this.#trackRunState(events);
 			for (const event of this.#bridge.translate(events)) this.#notify(event);
 		});
+		// THE ATTACHED RE-READ CADENCE, owned HERE and never in src/multiplex.mjs (whose shape
+		// pin greps the whole layer for a timer primitive). A watch acquired through a VIEWER
+		// handle delivers nothing across processes (measured: a cross-handle watch delivered 0
+		// events), so a viewer pane re-reads on the caller's clock instead. An owner pane keeps
+		// the watch above and pays no timer.
+		if (this.#parts.rereadMs > 0 && this.#parts.readOnly === true) {
+			const timer = setInterval(() => {
+				void this.refreshView().catch(() => undefined);
+			}, this.#parts.rereadMs);
+			this.#disposers.push(() => void clearInterval(timer));
+		}
 	}
 
 	#applyView(view) {
@@ -586,6 +668,25 @@ class DurableSessionCore {
 		this.#disposers = [];
 		this.#listeners.clear();
 	}
+
+	/** Re-read the session and render what the resident writer admitted. PUBLIC on the core on
+	 * purpose: the Proxy at createDurableTuiRuntime exposes core members, so an attached pane's
+	 * surface grows a refresh without touching the host shell. Cost: one inbox snapshot + one
+	 * entry page + one agent snapshot (measured 0.2 s in demo/tui-attach-surface.test.mjs).
+	 */
+	async refreshView() {
+		const client = await this.#ensureAttachedClient();
+		if (typeof client.refresh !== "function") {
+			throw new DurableAdapterError(
+				`refreshView needs an ATTACHED (read-only) client leg to re-read with — the multiplexer gives a refresh only to a viewer; an owner pane is rendered by its pi.live watch instead.`,
+			);
+		}
+		const { inbox, entries } = await client.refresh();
+		const { AgentDoc } = await import("@earendil-works/pi-durable");
+		const agent = await this.#parts.harness.snapshot(AgentDoc, this.#parts.conversation.id, this.#context);
+		this.#applyView({ entries, docs: { "pi.inbox": { items: inbox }, ...(agent ? { "pi.agent": agent } : {}) } });
+		return { inbox, entries };
+	}
 }
 
 function userText(message) {
@@ -688,6 +789,12 @@ export async function createDurableTuiRuntime(options) {
 		ca,
 		cwd: options.cwd,
 		readOnly: options.readOnly === true,
+		// THE ATTACH POSTURE (D339): where the broker's spool is, what this pane is called,
+		// how often a viewer re-reads, and how long a routed act waits for the writer's answer.
+		spoolDb: options.spoolDb ?? null,
+		clientName: options.clientName ?? null,
+		rereadMs: options.rereadMs ?? 0,
+		attachWaitMs: options.attachWaitMs ?? 20_000,
 		hostSession,
 		hostSessionManager,
 		harness,

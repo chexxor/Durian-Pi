@@ -177,13 +177,29 @@ export async function multiplexAttach(harness, conversationId, {
 			createdAt: new Date(now).toISOString(),
 		}) };
 		}
-	// No silent drop: today the ONLY spool target is a SEAT. An attached client aimed at the
-	// session's own conversation has no route, so the error names the fix.
+	if (dbPath) {
+	// The SESSION-LEVEL route (src/broker.mjs `input` spool op, ROADMAP 381). An attached
+	// client addressing the session's own conversation has no seat to name, so the leg above
+	// does not apply; the spool file is the transport and the resident writer does the
+	// admission, which is what keeps N attached clients merging into ONE ID-ordered stream.
+		return { spooled: writeIntent(dbPath, {
+			op: "input",
+			conversation: conversationId,
+			content: String(content ?? ""),
+			from: client_.id,
+			...(requestId ? { requestId } : {}),
+			...(whenBusy ? { whenBusy } : {}),
+			...(whenIdle ? { whenIdle } : {}),
+			createdAt: new Date(now).toISOString(),
+		}) };
+		}
+	// No silent drop: with NO `dbPath` there is no spool to carry the act at all, so an
+	// attached client has no route and the error names the fix by name.
 	throw new Error(
 		`multiplex: an ATTACHED client cannot act on conversation ${conversationId} — ` +
 		"the broker's spool routes a `message` intent to a seat (src/broker.mjs applyRequest " +
-		"throws `unknown seat` for the root conversation); give this client a seat, or extend " +
-		"SPOOL_OPS with a session-level input op",
+		"throws `unknown seat` for the root conversation); give this client a seat, or pass a " +
+		"`dbPath` (a `serve --db <path>`) so its words go through the session-level `input` op added to SPOOL_OPS",
 	);
 	};
 

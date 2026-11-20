@@ -69,10 +69,13 @@ try {
   //    #1841), `compact` (ROADMAP 71, #1904), `read` (D111, broker-served reads), `configure`
   //    (D105/D106 seat-doc-write, #2182; operator-only since #1966) and `queue` (operator ruling
   //    2026-11-12T17:5xZ: propose-and-apply queue order/eligibility for the operator and the
-  //    delegate, applied by `src/queueops.mjs`; see demo/queue-control-spool.test.mjs).
+  //    delegate, applied by `src/queueops.mjs`; see demo/queue-control-spool.test.mjs) and `input`
+  //    (ROADMAP 381, the tmux-like attach surface: an ATTACHED client's words address the session's
+  //    OWN conversation, so there is no seat `to`; the session's own writer admits them into that
+  //    conversation's `pi.inbox`. See demo/tui-attach-surface.test.mjs.)
   assert.deepEqual(
     SPOOL_OPS,
-    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "queue"],
+    ["message", "stop", "reset", "compact", "pause", "unpause", "read", "configure", "queue", "input"],
     "the spool's op vocabulary",
   );
   assert.equal(requestOp({ to: "worker", content: "hi" }), "message", "an intent with no op is a message");

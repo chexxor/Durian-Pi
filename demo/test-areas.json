@@ -243,6 +243,7 @@
       "demo/textwidth.test.mjs",
       "demo/tui-action-runt-band.test.mjs",
       "demo/tui-attach-seam.test.mjs",
+      "demo/tui-attach-surface.test.mjs",
       "demo/tui-backfill.test.mjs",
       "demo/tui-buffer.test.mjs",
       "demo/tui-cliargs.test.mjs",
