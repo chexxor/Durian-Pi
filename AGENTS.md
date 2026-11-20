@@ -80,9 +80,12 @@ Every `bash` call carries an explicit `timeout`. Leaving it unset means **no bou
 
 Reference timings measured on this box (Linux, Fedora Linux 45, kernel `7.2.15-300.fc45.x86_64`, node v24.22.1, git
 2.56.0) — re-measure rather than trust them, but use them as the starting guess: `cli.mjs ps` 0.7 s; `status --json`
-5.9 s; `queue --json --no-body` 2 s; `worktree audit --json` 1 s; `fleet-health.mjs` 0.2 s; a single demo 0.2–40 s
-(the slowest this session was `demo/runbook-diagnose.test.mjs` at 40.0 s); one test area 1.2–40 s; the **full** suite
-299 tests **121.3 s** at `7afd549c` (`--all --jobs 4`); `scripts/land.mjs` with a derived gate 82–106 s; broker start
+5.9 s; `queue --json --no-body` 2 s; `worktree audit --json` 1 s; `fleet-health.mjs` 0.2 s; a single demo 0.2–70 s
+(re-measured 2026-11-20 at `0bb055197`: the slowest member is `demo/runbook-diagnose.test.mjs` at **66.3 s** — its cost
+MOVES with the runbook count, 62.4 → 66.3 → 70.1 s across sessions, so never quote 40 s for it again); one test area
+5.7–70 s (measured at that tree: `tui` 52/52 in 13.0 s, `broker` 84/84 in 28.1 s, `rig` 100/100 in 21.6 s, `check` 20/20
+in 13.3 s, `docs` 8/8 in 66.3 s); the **full** suite 299 tests **121.3 s** at `7afd549c` (`--all --jobs 4`) — the manifest
+is now **380** tests and `timeout 300 node scripts/test.mjs --all --jobs 4` ran **380/380 in 159.7 s exit 0** at `0bb055197`; `scripts/land.mjs` with a derived gate 82–106 s; broker start
 and stop 1–10 s; git merge-tree / branch / worktree operations under 1 s.
 
 **Hard ceiling 600 s.** Anything that genuinely needs more is not one tool call: run the area that matters, split the

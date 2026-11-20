@@ -226,6 +226,16 @@ The multiplexer itself is proven hermetically, no key and no broker:
 (the four `pi.inbox` admission legs, ONE ID-ordered merged stream across both
 clients, ONE identical broadcast to both, an attached act routed or refused by name).
 
+And an ATTACHED pane can now **speak**: `tui.mjs --attach --db <store>` ROUTES its
+words into the broker's inbox spool — one session-level `input` member of `src/broker.mjs`
+`SPOOL_OPS` (`:708`), applied by the BROKER'S own harness into that conversation's built-in
+`pi.inbox` (`:777`) — so N panes merge into one ID-ordered stream and the acts that would
+DRIVE a foreign Session (`abort`, `abortCompaction`, `steer`, `followUp`, `compact`,
+`waitForIdle`) still refuse by name. Proven hermetically, no key and no broker:
+`node demo/tui-attach-surface.test.mjs` → **exit 0 in 1.98 s, 44 ok / 0 FAIL**, `.err` 0 B
+(two ATTACHED panes' words in ONE `pi.inbox` stream, BOTH panes render it, the rig store's
+mtime+size unchanged) — measured on the host line below.
+
 Every cost above was measured on **Linux, Fedora Linux 45 (Forty Five), kernel
 `7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0** — probe:
 `uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
