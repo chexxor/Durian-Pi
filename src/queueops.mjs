@@ -43,6 +43,11 @@ const TERMINAL = new Set(["done", "cancelled"]);
 // #5047 records, so the plan and the census read the imported predicate.
 import { classifyRow, isNoticeItem, isTerminalRow, queueShape } from "./queueclass.mjs";
 
+// THE SAME park lease `defer_work` enforces (src/rig.mjs Router calls this at :2022 before it writes
+// `status = "deferred"`). One rule, two surfaces: the seat's tool and the operator plane's verb cannot
+// disagree about whether a park on the human needs a clock.
+import { validateHumanDefer, HUMAN as DEFERRED_TO_HUMAN } from "./deferlease.mjs";
+
 const isTerminal = (item) => item != null && TERMINAL.has(item.status);
 
 /**
@@ -249,6 +254,49 @@ export function planDirective(request = {}) {
 }
 
 /**
+ * PLAN: DEFER rows — park them on the human operator with a decision clock. THE MIRROR OF `planRelease`.
+ *
+ * WHY THIS IS THE OTHER HALF OF THE MISSING VERB. `planRelease` below explains that 493 rows sat
+ * `deferredTo: "human"` and nothing in the operator plane could UN-park them; the shipped `release` fixed
+ * that half. The other half was never shipped: nothing in the operator plane could PARK a row, so the end
+ * user could not say "wait on this one — ask me", and `readapi.mjs`'s `awaitingOperator` attribute (derived
+ * from `deferredTo === DEFERRED_TO_HUMAN`) was a state the VIEW could read but the surface could not SET.
+ *
+ * WHAT IT REUSES, unchanged: `validateHumanDefer` (src/deferlease.mjs) — the SAME rule `src/rig.mjs` calls
+ * before `defer_work` writes, so the operator verb and the seat tool cannot drift on whether a park needs
+ * a clock. Refuses a `claimed` row (in flight, the same rule `planCancel` states) and a terminal row, BY NAME
+ * and by id.
+ *
+ * `--until` is the park's clock: a `resumeBy` instant at most 5 days out, after which `lead` decides instead
+ * of the row sitting parked (operator ruling 2026-11-12T20:2xZ).
+ */
+export function planDefer(items, request = {}) {
+  const { by, authority } = authorityOf(request);
+  const at = request.at ?? new Date().toISOString();
+  const atMs = request.atMs ?? (Number.isFinite(Date.parse(at)) ? Date.parse(at) : Date.now());
+  const reason = String(request.reason ?? "").trim();
+  if (reason === "") return { ok: false, refusal: "a defer needs a reason (what the park is waiting on)" };
+  const ids = (request.ids ?? []).map(String);
+  if (ids.length === 0) return { ok: false, refusal: "defer needs at least one --id" };
+  const sel = selectRows(items, ids, { allow: ["queued", "held"] });
+  if (!sel.ok) return { ok: false, refusal: sel.refusal };
+  const lease = validateHumanDefer({ to: DEFERRED_TO_HUMAN, resumeBy: request.resumeBy ?? request.expiresAt }, atMs);
+  if (!lease.ok) return { ok: false, refusal: lease.refusal };
+  const changes = sel.rows.map((item) => ({ id: String(item.id), from: item.status, to: "deferred", deferredTo: DEFERRED_TO_HUMAN, resumeBy: lease.resumeBy }));
+  const transitions = sel.rows.map((item) => ({
+    at,
+    event: "deferred",
+    by,
+    authority,
+    reason,
+    to: DEFERRED_TO_HUMAN,
+    resumeBy: lease.resumeBy,
+    ...(item.heldReason ? { leftHeld: true } : {}),
+  }));
+  return { ok: true, changes, transitions, lease: { resumeBy: lease.resumeBy, by, authority, at } };
+}
+
+/**
  * PLAN: RELEASE rows — take them out of a park (held / deferred-to-an-audience) and back to `queued`, so a
  * seat can claim them.
  *
@@ -419,6 +467,7 @@ export function planQueueAction(action, items, request = {}) {
   if (action === "repair-gates") return planRepairGates(items, request);
   if (action === "priority") return planPriority(items, request);
   if (action === "cancel") return planCancel(items, request);
+  if (action === "defer") return planDefer(items, request);
   if (action === "directive") return planDirective(request);
   if (action === "release") return planRelease(items, request);
   if (action === "directive-clear") return { ok: true, directive: null, changes: [{ id: "control", to: "directive:none" }], transitions: [] };
@@ -426,5 +475,5 @@ export function planQueueAction(action, items, request = {}) {
   if (action === "acknowledge-notices") return planAcknowledgeNotices(items, request);
   if (action === "registrations") return { ok: true, changes: [], transitions: [], census: registrationCensus(items) };
   if (action === "pressure") return { ok: true, changes: [], transitions: [], census: queueShape(items) };
-  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, release, directive, directive-clear, stranded, acknowledge-notices, registrations, pressure)` };
+  return { ok: false, refusal: `unknown queue action: ${action} (known: repair-gates, priority, cancel, defer, release, directive, directive-clear, stranded, acknowledge-notices, registrations, pressure)` };
 }

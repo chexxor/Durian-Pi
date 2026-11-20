@@ -18,7 +18,7 @@ import { join, basename, dirname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { CompactionEntry, configure } from "@earendil-works/pi-durable";
 
-import { RigControl, RigQueue, Seats, openPoolRow } from "./rig.mjs";
+import { RigControl, RigQueue, Seats, openPoolRow, DEFERRED_TO_HUMAN } from "./rig.mjs";
 import { dispatchRead } from "./brokerread.mjs";
 import { planQueueAction, confirmGate, scopeMatches } from "./queueops.mjs";
 import { resetSeatContext, maxSeatsFromEnv } from "./reset.mjs";
@@ -894,6 +894,7 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
       priority: request.priority,
       reason: request.reason,
       expiresAt: request.expiresAt,
+      resumeBy: request.resumeBy,
       from: request.from,
       confirm: request.confirm,
     });
@@ -931,6 +932,13 @@ async function applyRequest(harness, request, { seats, context, dbPath, probeSto
           };
         } else if (action === "cancel") {
           item.status = "cancelled";
+        } else if (action === "defer") {
+          // PARK on the operator: the SAME mutation `defer_work` (src/rig.mjs Router) writes — `deferredTo`
+          // records WHO was asked, and `deferLease` is the clock that makes the park a decision rather than
+          // a hole (operator ruling 2026-11-12T20:2xZ). `release` above is its mirror and clears both.
+          item.status = "deferred";
+          item.deferredTo = change.deferredTo ?? DEFERRED_TO_HUMAN;
+          if (change.resumeBy) item.deferLease = { resumeBy: change.resumeBy, by: reply.transitions[i]?.by ?? request.from, at: reply.transitions[i]?.at ?? new Date().toISOString() };
         } else if (action === "release") {
           // Un-park: back to `queued`, and the park's audience is cleared so nothing reads it as still
           // waiting on someone. The transition records who it was waiting on.

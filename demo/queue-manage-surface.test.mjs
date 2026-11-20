@@ -107,7 +107,7 @@ const readItems = async () =>
       : null,
     deferredTo: i.deferredTo ?? null,
     blockedBy: (i.blockedBy ?? []).map(String),
-    transitions: (i.transitions ?? []).map((t) => ({ event: t.event, by: t.by, authority: t.authority ?? null, gate: t.gate ?? null, from: t.from ?? null, reason: t.reason ?? null })),
+    transitions: (i.transitions ?? []).map((t) => ({ event: t.event, by: t.by, authority: t.authority ?? null, gate: t.gate ?? null, from: t.from ?? null, reason: t.reason ?? null, to: t.to ?? null, resumeBy: t.resumeBy ?? null })),
   }));
 const stamp = async () => JSON.stringify(await readItems());
 const nextId = async () => Number((await harness.snapshot(RigQueue, undefined, ctx)).nextId);
@@ -119,9 +119,9 @@ const apply = async (request) => await queueManageSpool(dbPath, request, { drain
 
 try {
   console.log("=== 1. ONE CORE, AND EVERY VERB NAMES THE FUNCTION BEHIND IT ===");
-  assert.equal(MANAGE_ACTIONS.length, 10, "ten actions are declared");
-  assert.equal(new Set([...MANAGE_MUTATING, ...MANAGE_CENSUS]).size, 10, "every action is either a MUTATION or a CENSUS — nothing is neither");
-  assert.equal(MANAGE_MUTATING.length, 7, "seven of them write");
+  assert.equal(MANAGE_ACTIONS.length, 11, "eleven actions are declared");
+  assert.equal(new Set([...MANAGE_MUTATING, ...MANAGE_CENSUS]).size, 11, "every action is either a MUTATION or a CENSUS — nothing is neither");
+  assert.equal(MANAGE_MUTATING.length, 8, "eight of them write");
   assert.equal(MANAGE_CENSUS.length, 3, "three only count");
   assert.deepEqual(MANAGE_PRIORITIES, ["now", "next", "later"], "the priority vocabulary is the rig's own, not free text");
   const bogus = queueManagePlan([], { action: "park" });
@@ -144,7 +144,7 @@ try {
   assert.equal(seatPlane.ok, false, "a SEAT identity spooling a queue mutation is refused");
   assert.equal(seatPlane.code, "not-operator-plane", "with the structured code a producer can branch on");
   assert.equal(seatPlane.spool, null, "and NOTHING was written on the way to that refusal");
-  console.log("  ok   ten actions, each naming its queueops function; `park` refused by name; a seat refused; the core contains no writer");
+  console.log("  ok   eleven actions, each naming its queueops function; `park` refused by name; a seat refused; the core contains no writer");
 
   console.log("\n=== 2. PROPOSE IS PURE — AND IT NAMES WHAT IT WOULD STRAND ===");
   const pristine = await stamp();
@@ -289,7 +289,40 @@ try {
   assert.equal(await spoolFiles(), 0, "still empty — the refusal wrote nothing");
   console.log("  ok   no-broker refused BEFORE writing; the census is printed; nothing was orphaned in the spool");
 
-  console.log("\n=== 9. THE CLI REGISTRATION IS THE SAME CORE, AND ITS REFUSALS COST THE STORE NOTHING ===");
+  console.log("\n=== 9. DEFER PARKS A ROW ON THE OPERATOR WITH A LEASE — the mirror of release ===");
+  const deferUntil = new Date(Date.now() + 3 * 3600_000).toISOString();
+  const deferPlan = queueManagePlan(await readItems(), { action: "defer", ids: ["4000"], reason: "the operator must choose the landing order", resumeBy: deferUntil });
+  assert.equal(deferPlan.ok, true, "parking a QUEUED row on the operator is a legal plan");
+  assert.equal(deferPlan.verb, "planDefer (src/queueops.mjs)", "it names the function behind it, like every other verb");
+  assert.equal(deferPlan.proposed, 1, "one row");
+  assert.deepEqual(deferPlan.changes, [{ id: "4000", from: "queued", to: "deferred", deferredTo: "human", resumeBy: deferPlan.lease.resumeBy }], "the change is the ROW TRANSITION, with the audience and the clock");
+  assert.equal(deferPlan.lease.resumeBy, deferUntil, "the lease carries the clock the caller gave");
+  assert.ok(queueManageRegisterText(deferPlan).includes("the park resumes at"), "and the human register prints the clock, so a reader knows when the park stops being silent");
+  const noClock = queueManagePlan(await readItems(), { action: "defer", ids: ["4000"], reason: "no clock given" });
+  assert.equal(noClock.ok, false, "a park on the human WITHOUT a clock is refused, not defaulted to 'forever'");
+  assert.match(noClock.refusal, /needs `resumeBy`/, "and the refusal is deferlease.mjs' own sentence — the SAME rule `defer_work` calls");
+  const tooFar = queueManagePlan(await readItems(), { action: "defer", ids: ["4000"], reason: "past the bound", resumeBy: new Date(Date.now() + 9 * 24 * 3600_000).toISOString() });
+  assert.equal(tooFar.ok, false, "a clock more than 5 days out is refused");
+  assert.match(tooFar.refusal, /at most 5 days out/, "naming the bound rather than a number nobody can act on");
+  const inFlight = queueManagePlan(await readItems(), { action: "defer", ids: ["4001"], reason: "mid-turn", resumeBy: deferUntil });
+  assert.equal(inFlight.ok, false, "a CLAIMED row is refused");
+  assert.match(inFlight.refusal, /item #4001 is claimed; this action touches queued or held rows only/, "and the refusal names the row's own state and the states the act touches");
+  const deferOut = await apply({ action: "defer", ids: ["4000"], reason: "the operator must choose the landing order", resumeBy: deferUntil, apply: true });
+  assert.equal(deferOut.ok, true, "the spool drained and the broker answered");
+  assert.equal(deferOut.reply.applied, 1, "one row parked");
+  const parkedRow = (await readItems()).find((r) => r.id === "4000");
+  assert.equal(parkedRow.status, "deferred", "queued -> deferred");
+  assert.equal(parkedRow.deferredTo, "human", "the audience is the operator, the same value readapi.mjs' `awaitingOperator` predicate reads");
+  assert.equal(parkedRow.transitions.find((t) => t.event === "deferred").resumeBy, deferUntil, "the transition carries the clock");
+  assert.deepEqual((await readItems()).filter((r) => r.status === "deferred").map((r) => r.id), ["4000"], "while parked, the only deferred row is the one this act parked (section 5 already released #4100)");
+  const unParked = await apply({ action: "release", ids: ["4000"], reason: "the operator answered", apply: true });
+  assert.equal(unParked.reply.applied, 1, "and `release` is its exact inverse for a park this surface wrote");
+  assert.equal((await readItems()).find((r) => r.id === "4000").status, "queued", "back in play");
+  assert.equal((await readItems()).find((r) => r.id === "4000").transitions.find((t) => t.event === "released").from, "human", "the release names the park it left");
+  assert.deepEqual((await readItems()).filter((r) => r.status === "deferred").map((r) => r.id), [], "and after the release no seed row is parked — the pair (defer, release) is a round trip, not a one-way park");
+  console.log("  ok   defer parks queued -> deferred with the operator as audience and a lease; release is its inverse; no-clock, too-far and claimed refused");
+
+  console.log("\n=== 10. THE CLI REGISTRATION IS THE SAME CORE, AND ITS REFUSALS COST THE STORE NOTHING ===");
   const cli = (args) => {
     const r = spawnSync(process.execPath, ["cli.mjs", ...args], {
       cwd: join(ROOT),
@@ -326,7 +359,7 @@ try {
   console.log("  ok   the CLI refuses an unknown action, an orphan manage flag, an out-of-scope action and a family collision, each by name");
 
   console.log(
-    "\nQUEUE-MANAGE-SURFACE PASS — one core, ten actions each naming its `src/queueops.mjs` function, propose pure, apply the broker's spool, every change attributed, a cancel names its casualties, >20 rows confirm-gated, a hand-off spools `message` only (rows byte-identical), and a store with no broker refuses instead of orphaning a spool file",
+    "\nQUEUE-MANAGE-SURFACE PASS — one core, eleven actions each naming its `src/queueops.mjs` function (cancel, DEFER, release, priority, repair-gates, directive, directive-clear, acknowledge-notices and the three censuses), propose pure, apply the broker's spool, every change attributed, a cancel names its casualties, a defer names its clock, >20 rows confirm-gated, a hand-off spools `message` only (rows byte-identical), and a store with no broker refuses instead of orphaning a spool file",
   );
 } finally {
   rmSync(dir, { recursive: true, force: true });

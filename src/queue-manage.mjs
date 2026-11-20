@@ -32,6 +32,7 @@ import {
   PRIORITIES,
   planAcknowledgeNotices,
   planCancel,
+  planDefer,
   planDirective,
   planPriority,
   planQueueAction,
@@ -71,6 +72,7 @@ const DEFAULT_FROM = DELEGATE;
  */
 export const MANAGE_ACTIONS = [
   "cancel",
+  "defer",
   "release",
   "priority",
   "repair-gates",
@@ -83,7 +85,7 @@ export const MANAGE_ACTIONS = [
 ];
 
 /** Which of those WRITE something (a plan whose `changes` are applied) vs. which only COUNT. */
-export const MANAGE_MUTATING = ["cancel", "release", "priority", "repair-gates", "directive", "directive-clear", "acknowledge-notices"];
+export const MANAGE_MUTATING = ["cancel", "defer", "release", "priority", "repair-gates", "directive", "directive-clear", "acknowledge-notices"];
 export const MANAGE_CENSUS = ["stranded", "registrations", "pressure"];
 
 /**
@@ -94,6 +96,7 @@ export const MANAGE_CENSUS = ["stranded", "registrations", "pressure"];
  */
 export const MANAGE_VERBS = {
   cancel: "planCancel (src/queueops.mjs)",
+  defer: "planDefer (src/queueops.mjs)",
   release: "planRelease (src/queueops.mjs)",
   priority: "planPriority (src/queueops.mjs)",
   "repair-gates": "planRepairGates (src/queueops.mjs)",
@@ -191,6 +194,7 @@ export function queueManageRegisterText(result, { db = null } = {}) {
     for (const r of (head.census.rows ?? []).slice(0, 20)) lines.push(`    #${r.id} ${r.status}${r.to ? ` ->${r.to}` : ""} ${r.subject}`);
     if (head.census.count > 20) lines.push(`    … ${head.census.count - 20} more (the JSON reply carries them all)`);
   }
+  if (head.lease && head.lease.resumeBy) lines.push(`  lease: the park resumes at ${head.lease.resumeBy} — at that instant lead decides rather than leaving it parked`);
   if (head.scope) lines.push(`  scope now: ${head.scope.matchedNow} row(s) match — ${head.scope.ids.slice(0, 20).map((i) => `#${i}`).join(", ")}`);
   if (head.note) lines.push(`  note: ${head.note}`);
   if (n(head.applied) === 0 && n(head.proposed) > 0)

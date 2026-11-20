@@ -264,7 +264,7 @@ export function queueCommandParse(args = [], { cap = GATE_VIEW_CAP } = {}) {
 // a row is counted, which is also what makes `--manage park` cost the store nothing.
 export function queueCommandGuards(state) {
   const { manage, handoff, ids, statuses, to } = state;
-  const rowScoped = manage === "cancel" || manage === "priority" || manage === "release";
+  const rowScoped = manage === "cancel" || manage === "defer" || manage === "priority" || manage === "release";
   if (rowScoped && !ids.length && !statuses.length && !to.length)
     return `--manage ${manage} is row-scoped and would select every row in the store: name the rows with --id (repeatable), or narrow with --status/--to`;
   if (handoff && state.to.length > 1)
