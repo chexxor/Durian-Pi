@@ -189,6 +189,47 @@ is the single easiest way to end up watching (or steering) the wrong rig. If you
 will use more than one terminal, put the values in `durian-pi.config.json` once
 instead — every terminal then agrees without any setup.
 
+## Step 5b — see the queue and the team as one screen (both planes)
+
+The SAME command core runs as a shell verb and as an in-process pi command — the
+landing screen is a regular pi coding-agent session, so the operator's own session
+types `/queue` in the SAME grammar:
+
+```powershell
+node cli.mjs queue --list --sort age --limit 20    # attributed, bounded, stable-ordered view
+node cli.mjs queue --list --sort zork              # REFUSED BY NAME, exit 1, no partial document
+```
+
+In a pi session: `/queue --list --sort priority --limit 20` — one core
+(`src/queue-manage.mjs`), two registrations, no spawn (**D336**). Proof it is one
+grammar: `node demo/queue-pi-command.test.mjs` → exit 0 in **3.2 s**, 9 refusal
+classes byte-identical pi-plane-vs-CLI, both loaders 0 errors.
+
+The TUI does not own a session — it **ATTACHES** to the one the broker already
+owns, read-only, so N terminals never fight over one store:
+
+```powershell
+node tui.mjs --attach --db ./selfdev.sqlite   # read-only Harness on the broker's session
+```
+
+Today that attach **refuses** (exit 1) because no broker owns the store, and a
+seat turn today also dies at auth — both are the operator's grants, not this
+verb's:
+
+```powershell
+node tools/broker-serve.mjs --status   # 2.0 s exit 0 — "broker: down (no broker state)"
+node tools/keycheck.mjs --level=auth   # 0.25 s exit 1 — local ok; verifier + deepinfra NOT-OK
+```
+
+The multiplexer itself is proven hermetically, no key and no broker:
+`node demo/tui-multiplex-attach.test.mjs` → **exit 0 in 1.3 s, 50 ok / 0 FAIL**
+(the four `pi.inbox` admission legs, ONE ID-ordered merged stream across both
+clients, ONE identical broadcast to both, an attached act routed or refused by name).
+
+Every cost above was measured on **Linux, Fedora Linux 45 (Forty Five), kernel
+`7.2.15-300.fc45.x86_64`, node v24.22.1, git 2.56.0** — probe:
+`uname -s && uname -r && (. /etc/os-release && echo "$PRETTY_NAME") && node -v && git --version`.
+
 ## Step 6 — let the worker pick it up
 
 ```powershell
