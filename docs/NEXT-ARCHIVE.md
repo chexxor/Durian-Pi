@@ -15889,3 +15889,11 @@ every client's input is a `SubmissionDraft` admitted by the LIBRARY into the bui
 **Cut VERBATIM — the 1 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-20 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 205 B of slice text and therefore of the clock-in digest):**
 
 the completion auditor REFUSED at `f8ec5e394` on three objections, all three now CLOSED — (1) MANAGE's `defer`/PARK at `1acc605d7`, (2) the multiplexer had ZERO call sites outside its demo and an attached pane REFUSED its words, fixed at `0bb055197`, (3) the stale SELFDEV pitfall-range heading (now 441–466).
+
+**Cut VERBATIM — the 3 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-21 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 751 B of slice text and therefore of the clock-in digest):**
+
+ Carriers: ROADMAP 382 registered, DECISIONS D340, FEATURES row + anti-feature amendment, QUICKSTART Step 5c, SELFDEV 467–473, session-start-cost §49, `docs/runbooks/README.md` indexed. 
+
+NOTHING transitioned: no row claimed / completed / deferred / minted / routed, no seat woken, no broker started, no spool file left on the live store, store UNCHANGED — `stat -c '%y %s' selfdev.sqlite` = `2026-11-16 13:12:12.113902193 -0600 810074112` before and after every call — `grep -c "2026-11-21" selfdev.sqlite.spend.jsonl` = 0 → **$0**. 
+
+, re-measured now: `tools/broker-serve.mjs --status` reads `broker: down (no broker state)` with 0 pending and 90 DEAD-LETTER; `tools/keycheck.mjs --level=auth` exits 1 with `configKeyGap:["DEEPINFRA_API_KEY"]`.

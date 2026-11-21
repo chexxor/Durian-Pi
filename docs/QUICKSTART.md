@@ -291,6 +291,74 @@ Durability note: that file IS the rig. Kill any process mid-flight and every
 command above reopens it where it left off (`demo/persistence.test.mjs`
 proves restart survival mechanically).
 
+## Step 5c — put the rig in a multiplexer WITHOUT cluttering your own session (optional)
+
+Nothing here is required to run the rig — **D22** still holds (`docs/DECISIONS.md:327`,
+AMENDED not reversed): a seat is a conversation row, there is no PTY and no per-seat
+process, and no multiplexer is on the path to any capability. This step is the
+PRESENTATION layer for an operator who already runs tmux / GNU Screen with several
+other LLM harnesses in it and does not want a Durian-Pi instance's panes in the
+session they are typing in (**ROADMAP 382, D340**).
+
+Where the project is TRUSTED (pi's project-trust gate — not "always available"), the
+plugin registers `/mux` and `/mux-keys` in the session you are already in. Type:
+
+```text
+/mux list                                # attributed census: sessions + panes, namespaces named
+/mux open --all                          # attach the session this store has, or create one on --create
+/mux act impl --op message --text "..."  # the broker's spool, never a terminal input primitive
+/mux-keys                                # the active preset's keys, plus all four styles
+```
+
+The default is TWO namespaces and it NEVER touches yours: the plugin's panes live in
+its OWN multiplexer session, named by the core from the store — `durian-<workspace>`
+(`tools/mux-surface-core.mjs:88` `MUX_NAMESPACE_TAG_PREFIX = "durian-"`), created
+DETACHED from inside your pane, so closing the pane never ends the session. Your own
+session — the one that may hold other harnesses — is reported
+`PRESENT, NOT TOUCHED` with its pane count and `touched:false`.
+
+Four preset styles — `tmux`, `screen`, `zellij`, `herdr` — 32 keys total, every combo
+`ctrl+shift+<letter>`, none of pi's own `ctrl+shift+f/g/p` borrowed, rendered with pi's
+`keyHint()`/`keyText()`. The ACTIVE preset is the ACTIVE backend's own; `DURIAN_PI_MUX_BACKEND`
+moves backend and preset together.
+
+If you WANT the panes in your own session, the override is a LOUD explicit ask:
+
+```text
+/mux open --all --into 4242.user-watching --namespace user
+```
+
+That census prints `namespace user` plus `NAMESPACE OVERRIDE` and says the plugin's own
+session was NOT used. The persistent form is two knobs (verbatim core lines:
+`export const MUX_NAMESPACE_ENV = "DURIAN_PI_MUX_NAMESPACE";` and
+`export const MUX_NAMESPACE_SESSION_ENV = "DURIAN_PI_MUX_SESSION";`):
+
+```powershell
+$env:DURIAN_PI_MUX_NAMESPACE = "user"              # core: MUX_NAMESPACE_ENV
+$env:DURIAN_PI_MUX_SESSION   = "4242.user-watching" # core: MUX_NAMESPACE_SESSION_ENV
+$env:DURIAN_PI_MUX_BACKEND   = "screen"             # core: MUX_BACKEND_ENV
+$env:DURIAN_PI_MUX_PRESET    = "screen"             # core: MUX_PRESET_ENV
+```
+
+An override only PLACES panes; it never grants the right to END a session you started —
+a session-level `kill`/`halt` on a session that does not carry the plugin's tag refuses
+`teardown-foreign` in EITHER namespace, and `--every-session` refuses
+`teardown-every-session`. Seven leak classes (a bare `--into` a foreign session, an
+unregistered `--preset`, an undeclared selector, a knob outside the closed vocabulary,
+a flag contradicting a knob, and more) refuse **BY NAME** with the legal ask printed
+and **NO partial census**.
+
+Measured on **Linux / Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
+node v24.22.1** (2026-11-21): the multiplexer binary census answers `tmux` ABSENT,
+`/usr/bin/screen` **GNU Screen 5.0.2 PRESENT**, `zellij`/`herdr` ABSENT — so only the
+GNU Screen leg is proven against a real binary on this box; tmux, Zellij and herdr are
+registered-but-NOT-RUN. Pane-LEVEL isolation is NOT implemented (SESSION level only).
+Proof: `node tools/mux-surface-install.mjs --check` → `UP TO DATE` in 29.97 ms, and the
+six pins `node demo/mux-{surface,ownership,interact,keybinds,drivers,namespace}.test.mjs`
+exit 0 / 0 FAIL at 0.27/1.31/0.01/0.01/0.33/0.14 s, all six in the `tui` area →
+`node scripts/test.mjs --area tui --jobs 4` **58/58 in 18.4 s**. Runbook:
+`docs/runbooks/pi-inside-tmux.md`.
+
 ## Where to go next
 
 - `docs/MVP.md` — what is guaranteed today and what is next on the list.
