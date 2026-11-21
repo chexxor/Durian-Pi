@@ -15897,3 +15897,9 @@ the completion auditor REFUSED at `f8ec5e394` on three objections, all three now
 NOTHING transitioned: no row claimed / completed / deferred / minted / routed, no seat woken, no broker started, no spool file left on the live store, store UNCHANGED — `stat -c '%y %s' selfdev.sqlite` = `2026-11-16 13:12:12.113902193 -0600 810074112` before and after every call — `grep -c "2026-11-21" selfdev.sqlite.spend.jsonl` = 0 → **$0**. 
 
 , re-measured now: `tools/broker-serve.mjs --status` reads `broker: down (no broker state)` with 0 pending and 90 DEAD-LETTER; `tools/keycheck.mjs --level=auth` exits 1 with `configKeyGap:["DEEPINFRA_API_KEY"]`.
+
+**Cut VERBATIM — the 2 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-21 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 291 B of slice text and therefore of the clock-in digest):**
+
+# 0.33 s — THE PRESENCE CENSUS: tmux ABSENT, /usr/bin/screen GNU Screen 5.0.2 PRESENT (own version line), zellij + herdr ABSENT (NOT-RUN ~0.001 s, no spawn) — registered != runnable
+
+**Known red:** `node demo/offline.mjs` exits 1 (0.3 s — the loop SETTLES on MemoryStorage) and `demo/restart-limit-behaviour.test.mjs` flakes red under `--jobs 4` on a swap-tight box, green STANDALONE and in area — rules, not defects (`docs/runbooks/suite-red-standalone-green.md`).
