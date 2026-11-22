@@ -349,15 +349,22 @@ a flag contradicting a knob, and more) refuse **BY NAME** with the legal ask pri
 and **NO partial census**.
 
 Measured on **Linux / Fedora Linux 45 (Forty Five), kernel `7.2.15-300.fc45.x86_64`,
-node v24.22.1** (2026-11-21): the multiplexer binary census answers `tmux` ABSENT,
-`/usr/bin/screen` **GNU Screen 5.0.2 PRESENT**, `zellij`/`herdr` ABSENT — so only the
-GNU Screen leg is proven against a real binary on this box; tmux, Zellij and herdr are
-registered-but-NOT-RUN. Pane-LEVEL isolation is NOT implemented (SESSION level only).
-Proof: `node tools/mux-surface-install.mjs --check` → `UP TO DATE` in 29.97 ms, and the
-six pins `node demo/mux-{surface,ownership,interact,keybinds,drivers,namespace}.test.mjs`
-exit 0 / 0 FAIL at 0.27/1.31/0.01/0.01/0.33/0.14 s, all six in the `tui` area →
-`node scripts/test.mjs --area tui --jobs 4` **58/58 in 18.4 s**. Runbook:
-`docs/runbooks/pi-inside-tmux.md`.
+node v24.22.1** (2026-11-22): the multiplexer DISTRO census answers `tmux` NOT on PATH
+(`/usr/bin/tmux` absent, `rpm -q tmux` → `package tmux is not installed`), `/usr/bin/screen`
+**GNU Screen 5.0.2 PRESENT**, `zellij`/`herdr` ABSENT — but tmux has since been **RUN** on
+this box against a **3.5a binary SELF-BUILT FROM SOURCE** (`.spike/build-tmux.sh`, reached
+through `.spike/bin/tmux`, `tmux -V` → `tmux 3.5a`): driven by the plugin's OWN driver argv
+it created the session `durian-w1` **detached**, censused `durian-w1 2 pane(s) detached |
+user-own 2 pane(s) detached` with the user's own session reported PRESENT, NOT TOUCHED,
+`kill-pane -t durian-w1:impl-2` rc 0 left the broker resident, and the whole leg answered
+**`MUXLIVE 0 FAIL` in 15.995 s** — so tmux pane semantics are MEASURED, not docs-grounded
+(read `docs/runbooks/pi-inside-tmux.md` for what it does and does not do); Zellij and
+herdr stay registered-but-NOT-RUN. Pane-LEVEL isolation is NOT implemented (SESSION level
+only). Proof: `node tools/mux-surface-install.mjs --check` → `UP TO DATE` in **28 ms**, and
+the six pins `node demo/mux-{surface,ownership,interact,keybinds,drivers,namespace}.test.mjs`
+exit 0 / 0 FAIL at **0.31/7.33/0.04/0.23/0.32/0.12 s** internal (WALL 1.1/7.5/0.18/0.36/0.46/0.25 s),
+all six in the `tui` area → `node scripts/test.mjs --area tui --jobs 4` **58/58 in 17.7 s**
+exit 0. Runbook: `docs/runbooks/pi-inside-tmux.md`.
 
 ## Where to go next
 

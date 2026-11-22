@@ -20,8 +20,21 @@
 //   9. THE `send` LEG IS AN OPEN GAP, PINNED AS REFUSED — the preset names `mux.send`, the core has no `send` verb,
 //      and no driver names a `send` command. What is true today is a REFUSAL, not a route to the spool: the gap is
 //      reported, not papered over (the goal's contract (4) wants send to be the spool, so this row is owed work).
+//  10. PI'S OWN HINT FNS, RUN ON PI'S OWN PLANE — contract (5) says the vocabulary is "rendered with pi's own
+//      keyHint()/keyText()", and those two fns are reachable from an extension through ONE route only: the entry
+//      renderer (`EntryRenderOptions extends KeybindingHints`), never a command handler. So this section imports the
+//      real `@earendil-works/pi-tui` + pi-coding-agent modules and (a) re-reads pi's RESERVED shortcut list from
+//      vendor/pi-main/packages/coding-agent/src/core/extensions/runner.ts and FAILS if the core's copy drifts, (b)
+//      asks pi for all 18 reserved keys and ties every answer to pi's own default, (c) proves `keyText` of a MUX
+//      action is "" (the CLOSED-vocabulary gap — keybindings.json cannot move a mux key, even when a user tries),
+//      (d) shows the core prints WHICH fn refused before pi's `initTheme()` instead of losing the table, (e) renders
+//      the entry `/mux-keys` appends through the renderer the extension registered — pi's Text component, pi's hint
+//      line — and (f) rebinds a pi id onto a preset's combo, which makes pi SKIP that plugin shortcut (runner.ts
+//      prints "conflicts with built-in shortcut. Skipping."): a dead key is the trap, so the core NAMES the collision.
 //
-// HERMETIC: no multiplexer binary runs here, no store is read. Run: node demo/mux-keybinds.test.mjs (exit 0 = pass)
+// HERMETIC: no multiplexer binary runs here, no store is written, no model is called, no session is started. §10
+// imports pi's own compiled modules in-process and pi's own `KeybindingsManager.create()` (which only READS the
+// user's keybindings.json). Run: node demo/mux-keybinds.test.mjs (exit 0 = pass)
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -36,6 +49,12 @@ import {
   MUX_PRESET_ENV,
   MUX_USAGE,
   MUX_SURFACE_DESCRIPTION,
+  MUX_RESERVED_PI_IDS,
+  MUX_PI_HINT_IDS,
+  muxKeyResolve,
+  muxKeyCollision,
+  muxKeyCollisionLines,
+  muxKeyHintLines,
 } from "../tools/mux-surface-core.mjs";
 import muxSurfaceExtension from "../tools/mux-surface-extension.js";
 
@@ -97,19 +116,24 @@ console.log("\n=== 4. THE KEY TEXT: active preset + pi's OWN rendering + the ref
 const keyText = muxKeysText(loaded, {});
 check("it names the ACTIVE preset, taken from the active backend's own preset (not hardcoded here)", keyText.includes(`active preset: ${activeDriver.preset.style}`), keyText.slice(0, 200).replace(/\n/g, " | "));
 check("and it prints EVERY registered preset's keys, so choosing a style is a visible choice", presets.every((p) => keyText.includes(`preset ${p.style}:`)), `${presets.length} styles`);
-check("and it says pi renders them with keyHint()/keyText() from the user's keybindings (the goal's contract (5))", keyText.includes("keyHint()/keyText()") && keyText.includes("keybindings"), "");
+check("and it states what pi CAN and CANNOT rebind: pi's keybinding ids are a CLOSED vocabulary, so keybindings.json cannot move a mux key", keyText.includes("CLOSED vocabulary") && keyText.includes("keybindings.json") && keyText.includes('keyText of an unknown id is ""') && keyText.includes("mux.list"), keyText.slice(-400).replace(/\n/g, " | "));
+check("and a hint/collision check that could not run SAYS NOT RUN (an unrun check never prints as clean)", keyText.includes("collision check NOT RUN") && keyText.includes("no host keyText handed in"), keyText.slice(-300).replace(/\n/g, " | "));
+check("and it names the pi ids whose keys it asks pi for, so the table is honest about which keys are pi's", MUX_PI_HINT_IDS && Object.keys(MUX_PI_HINT_IDS).length === 4 && Object.keys(MUX_PI_HINT_IDS).every((id) => keyText.includes(id)), Object.keys(MUX_PI_HINT_IDS).join(","));
 check("and it states the REFUSAL rule: an action a preset does not carry is REFUSED BY NAME, never forwarded", keyText.includes("REFUSED BY NAME") && keyText.includes("never forwarded"), "");
 check("and it lists the registered styles, so a session can ask for one that exists", keyText.includes(`registered styles: ${loaded.styles.join(", ")}`), "");
 const oneStyle = muxKeysText(loaded, { presets: ["screen"] });
 check("and --preset narrows the table to the chosen style while still naming the active one", oneStyle.includes("preset screen:") && !oneStyle.includes("preset tmux:") && oneStyle.includes("active preset: tmux"), `${(oneStyle.match(/preset [a-z]+:/g) ?? []).join(" ")}`);
 
 console.log("\n=== 5. THE EXTENSION REGISTERS THE ACTIVE PRESET'S SHORTCUTS, AND ONLY ITS ===");
-const calls = { commands: [], shortcuts: [] };
+const calls = { commands: [], shortcuts: [], entryRenderers: [], entries: [], notices: [] };
 const api = {
   registerCommand: (name, spec) => { calls.commands.push({ name, spec }); return { name }; },
   registerShortcut: (combo, spec) => { calls.shortcuts.push({ combo, spec }); return { combo }; },
+  registerEntryRenderer: (type, renderer) => { calls.entryRenderers.push({ type, renderer }); return type; },
+  appendEntry: (type, data) => { calls.entries.push({ type, data }); return type; },
 };
 await muxSurfaceExtension(api);
+check("and the extension registers an entry renderer for mux-keys — the ONLY route on which pi's keyHint()/keyText() reach a plugin", calls.entryRenderers.length === 1 && calls.entryRenderers[0].type === "mux-keys" && typeof calls.entryRenderers[0].renderer === "function", `${calls.entryRenderers.map((r) => r.type).join(",")} (${calls.entryRenderers.length} renderers)`);
 const activeKeys = Object.entries(activeDriver.preset.keys);
 check(`exactly /mux and /mux-keys are registered as commands (${activeBackend} preset)`, calls.commands.map((c) => c.name).join(",") === "mux,mux-keys", calls.commands.map((c) => c.name).join(","));
 check(`and the shortcut count is the ACTIVE preset's size (${activeKeys.length})`, calls.shortcuts.length === activeKeys.length, `${calls.shortcuts.length} shortcuts for ${activeKeys.length} keys`);
@@ -127,6 +151,12 @@ check("and the argument box is the core's completion table, so a flag cannot be 
   const comp = calls.commands[0].spec?.getArgumentCompletions?.("--st");
   return Array.isArray(comp) && comp.length === 1 && comp[0].value === "--status";
 })(), `${JSON.stringify(calls.commands[0].spec?.getArgumentCompletions?.("--st"))}`);
+
+const keysCmd = calls.commands.find((c) => c.name === "mux-keys");
+await keysCmd?.spec?.handler?.("screen", { ui: { notify: (msg, level) => calls.notices.push({ msg, level }) } });
+check("and /mux-keys APPENDS the entry whose renderer pi calls with pi's own fns (one entry, carrying the loaded table)", calls.entries.length === 1 && calls.entries[0].type === "mux-keys" && calls.entries[0].data?.loaded?.active === activeBackend && calls.entries[0].data?.loaded?.drivers?.size === loaded.drivers.size, `${calls.entries.length} entries: ${calls.entries.map((e) => e.type).join(",")}`);
+check("and the handler still prints the table it can print WITHOUT pi's keys, and says an entry follows (two documents, one claim each)", calls.notices.length >= 2 && calls.notices.some((n) => String(n.msg).includes("rendered by pi with pi's own KeybindingHints")), `${calls.notices.length} notices`);
+check("and the appended entry kept the --preset narrowing the user asked for", JSON.stringify(calls.entries[0].data?.state) === JSON.stringify({ presets: ["screen"] }), `${JSON.stringify(calls.entries[0].data?.state)}`);
 
 console.log("\n=== 6. A PRESET BLOCK THAT FAILS DOES NOT EAT /mux ===");
 const boom = { commands: [], shortcuts: [] };
@@ -181,6 +211,63 @@ check("and the core HAS the route it needs (act --op message is the spool leg), 
   return a.ok === true && a.exitCode === 0;
 })(), "act --op message answers ok");
 
+console.log("\n=== 10. PI'S OWN HINT FNS, RUN ON PI'S OWN PLANE (the KeybindingHints route) ===");
+const runnerSrc = readFileSync(join(ROOT, "vendor", "pi-main", "packages", "coding-agent", "src", "core", "extensions", "runner.ts"), "utf8");
+const reservedMatch = String(runnerSrc).match(/RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS\s*=\s*\[([\s\S]*?)\]/);
+const piReserved = reservedMatch ? [...reservedMatch[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
+check("the core's copy of pi's RESERVED shortcut list is pi's, in order (the collision rule READS that copy, so drift here is a rule defect)", JSON.stringify(MUX_RESERVED_PI_IDS) === JSON.stringify(piReserved), `core ${MUX_RESERVED_PI_IDS.length} vs pi ${piReserved.length}: ${piReserved.slice(0, 3).join(",")}`);
+check("and pi really does SKIP an extension shortcut equal to a reserved one — the source of that skip is present, cited, not remembered", /conflicts with built-in shortcut\. Skipping\./.test(runnerSrc), "vendor/pi-main/packages/coding-agent/src/core/extensions/runner.ts must carry the skip message");
+const tuiPkg = await import("@earendil-works/pi-tui");
+const caPkg = await import(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/core/keybindings.js", import.meta.url).href);
+const hintsPkg = await import(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/components/keybinding-hints.js", import.meta.url).href);
+const themePkg = await import(new URL("../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js", import.meta.url).href);
+check("all four pi modules answered (an absent module would make this whole section vacuous)", [tuiPkg, caPkg, hintsPkg, themePkg].every(Boolean), `${tuiPkg ? "tui" : "-"} ${caPkg ? "ca" : "-"} ${hintsPkg ? "hints" : "-"} ${themePkg ? "theme" : "-"}`);
+check("and pi exports both hint fns the seam asks for", typeof hintsPkg.keyText === "function" && typeof hintsPkg.keyHint === "function", `${typeof hintsPkg.keyText}/${typeof hintsPkg.keyHint}`);
+const km = caPkg.KeybindingsManager.create();
+tuiPkg.setKeybindings(km);
+const host = { keyText: hintsPkg.keyText, keyHint: hintsPkg.keyHint };
+const resolved = muxKeyResolve(host);
+const askedOf = Object.values(resolved).filter((r) => r.called === true);
+check(`and pi ANSWERED for every one of pi's ${MUX_RESERVED_PI_IDS.length} reserved ids`, askedOf.length === MUX_RESERVED_PI_IDS.length, `${askedOf.length}/${MUX_RESERVED_PI_IDS.length} (any "no host keyText handed in" would be a seam failure, not a pi fact)`);
+const defOf = (id) => String(caPkg.KEYBINDINGS?.[id]?.defaultKeys ?? "");
+const drifted = MUX_RESERVED_PI_IDS.filter((id) => {
+  const d = defOf(id).toLowerCase();
+  if (!d) return true;
+  const want = d.split(",");
+  const got = String(resolved[id]?.text ?? "").toLowerCase().split("/");
+  return want.length !== got.length || !want.every((p) => got.includes(p));
+});
+check("and every answer is that id's OWN pi default from pi's own KEYBINDINGS table — the plugin prints pi's key, it never copies a name here", drifted.length === 0 && MUX_RESERVED_PI_IDS.every((id) => defOf(id)), `${drifted.length} drifts: ${drifted.map((id) => `${id} pi="${resolved[id]?.text}" default="${defOf(id)}"`).join(" | ") || "(none)"}`);
+const followKeyUp = String(resolved["app.message.followUp"]?.text ?? "");
+check("and pi's follow-up key is one of pi's two documented branches (alt+enter, ctrl+q on the windows branch)", ["alt+enter", "ctrl+q"].includes(followKeyUp), `followUp=${followKeyUp} windows=${caPkg.useWindowsKeybindings?.()}`);
+check("and keyText of a MUX action answers \"\" — a plugin key has no pi id, so there is nothing for pi to render (the CLOSED vocabulary, proven)", hintsPkg.keyText("mux.detach") === "" && hintsPkg.keyText("mux.list") === "", `mux.detach=${JSON.stringify(hintsPkg.keyText("mux.detach"))} mux.list=${JSON.stringify(hintsPkg.keyText("mux.list"))}`);
+km.setUserBindings({ "mux.detach": "ctrl+shift+q" });
+tuiPkg.setKeybindings(km);
+check("and a user keybindings.json entry for a mux action is IGNORED by pi, so keybindings.json cannot re-key a preset (the trap the docs now state instead of denying)", hintsPkg.keyText("mux.detach") === "" && hintsPkg.keyText("app.exit") === defOf("app.exit"), `mux.detach=${JSON.stringify(hintsPkg.keyText("mux.detach"))} app.exit=${JSON.stringify(hintsPkg.keyText("app.exit"))}`);
+const noTheme = muxKeyHintLines(host);
+check("BEFORE pi's initTheme(): the core keeps the table and NAMES which fn refused plus what the other one answered (a hint that dies silently is the drift this seam exists to catch)", noTheme.join("\n").includes("keyHint did not answer") && noTheme.join("\n").includes("Theme not initialized") && noTheme.join("\n").includes('keyText says "'), noTheme.join("\n").slice(0, 300));
+themePkg.initTheme();
+const hintLines = muxKeyHintLines(host);
+check("AFTER pi's own initTheme(): every pi id's line is pi's keyHint — the rendering contract (5) asks for, RUN", Object.keys(MUX_PI_HINT_IDS).every((id) => hintLines.join("\n").includes(`pi id ${id}`)) && hintLines.join("\n").split("(rendered by pi's keyHint)").length - 1 === Object.keys(MUX_PI_HINT_IDS).length, `${hintLines.join("\n").split("(rendered by pi's keyHint)").length - 1} of ${Object.keys(MUX_PI_HINT_IDS).length} ids rendered by keyHint`);
+const fullKeyText = muxKeysText(loaded, {}, host);
+check("and the SAME document with pi's fns handed in prints pi's answers for all 18 reserved ids and says no collision today", fullKeyText.includes(`pi answered for ${MUX_RESERVED_PI_IDS.length} of ${MUX_RESERVED_PI_IDS.length} reserved ids`) && fullKeyText.includes("no preset key collides with a RESERVED pi shortcut"), fullKeyText.slice(-300).replace(/\n/g, " | "));
+check("no preset combo equals a RESERVED pi key today, and that absence is evidence only because pi answered for all 18", muxKeyCollision(allKeys, resolved).length === 0, `${muxKeyCollision(allKeys, resolved).map((h) => `${h.style} ${h.action}`).join(",") || "(none)"} of ${allKeys.length} preset keys`);
+const entryRendered = calls.entryRenderers[0]?.renderer?.(calls.entries[0], { keyText: hintsPkg.keyText, keyHint: hintsPkg.keyHint, expanded: false }, null);
+check("and the renderer the extension registered returns pi-tui's OWN Text component", typeof tuiPkg.Text === "function" && entryRendered?.constructor?.name === "Text", `${typeof tuiPkg.Text} ${entryRendered?.constructor?.name ?? "(no component)"}`);
+const strip = (s) => String(s).replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
+const oneLine = (s) => strip(s).replace(/\s+/g, " ").trim();
+const visible = oneLine((entryRendered?.render?.(120) ?? []).join("\n"));
+check("and the rendered entry carries pi's OWN hint for the follow-up id — pi typed the key, the plugin only named the id", visible.includes(`${followKeyUp} to queue a follow-up on the seat this pane shows`) && visible.includes("rendered by pi's keyHint"), visible.slice(-400));
+km.setUserBindings({ "app.tools.expand": "ctrl+shift+q" });
+tuiPkg.setKeybindings(km);
+const hits = muxKeyCollision(allKeys, muxKeyResolve(host));
+const verdict = muxKeyCollisionLines(loaded, host).join("\n");
+check("and rebinding a pi id ONTO a preset's combo makes pi SKIP that plugin shortcut — the core NAMES the collision (tmux mux.halt, screen/herdr mux.detach) rather than shipping a dead key", hits.some((h) => h.style === "tmux" && h.action === "mux.halt" && h.piId === "app.tools.expand") && hits.some((h) => h.style === "screen" && h.action === "mux.detach") && verdict.startsWith("COLLISION"), `${hits.length} hits: ${hits.map((h) => `${h.style} ${h.action}`).join(", ")}`);
+check("and the verdict quotes pi's own skip message so a reader can find why the key is dead", verdict.includes("conflicts with built-in shortcut. Skipping."), verdict.slice(0, 260));
+km.setUserBindings({});
+tuiPkg.setKeybindings(km);
+check("and restoring the bindings restores zero collisions (the rebind above is a probe, not a residue)", muxKeyCollision(allKeys, muxKeyResolve(host)).length === 0, `${muxKeyCollision(allKeys, muxKeyResolve(host)).length} left`);
+
 rmSync(tmp, { recursive: true, force: true });
 check("the rig's live store did not move by a byte", statOf(liveStore) === liveStoreBefore, `mtime ${liveStoreBefore} -> ${statOf(liveStore)}`);
 check("and its size is unchanged", statSync(liveStore).size === liveSizeBefore, `size ${liveSizeBefore} -> ${statSync(liveStore).size}`);
@@ -188,7 +275,7 @@ check("and the tracked extension and the installed copy are the SAME bytes (one 
 
 const secs = ((Date.now() - t0) / 1000).toFixed(2);
 if (failures === 0) {
-  process.stdout.write(`\nMUX-KEYBINDS PASS (${secs}s total) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — the keybind vocabulary is ONE table: ${allKeys.length} preset keys across ${presets.length} styles (tmux, screen, zellij, herdr), every one spelled mux.<name> and every combo ctrl+shift+letter with NONE of pi's ctrl+shift+f/g/p borrowed; the ACTIVE preset is the ACTIVE backend's own (rank ${activeDriver.rank}) and ${MUX_BACKEND_ENV}=screen moves backend and preset together; muxKeysText prints the active preset, all ${presets.length} styles, pi's keyHint()/keyText() rendering and the REFUSED BY NAME rule; the extension registers exactly /mux, /mux-keys and ${calls.shortcuts.length} shortcuts — the active preset's only — while ${dupes.length} cross-style combos stay off the session, and a preset block that raises still leaves /mux plus a self-named /mux-preset-problem; herdr's detach is refused capability-not-declared naming its ${caps.length} declared actions, and the plan refuses it rather than returning zero commands. HONEST GAP, still open: the preset key mux.send is NOT a core verb, so that key answers send-is-not-a-verb today (no driver names a send command, so nothing here can type into a pane) — routing mux.send to act --op message is owed work, and the spool route it needs already answers ok.\n`);
+  process.stdout.write(`\nMUX-KEYBINDS PASS (${secs}s total) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — the keybind vocabulary is ONE table: ${allKeys.length} preset keys across ${presets.length} styles (tmux, screen, zellij, herdr), every one spelled mux.<name> and every combo ctrl+shift+letter with NONE of pi's ctrl+shift+f/g/p borrowed; the ACTIVE preset is the ACTIVE backend's own (rank ${activeDriver.rank}) and ${MUX_BACKEND_ENV}=screen moves backend and preset together; muxKeysText prints the active preset, all ${presets.length} styles, pi's keyHint()/keyText() rendering and the REFUSED BY NAME rule; the extension registers exactly /mux, /mux-keys and ${calls.shortcuts.length} shortcuts — the active preset's only — while ${dupes.length} cross-style combos stay off the session, and a preset block that raises still leaves /mux plus a self-named /mux-preset-problem; herdr's detach is refused capability-not-declared naming its ${caps.length} declared actions, and the plan refuses it rather than returning zero commands. PI'S OWN PLANE RAN (§10): the core's RESERVED copy matched vendor/pi-main/packages/coding-agent/src/core/extensions/runner.ts (${MUX_RESERVED_PI_IDS.length} ids), pi answered all ${askedOf.length} reserved keys and each matched pi's own KEYBINDINGS default (follow-up=${followKeyUp}), keyText of a mux action answered \"\" and a user keybindings.json entry for it stayed IGNORED, the core named which hint fn refused before pi's initTheme() and then rendered pi's keyHint for ${Object.keys(MUX_PI_HINT_IDS).length} ids, the entry /mux-keys appends rendered through pi-tui's Text with pi's own hint line (${followKeyUp} to queue a follow-up…), and rebinding app.tools.expand onto ctrl+shift+q made pi SKIP ${hits.length} preset shortcuts — named, with pi's skip message quoted. HONEST GAP, still open: the preset key mux.send is NOT a core verb, so that key answers send-is-not-a-verb today (no driver names a send command, so nothing here can type into a pane) — routing mux.send to act --op message is owed work, and the spool route it needs already answers ok.\n`);
   process.exit(0);
 }
 process.stdout.write(`${failures} FAILURE(S)\n`);

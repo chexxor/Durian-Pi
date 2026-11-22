@@ -16,6 +16,11 @@
 //      never created or written — that is the one-writer claim, checked, not claimed.
 //   7. NO INPUT PRIMITIVE ANYWHERE: not one argv any driver emits types into a pane (a send-keys/stuff leg would
 //      be the second writer that corrupted this store twice). Scanned over EMITTED ARGV, not over comments.
+//   8. THE DRAIN LEG, END TO END: TWO PANES ON ONE SEAT. The acts are admitted by the broker's OWN drain
+//      (`drainIntentInbox`), each answered by the broker's OWN result record (its requestId, ok, op, seat), and
+//      BOTH panes' words land in ONE conversation — N panes read/write the SAME session, never N seats, never N
+//      drivers. Seam cost measured 2026-11-21 on Linux / Fedora Linux 45 / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1:
+//      §8 is 0.03 s of the pin's 0.04 s (wall 0.18 s) — faux plane, MemoryStorage, no network, no key, no sleep.
 //
 // HERMETIC: seats are handed in through the core's read seams; the store named is a temp dir under os.tmpdir().
 // The rig's live store must not move by a byte. Run: node demo/mux-interact.test.mjs (exit 0 = pass)
@@ -37,9 +42,18 @@ import {
   readIntentFiles,
   pendingIntentCensus,
   intentInboxDir,
+  intentResultDir,
+  readIntentResult,
+  readIntentError,
+  drainIntentInbox,
   OPERATOR,
   DELEGATE,
 } from "../src/broker.mjs";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxAssistantMessage, fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { configure, createRegistry, Harness, MemoryStorage } from "@earendil-works/pi-durable";
+import { Router, Seats, compilePersona, registerSeat } from "../src/rig.mjs";
 
 const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const tmp = mkdtempSync(join(tmpdir(), "durig-mux-act-"));
@@ -166,13 +180,68 @@ check("not one token in ANY emitted argv is an input primitive", !flat.some((t) 
 check("so every pane action is VIEWPORT-only (list/open/attach/detach/kill/capture/halt)", seen.every((s) => !["act"].includes(s.verb)), `${seen.length} named commands across 4 backends x 7 verbs x 3 shapes`);
 check("and a backend that cannot name an ask emits NO argv rather than a plausible one", notes.length >= 4 && notes.every((n) => n.includes("NO argv")), `${notes.length} gaps: ${notes.slice(0, 4).join(" | ")}`);
 
+console.log("\n=== 8. TWO PANES, ONE SEAT: THE BROKER'S OWN DRAIN AND ITS OWN RECORD ANSWER ===");
+const t8 = Date.now();
+const pctx = BACKGROUND_CONTEXT;
+const fauxP = fauxProvider({ models: [{ id: "faux-seat" }] });
+fauxP.setResponses(Array.from({ length: 8 }, () => fauxAssistantMessage("acknowledged, no tool call")));
+const modelsP = createModels();
+modelsP.setProvider(fauxP.provider);
+const regP = createRegistry();
+regP.install(Router);
+const memStorage = new MemoryStorage();
+const harness = await Harness.open(memStorage, { models: modelsP, registry: regP }, pctx);
+let convId = null;
+await harness.commit(async (tx) => {
+  const c = await tx.createConversation({ ownership: { kind: "ownerless" } });
+  await configure(tx, c.id, { model: { provider: "faux", modelId: "faux-seat" }, instructions: compilePersona({ role: "worker" }) });
+  await registerSeat(tx, "impl", c.id, "worker");
+  convId = c.id;
+}, pctx);
+check("ONE seat owns ONE conversation token (the session every pane of that seat attaches to)", convId !== null, `conv ${convId}`);
+const spoolStore = join(tmp, "w8", "selfdev.sqlite");
+const pA = { paneName: "impl-1", seat: "impl", conversationId: convId };
+const pB = { paneName: "impl-2", seat: "impl", conversationId: convId };
+check("two panes of one seat hold the SAME conversation token (one session, two viewports)", pA.conversationId === pB.conversationId && pA.conversationId === convId, `${pA.conversationId}/${pB.conversationId}`);
+const rA = muxActRequest(pA, { op: "message", text: "PANE-ONE: steer from the first viewport" });
+const rB = muxActRequest(pB, { op: "message", text: "PANE-TWO: steer from the second viewport" });
+check("BOTH acts are admitted at the core: two `from`, ONE `to`, no second vocabulary", rA.ok && rB.ok && rA.request.to === "impl" && rB.request.to === "impl" && rA.request.from === "impl-1" && rB.request.from === "impl-2" && rA.admitted === "content-op" && rB.admitted === "content-op", `${rA.request.from}->${rA.request.to} / ${rB.request.from}->${rB.request.to}`);
+check("and the request carries the SEAT NAME only, never a conversation token the pane could stale-cache", !!("conversation" in rA.request) === false && !!("conversation" in rB.request) === false, `request keys ${Object.keys(rA.request).join(",")}`);
+const fA = writeIntent(spoolStore, { ...rA.request, requestId: "pane-1", createdAt: new Date().toISOString() });
+const fB = writeIntent(spoolStore, { ...rB.request, requestId: "pane-2", createdAt: new Date().toISOString() });
+check("both acts land as files in the broker's OWN inbox before any admission", readIntentFiles(spoolStore).length === 2, `${readIntentFiles(spoolStore).length} files`);
+const drained = await drainIntentInbox(harness, memStorage, { dbPath: spoolStore, context: pctx });
+check("the broker admits BOTH through its OWN drain (delivered 2, nothing dead-lettered)", drained?.delivered === 2 && drained?.deadLettered === 0 && drained?.duplicates === 0, JSON.stringify(drained));
+check("and the spool is EMPTY after the drain (one writer consumed both files)", readIntentFiles(spoolStore).length === 0, `${readIntentFiles(spoolStore).length}`);
+const recA = readIntentResult(spoolStore, "pane-1");
+const recB = readIntentResult(spoolStore, "pane-2");
+check("each pane's act is answered by the BROKER'S OWN record (its requestId, ok, op, seat)", recA?.requestId === "pane-1" && recA?.ok === true && recA?.op === "message" && recB?.requestId === "pane-2" && recB?.ok === true && recB?.op === "message", `${JSON.stringify(recA)} ${JSON.stringify(recB)}`);
+check("and both records name the SAME seat — one conversation resolved from the broker's OWN roster, not from the panes", recA?.result?.seat === "impl" && recB?.result?.seat === "impl" && recA?.result?.delivered === true && recB?.result?.delivered === true, `${recA?.result?.seat}/${recB?.result?.seat}`);
+check("and neither act was dead-lettered", readIntentError(spoolStore, "pane-1") === null && readIntentError(spoolStore, "pane-2") === null, `${readIntentError(spoolStore, "pane-1")}/${readIntentError(spoolStore, "pane-2")}`);
+check("and the records live in the broker's OWN result channel beside the spool", existsSync(intentResultDir(spoolStore)), intentResultDir(spoolStore));
+await harness.waitForIdle(pctx);
+const conv = await harness.conversation(convId, pctx);
+const page = await conv.entries({}, 500, undefined, pctx);
+const bodies = page.items.map((e) => JSON.stringify(e));
+check("the seat's conversation carries BOTH panes' words (the same session read and written by two viewports)", bodies.some((s) => s.includes("PANE-ONE")) && bodies.some((s) => s.includes("PANE-TWO")), `entries ${page.items.length}`);
+check("and BOTH arrived as user turns in that ONE conversation (two deliveries, one inbox, one session)", page.items.filter((e) => e.kind === "pi.user" && /PANE-(ONE|TWO)/.test(JSON.stringify(e))).length === 2, `user turns ${page.items.filter((e) => e.kind === "pi.user").length}`);
+const roster = (await harness.snapshot(Seats, undefined, pctx))?.seats ?? {};
+check("and the roster still holds exactly ONE seat for that conversation (N panes never N seats)", Object.keys(roster).length === 1 && roster.impl?.conversationId === convId, `seats ${Object.keys(roster).join(",")}`);
+check("and the store FILE was never created by any of this (the spool is the transport)", !existsSync(spoolStore), `${existsSync(spoolStore)}`);
+try {
+  await harness.close(pctx);
+} catch (err) {
+  check("the faux plane closed cleanly", false, `harness close: ${err?.message ?? err}`);
+}
+const secs8 = ((Date.now() - t8) / 1000).toFixed(2);
+
 rmSync(tmp, { recursive: true, force: true });
 check("and the rig's live store did not move by a byte for this whole gate", statOf(liveStore) === liveStoreBefore, `selfdev.sqlite mtime ${liveStoreBefore} -> ${statOf(liveStore)}`);
 check("and its size is unchanged", statSync(liveStore).size === liveSizeBefore, `size ${liveSizeBefore} -> ${statSync(liveStore).size}`);
 check("and the spool gate never saw the operator's own inbox touched", !existsSync(`${liveStore}.broker.inbox`) || readIntentFiles(liveStore).length === 0, `rig inbox files ${readIntentFiles(liveStore).length}`);
 const secs = ((Date.now() - t0) / 1000).toFixed(2);
 if (failures === 0) {
-  process.stdout.write(`\nMUX-INTERACT PASS (${secs}s total) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — a pane is an ATTACHED CLIENT, not a writer: all ${SPOOL_OPS.length} broker spool ops answer BY NAME through the IMPORTED authorizeSpoolRequest (admitted with the spool's own codes content-op/self-target; pause,unpause,configure refused not-operator and queue refused not-operator-plane because a pane is neither ${OPERATOR} nor ${DELEGATE}); a pane aimed at ANOTHER seat is refused not-operator while the same op on its OWN seat is admitted self-target; an op the broker does not carry is refused op-not-carried at the core and value-not-in-vocabulary at the surface, each printing the full known set and NO partial census; /mux act PRINTS the request and writes NOTHING (inbox files 0 without --run); the real spool leg lands ONE FILE in <store>.broker.inbox (pendingIntentCensus count 1 mutations 1) while the store file is never created — one writer, not two; and not one token among ${flat.length} argv tokens the four drivers emit is an input primitive (no send-keys, no stuff), with ${notes.length} named gaps emitting NO argv instead of a plausible command. The rig's ${liveSizeBefore}-byte live store did not move by a byte.\n`);
+  process.stdout.write(`\nMUX-INTERACT PASS (${secs}s total) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — a pane is an ATTACHED CLIENT, not a writer: all ${SPOOL_OPS.length} broker spool ops answer BY NAME through the IMPORTED authorizeSpoolRequest (admitted with the spool's own codes content-op/self-target; pause,unpause,configure refused not-operator and queue refused not-operator-plane because a pane is neither ${OPERATOR} nor ${DELEGATE}); a pane aimed at ANOTHER seat is refused not-operator while the same op on its OWN seat is admitted self-target; an op the broker does not carry is refused op-not-carried at the core and value-not-in-vocabulary at the surface, each printing the full known set and NO partial census; /mux act PRINTS the request and writes NOTHING (inbox files 0 without --run); the real spool leg lands ONE FILE in <store>.broker.inbox (pendingIntentCensus count 1 mutations 1) while the store file is never created — one writer, not two; and not one token among ${flat.length} argv tokens the four drivers emit is an input primitive (no send-keys, no stuff), with ${notes.length} named gaps emitting NO argv instead of a plausible command. §8 then ran the DRAIN LEG END TO END (${secs8}s of the ${secs}s, on the hermetic faux/MemoryStorage plane): two panes impl-1/impl-2 of ONE seat both admitted at the core with the spool's own content-op, each carrying only the SEAT NAME (never a conversation token), both landed as spool files, drainIntentInbox delivered ${JSON.stringify(drained)}, the broker's OWN result records answered each by its own requestId/op/ok/seat and named the SAME seat, neither was dead-lettered, the seat's conversation carries BOTH panes' words, and the roster still holds exactly ONE seat — N panes read/write the SAME session through the broker's record, never N drivers. The rig's ${liveSizeBefore}-byte live store did not move by a byte.\n`);
   process.exit(0);
 }
 process.stdout.write(`${failures} FAILURE(S)\n`);

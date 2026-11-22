@@ -22,9 +22,21 @@
 // preset therefore maps to `/mux act <seat> --op message --text "…"`, i.e. to the spool, not to the terminal.
 //
 // GROUNDING (D159: never assert from memory). The argv shapes below come from
-// https://tmux.app/commands/ fetched 2026-11-20 (see docs/runbooks/pi-inside-tmux.md, which this driver owns).
-// `tmux` IS NOT INSTALLED on this rig's host and there is NO passwordless sudo, so nothing here has been run
-// against a real tmux binary: the hermetic pin proves ARGV BYTES AND DISPATCH ONLY, not tmux's pane semantics.
+// https://tmux.app/commands/ fetched 2026-11-20 (see docs/runbooks/pi-inside-tmux.md, which this driver owns),
+// AND — MEASURED 2026-11-21 — from running them against a REAL tmux binary on this host. tmux 3.5a is SELF-BUILT
+// FROM SOURCE here (`.spike/build-tmux.sh`: codeload tarball + autogen + configure + make; `tmux -V` -> `tmux 3.5a`);
+// the DISTRO census is still true and is a SEPARATE fact: `tmux` is NOT in PATH and `/usr/bin/tmux` is absent, so a
+// user of this rig gets the plugin only with a binary they bring. The real leg (see the runbook's REAL-BINARY CENSUS)
+// ran this driver's OWN argv through `tools/mux-surface-owner.mjs` `muxRunPlan`/`muxSessions` and corrected TWO
+// shapes that the docs alone got wrong: `list-panes -t <session>` answers ONE pane (3.5a's `-t` is a TARGET pane, not
+// a session selector), so the pane census is `list-windows -t <session>`; and the 3-part dotted target `session.name.0`
+// is REJECTED (`can''t find pane`) while the 2-part `session:<window-name>` addresses the right window. A note that
+// still says UNVERIFIED names a leg that was NOT run; a note that quotes a result was measured.
+//
+// MEASURED 2026-11-21 ON tmux 3.5a SELF-BUILT (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64
+// / node v24.22.1): `extended-keys-format` DEFAULTS TO `xterm`, not `csi-u` (`show-options -g extended-keys-format`
+// -> `extended-keys-format xterm`; `options-table.c:323` lists choices `csi-u`,`xterm` with `.default_num = 1`), so
+// the runbook's csi-u line is a `set -g extended-keys-format csi-u`, never "already on by default".
 // Every line that has not been executed against a binary carries `UNVERIFIED` in its `note`. The real-binary
 // demonstration available on this host is GNU Screen (see tools/mux-driver-screen.mjs).
 //
@@ -93,7 +105,10 @@ export const MUX_DRIVER = {
   sessionName: ({ tag = null, namespace = "plugin" } = {}) => (namespace === "plugin" ? safe(tag) : String(tag ?? "")),
 
   // PARSE of the two census commands below, into the ONE shape the owner plane feeds to `muxNamespace`
-  // (`present = [{name, panes}]`), so a foreign session is reportable as PRESENT-NOT-TOUCHED.
+  // (`present = [{name, panes}]`). The session census is `tmux ls -F ...`; the pane census is `tmux list-windows
+  // -t <session> -F '#{window_index} #{pane_pid} #{window_name} #{pane_current_command}'` — MEASURED 2026-11-21 on
+  // tmux 3.5a: `list-panes -t <session>` answers only ONE row (its `-t` names a TARGET pane) so it cannot census a
+  // two-window session, while `list-windows -t <session>` answers every window, named.
   census: (output) => {
     const sessions = [];
     const unparsed = [];
@@ -106,9 +121,10 @@ export const MUX_DRIVER = {
         sessions.push({ name: m[1], panes: Number(m[2]), attached: m[3] === "attached" });
         continue;
       }
-      // `-F '#{pane_index} #{pane_pid} #{pane_title} #{pane_current_command}'`
+      // `-F '#{window_index} #{pane_pid} #{window_name} #{pane_current_command}'` (a window_name may hold spaces;
+      // the pid is what anchors the split, so the remainder is kept WHOLE as `rest` and never re-guessed.)
       const p = /^(\d+)\s+(\d+)\s+(.*)$/.exec(t);
-      if (p) sessions.push({ pane_index: p[1], pane_pid: p[2], rest: p[3] });
+      if (p) sessions.push({ pane_index: p[1], pane_pid: p[2], rest: p[3], title: p[3] });
       else unparsed.push(t);
     }
     return { sessions, unparsed };
@@ -124,12 +140,12 @@ export const MUX_DRIVER = {
       if (plan.index === 0)
         return {
           argv: ["tmux", "ls", "-F", "#{session_name} #{session_windows} #{?session_attached,attached,detached}"],
-          note: "sessions census — every session the multiplexer manages, named. The plugin's own tag must appear here; any OTHER name is the user's namespace and is reported PRESENT, NOT TOUCHED. UNVERIFIED on this host (tmux absent).",
+          note: "sessions census — every session the multiplexer manages, named. The plugin's own tag must appear here; any OTHER name is the user's namespace and is reported PRESENT, NOT TOUCHED (MEASURED on tmux 3.5a: with a user session `user-own` and the plugin's `durian-w1` both on the server, this census answers both and the plugin touches only its own tag).",
         };
       if (plan.index === 1)
         return {
-          argv: ["tmux", "list-panes", "-F", "#{pane_index} #{pane_pid} #{pane_title} #{pane_current_command}", "-t", safe(plan.sessionName)],
-          note: "pane census for THIS session only (one command covers every pane; later panes repeat nothing). UNVERIFIED on this host (tmux absent).",
+          argv: ["tmux", "list-windows", "-t", safe(plan.sessionName), "-F", "#{window_index} #{pane_pid} #{window_name} #{pane_current_command}"],
+          note: "pane census for THIS session only (MEASURED on tmux 3.5a: every window, named; `list-panes -t <session>` would answer ONE pane because tmux's `-t` names a TARGET, so it is not a census). A foreign session's windows are never listed: this names THIS session.",
         };
       return null;
     },
@@ -145,12 +161,12 @@ export const MUX_DRIVER = {
         return {
           argv: ["tmux", "new-session", "-d", "-s", safe(plan.sessionName), "-n", String(plan.pane.paneName), ...(ws ? ["-c", ws] : []), "--", ...cmd],
           cwd: ws,
-          note: "first pane: create the plugin's OWN session DETACHED and name its window after the SEAT. The rig's session itself is owned by the broker (`DURIG_DB=<store> node cli.mjs serve`), which the owner plane starts; this pane only ATTACHES to it. UNVERIFIED on this host (tmux absent): `--` ends option parsing in tmux 3.x — on an older tmux drop it and the command is the remainder.",
+          note: "first pane: create the plugin's OWN session DETACHED and name its window after the SEAT (MEASURED on tmux 3.5a: `new-session -d -s durian-w1 -n impl -c <ws> -- node tui.mjs …` rc 0 in 4 ms). The rig's session itself is owned by the broker (`DURIG_DB=<store> node cli.mjs serve`), which the owner plane starts; this pane only ATTACHES to it.",
         };
       return {
         argv: ["tmux", "new-window", "-t", safe(plan.sessionName), "-n", String(plan.pane.paneName), ...(ws ? ["-c", ws] : []), "--", ...cmd],
         cwd: ws,
-        note: "later panes: another WINDOW in the plugin's own session, never a new session. UNVERIFIED on this host (tmux absent).",
+        note: "later panes: another WINDOW in the plugin's own session, never a new session (MEASURED on tmux 3.5a: rc 0, and the census then answers 2 windows for one session).",
       };
     },
 
@@ -159,7 +175,7 @@ export const MUX_DRIVER = {
       if (plan.index !== 0) return null; // tmux has no per-pane attach: ONE client attaches every window of the session
       return {
         argv: ["tmux", "attach-session", "-t", safe(plan.sessionName)],
-        note: "tmux has no per-pane attach, so ONE client covers the session (the per-seat pane command in `open` is what carries each seat). Needs a terminal to be interactive. UNVERIFIED on this host (tmux absent).",
+        note: "tmux has no per-pane attach, so ONE client attaches every window of the session (needs a terminal to be interactive; the leg NOT run in the real census is this interactive one — everything else in this table ran).",
       };
     },
 
@@ -168,17 +184,19 @@ export const MUX_DRIVER = {
       if (plan.index !== 0) return null;
       return {
         argv: ["tmux", "detach-client", "-s", safe(plan.sessionName)],
-        note: "tmux's own detach semantics: the session KEEPS RUNNING with no client, so closing the pane/terminal never ends the rig's session. UNVERIFIED on this host (tmux absent).",
+        note: "tmux's own detach semantics: the session KEEPS RUNNING with no client, so closing the pane/terminal never ends the rig's session (MEASURED on 3.5a twice: the plugin creates with `-d`, so the census says `detached` from birth and `detach-client -s durian-w1` answers `no current client` rc 1 WITHOUT ending the session — the next census still names it).",
       };
     },
 
     kill: (plan) => {
       if (blocked(plan)) return blockedNote(plan);
       if (!plan.pane) return null;
-      // tmux's target-pane grammar is session.window.index; the window was NAMED after the seat by `open`.
+      // tmux's target that WORKS (MEASURED 2026-11-21 on 3.5a): `session:<window-name>` addresses the window the
+      // `open` verb NAMED after the seat. The 3-part dotted form `session.window.index` the tmux man page shows for
+      // OLDER tmux is REJECTED by 3.5a (`can''t find pane: impl.0`), so it is not emitted here.
       return {
-        argv: ["tmux", "kill-pane", "-t", `${safe(plan.sessionName)}.${safe(plan.pane.paneName)}.0`],
-        note: "ONE pane, never the session. The session-scoped teardown is `kill-session -t <sessionName>` and `tmux kill-server` is NEVER emitted: it ends EVERY session the server manages, including the user's namespace (the core refuses `--every-session` BY NAME). UNVERIFIED on this host (tmux absent).",
+        argv: ["tmux", "kill-pane", "-t", `${safe(plan.sessionName)}:${safe(plan.pane.paneName)}`],
+        note: "ONE pane, never the session (MEASURED: `kill-pane -t durian-w1:impl-2` rc 0 left the session alive with its other window). The session-scoped teardown is `kill-session -t <sessionName>` and `tmux kill-server` is NEVER emitted: it ends EVERY session the server manages, including the user's namespace (the core refuses `--every-session` BY NAME).",
       };
     },
 
@@ -186,8 +204,8 @@ export const MUX_DRIVER = {
       if (blocked(plan)) return blockedNote(plan);
       if (!plan.pane) return null;
       return {
-        argv: ["tmux", "capture-pane", "-p", "-t", `${safe(plan.sessionName)}.${safe(plan.pane.paneName)}.0`],
-        note: "prints the pane's text to stdout (-p). A pane's text is VIEWPORT evidence only; the seat's own record is the store (`mergedInputStream`). UNVERIFIED on this host (tmux absent).",
+        argv: ["tmux", "capture-pane", "-p", "-t", `${safe(plan.sessionName)}:${safe(plan.pane.paneName)}`],
+        note: "prints the pane's text to stdout (-p; MEASURED on tmux 3.5a: the two panes of one session answer with their OWN text, so attribution is per-pane). A pane's text is VIEWPORT evidence only; the seat's own record is the store (`mergedInputStream`).",
       };
     },
 

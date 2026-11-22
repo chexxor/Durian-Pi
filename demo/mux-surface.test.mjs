@@ -11,7 +11,14 @@
 //      driver names ONE, and by no driver naming a FOREIGN backend's argv head.
 //   3. A SESSION THAT SHELLS OUT. The plugin's only out-of-process leg is `tools/mux-surface-owner.mjs`, reached by
 //      `cli.mjs mux` under an explicit `--run` — a presentation command must not be able to reach it. Closed here
-//      by `child_process`/`spawn` counts 0 in the core, the registration and every driver.
+//   7. AN ASK THAT NAMED argv BUT COULD NOT RUN IT. A `/mux open` that printed argv and started nothing left the
+//      user with a command to copy rather than a pane. Corrected 2026-11-21: the registration DOES import the owner
+//      plane, and the door is `--run`. Closed by §6 below: every verb answers through `muxSurfaceInvoke`, the
+//      census attributes namespace + session + pane count + the seat each pane holds + the exact argv it belongs
+//      to, and the refusal legs name what they refused without printing a partial census.
+//      by `child_process`/`spawn` counts 0 in the core, the registration and every driver, AND by the registration
+//      reaching the owner plane ONLY through asks: the census seam, `muxRunPlan` under `--run`, `muxStartOwner`
+//      under `--run` + a CREATE ownership decision. Importing the runner is not what makes a run; the ASK is.
 //   4. THE LOAD ITSELF. `.pi/extensions/mux-surface.js` → `../tools/mux-surface-core.mjs` → `../src/*.mjs` under
 //      pi's jiti loader is a hypothesis, not an assumption. Measured on BOTH planes with `errors: []`.
 //   5. THE DEFAULT BEING A NAME IN A FILE. Which backend answers when nothing was asked is a driver `rank` fact;
@@ -42,7 +49,7 @@ import {
   muxKeysText,
   muxRefusalText,
 } from "../tools/mux-surface-core.mjs";
-import { MUX_BACKEND_ENV } from "../tools/mux-surface-core.mjs";
+import { MUX_BACKEND_ENV, MUX_STORE_ENV, MUX_STORE_ENV_ALIAS } from "../tools/mux-surface-core.mjs";
 
 const BACKENDS = ["tmux", "screen", "zellij", "herdr"]; // the TEST's census list, never the core's decision
 const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
@@ -98,7 +105,14 @@ for (const forbidden of ["Harness.open", "openNodeSqliteStorage", "writeIntent",
   check(`the core contains NO ${forbidden} (it opens no store and writes no intent)`, !coreStripped.includes(forbidden), "reads go through the rig's readData routing");
 }
 check("the ONE out-of-process module IS the owner plane (and only it spawns)", /spawnSync\(/.test(ownerSource) && !/spawn/i.test(coreStripped) && !/spawn/i.test(extStripped), "the door the extension cannot reach");
-check("the registration does NOT import the owner plane (a presentation command cannot run argv)", !extStripped.includes("mux-surface-owner"), "cli.mjs mux is the plane that may pass --run");
+// THE CLAIM INVERTED 2026-11-21: a registration that could not run the argv it printed was the defect — `/mux open`
+// named a pane command and created no pane. What keeps execution safe is the ASK plus the core's namespace and
+// ownership refusals, both of which run before any argv is named, so the assertion is now that the registration
+// REACHES the owner plane and that its own source grows no process primitive of its own.
+check("the registration DOES reach the owner plane (so --run can actually run the argv it printed)", extStripped.includes("mux-surface-owner"), "no mux-surface-owner import in the registration");
+check("and it still holds NO process primitive of its own (the only runner is the owner plane's)", !["child_process", "spawn", "execSync", "exec(", "fork("].some((w) => extStripped.includes(w)), "see the checks above");
+check("and the owner plane names the door its own header states (`--run` is the ask)", ownerSource.includes("ONLY when the caller passes `run: true`"), "the owner plane's §3 comment");
+check("and the core still runs nothing and opens no store", !["child_process", "spawn", "exec(", "fork(", "Harness.open", "openNodeSqliteStorage", "writeIntent"].some((w) => coreStripped.includes(w)), "the backend-agnostic half stays inert");
 for (const b of BACKENDS) {
   const src = strip(readFileSync(join(ROOT, "tools", `mux-driver-${b}.mjs`), "utf8"));
   for (const forbidden of ["child_process", "spawn", "execSync"]) {
@@ -193,9 +207,65 @@ const keysBody = keys.show.map((l) => l.body).join("");
 check("`keys` answers (ok, exit 0)", keys.ok === true && keys.exitCode === 0, JSON.stringify(keys.show).slice(0, 120));
 check("it names the ACTIVE preset it rendered", keysBody.includes(`active preset: ${registry.active}`), keysBody.slice(0, 200));
 check("it prints EVERY registered preset, so a user can choose one", BACKENDS.every((b) => keysBody.includes(`preset ${b}:`)), keysBody.slice(0, 260));
-check("it renders pi's own key vocabulary (keyHint/keyText, pi 1.5.2)", keysBody.includes("keyHint()/keyText()"), keysBody.match(/keyHint[^\n]*/)?.[0]);
+check("it states pi's CLOSED keybinding-id rule, so a user knows a mux key is not rebindable from keybindings.json", keysBody.includes("CLOSED vocabulary") && keysBody.includes("keybindings.json") && keysBody.includes('keyText of an unknown id is ""'), keysBody.match(/what pi can rebind[^\n]*/)?.[0]);
+check("and it NAMES which of pi's hint fns were asked, printing NOT-ASKED rather than printing as clean when no KeybindingHints was handed in", keysBody.includes("KeybindingHints") && keysBody.includes('keyText("mux.list")') && keysBody.includes("collision check NOT RUN"), [keysBody.match(/NO host KeybindingHints[^\n]*/)?.[0], keysBody.match(/collision check NOT RUN[^\n]*/)?.[0]].join(" | "));
+const PI_HINT_IDS = ["app.message.followUp", "tui.input.submit", "app.tools.expand", "app.editor.external"];
+check("and it names pi's OWN ids whose keys it asks pi for, so the table is honest about which keys are pi's", PI_HINT_IDS.every((id) => keysBody.includes(id)) && keysBody.includes(`pi id ${PI_HINT_IDS[0]}`), PI_HINT_IDS.join(","));
 check("and it states the refuse-by-name rule for what it cannot do", keysBody.includes("REFUSED BY NAME") && keysBody.includes("never forwarded"), keysBody.match(/an action no preset[^\n]*/)?.[0]);
 check("every census line attributes the namespace it acted in", keys.show.some((l) => /namespace: plugin/.test(l.body)), keys.show.map((l) => l.body).join(" | ").slice(0, 400));
+
+console.log("\n=== 6. EVERY /mux VERB RUNS THROUGH THE SURFACE AND PRINTS AN ATTRIBUTED CENSUS ===");
+// MEASURED TRUTH (this pin, 2026-11-21): the verbs that answer ok with no owner resident are the ones the
+// ownership decision does not gate; `open`/`attach`/`halt` are gated and are asserted as refusals here (the
+// exit-0 legs for those three, on a store a REAL broker owns, are demo/mux-live.test.mjs and demo/mux-ownership.test.mjs).
+const verbTable = [
+  ["list", 2, 2, ["tmux ls -F #{session_name} #{session_windows} #{?session_attached,attached,detached}", "tmux list-windows -t durian-w1 -F #{window_index} #{pane_pid} #{window_name} #{pane_current_command}"]],
+  ["open --all --create", 2, 2, [`tmux new-session -d -s durian-w1 -n impl -c ${join(tmp, "w1")} -- node tui.mjs --db ${join(tmp, "w1", "selfdev.sqlite")} --attach --select impl`, `tmux new-window -t durian-w1 -n qa -c ${join(tmp, "w1")} -- node tui.mjs --db ${join(tmp, "w1", "selfdev.sqlite")} --attach --select qa`]],
+  ["detach --all", 2, 1, ["tmux detach-client -s durian-w1"]],
+  ["kill --all", 2, 2, ["tmux kill-pane -t durian-w1:impl", "tmux kill-pane -t durian-w1:qa"]],
+  ["capture --all", 2, 2, ["tmux capture-pane -p -t durian-w1:impl", "tmux capture-pane -p -t durian-w1:qa"]],
+  ["act --all --op read", 2, 0, []],
+];
+// `keys` is the ninth name and is asserted in §5 above (it prints the key TABLE plus its own namespace line, not a
+// pane census — a census of zero panes would say nothing about it).
+for (const [text, wantPanes, wantCmds, argvs] of verbTable) {
+  const r = await ask(text);
+  const body = r.show.map((l) => l.body).join("\n");
+  check(`\`${text}\` answers ok at exit 0 through the surface`, r.ok === true && r.exitCode === 0 && r.show.length >= 1 && r.show[0].level === "info", `ok ${r.ok} exit ${r.exitCode}`);
+  check(`and it prints the CENSUS (not a bare count)`, body.includes("mux census \u2014"), body.slice(0, 120));
+  check(`and the census attributes the NAMESPACE and the SESSION name it acted in`, body.includes("namespace plugin \u2014 session durian-w1"), body.split("\n")[0]);
+  check(`and it states the pane COUNT`, body.includes(`panes: ${wantPanes}  `), body.split("\n")[1]);
+  check(`and every pane row names the SEAT that pane holds and its conversation`, (r.panes ?? []).every((p) => body.includes(`pane ${p.paneName}  holds seat ${p.seat}  conversation ${p.conversationId}`)) && (r.panes ?? []).length === wantPanes, `panes ${(r.panes ?? []).length} wanted ${wantPanes} | ${body.slice(0, 300)}`);
+  check(`and it names ${wantCmds} backend command(s)`, (r.plan?.commands ?? []).length === wantCmds, `cmds ${(r.plan?.commands ?? []).length} wanted ${wantCmds}`);
+  check(`and each EXACT argv is printed against the pane it belongs to`, argvs.every((a) => body.includes(a)) && body.includes(`backend commands: ${wantCmds} named`), body.slice(0, 500));
+  check(`and NOTHING was run for it (no --run asked): the census says so`, body.includes("PRINTED ONLY (nothing was run; --run is the ask)"), body.match(/backend commands[^\n]*/)?.[0]);
+  check(`and the census says which session is the broker-owned one, not the multiplexer's`, body.includes("the SESSION is the broker-owned one"), body.slice(0, 200));
+  if (text === "act --all --op read") {
+    check("and the act leg prints the SPOOL REQUEST it built, per pane, with the seat routed in", (r.panes ?? []).every((p) => body.includes(`act \u2014 pane ${p.paneName} seat ${p.seat} spool op read`)), body.slice(0, 600));
+    check("and it says the op is the broker's spool op, not bytes typed into the window", body.includes("spool op read") && !body.includes("tmux send-keys"), body.slice(0, 400));
+  }
+}
+const gatedAsks = [
+  ["open --to impl", "no owner and none asked"],
+  ["attach --all", "no session to attach to"],
+  ["halt", "no owner and none asked"],
+];
+for (const [text] of gatedAsks) {
+  const r = await ask(text);
+  const body = r.show.map((l) => l.body).join("\n");
+  check(`\`${text}\` on a store NO broker owns is REFUSED BY NAME (ok false, exit 1)`, r.ok === false && r.exitCode === 1 && r.show[0].level === "error", `ok ${r.ok} exit ${r.exitCode}`);
+  check(`and it names the gate that refused it`, body.includes("nothing owns") || body.includes("no session to attach to"), body.slice(0, 300));
+  check(`and it offers the start command in the form that WORKS on this store (env-named), when the gate can name one`, body.includes(`${MUX_STORE_ENV}=`) || body.includes("--create"), body.slice(0, 300));
+  // The SELECTION runs before the ownership gate, so panes may be named while the ask still refuses — what must NOT
+  // appear is the census itself: a reader who sees a pane census reads it as an ask that acted.
+  check(`and NO pane census was printed for it (panes may be selected above the gate, the census may not)`, !body.includes("mux census \u2014"), `census ${body.includes("mux census \u2014")} panes ${(r.panes ?? []).length} | ${body.slice(0, 160)}`);
+}
+const pauseAsk = await ask("act --to impl --op pause");
+check("a PANE asking for a control-plane op is refused BY NAME with the spool's own code", pauseAsk.ok === false && pauseAsk.exitCode === 1 && pauseAsk.show[0].body.includes("not-operator") && pauseAsk.show[0].body.includes("Nothing was written."), pauseAsk.show[0].body.slice(0, 240));
+check("and this plugin did not launder the identity: the refusal is the spool's own authority", pauseAsk.show[0].body.includes('from="impl"') && pauseAsk.show[0].body.includes('from="operator"'), pauseAsk.show[0].body.slice(0, 300));
+const runAsk = await ask("capture --all --run");
+check("`--run` asked of a PRESENT-only-in-name backend names the NOT-RUN gap rather than a false success", runAsk.ok === true && runAsk.plan?.commands?.length === 2 && runAsk.plan.commands.every((c) => c.argv[0] === "tmux"), `cmds ${runAsk.plan?.commands?.length}`);
+check("and the census MARKS the ask as RUN (the owner plane executes those argv; the core itself still ran nothing)", runAsk.show[0].body.includes("named \u2014 RUN") && !runAsk.show[0].body.includes("PRINTED ONLY"), runAsk.show[0].body.match(/backend commands[^\n]*/)?.[0]);
 
 rmSync(tmp, { recursive: true, force: true });
 check("and the rig's live store did not move by a byte for this whole gate", statOf(liveStore) === liveStoreBefore, `selfdev.sqlite mtime ${liveStoreBefore} -> ${statOf(liveStore)}`);

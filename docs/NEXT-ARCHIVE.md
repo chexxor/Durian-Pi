@@ -15903,3 +15903,29 @@ NOTHING transitioned: no row claimed / completed / deferred / minted / routed, n
 # 0.33 s — THE PRESENCE CENSUS: tmux ABSENT, /usr/bin/screen GNU Screen 5.0.2 PRESENT (own version line), zellij + herdr ABSENT (NOT-RUN ~0.001 s, no spawn) — registered != runnable
 
 **Known red:** `node demo/offline.mjs` exits 1 (0.3 s — the loop SETTLES on MemoryStorage) and `demo/restart-limit-behaviour.test.mjs` flakes red under `--jobs 4` on a swap-tight box, green STANDALONE and in area — rules, not defects (`docs/runbooks/suite-red-standalone-green.md`).
+
+**Cut VERBATIM — the 12 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-22 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 1070 B of slice text and therefore of the clock-in digest):**
+
+a LOUD override (`--into` / `--namespace`, and the persistent knobs `DURIAN_PI_MUX_NAMESPACE` / `DURIAN_PI_MUX_SESSION`) that PLACES panes but never grants the right to END a session the user started (`teardown-foreign`, `teardown-every-session`), and every pane an ATTACHED CLIENT that reaches a seat only through the broker's existing `SPOOL_OPS` — no `send-keys`, no `stuff`, no second writer.
+
+DURIG_DB=./selfdev.sqlite timeout 60 node cli.mjs status   # 5.9 s exit 0 — the team's attention and non-terminal work (the seam's panes name a seat; `cli.mjs` HAS NO `--db`, so the store is named by ENV, D103 alias pitfall)
+
+node tools/pointer-row-for-predecessor.mjs --base=8b5a19e1 --for=HEAD --order   # 6.1 s exit 0 — THE CADENCE CLOSER: writes the row for the commit that carries THIS pointer (pitfall 384: a pointer-carrying commit cannot name itself) and re-audits 0 holes / 0 ordering defects
+
+node tools/pointer-table-trim.mjs --base=8b5a19e1 --to=180   # 2.9 s; ONLY with `--writes` once `wc -l docs/NEXT.md` >= 180 (now 188 `wc -l` / 189 split vs the 200 cap) — a plan call AND a write call is a HALF-CUT (pitfall 412)
+
+for f in mux-surface mux-ownership mux-interact mux-keybinds mux-drivers mux-namespace; do node demo/$f.test.mjs; done   # WALL 1.12 / 7.51 / 0.18 / 0.36 / 0.46 / 0.25 s, all exit 0 / 0 FAIL — the SIX mux pins (WALL here; each PASS line carries the host and its own smaller internal seconds)
+
+timeout 200 node scripts/test.mjs --area tui --jobs 4   # 17.7 s 58/58 exit 0 — THE AREA the mux pins live in (was 52/52 / 13–17 s before the seam); NEVER reach them via the ~121 s full suite (pitfall 473)
+
+node demo/test-areas.test.mjs   # 0.09 s exit 0 — 386 tests across 9 areas: answers whether the seam is still inside a declared area, running nothing
+
+node tools/mux-surface-install.mjs --check   # 28 ms exit 0 — `UP TO DATE .pi/extensions/mux-surface.js`; prints STALE + the write command otherwise; do NOT diff or read the installed file
+
+node demo/mux-drivers.test.mjs   # 0.46 s WALL — THE PRESENCE CENSUS (DISTRO tmux ABSENT vs a SELF-BUILT 3.5a PRESENT; registered != runnable; read its own output)
+
+timeout 200 node scripts/test.mjs --area docs --jobs 4   # 66.2 s 8/8 exit 0 — the gate a docs carrier owes; slowest member demo/runbook-diagnose 66.1 s and it reports the screen/tmux census legs as GAP — that GAP is the PASS (pitfall 471)
+
+node tools/broker-serve.mjs --status   # 0.9 s exit 0 — `broker: down (no broker state)`, spool 0 pending / 90 DEAD-LETTER in ./selfdev.sqlite.broker.inbox.error; it also prints `BLOCK live-tree-dirty` while the tree is dirty — re-read after the commit
+
+node tools/keycheck.mjs --level=auth   # 0.19 s exit 1 — notOk:2, configKeyGap ["DEEPINFRA_API_KEY"]: a seat turn today dies at auth before any request

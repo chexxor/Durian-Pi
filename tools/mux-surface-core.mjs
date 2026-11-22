@@ -329,7 +329,11 @@ export function muxOwnershipPlan(store, { create = false, attach = false } = {})
   return {
     ok: false,
     code: "no-session-to-attach",
-    refusal: `mux: ${verdict.reasons.join(" ")} Nothing was started, read or changed.`,
+    // MEASURED 2026-11-21: the rig's own sentence for this leg prints `serve --db <path>`, but `cli.mjs` HAS NO
+    // `--db` and silently ignores an invented one (it acts on the CONFIGURED store, `cli.mjs:174`), so that hint is
+    // a line that would act on the WRONG store. This plugin prints the env-named form and says why the other one is
+    // not offered: a refusal whose copyable line is fiction is the class this seam refuses.
+    refusal: `${verdict.reasons.join(" ")} Nothing was started, read or changed. The command that WOULD own this store is ${startText} (the store is named by ENV: cli.mjs has no --db flag, so an invented --db is silently ignored and acts on the CONFIGURED store), or pass --create to ask for it.`,
     ownership,
     reasons: verdict.reasons,
     start,
@@ -620,7 +624,9 @@ export async function muxSurfaceInvoke(text = "", { env = process.env, cwd = pro
 
 // THE KEY TEXT: the active preset, every other registered preset, and what this plugin CANNOT do. The keys
 // themselves come from the drivers, so this sentence names no backend.
-export function muxKeysText(loaded, state = {}) {
+// The HINT SEAM (criterion 5) takes a THIRD argument: pi's own `KeybindingHints`, which reach an extension
+// through ONE route only — the render context (`node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/types.d.ts:73-77` declares `keyText(keybinding)` and `keyHint(keybinding, description)`, and `EntryRenderOptions extends KeybindingHints` at :1208 is what `registerEntryRenderer` (:1299) hands a renderer). `ExtensionContext`/``ExtensionCommandContext` carry NO hints, so a command handler that is not a renderer CANNOT ask pi for a key; `/mux-keys` therefore appends an entry (`appendEntry`, types.d.ts:1317) and pi renders it. Which fns answered is printed below, never assumed.
+export function muxKeysText(loaded, state = {}, host = {}) {
   const styles = loaded?.styles ?? [];
   const active = loaded?.active;
   const presets = [...(loaded?.drivers ?? new Map()).values()].map((r) => r.driver?.preset).filter(Boolean);
@@ -633,8 +639,113 @@ export function muxKeysText(loaded, state = {}) {
     `active preset: ${activePreset?.style ?? "(none)"} (switch with --preset <style>; a preset is registered by a driver, the core does not name one)`,
     ...chosen.map((p) => `preset ${p.style}:\n${key(p)}`),
     `namespace: the plugin's OWN session is the default (a name derived from the store/workspace, e.g. ${MUX_NAMESPACE_TAG_PREFIX}<workspace>); opt in to the user's session with --into <session> or --namespace user, or persistently with ${MUX_NAMESPACE_ENV}=user / ${MUX_NAMESPACE_SESSION_ENV}=<session>. Every census prints the namespace it acted in.`,
-    `pi renders these from the user's keybindings.json with keyHint()/keyText() (pi 1.5.2 docs/extensions.md:2612-2623)`,
-    `an action no preset carries, or a verb the active driver does not declare, is REFUSED BY NAME — the multiplexer's own key is never forwarded.`,
+    `what pi can rebind, and what it cannot: pi's keybinding ids are a CLOSED vocabulary (vendor/pi-main/packages/tui/src/keybindings.ts:61 exports \`Keybinding = keyof Keybindings\`, and the manager's rebuild() skips an id outside its definitions, so keyText of an unknown id is \"\") \u2014 a mux action is NOT one of those ids, so keybindings.json cannot move a mux key. A user rebinds pi's OWN ids; the plugin's keys are fixed while its preset is chosen. pi's own ids ARE rendered with pi's own fns, in the lines below.`,
+    `an action no preset carries, or a verb the active driver does not declare, is REFUSED BY NAME \u2014 the multiplexer's own key is never forwarded.`,
     styles.length ? `registered styles: ${styles.join(", ")}` : "no preset registered (no driver loaded)",
+    ...muxKeyHintLines(host),
+    ...muxKeyCollisionLines(loaded, host),
   ].join("\n");
+}
+
+// pi's RESERVED extension-conflict list, copied VERBATIM from vendor/pi-main/packages/coding-agent/src/core/
+// extensions/runner.ts:98-117 (measured 2026-11-21). demo/mux-keybinds.test.mjs re-reads that source and FAILS
+// if the two lists drift, which is what makes this copy a rule and not a memory.
+export const MUX_RESERVED_PI_IDS = [
+  "app.interrupt", "app.clear", "app.exit", "app.suspend", "app.thinking.cycle", "app.model.cycleForward",
+  "app.model.cycleBackward", "app.model.select", "app.tools.expand", "app.thinking.toggle", "app.editor.external",
+  "app.message.copy", "app.message.followUp", "tui.input.submit", "tui.select.confirm", "tui.select.cancel",
+  "tui.input.copy", "tui.editor.deleteToLineEnd",
+];
+// pi ids whose keys sit next to a mux action, each with the description its hint carries. The KEYS are asked
+// from pi, never written here: the only honest answer about a key is pi's own keyText/keyHint of that id.
+export const MUX_PI_HINT_IDS = {
+  "app.message.followUp": "to queue a follow-up on the seat this pane shows",
+  "tui.input.submit": "to submit the prompt a pane is typing into",
+  "app.tools.expand": "to expand what the census folded away",
+  "app.editor.external": "to open the external editor (a pane never edits a session)",
+};
+
+// ONE shape for asking pi for a key: {called: true|"threw"|false, text, reason}. Never throws, because a
+// renderer whose hint fns throw must still print the table it was given — a hint that dies silently is the
+// drift this seam exists to catch.
+export function muxKeyText(id, host = {}) {
+  const f = host?.keyText;
+  if (typeof f !== "function") return { called: false, text: null, reason: "no host keyText handed in" };
+  try { return { called: true, text: String(f(id) ?? ""), reason: null }; }
+  catch (err) { return { called: "threw", text: null, reason: String(err?.message ?? err) }; }
+}
+
+export function muxKeyHint(id, description, host = {}) {
+  const f = host?.keyHint;
+  if (typeof f !== "function") return { called: false, text: null, reason: "no host keyHint handed in" };
+  try { return { called: true, text: String(f(id, description) ?? ""), reason: null }; }
+  catch (err) { return { called: "threw", text: null, reason: String(err?.message ?? err) }; }
+}
+
+// pi's resolved key for every RESERVED id — the input to the collision rule below. An id pi does not know
+// formats as "" (measured: keyText("mux.detach") -> ""), which is a fact about the CLOSED vocabulary, not a
+// parse failure.
+export function muxKeyResolve(host = {}, { reserved = MUX_RESERVED_PI_IDS } = {}) {
+  const out = {};
+  for (const id of reserved) out[id] = muxKeyText(id, host);
+  return out;
+}
+
+// THE COLLISION RULE (the trap that costs time): a preset key equal to a RESERVED pi shortcut is not rebound
+// and not shadowed \u2014 pi SKIPS the plugin's shortcut, printing "Extension shortcut '<key>' from <path> conflicts
+// with built-in shortcut. Skipping." (vendor/pi-main/packages/coding-agent/src/core/extensions/runner.ts:697
+// and :699). So the plugin must NAME the collision rather than discover it by a dead key.
+export function muxKeyCollision(presetKeys, resolved) {
+  const hits = [];
+  for (const p of presetKeys) {
+    const combo = String(p.combo).toLowerCase();
+    for (const [id, r] of Object.entries(resolved)) {
+      if (r?.called !== true || !r.text) continue;
+      const piKeys = String(r.text).toLowerCase().split("/");
+      if (piKeys.includes(combo)) hits.push({ style: p.style, action: p.action, combo: p.combo, piId: id });
+    }
+  }
+  return hits;
+}
+
+// The rendered hint lines: pi's own fns answering for pi's own ids, or the named reason they did not answer.
+export function muxKeyHintLines(host = {}, { ids = MUX_PI_HINT_IDS } = {}) {
+  const rows = Object.entries(ids).map(([id, description]) => {
+    const hint = muxKeyHint(id, description, host);
+    if (hint.called === true) return `  pi id ${id} \u2014 ${hint.text}  (rendered by pi's keyHint)`;
+    const text = muxKeyText(id, host);
+    if (text.called === true) return `  pi id ${id} \u2014 keyHint did not answer (${hint.reason}); keyText says "${text.text}"`;
+    return `  pi id ${id} \u2014 NO host KeybindingHints handed in, so pi was never asked for this key`;
+  });
+  const gap = muxKeyText("mux.list", host);
+  rows.push(`  the plugin's own actions are NOT pi ids: ${gap.called === true ? `keyText("mux.list") answered "${gap.text}"` : `keyText("mux.list") was not asked`} \u2014 pi registers a plugin's keys as LITERAL shortcuts, so a mux key is fixed while its preset is chosen.`);
+  return [rows.join("\n")];
+}
+
+// The collision verdict for the ACTIVE and every other registered preset, or the named reason it could not
+// be computed. "no collision" is only evidence when pi actually answered for the RESERVED ids.
+export function muxKeyCollisionLines(loaded, host = {}) {
+  const presets = [...(loaded?.drivers ?? new Map()).values()].map((r) => r.driver?.preset).filter(Boolean);
+  const presetKeys = presets.flatMap((p) => Object.entries(p.keys ?? {}).map(([action, combo]) => ({ style: p.style, action, combo })));
+  const resolved = muxKeyResolve(host, { reserved: MUX_RESERVED_PI_IDS });
+  const asked = Object.values(resolved).filter((r) => r.called === true).length;
+  if (!asked)
+    return [`collision check NOT RUN \u2014 no host keyText handed in, so pi's reserved keys were never read (0 of ${MUX_RESERVED_PI_IDS.length} ids asked)`];
+  const hits = muxKeyCollision(presetKeys, resolved);
+  if (!hits.length)
+    return [`no preset key collides with a RESERVED pi shortcut (pi answered for ${asked} of ${MUX_RESERVED_PI_IDS.length} reserved ids; ${presetKeys.length} preset keys checked)`];
+  return [
+    `COLLISION \u2014 pi would SKIP these plugin shortcuts and print "conflicts with built-in shortcut. Skipping.": ${hits.map((h) => `${h.style} preset ${h.action} (${h.combo}) == ${h.piId}`).join("; ")}. A preset that needs such a key is a naming defect in that driver's preset, fixed there.`,
+  ];
+}
+
+// THE ENTRY RENDERER BODY, registered by the extension through pi.registerEntryRenderer. `options` IS pi's
+// EntryRenderOptions (keyHint/keyText/expanded); `Text` is pi-tui's component class, imported on the pi plane
+// only. With no Text (a headless pin) it returns the same body as a plain marker so the pin can still read
+// what the renderer would print.
+export function muxKeysRender(entry, options, theme = null, { Text = null } = {}) {
+  const host = { keyText: options?.keyText, keyHint: options?.keyHint };
+  const body = muxKeysText(entry?.data?.loaded, entry?.data?.state ?? {}, host);
+  if (typeof Text !== "function") return { component: "none (no pi-tui Text on this plane)", body };
+  return new Text(body, 0, 0);
 }
