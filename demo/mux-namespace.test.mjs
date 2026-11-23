@@ -22,13 +22,16 @@
 //   6. THE REAL BACKEND LEG (GNU Screen 5.0.2 IS on this host) — the user's session is created FIRST by a raw
 //      argv, the plugin's session is created THROUGH THE SEAM, both are censused together, the user's row is
 //      BYTE-IDENTICAL after the plugin acted (proof it was not touched), the plugin's window really is named
-//      after the seat, and each session this pin created is killed by its OWN census pid. The pane command runs
-//      a SHIM tui.mjs written into the temp workspace, so this proves session creation + census + teardown on the
-//      real backend, NOT the rig's attach surface.
+//      after the seat, and each session this pin created is killed by its OWN census pid. THE PANE IS THE PLUGIN'S
+//      OWN ATTACHED CLIENT (tools/mux-pane-client.mjs, spelled by the core's muxPaneArgv) running on a REAL temp
+//      store that a REAL detached broker ALREADY owns — the pane ATTACHES (it refuses rather than creating an owner),
+//      and the census 2 s later still finding the plugin's session AND its window named after the seat is the
+//      residency proof, because screen ENDS a session whose last window dies.
 //
 // HERMETIC: sections 1-5 start no process (the present rows are handed in; the only spawn in them is the presence
-// probe, which reads a version line). Section 6 runs this host's GNU Screen and a 30 s-bounded shim in a temp
-// dir. The rig's live store is never opened: its mtime and size must not move by a byte.
+// probe, which reads a version line). Section 6 runs this host's GNU Screen, a REAL temp store seeded with one
+// seat on the MOCKED fauxProvider plane (no key, no network, no funded model), and the rig's OWN bounded detached
+// broker on that store. The rig's live store is never opened: its mtime and size must not move by a byte.
 // Run: node demo/mux-namespace.test.mjs (exit 0 = pass)
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,7 +49,15 @@ import {
   muxSurfaceDrivers,
   muxSurfaceInvoke,
 } from "../tools/mux-surface-core.mjs";
-import { muxRunArgv, muxRunPlan, muxListSessions, muxProbeBackends } from "../tools/mux-surface-owner.mjs";
+import { muxRunArgv, muxRunPlan, muxListSessions, muxProbeBackends, muxStartOwner, muxStopOwner } from "../tools/mux-surface-owner.mjs";
+import { brokerStatePath, readBrokerState } from "../src/broker.mjs";
+import { assessStoreOwnership } from "../src/storeownership.mjs";
+import { Harness, createRegistry } from "@earendil-works/pi-durable";
+import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { createModels } from "@earendil-works/pi-ai/models";
+import { fauxProvider } from "@earendil-works/pi-ai/providers/faux";
+import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
+import { Router, registerSeat } from "../src/rig.mjs";
 
 const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
 const TOOLS = join(ROOT, "tools");
@@ -61,6 +72,8 @@ const check = (label, ok, detail = "") => {
   failures += 1;
   process.stdout.write(`FAIL ${label}: ${detail}\n`);
 };
+const sleepMs = (ms) => new Promise((f) => setTimeout(f, ms));
+const ctxPane = BACKGROUND_CONTEXT;
 
 // THE HERMETIC WORLD: one workspace, one store that is NEVER created, two sessions already present in the
 // multiplexer — the plugin's own, and the user's, which holds a dozen other harnesses.
@@ -188,11 +201,33 @@ if (screenHere) {
   const rw = join(real, "w1");
   mkdirSync(rw);
   const rstore = join(rw, "selfdev.sqlite");
-  // THE SHIM: the pane command the driver spells is node tui.mjs --db <store> --attach --select <seat>, run in
-  // the workspace dir. Without a file there, node exits at once and a detached session whose window exits ENDS
-  // (screen's own semantics). So this leg proves session creation + census + teardown on the REAL backend, NOT
-  // the rig's attach surface. The shim is BOUNDED: it exits at 30 s, so the pin cannot leave an orphan.
-  writeFileSync(join(rw, "tui.mjs"), "// SHIM standing in for the rig's TUI (this pin proves session creation + census + teardown, not the attach surface)\nsetTimeout(() => process.exit(0), 30_000);\n");
+  // NO SHIM. The pane command the driver spells is the core's ONE pane argv (muxPaneArgv: <execPath> <abs
+  // tools/mux-pane-client.mjs> --db <store> --select <seat> --pane <name>), and that client REFUSES unless a live
+  // broker ALREADY owns the store (contract (3): the pane ATTACHES, it never CREATES an owner). So this leg seeds a
+  // REAL temp store with one seat on the MOCKED fauxProvider plane (no key, no network, no funded model) and starts
+  // the rig's OWN detached owner on it, bounded by --max-duration. A pane that refused or exited would leave a DEAD
+  // window, and screen ENDS a session whose last window dies — so the census 2 s later is the residency proof.
+  {
+    const stPane = await openNodeSqliteStorage(rstore, { busyTimeoutMs: 15_000 });
+    const faux = fauxProvider({ models: [{ id: "faux-seat" }] });
+    const models = createModels();
+    models.setProvider(faux.provider);
+    const registry = createRegistry();
+    registry.install(Router);
+    const writer = await Harness.open(stPane, { models, registry }, ctxPane);
+    const seedRoot = await writer.root(ctxPane, { agent: { model: { provider: "faux", modelId: "faux-seat" }, cwd: rw } });
+    await writer.commit(async (tx) => { await registerSeat(tx, "impl", seedRoot.id, "worker"); }, ctxPane);
+    await writer.close(ctxPane);
+    await stPane.close(ctxPane);
+  }
+  const seededSize = statSync(rstore).size;
+  check("the store the pane will read EXISTS before any pane ran, seeded with one seat (the seam ATTACHES to it; it created nothing)", existsSync(rstore) && seededSize > 0, `size ${seededSize}`);
+  process.env.DURIG_PROVIDER = "faux";
+  const owner = await muxStartOwner(rstore, { maxDurationSec: 120, logDir: join(real, ".muxlogs") });
+  check("the RIG'S OWN detached owner is resident on that temp store (a real pid, not this pin's)", owner.ok === true && Number.isInteger(owner.pid) && owner.pid > 0, JSON.stringify({ ok: owner.ok, pid: owner.pid }));
+  let ownPane = null;
+  for (let i = 0; i < 30 && (ownPane = assessStoreOwnership(rstore, {}))?.owned !== true; i += 1) await sleepMs(400);
+  check("and the rig's own ownership census reads OWNED before the pane runs (keyed on `owned`; `broker.alive` reads undefined for a live broker here)", ownPane?.owned === true, `owned ${ownPane?.owned} pid ${ownPane?.broker?.pid}`);
   const screenDriver = loaded.drivers.get("screen").driver;
   const pre = await muxListSessions(screenDriver, { cwd: rw, session: tag, tag, namespace: MUX_NAMESPACE_DEFAULT, timeoutMs: 5000 });
   const baseline = new Set(pre.sessions.map((r) => r.name));
@@ -206,14 +241,16 @@ if (screenHere) {
   check("and the DEFAULT namespace does NOT aim at it: censusTarget null, the user's row foreign", nsReal.ok && nsReal.namespace === MUX_NAMESPACE_DEFAULT && nsReal.censusTarget === null && nsReal.foreign.some((f) => f.name === userRow?.name && f.touched === false), `censusTarget ${JSON.stringify(nsReal.censusTarget)} foreign ${JSON.stringify(nsReal.foreign)}`);
   check("the bare aim refused the window leg against a REAL binary (no argv for a name screen cannot match)", c1.notes.some((n) => /NO CENSUS LABEL/.test(n)), c1.notes.join(" | ").slice(0, 300));
   const openPlan = muxPlan("open", {}, { session: nsReal.sessionName, sessionTag: nsReal.censusTarget, tag: nsReal.tag, namespace: nsReal.namespace, panes: [{ seat: "impl", paneName: "impl", conversationId: "conv-impl" }], drivers: loaded.drivers, backend: "screen", store: rstore });
-  check("namespace B is created THROUGH THE SEAM: one command, detached, the window named after the SEAT, the pane an ATTACHED client of the store", openPlan.ok && openPlan.commands.length === 1 && openPlan.commands[0].argv.slice(0, 5).join(" ") === `screen -c /dev/null -dmS ${tag}` && openPlan.commands[0].argv.slice(7).join(" ") === `node tui.mjs --db ${rstore} --attach --select impl` && openPlan.commands[0].cwd === rw, openPlan.commands.map((c) => c.argv.join(" ")).join(" || "));
+  check("namespace B is created THROUGH THE SEAM: one command, detached, the window named after the SEAT, the pane an ATTACHED client of the store", openPlan.ok && openPlan.commands.length === 1 && openPlan.commands[0].argv.slice(0, 5).join(" ") === `screen -c /dev/null -dmS ${tag}` && openPlan.commands[0].argv.slice(-8).join(" ") === `${process.execPath} ${join(TOOLS, "mux-pane-client.mjs")} --db ${rstore} --select impl --pane impl` && openPlan.commands[0].cwd === rw, openPlan.commands.map((c) => c.argv.join(" ")).join(" || "));
   const ranOpen = await muxRunPlan(openPlan, { run: true, timeoutMs: 8000 });
   check("the ONE door ran it (run:true is the ask) and the session came to exist", ranOpen.ran && ranOpen.ok && ranOpen.steps.length === 1 && ranOpen.steps[0].rc === 0, `ran ${ranOpen.ran} ok ${ranOpen.ok} rc ${ranOpen.steps[0]?.rc} ms ${ranOpen.steps[0]?.ms}`);
-  check("the pane plane created NO store (a viewport is not a second writer)", existsSync(rstore) === false, `existsSync(${rstore})`);
+  check("the pane plane created NO store: the store the pane reads was ALREADY THERE, seeded to ${seededSize} bytes before the seam ran (the pane ATTACHES, it never creates an owner)", existsSync(rstore) && statSync(rstore).size >= seededSize, `seed ${seededSize} now ${statSync(rstore).size}`);
+  await sleepMs(2_000); // THE RESIDENCY WINDOW: screen ENDS a session whose last window dies, so a census 2 s later is the measurement
   const c2 = await muxListSessions(screenDriver, { cwd: rw, session: tag, tag, namespace: MUX_NAMESPACE_DEFAULT, timeoutMs: 5000 });
   const pluginRow = c2.sessions.find((r) => r.tag === tag);
   const userRow2 = c2.sessions.find((r) => r.tag === "user-watching");
   check("TWO rows now: the plugin's own session BESIDE the user's, never inside it", !!pluginRow && !!userRow2 && c2.sessions.length === baseline.size + 2, `rows ${c2.sessions.map((r) => `${r.name}(${r.state})`).join(",")}`);
+  check("AND the plugin's session is STILL THERE 2 s after its window's command started — the plugin's OWN pane client was RESIDENT (a pane that refused or exited would have left a dead window and an ENDED session)", !!pluginRow, `rows ${c2.sessions.map((r) => `${r.name}(${r.state})`).join(",")}`);
   check("and the user's row is BYTE-IDENTICAL after the plugin acted (the proof its session was not touched)", JSON.stringify(userRow2) === JSON.stringify(userRow), `${JSON.stringify(userRow)} vs ${JSON.stringify(userRow2)}`);
   const nsReal2 = muxNamespace({ store: rstore, cwd: rw, state: { verb: "list" }, env: {}, backend: "screen", drivers: loaded.drivers, present: c2.sessions });
   check("the census LEARNS the plugin's label and the plan carries it (a bare name cannot address the socket)", nsReal2.ok && nsReal2.censusTarget === pluginRow?.name && nsReal2.foreign.length === c2.sessions.length - 1, `label ${JSON.stringify(nsReal2.censusTarget)} foreign ${nsReal2.foreign.length}`);
@@ -229,6 +266,15 @@ if (screenHere) {
     }
   });
   check("each session THIS PIN created is torn down by its OWN census pid (never pkill -f, never -wipe)", mine.length === 2 && killed.every((s) => !/ENOPRO|kill ERETRY|ENOENT/.test(s)), killed.join(" "));
+  process.env.DURIG_STOP_GRACE_MS = "0"; // cli.mjs:2388 resolveStopGraceMs honours 0, so the pin pays the grace once
+  const stopPane = muxStopOwner(rstore, { timeoutMs: 20_000 });
+  check("and the broker owner this leg started is halted by the rig's OWN off switch", stopPane.ok === true && stopPane.rc === 0, `ok ${stopPane.ok} rc ${stopPane.rc} ms ${stopPane.ms}`);
+  let statePane = readBrokerState(rstore);
+  for (let i = 0; i < 20 && statePane !== null; i += 1) {
+    await sleepMs(250);
+    statePane = readBrokerState(rstore);
+  }
+  check("and its state file is GONE, so no orphan owner survives the pin", statePane === null && !existsSync(brokerStatePath(rstore)), `state ${existsSync(brokerStatePath(rstore))}`);
   const c4 = await muxListSessions(screenDriver, { cwd: rw, session: tag, tag, namespace: MUX_NAMESPACE_DEFAULT, timeoutMs: 5000 });
   check("and after teardown NO session this pin created remains (a session the USER started elsewhere is still only reported)", c4.sessions.length === baseline.size && c4.sessions.every((r) => baseline.has(r.name)), `left ${c4.sessions.map((r) => r.name).join(",")} baseline ${[...baseline].join(",")} notes ${c4.notes.join(" | ")}`);
   check("the census says honestly when the sockets are gone (rc 1, No Sockets found)", baseline.size > 0 || c4.notes.some((n) => /census rc 1/.test(n)), c4.notes.join(" | "));
@@ -244,7 +290,7 @@ check("and its size is unchanged", statSync(liveStore).size === liveSize, `size 
 
 const secs = ((Date.now() - t0) / 1000).toFixed(2);
 if (failures === 0) {
-  process.stdout.write(`\nMUX-NAMESPACE PASS (${secs}s total${realRan ? ", real GNU Screen leg included" : ", REAL-BACKEND LEG SKIPPED"}; ${MUX_NAMESPACE_TAG_PREFIX}tag derivation in core 4 checks) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — the plugin's namespace is a NAME THE CORE DERIVES from the store (durian-w1 here, durian-w2 for another workspace, the core naming zero backend words), so the DEFAULT census names the plugin's OWN session and reports the user's other session as PRESENT, NOT TOUCHED with its pane count and touched:false, while the census-learned label (99097.durian-w1) is what reaches the driver's window leg — a bare aim emits NO argv and keeps the gap because screen cannot match a bare name. ${leaks.length} leak classes are refused BY NAME at BOTH the core's own decision and the whole invoke: --every-session, an --into that names a foreign session while the namespace is still plugin (the flag form AND the DURIAN_PI_MUX_SESSION form), --namespace user with no session named, the knob outside the closed vocabulary, and a flag contradicting a knob — each with the namespace printed, the legal ask named, and NO partial census (panes 0, no census line). A plugin-namespace halt aimed at a session that does not carry the tag is refused teardown-foreign against a SYNTHETIC driver (no real driver can reach it: each sessionName returns the tag). The override is LOUD: --into names the user's session and the census prints namespace user plus NAMESPACE OVERRIDE and says the plugin's own session was NOT used, and the two persistent knobs do the same with no flag, attributed to the knob that answered.${realRan ? " On THIS host the real leg created the user's own screen session FIRST by a raw argv, created the plugin's session THROUGH the seam (detached, window named after the seat, the pane command an attached client of a store the plane never created), censused BOTH rows, showed the user's row BYTE-IDENTICAL after the plugin acted, ran the window leg only against the census label and found the window named impl, then killed each session by its OWN census pid and re-censused to no rows" : ""}; the rig's live store did not move by a byte (${liveSize} bytes, mtime ${liveMtime})\n`);
+  process.stdout.write(`\nMUX-NAMESPACE PASS (${secs}s total${realRan ? ", real GNU Screen leg included" : ", REAL-BACKEND LEG SKIPPED"}; ${MUX_NAMESPACE_TAG_PREFIX}tag derivation in core 4 checks) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — the plugin's namespace is a NAME THE CORE DERIVES from the store (durian-w1 here, durian-w2 for another workspace, the core naming zero backend words), so the DEFAULT census names the plugin's OWN session and reports the user's other session as PRESENT, NOT TOUCHED with its pane count and touched:false, while the census-learned label (99097.durian-w1) is what reaches the driver's window leg — a bare aim emits NO argv and keeps the gap because screen cannot match a bare name. ${leaks.length} leak classes are refused BY NAME at BOTH the core's own decision and the whole invoke: --every-session, an --into that names a foreign session while the namespace is still plugin (the flag form AND the DURIAN_PI_MUX_SESSION form), --namespace user with no session named, the knob outside the closed vocabulary, and a flag contradicting a knob — each with the namespace printed, the legal ask named, and NO partial census (panes 0, no census line). A plugin-namespace halt aimed at a session that does not carry the tag is refused teardown-foreign against a SYNTHETIC driver (no real driver can reach it: each sessionName returns the tag). The override is LOUD: --into names the user's session and the census prints namespace user plus NAMESPACE OVERRIDE and says the plugin's own session was NOT used, and the two persistent knobs do the same with no flag, attributed to the knob that answered.${realRan ? " On THIS host the real leg created the user's own screen session FIRST by a raw argv, created the plugin's session THROUGH the seam (detached, window named after the seat, the pane command the core's ONE pane argv — <execPath> <abs tools/mux-pane-client.mjs> --db <store> --select impl --pane impl, the PLUGIN'S OWN attached client, not the rig's full TUI and NOT a shim), on a REAL temp store seeded with one seat on the mocked fauxProvider plane that the rig's OWN detached broker ALREADY owns (the pane ATTACHES, it never creates an owner), censused BOTH rows, showed the user's row BYTE-IDENTICAL after the plugin acted, ran the window leg only against the census label and found the window named impl 2 s after the window opened — the plugin's OWN pane client was RESIDENT, since screen ENDS a session whose last window dies — then killed each session by its OWN census pid, halted the broker with the rig's own off switch at DURIG_STOP_GRACE_MS=0 and asserted its state file GONE, and re-censused to no rows" : ""}; the rig's live store did not move by a byte (${liveSize} bytes, mtime ${liveMtime})\n`);
   process.exit(0);
 }
 process.stdout.write(`${failures} FAILURE(S)\n`);

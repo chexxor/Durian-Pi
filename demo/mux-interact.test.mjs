@@ -30,6 +30,7 @@ import { join } from "node:path";
 
 import {
   muxActRequest,
+  muxPaneArgv,
   muxSurfaceInvoke,
   muxSurfaceDrivers,
   muxRefusalText,
@@ -168,7 +169,9 @@ for (const [name, rec] of registry.drivers) {
   check(`the ${name} driver names NO \`act\` command (an act is backend-free: the broker's spool)`, !Object.keys(d?.commands ?? {}).includes("act"), `${name} commands ${Object.keys(d?.commands ?? {}).join(",")}`);
   for (const verb of verbs) {
     for (const shape of shapes) {
-      const made = d.commands?.[verb]?.({ sessionName: "durian-w1", sessionTag: "9001.durian-w1", tag: "durian-w1", namespace: "plugin", pane: shape.pane, store, backend: name, verb, index: shape.index, total: shape.total });
+      // the plan the SEAM hands a driver is this object (`muxPlan` in the core), so it carries `paneArgv` — the
+      // pane command is the core's decision, HANDED IN as data, never imported by a driver.
+      const made = d.commands?.[verb]?.({ sessionName: "durian-w1", sessionTag: "9001.durian-w1", tag: "durian-w1", namespace: "plugin", pane: shape.pane, store, backend: name, verb, index: shape.index, total: shape.total, paneArgv: muxPaneArgv(store, shape.pane?.seat, shape.pane?.paneName) });
       if (!made) continue;
       if (!made.argv) { notes.push(`${name} ${verb} -> NO argv (a named gap)`); continue; }
       seen.push({ backend: name, verb, argv: made.argv });

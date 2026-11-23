@@ -17,9 +17,12 @@
 //   6. A PRESET BLOCK THAT THROWS DOES NOT EAT /mux — the fallback names itself.
 //   7. NO PRESET KEY BORROWS A PI DEFAULT — every combo is ctrl+shift+letter and never pi's f/g/p.
 //   8. A CAPABILITY A DRIVER DOES NOT DECLARE IS REFUSED BY NAME with the declared set printed.
-//   9. THE `send` LEG IS AN OPEN GAP, PINNED AS REFUSED — the preset names `mux.send`, the core has no `send` verb,
-//      and no driver names a `send` command. What is true today is a REFUSAL, not a route to the spool: the gap is
-//      reported, not papered over (the goal's contract (4) wants send to be the spool, so this row is owed work).
+//   9. THE `send` LEG IS ROUTED — every preset names `mux.send`, so that key is a PRESET KEY and a name that
+//      answers "not a mux verb" is a dead key wearing a product name (the completion auditor's objection 3). It
+//      resolves through the ONE verb table to the core's act leg pinned to --op message (the broker's spool);
+//      a contradicting --op is a NEW refusal BY NAME (send-op-conflict), and no driver names a `send` command,
+//      so the verb is routed to the spool and NOT to a keystroke primitive. The decision sits in the CORE, not
+//      in a driver, because a key style IS a backend word and the core must stay backend-word-free.
 //  10. PI'S OWN HINT FNS, RUN ON PI'S OWN PLANE — contract (5) says the vocabulary is "rendered with pi's own
 //      keyHint()/keyText()", and those two fns are reachable from an extension through ONE route only: the entry
 //      renderer (`EntryRenderOptions extends KeybindingHints`), never a command handler. So this section imports the
@@ -82,7 +85,7 @@ const allKeys = presets.flatMap((p) => Object.entries(p.keys).map(([action, comb
 check("every preset action is spelled mux.<name>, so one split turns a key into a verb", allKeys.every((k) => /^mux\.[a-z]+$/.test(k.action)), `${allKeys.filter((k) => !/^mux\.[a-z]+$/.test(k.action)).map((k) => k.action).join(",") || "(none)"}`);
 const presetActions = [...new Set(allKeys.map((k) => k.action.slice(4)))];
 const orphan = presetActions.filter((a) => !MUX_VERB_NAMES.includes(a));
-check("and the core's verb list is what answers: a preset name that is NOT a verb is FOUND, not assumed absent", orphan.length === 1 && orphan[0] === "send", `orphan(s): ${orphan.join(",")} (${presets.length} styles x their actions)`);
+check("and the core's verb list is what answers: EVERY preset name is a verb, so no preset key is dead", orphan.length === 0, `orphan(s): ${orphan.join(",")} (${presets.length} styles x their actions)`);
 const unnamed = MUX_VERB_NAMES.filter((v) => !presetActions.includes(v));
 check("and the ONLY core verbs no preset carries are act and keys (a seat act is backend-free; keys is the table itself)", JSON.stringify([...unnamed].sort()) === JSON.stringify(["act", "keys"]), `unnamed: ${unnamed.join(",")}`);
 
@@ -90,7 +93,7 @@ console.log("\n=== 2. FOUR PRESET STYLES ARE REGISTERED BY DRIVERS, NOT BRANCHED
 check("four styles are registered", presets.length === 4 && loaded.styles.length === 4, `${loaded.styles.join(",")}`);
 check("the styles are exactly the drivers' own styles (the core composes them, it does not name one)", JSON.stringify([...loaded.styles].sort()) === JSON.stringify(["herdr", "screen", "tmux", "zellij"]), loaded.styles.join(","));
 check("every preset carries a style AND a key table", presets.every((p) => p.style && Object.keys(p.keys).length >= 8), `${presets.map((p) => `${p.style}=${Object.keys(p.keys).length}`).join(" ")}`);
-check("a style is a driver file name, so --preset validates against the registry", (async () => {
+check("a style is a driver file name, so --preset validates against the registry", await (async () => {
   const bad = await muxSurfaceInvoke("keys --preset not-a-style", { env: {}, cwd: ROOT, store: join(tmp, "no-store.sqlite") });
   return bad.ok === false && bad.exitCode === 1 && bad.show[0].body.includes("is not registered") && loaded.styles.every((s) => bad.show[0].body.includes(s));
 })(), "--preset unknown prints the registered styles");
@@ -102,11 +105,11 @@ const activeDriver = loaded.drivers.get(activeBackend)?.driver;
 check("nothing was asked => the ACTIVE backend is a driver rank fact, not a name in the core", activeBackend === "tmux" && activeDriver.rank === 100 && activeBackend === loaded.ranked[0], `ranked ${loaded.ranked.join(",")} ranks ${loaded.ranked.map((b) => loaded.drivers.get(b)?.driver?.rank).join(",")}`);
 const screenEnv = await muxSurfaceDrivers({ dir: join(ROOT, "tools"), env: { [MUX_BACKEND_ENV]: "screen" } });
 check(`and ${MUX_BACKEND_ENV}=screen moves the ACTIVE backend AND its preset together`, screenEnv.active === "screen" && screenEnv.drivers.get("screen").driver.preset.style === "screen" && screenEnv.requested === "screen", `active ${screenEnv.active} style ${screenEnv.drivers.get(screenEnv.active).driver.preset.style}`);
-check("and an unregistered --backend does NOT become the default (a typo never silently re-keys the session)", (async () => {
+check("and an unregistered --backend does NOT become the default (a typo never silently re-keys the session)", await (async () => {
   const r = await muxSurfaceInvoke("list --backend nosuch --all", { env: {}, cwd: ROOT, store: join(tmp, "no-store.sqlite") });
   return r.ok === false && r.show[0].body.includes("is not registered") && loaded.names.every((n) => r.show[0].body.includes(n));
 })(), "--backend typo refused with the registered set");
-check("and an unregistered --preset is refused BY NAME with every registered style printed", (async () => {
+check("and an unregistered --preset is refused BY NAME with every registered style printed", await (async () => {
   const bad = await muxSurfaceInvoke("keys --preset not-a-style", { env: {}, cwd: ROOT, store: join(tmp, "no-store.sqlite") });
   return bad.ok === false && bad.exitCode === 1 && bad.show[0].body.includes("is not registered") && loaded.styles.every((s) => bad.show[0].body.includes(s));
 })(), "--preset unknown prints the registered styles");
@@ -145,7 +148,7 @@ check("and every other style's combos are NOT registered, even where they collid
   return shared.length > 0 && calls.shortcuts.map((s) => s.combo).join(",") === activeKeys.map(([, c]) => c).join(",");
 })(), `${allKeys.length} keys across 4 styles, ${activeCombos.size} registered`);
 check("and each shortcut's description names the backend whose preset it came from", calls.shortcuts.every((s) => String(s.spec?.description ?? "").includes(activeBackend)), `${calls.shortcuts[0].spec?.description}`);
-check("and each shortcut resolves to a core verb through the ONE table", activeKeys.every(([action]) => MUX_VERB_NAMES.includes(action.slice(4)) || action === "mux.send"), "");
+check("and each shortcut resolves to a core verb through the ONE table (no exception for send: send IS a verb)", activeKeys.every(([action]) => MUX_VERB_NAMES.includes(action.slice(4))), "");
 check("and the command's own description IS the core's (one description, two registrations)", calls.commands[0].spec?.description === MUX_SURFACE_DESCRIPTION, `${String(calls.commands[0].spec?.description ?? "(none)").slice(0, 80)} vs ${MUX_SURFACE_DESCRIPTION.slice(0, 80)}`);
 check("and the argument box is the core's completion table, so a flag cannot be offered and then refused", (() => {
   const comp = calls.commands[0].spec?.getArgumentCompletions?.("--st");
@@ -195,21 +198,36 @@ check("and an unregistered backend is refused BY NAME too, not treated as all-ca
   const r = muxCapability("dwm", "list", { drivers: loaded.drivers });
   return r.ok === false && r.code === "backend-not-registered" && loaded.names.every((n) => r.refusal.includes(n));
 })(), "backend-not-registered");
-check("and the PLAN turns an undeclared verb into that refusal rather than a zero-command success", (async () => {
+check("and the PLAN turns an undeclared verb into that refusal rather than a zero-command success", await (async () => {
   const out = await muxSurfaceInvoke("detach --pane p1 --backend herdr", { env: {}, cwd: ROOT, store: join(tmp, "no-store.sqlite") });
   return out.ok === false && out.exitCode === 1 && out.show[0].body.includes("does not declare");
 })(), "detach on herdr refused at the plan");
 
-console.log("\n=== 9. THE send LEG IS AN OPEN GAP — PINNED AS A REFUSAL, NOT AS A ROUTE ===");
-const sendOut = await muxSurfaceInvoke("send", { env: {}, cwd: ROOT, store: join(tmp, "no-store.sqlite") });
-check("the active preset's send key currently answers send-is-not-a-verb (the truth today)", sendOut.ok === false && sendOut.exitCode === 1 && sendOut.show[0].body.includes("`send` is not a mux verb"), `${String(sendOut.show[0].body).slice(0, 140)}`);
-check("and the refusal prints the verbs that DO exist, so a user can correct to act", MUX_VERB_NAMES.every((v) => sendOut.show[0].body.includes(v)) && sendOut.show[0].body.includes(MUX_USAGE), String(sendOut.show[0].body).slice(0, 200));
-check("and NO driver names a send command (so nothing here is one keystroke away from a second writer)", loaded.names.every((n) => !Object.keys(loaded.drivers.get(n).driver?.commands ?? {}).includes("send")), `${loaded.names.filter((n) => Object.keys(loaded.drivers.get(n).driver?.commands ?? {}).includes("send")).join(",")}`);
-check("and the extension forwards a preset key as the bare verb (which is why send lands in the refusal)", readFileSync(join(ROOT, "tools", "mux-surface-extension.js"), "utf8").includes("muxSurfaceInvoke(verb,"), "the shortcut handler calls muxSurfaceInvoke(verb, ...)");
-check("and the core HAS the route it needs (act --op message is the spool leg), so the fix is a table row, not a new door", (async () => {
-  const a = await muxSurfaceInvoke("act impl --op message --text \"steer me\"", { env: {}, cwd: ROOT, store: join(tmp, "no-store.sqlite") });
-  return a.ok === true && a.exitCode === 0;
-})(), "act --op message answers ok");
+console.log("\n=== 9. THE send LEG IS ROUTED: the preset key resolves to the core's ONE spool op ===");
+// THE PIN'S IN-MEMORY PLANE — the same seams shape the other mux pins use, so this section witnesses the
+// ROUTE without a store, a binary, or a model. The seats are DATA handed to the core; the core decides.
+const sendStore = join(tmp, "no-store-send.sqlite");
+const sendSeats = [{ name: "impl", conversationId: "conv-impl" }, { name: "qa", conversationId: "conv-qa" }];
+const sendSeams = { drivers: loaded, readSeats: async () => sendSeats, readRows: async () => [], sessions: async () => [] };
+check("send is IN the one verb table, so MUX_USAGE offers the key and the parser accepts it", MUX_VERB_NAMES.includes("send") && MUX_USAGE.includes("send <seat ...>"), `${MUX_VERB_NAMES.join(",")}`);
+const bareSend = await muxSurfaceInvoke("send", { env: {}, cwd: ROOT, seams: sendSeams, store: sendStore });
+check("a bare send asks for a selector rather than writing (a send with no target has no seat to route to)", bareSend.ok === false && bareSend.exitCode === 1 && bareSend.show[0].body.includes("send needs a selector"), `${String(bareSend.show[0].body).slice(0, 140)}`);
+const sendAsk = await muxSurfaceInvoke("send impl --text \"steer me\"", { env: {}, cwd: ROOT, seams: sendSeams, store: sendStore });
+check("send answers ok — the preset key is a ROUTED verb, not a dead key wearing a product name", sendAsk.ok === true && sendAsk.exitCode === 0, JSON.stringify({ ok: sendAsk.ok, exit: sendAsk.exitCode, body: String(sendAsk.show[0]?.body ?? "").slice(0, 160) }));
+const sendBody = sendAsk.show.map((l) => l.body).join("\n");
+check("and the request it holds is the broker's MESSAGE spool op aimed at the pane's OWN seat (contract (4))", sendBody.includes("act \u2014 pane impl seat impl spool op message") && sendBody.includes("\"op\":\"message\"") && sendBody.includes("\"to\":\"impl\"") && sendBody.includes("\"from\":\"impl\""), sendBody.slice(0, 400));
+check("and it printed the census and the request even without --run, so an act that ran nothing says what it holds", sendBody.includes("mux census") && !/act RESULT/.test(sendBody), "census printed, no RESULT line: nothing was delivered");
+check("and the store was never created by a send that did not pass --run", !existsSync(sendStore), `store ${existsSync(sendStore)}`);
+const sendConflict = await muxSurfaceInvoke("send impl --op stop", { env: {}, cwd: ROOT, seams: sendSeams, store: sendStore });
+check("a contradicting --op is REFUSED BY NAME, never re-routed and never silently ignored", sendConflict.ok === false && sendConflict.exitCode === 1 && sendConflict.show[0].body.includes("send names the message spool op") && sendConflict.show[0].body.includes("--op stop contradicts it"), `${String(sendConflict.show[0].body).slice(0, 200)}`);
+check("and the refusal prints the spelling that DOES mean the other op, so the correction is complete", sendConflict.show[0].body.includes("act <seat> --op stop") && sendConflict.show[0].body.includes("Nothing was written"), `${String(sendConflict.show[0].body).slice(0, 240)}`);
+check("and NO driver names a send command, so `send` is a verb routed to the spool and NOT a keystroke primitive", loaded.names.every((n) => !Object.keys(loaded.drivers.get(n).driver?.commands ?? {}).includes("send")), `${loaded.names.filter((n) => Object.keys(loaded.drivers.get(n).driver?.commands ?? {}).includes("send")).join(",")}`);
+check("and EVERY registered preset names mux.send, which is why this row is a preset key and not an optional verb", presets.every((p) => Object.keys(p.keys ?? {}).includes("mux.send")), `${presets.map((p) => `${p.style}:${Object.keys(p.keys ?? {}).includes("mux.send")}`).join(" ")}`);
+check("and the extension forwards a preset key as the bare verb, so the shortcut now reaches the spool rather than a refusal", readFileSync(join(ROOT, "tools", "mux-surface-extension.js"), "utf8").includes("muxSurfaceInvoke(verb,"), "the shortcut handler calls muxSurfaceInvoke(verb, ...)");
+check("and `act --op message` (the route send aliases) answers the same way, so send is an alias and not a second door", await (async () => {
+  const a = await muxSurfaceInvoke("act impl --op message --text \"steer me\"", { env: {}, cwd: ROOT, seams: sendSeams, store: sendStore });
+  return a.ok === true && a.exitCode === 0 && a.show.map((l) => l.body).join("\n").includes("spool op message");
+})(), "act --op message answers ok and prints the same spool op");
 
 console.log("\n=== 10. PI'S OWN HINT FNS, RUN ON PI'S OWN PLANE (the KeybindingHints route) ===");
 const runnerSrc = readFileSync(join(ROOT, "vendor", "pi-main", "packages", "coding-agent", "src", "core", "extensions", "runner.ts"), "utf8");
@@ -275,7 +293,7 @@ check("and the tracked extension and the installed copy are the SAME bytes (one 
 
 const secs = ((Date.now() - t0) / 1000).toFixed(2);
 if (failures === 0) {
-  process.stdout.write(`\nMUX-KEYBINDS PASS (${secs}s total) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — the keybind vocabulary is ONE table: ${allKeys.length} preset keys across ${presets.length} styles (tmux, screen, zellij, herdr), every one spelled mux.<name> and every combo ctrl+shift+letter with NONE of pi's ctrl+shift+f/g/p borrowed; the ACTIVE preset is the ACTIVE backend's own (rank ${activeDriver.rank}) and ${MUX_BACKEND_ENV}=screen moves backend and preset together; muxKeysText prints the active preset, all ${presets.length} styles, pi's keyHint()/keyText() rendering and the REFUSED BY NAME rule; the extension registers exactly /mux, /mux-keys and ${calls.shortcuts.length} shortcuts — the active preset's only — while ${dupes.length} cross-style combos stay off the session, and a preset block that raises still leaves /mux plus a self-named /mux-preset-problem; herdr's detach is refused capability-not-declared naming its ${caps.length} declared actions, and the plan refuses it rather than returning zero commands. PI'S OWN PLANE RAN (§10): the core's RESERVED copy matched vendor/pi-main/packages/coding-agent/src/core/extensions/runner.ts (${MUX_RESERVED_PI_IDS.length} ids), pi answered all ${askedOf.length} reserved keys and each matched pi's own KEYBINDINGS default (follow-up=${followKeyUp}), keyText of a mux action answered \"\" and a user keybindings.json entry for it stayed IGNORED, the core named which hint fn refused before pi's initTheme() and then rendered pi's keyHint for ${Object.keys(MUX_PI_HINT_IDS).length} ids, the entry /mux-keys appends rendered through pi-tui's Text with pi's own hint line (${followKeyUp} to queue a follow-up…), and rebinding app.tools.expand onto ctrl+shift+q made pi SKIP ${hits.length} preset shortcuts — named, with pi's skip message quoted. HONEST GAP, still open: the preset key mux.send is NOT a core verb, so that key answers send-is-not-a-verb today (no driver names a send command, so nothing here can type into a pane) — routing mux.send to act --op message is owed work, and the spool route it needs already answers ok.\n`);
+  process.stdout.write(`\nMUX-KEYBINDS PASS (${secs}s total) on Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1 — the keybind vocabulary is ONE table: ${allKeys.length} preset keys across ${presets.length} styles (tmux, screen, zellij, herdr), every one spelled mux.<name> and every combo ctrl+shift+letter with NONE of pi's ctrl+shift+f/g/p borrowed; the ACTIVE preset is the ACTIVE backend's own (rank ${activeDriver.rank}) and ${MUX_BACKEND_ENV}=screen moves backend and preset together; muxKeysText prints the active preset, all ${presets.length} styles, pi's keyHint()/keyText() rendering and the REFUSED BY NAME rule; the extension registers exactly /mux, /mux-keys and ${calls.shortcuts.length} shortcuts — the active preset's only — while ${dupes.length} cross-style combos stay off the session, and a preset block that raises still leaves /mux plus a self-named /mux-preset-problem; herdr's detach is refused capability-not-declared naming its ${caps.length} declared actions, and the plan refuses it rather than returning zero commands. PI'S OWN PLANE RAN (§10): the core's RESERVED copy matched vendor/pi-main/packages/coding-agent/src/core/extensions/runner.ts (${MUX_RESERVED_PI_IDS.length} ids), pi answered all ${askedOf.length} reserved keys and each matched pi's own KEYBINDINGS default (follow-up=${followKeyUp}), keyText of a mux action answered \"\" and a user keybindings.json entry for it stayed IGNORED, the core named which hint fn refused before pi's initTheme() and then rendered pi's keyHint for ${Object.keys(MUX_PI_HINT_IDS).length} ids, the entry /mux-keys appends rendered through pi-tui's Text with pi's own hint line (${followKeyUp} to queue a follow-up…), and rebinding app.tools.expand onto ctrl+shift+q made pi SKIP ${hits.length} preset shortcuts — named, with pi's skip message quoted. THE send LEG IS ROUTED, NOT AN OPEN GAP: all ${presets.length} presets name mux.send, that name is IN the one verb table (MUX_VERB_NAMES carries it and MUX_USAGE prints it), and it resolves through that table to the core's act leg pinned to --op message — "send impl --text …" answers ok holding a spool request with "op":"message", "from":"impl" and "to" the pane's own seat, a bare send asks for a selector, and "send impl --op stop" answers a NEW refusal that names both the word message and the spelling that does mean stop. No driver names a send command, so the preset key is a verb routed to the broker's spool and NOT a keystroke primitive, and the core still carries zero backend words.\n`);
   process.exit(0);
 }
 process.stdout.write(`${failures} FAILURE(S)\n`);

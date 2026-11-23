@@ -52,15 +52,22 @@
 // detached screen session whose LAST window dies ENDS (screen's own semantics). The rig's session does not
 // depend on it: the rig's ONE owner is the resident detached BROKER (`DURIG_DB=<store> node cli.mjs serve` —
 // the store is named by ENV because `cli.mjs` has NO `--db`, MEASURED 2026-11-21; `tui.mjs --db` IS real), and a
-// screen pane is only a viewport running the read-only attach
-// surface (`node tui.mjs --db <abs store> --attach --select <seat>`, `src/multiplex.mjs` `multiplexAttach`
-// with `readOnly`). Killing/losing every pane can end the VIEWPORT and must never end the SESSION. The notes
+// screen pane is only a viewport running the plugin's OWN pane client
+// (`muxPaneArgv()` from `tools/mux-surface-core.mjs` -> `tools/mux-pane-client.mjs`, `src/multiplex.mjs` `multiplexAttach`
+// with `readOnly`). It is NOT the rig's full TUI: `node tui.mjs --db <abs store> --attach --select <seat>` in a
+// window was MEASURED 2026-11-22 to exit rc 1 ~1 s in with an uncaught `ReadOnlySession` throw from the vendor's
+// upkeep job — and a detached screen session whose LAST window DIES ENDS, so that command would end the viewport
+// session at once. The pane client stays resident (it defaults to FOREVER), so the window lives as long as the
+// multiplexer should. Killing/losing every pane can end the VIEWPORT and must never end the SESSION. The notes
 // below say so where a reader would otherwise assume tmux's behaviour.
 //
 // Cost (D213): pure composition — no model, no key, no network, no process started here. `node --check` 0.01 s;
 // the pin that exercises it is `node demo/mux-drivers.test.mjs`; the REAL run is the screen section of
 // docs/runbooks/pi-inside-tmux.md.
 import { dirname as dirOf, join } from "node:path";
+// THE PANE COMMAND IS THE CORE'S DECISION, HANDED IN ON THE PLAN AS DATA (`plan.paneArgv`, built by the core's
+// `muxPaneArgv` — see its note there). This driver imports NO sibling module: the seam passes the decision, so a
+// driver can be loaded on its own and cannot half-register against a sibling it cannot see.
 
 const workspace = (store) => (store ? dirOf(store) : null);
 
@@ -83,6 +90,26 @@ export const MUX_DRIVER = {
   version: ["screen", "--version"],
   probe: ["screen", "--version"],
   docs: "docs/runbooks/pi-inside-tmux.md", // this driver owns that runbook's GNU Screen section
+
+  // THE PLATFORM TABLE — a DRIVER fact (see tools/mux-driver-tmux.mjs for what each `status` class means).
+  // This driver is the one backend whose Windows verdict is NOT an install route: no native-Windows GNU Screen
+  // build was found in the copies this seam fetched, and the routes that DO exist (wsl / cygwin / msys2) are
+  // FORBIDDEN under D131 "native host OS only". So the row says `refused`, `binary: null`, and the core turns the
+  // whole ask into a REFUSAL BY NAME with ZERO commands — not a shim, not a plausibly-wrong argv.
+  platform: {
+    linux: {
+      binary: "screen",
+      status: "measured",
+      note: "MEASURED on this rig's host (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1): GNU Screen 5.0.2 is PRESENT at /usr/bin/screen and this driver's argv was run against it (`screen -V` -> `Screen version 5.0.2 (build on 2026-07-17 00:00:00)` rc 0; docs/runbooks/pi-inside-tmux.md, real-screen census).",
+      route: null,
+    },
+    windows: {
+      binary: null,
+      status: "refused",
+      route: null,
+      note: "WINDOWS IS REFUSED FOR THIS BACKEND, so this seam names NO argv for it on a Windows host. What was FOUND (kagi, fetched 2026-11-22): only Cygwin package routes (https://cygwin.com/cygwin/packages/summary/screen.html) and a blog running GNU screen UNDER WSL (drjohnstechtalk.com) plus Gnulib's generic native-Windows chapter — NO native Windows screen build in a fetched copy. That is OBSERVED ABSENCE in a fetched copy, and the verdict is therefore UNVERIFIED-AND-REFUSED, not proven-impossible. The routes that exist are FORBIDDEN under D131 (native host OS only — never wsl, cygwin, msys2, or docker), and this plugin will not quietly run screen under an emulation layer. What a Windows user does instead: pick a backend that has a declared Windows route (see the tmux driver's `psmux` row, the zellij driver's `.exe` row, the herdr driver's native row), or run the rig in a pi terminal with no multiplexer at all — the broker owns the session, so no presentation layer is required for the rig to run.",
+    },
+  },
 
   // DECLARED, NOT ASSUMED. Screen can NAME every action, so all are declared — but four of the argv below are
   // UNVERIFIED (never run here), which is why each carries the word in its note.
@@ -171,12 +198,19 @@ export const MUX_DRIVER = {
     open: (plan) => {
       if (!plan.pane || !plan.pane.seat) return null; // open names a seat; a seatless named pane starts nothing
       const ws = workspace(plan.store);
-      const cmd = ["node", "tui.mjs", "--db", plan.store, "--attach", "--select", plan.pane.seat];
+      const cmd = plan.paneArgv; // the core's ONE pane argv, never restated here
+      if (!cmd)
+        return {
+          note:
+            "NAMED GAP: no pane argv could be built (no store, no seat, or the plugin's pane client is not on disk), " +
+            "so NO argv is emitted — a detached screen session whose window runs nothing ENDS, and a dead session " +
+            "that reports nothing is the fail-open this seam refuses.",
+        };
       if (plan.index === 0)
         return {
           argv: ["screen", "-c", "/dev/null", "-dmS", String(plan.sessionName), "-t", String(plan.pane.paneName), ...cmd],
           cwd: ws,
-          note: "MEASURED leg (`-c /dev/null -dmS <tag> -t <name> <cmd>` -> rc 0 DETACHED in 0.013 s; `-t` really names the window, census shows `0(<name>)`): create the PLUGIN's OWN session detached, window named after the SEAT. The rig's own session is owned by the broker (`DURIG_DB=<store> node cli.mjs serve`), started by the owner plane; this pane only ATTACHES to it — no second writer. The `<cmd>` itself is UNVERIFIED against a running TUI (a detached session whose window exits ENDS; that is screen's semantics, and the broker survives it).",
+          note: "MEASURED leg (`-c /dev/null -dmS <tag> -t <name> <cmd>` -> rc 0 DETACHED in 0.013 s; `-t` really names the window, census shows `0(<name>)`): create the PLUGIN's OWN session detached, window named after the SEAT. The rig's own session is owned by the broker (`DURIG_DB=<store> node cli.mjs serve`), started by the owner plane; this pane only ATTACHES to it — no second writer. The `<cmd>` is the plugin's pane client, which stays FOREVER, so the window does not die (see the runbook's real-screen census for the measured window survival).",
         };
       // NO ARGV, DELIBERATE — MEASURED DEAD on GNU Screen 5.0.2 from a non-TTY plane (2026-11-21, .spike/muxscreen-cmds*.mjs):
       // `-X screen <cmd>`, `-X window <cmd>`, `-X windows` and a generated `-c <rc>` route all either answer

@@ -9,11 +9,15 @@
 // AS DATA — it starts no process (no `child_process` here; the ONE process leg is `tools/mux-surface-owner.mjs`).
 //
 // WHAT A PANE IS HERE (contract (3)+(4)). A tmux window is a VIEWPORT onto the rig's ONE session. The pane runs
-// the rig's OWN attach surface — `node tui.mjs --db <abs store> --attach --select <seat>` — which is the read-only
-// viewer (`src/storeownership.mjs` `tuiOpenVerdict`: pi-durable spec.md:4371 "Harness instances must never own the
-// same Session concurrently"). The rig's session itself stays in the ONE resident detached owner (`cli.mjs serve`,
-// `src/broker.mjs`), so `tmux detach-client` / closing the window never ends it: tmux keeps a session that holds
-// no client, exactly tmux's own detach semantics.
+// the PLUGIN's OWN pane client — `muxPaneArgv()` from `tools/mux-surface-core.mjs`, spelled in THIS file's window
+// vocabulary and never restated here — which is an ATTACHED CLIENT of one seat (a readOnly `multiplexAttach`
+// re-read leg over `pi.live`/`pi.inbox`, `src/multiplex.mjs`). It is NOT the rig's full TUI: `node tui.mjs --db …
+// --attach --select …` run inside a window was MEASURED 2026-11-22 to print the attach banner and then exit rc 1
+// about 1 s later with an uncaught `ReadOnlySession` throw from the vendor's upkeep job, and a multiplexer DESTROYS
+// a window whose command exited — so that command makes the census lose the pane rather than show a client. The
+// rig's session itself stays in the ONE resident detached owner (`cli.mjs serve`, `src/broker.mjs`), so `tmux
+// detach-client` / closing the window never ends it: tmux keeps a session that holds no client, exactly tmux's own
+// detach semantics.
 //
 // ACTS ARE NOT TMUX KEYS (the whole point of contract (4)). There is deliberately NO `act` entry in `commands`
 // and no `send-keys` argv anywhere in the plugin: an act is ROUTED to the broker's spool by the core
@@ -44,6 +48,9 @@
 // is `node demo/mux-surface.test.mjs`. Measured Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64
 // / node v24.22.1, last_verified 2026-11-21 (`node --check tools/mux-driver-tmux.mjs`).
 import { dirname as dirOf, join } from "node:path";
+// THE PANE COMMAND IS THE CORE'S DECISION, HANDED IN ON THE PLAN AS DATA (`plan.paneArgv`, built by the core's
+// `muxPaneArgv` — see its note there). This driver imports NO sibling module: the seam passes the decision, so a
+// driver can be loaded on its own and cannot half-register against a sibling it cannot see.
 
 // THE WORKSPACE, derived from the store by the SAME convention the core's tag uses
 // (`muxWorkspaceTag` = `durian-<basename(dirname(store))>`), so the pane's start directory and the session's
@@ -75,6 +82,37 @@ export const MUX_DRIVER = {
   version: ["tmux", "-V"],
   probe: ["tmux", "-V"],
   docs: "docs/runbooks/pi-inside-tmux.md",
+
+  // THE PLATFORM TABLE — a DRIVER fact, never a core fact. D131 makes Linux and Windows both operating
+  // platforms for this rig, so a backend that resolves on one may name a DIFFERENT binary, or no presentation
+  // layer at all, on the other. The core's `muxPlatformVerdict` READS this table and decides (probe this binary /
+  // refuse the whole ask with ZERO commands); it never names an OS and never names a backend, so the core's
+  // backend-word census stays 0 and the WORDS of an OS-specific refusal live HERE. `status` is the EVIDENCE
+  // CLASS of the row, not of the row's existence: `measured` = this driver's argv was run against a binary on
+  // this rig's host; `absent` = measured absent here; `advertised-elsewhere` = quoted from a fetched page and
+  // NEVER RUN here (the honest class for a platform this box cannot run — dressing it up as `observed` would be
+  // the false-gap class this seam exists to refuse); `refused` = the seam emits NO argv for that OS at all.
+  platform: {
+    linux: {
+      binary: "tmux",
+      status: "measured",
+      note: "MEASURED on this rig's host (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1): a tmux 3.5a SELF-BUILT from source ran this driver's OWN argv (docs/runbooks/pi-inside-tmux.md, REAL-BINARY CENSUS). The DISTRO census is a SEPARATE fact and still true here: tmux is NOT on PATH and /usr/bin/tmux is absent, so a user of this box brings their own binary.",
+      route: null,
+    },
+    windows: {
+      // `psmux` is the native-Windows route: tmux upstream ships no Windows build in the copy of its
+      // Installing page this seam fetched, and D131 forbids borrowing a wsl/cygwin/msys2 tmux. psmux is
+      // tmux's OWN command language on ConPTY, so this driver's argv stays valid on it; the deviations below
+      // are what a reader must know before believing a Windows pane census.
+      binary: "psmux",
+      status: "advertised-elsewhere",
+      route: "winget install psmux | cargo install psmux | the GitHub Releases .zip; psmux also ships `pmux` and a `tmux` alias name, so a Windows host may really have `tmux` on PATH and it is psmux",
+      note: "VERBATIM: \"psmux is a native Windows terminal multiplexer built from the ground up in Rust. It uses Windows ConPTY directly, speaks the tmux command language, reads your `.tmux.conf`, and supports tmux themes. All without WSL, Cygwin, or MSYS2.\" https://raw.githubusercontent.com/psmux/psmux/master/README.md fetched 2026-11-22. NEVER RUN here: this rig's host is Linux, so this row is advertised-elsewhere, not observed.",
+      identity: "PANE IDENTITY DIFFERS ON WINDOWS: \"psmux therefore reports the executable of the pane's immediate child, which is stable and cheap but is not a service identity (#647)\" — `#{pane_current_command}` is the IMAGE name (ConPTY has no tcgetpgrp), so it CANNOT tell two panes of the same rig apart. The identity THIS seam uses on Windows is the controller's own window/pane NAME addressed by stable id + `#{pane_start_command}` (what psmux was asked to run; empty for a pane that got the default shell) + liveness via `#{pane_dead}` and `#{pane_pid}`, plus a health check outside psmux. `#{pane_title}` only works with `allow-set-title on`, which is OFF by default. https://raw.githubusercontent.com/psmux/psmux/master/docs/compatibility.md fetched 2026-11-22.",
+      namespace: "`-L` gives isolated instances (server namespaces): a bare `kill-server` ends only the DEFAULT namespace, `-L <name> kill-server` ends THAT one only — the session-scoped teardown this seam wants. psmux-only `kill-server -a` sweeps EVERY namespace INCLUDING the user's own, so it is REFUSED BY NAME and never emitted (the core's `--every-session` refusal).",
+      pathDeviation: "ONE deliberate deviation: \"a backslash is never doubled. tmux stores `C:\\src` as `C:\\\\src`\", which on Windows would corrupt every path-shaped window name — so a pane name that embeds a Windows path is this seam's gap, not psmux's. Same page also: `new-window`/`split-window`/`new-session` treat a MULTI-TOKEN command after `--` as an argv and execute it directly like tmux's `execvp` (#582), which is exactly how this driver hands the core's ONE pane argv.",
+    },
+  },
 
   // DECLARED, NOT ASSUMED (`muxCapability` refuses anything missing BY NAME). `act` IS declared because the
   // plugin CAN act in a tmux namespace — via the broker's spool, which is backend-free — and this file names
@@ -154,14 +192,21 @@ export const MUX_DRIVER = {
       if (blocked(plan)) return blockedNote(plan);
       if (!plan.pane || !plan.pane.seat) return null; // open names a seat; a seatless named pane starts nothing
       const ws = workspace(plan.store);
-      const cmd = ["node", "tui.mjs", "--db", plan.store, "--attach", "--select", plan.pane.seat];
+      const cmd = plan.paneArgv; // the core's ONE pane argv, never restated here
+      if (!cmd)
+        return {
+          note:
+            "NAMED GAP: no pane argv could be built (no store, no seat, or the plugin's pane client is not on disk), " +
+            "so NO argv is emitted — a window that runs nothing is destroyed by the multiplexer and reads as an empty " +
+            "capture, which is exactly the fail-open this seam refuses.",
+        };
       // tmux >=3.x: `new-session -c` is START-DIRECTORY and the pane command is the POSITIONAL remainder;
       // `-d` makes the session DETACHED from birth, which is the detach semantics the contract asks for.
       if (plan.index === 0)
         return {
           argv: ["tmux", "new-session", "-d", "-s", safe(plan.sessionName), "-n", String(plan.pane.paneName), ...(ws ? ["-c", ws] : []), "--", ...cmd],
           cwd: ws,
-          note: "first pane: create the plugin's OWN session DETACHED and name its window after the SEAT (MEASURED on tmux 3.5a: `new-session -d -s durian-w1 -n impl -c <ws> -- node tui.mjs …` rc 0 in 4 ms). The rig's session itself is owned by the broker (`DURIG_DB=<store> node cli.mjs serve`), which the owner plane starts; this pane only ATTACHES to it.",
+          note: "first pane: create the plugin's OWN session DETACHED and name its window after the SEAT (MEASURED on tmux 3.5a: `new-session -d -s durian-w1 -n impl -c <ws> -- <pane client>` rc 0 in 4 ms, and the window then SURVIVES and captures the client's own viewport — see the runbook's REAL-BINARY CENSUS and the driver's MEASURED block). The rig's session itself is owned by the broker (`DURIG_DB=<store> node cli.mjs serve`), which the owner plane starts; this pane only ATTACHES to it.",
         };
       return {
         argv: ["tmux", "new-window", "-t", safe(plan.sessionName), "-n", String(plan.pane.paneName), ...(ws ? ["-c", ws] : []), "--", ...cmd],

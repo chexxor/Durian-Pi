@@ -15929,3 +15929,23 @@ timeout 200 node scripts/test.mjs --area docs --jobs 4   # 66.2 s 8/8 exit 0 —
 node tools/broker-serve.mjs --status   # 0.9 s exit 0 — `broker: down (no broker state)`, spool 0 pending / 90 DEAD-LETTER in ./selfdev.sqlite.broker.inbox.error; it also prints `BLOCK live-tree-dirty` while the tree is dirty — re-read after the commit
 
 node tools/keycheck.mjs --level=auth   # 0.19 s exit 1 — notOk:2, configKeyGap ["DEEPINFRA_API_KEY"]: a seat turn today dies at auth before any request
+
+**Cut VERBATIM — the 9 clause(s) below left the `## NEXT SESSION` slice of `docs/NEXT.md` on 2026-11-23 via `tools/pointer-prose-cut.mjs` (the bytes that left the live file are the bytes below, never retyped; proof: applying this tool's plan to the pre-cut `docs/NEXT.md` is the file on disk now, and these blocks sit in the archive exactly once, 856 B of slice text and therefore of the clock-in digest):**
+
+, `muxPlan` refuses before it builds argv, and `act`/`keys`/`send` stay exempt because the spool is backend-free)
+
+it READS the driver's platform table BEFORE it probes, so a Windows aim probes psmux rather than reading a real tmux as absent
+
+— the pane survives the seat halting and its capture prints that pane's OWN banner)
+
+each driver now declares a `platform` table with a linux AND a windows row, so the Windows verdict is DATA the core reads, never a word in the core)
+
+This pointer now carries the cadence row for `984ea1622`; the NEXT pointer commit owes ITS OWN row (pitfall 384).
+
+The LIVE end-to-end (the broker owning a session, a pane acting on a seat) needs an **operator grant**.
+
+and must be corrected (a ROSTER grant; the seam's docs-grounded argv tables are the same kind of operator-owned text that closes an UNVERIFIED leg)
+
+which GNU Screen cannot do from a non-TTY plane (`-X screen`/`-X window`/`-X windows` answer `cannot be queried.` or create nothing)
+
+— `.spike/muxlive-2.mjs` (the 15.995 s real-tmux leg), `.spike/build-tmux.sh` (the 3.5a build), `.spike/muxtrap2.mjs` (the argv-shape trap probe, 0.074 s): host-shaped, so a `lead` row decides whether they become instruments (**D341**'s rule)

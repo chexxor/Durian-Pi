@@ -68,6 +68,12 @@ export const MUX_VERBS = {
   halt: { usage: "halt [--run]", pane: false, act: true },
   // an act on one pane's seat, routed to the broker's spool op.
   act: { usage: "act <seat> --op <spool-op> [--text \"sentence\"]", pane: true, act: true },
+  // `send` is a VERB, not a keystroke. Every driver preset names `mux.send`, so a preset key that answers
+  // "not a mux verb" is a dead key wearing a product name (the completion auditor's objection 3). It is NOT a
+  // new door: it is the ONE spool leg above, pinned here to --op message. The decision lives IN THE CORE and
+  // not in a driver because a key style IS a backend word — a driver that routed its own preset key would
+  // spell a backend vocabulary in the place that must stay backend-agnostic.
+  send: { usage: "send <seat ...> --text \"sentence\" (an alias for act --op message)", pane: true, act: true },
   // the keybind vocabulary and the presets this core can actually honour.
   keys: { usage: "keys [--preset <style>]", pane: false, act: false },
 };
@@ -117,7 +123,13 @@ export const MUX_FLAGS = {
   "--json": { kind: "flag", usage: "[--json]" },
 };
 export const MUX_FLAG_NAMES = Object.keys(MUX_FLAGS);
-export const MUX_USAGE = `node cli.mjs mux ${MUX_VERB_NAMES.map((v) => `<${v}> ${MUX_VERBS[v].usage}`).join(" | ")}`;
+// THE USAGE LINE MUST BE RUNNABLE (the honesty fix measured 2026-11-22: the line this REPLACED printed
+// `node cli.mjs mux …`, and `grep -n mux cli.mjs` answers NOTHING — there is NO `cli.mjs mux` verb, so every
+// refusal printed a command that cannot be run, which is the fiction class this seam refuses). The runnable
+// registration of THIS core is the in-session command the extension installs
+// (`pi.registerCommand(MUX_COMMAND_NAME, …)` in tools/mux-surface-extension.js), so the usage line is typed in
+// a pi session, not at a shell. The core still names no backend here, so the line stays backend-word-free.
+export const MUX_USAGE = `/mux ${MUX_VERB_NAMES.map((v) => MUX_VERBS[v].usage).join(" | ")}`;
 export const MUX_BACKEND_ENV = "DURIAN_PI_MUX_BACKEND";
 export const MUX_PRESET_ENV = "DURIAN_PI_MUX_PRESET";
 
@@ -257,6 +269,14 @@ export function muxSurfaceParse(argv, { styles = [], backends = [] } = {}) {
     if (token === "--namespace") state.namespace = value;
     if (token === "--into") state.into = value;
   }
+  // `send` is the alias above: it names the MESSAGE spool op and nothing else. A contradicting --op is not
+  // silently re-routed and not silently ignored — it is refused BY NAME with the spelling that does what the
+  // reader meant, because a `send --op stop` that behaved as a message would be a wrong-door success.
+  if (state.verb === "send") {
+    if (state.op && state.op !== "message")
+      return { ok: false, code: "send-op-conflict", refusal: muxRefusalText(`send names the message spool op; --op ${state.op} contradicts it. Use \`act <seat> --op ${state.op}\`. Nothing was written.`), state, exitCode: 1 };
+    state.op = "message";
+  }
   // the preset and the backend are the DRIVER's names, validated against the registry's own keys.
   for (const style of state.presets)
     if (!styles.includes(style))
@@ -356,6 +376,37 @@ export function muxWorkspaceTag(store = null, cwd = null) {
   return MUX_NAMESPACE_TAG_PREFIX + muxSlug(named).slice(0, 40);
 }
 
+// THE PANE COMMAND IS ONE DECISION, MADE HERE, AND NEVER RESTATED BY A DRIVER (contracts (3) OWNERSHIP + (4)
+// INTERACTION). Every driver's `open`/`attach` puts the SAME command in its own window vocabulary, and that
+// command is the PLUGIN's OWN pane client — `tools/mux-pane-client.mjs`, an ATTACHED CLIENT of one seat: a
+// readOnly `multiplexAttach` RE-READ leg that reads that seat's `pi.live`/`pi.inbox` and routes one act to the
+// broker's spool. It is never a keystroke and never a second writer.
+//
+// WHY NOT the rig's own full TUI as the pane command — MEASURED, and this is the reason the seam needed its own
+// client at all: `node tui.mjs --db <store> --attach --select <seat>` run inside a window prints the attach
+// banner and then exits rc 1 about 1 s later, throwing `ReadOnlySession: Read-only Harness: a commit with writes
+// refused` from the vendor's upkeep job (`vendor/pi-main/packages/durable/dist/session/session.js:823`, reached
+// from `#maintain`, which arms the hold-store/document-sweep timers). A readOnly Harness that runs upkeep WRITES,
+// and a readOnly Harness may not. A multiplexer then DESTROYS the window whose command exited (measured on BOTH
+// multiplexers this host can run — see each driver's own note: an empty capture is a DEAD window, not a capture
+// failure), so the census shows the pane gone and the backend's own capture answers 0 chars. That is a fact about
+// the vendor's TUI — the BASE — and D212 forbids patching it, so the seam grows its OWN pane client on the plane
+// it already owns.
+//
+// WHY `process.execPath` AND ABSOLUTE PATHS AND NO `--frames`: this box runs node from an nvm path (`node -v`
+// v24.22.1 at /home/chexxor/.nvm/…/bin/node), and a window starts in a bare `-c <ws>` environment, so a hardcoded
+// `node` resolves through the WINDOW's own PATH — a different interpreter at best, a missing one at worst. And
+// the client defaults to `--frames 0` = FOREVER precisely because of the destroy rule above: the multiplexer owns
+// the window's life, so the client keeps it alive. `existsSync` is a belt: a pane command that names a file which
+// is not there is not a command, and a driver that emits it produces a dead window and an empty capture — the
+// fail-open class this seam refuses.
+export function muxPaneArgv(store = null, seat = null, name = null) {
+  const client = join(ROOT, "tools", "mux-pane-client.mjs");
+  if (!store || !seat || !existsSync(client)) return null; // not a command: no store, no seat, or no client
+  return [process.execPath, client, "--db", store, "--select", seat, "--pane", String(name || seat)];
+}
+export const MUX_PANE_CLIENT_PATH = join(ROOT, "tools", "mux-pane-client.mjs");
+
 // WHICH SESSION the plugin may touch (contract (9)). The default is the plugin's OWN derived session; a foreign
 // session is REPORTED present-but-not-touched, and any verb aimed at it is refused BY NAME with the namespace
 // printed. The override (contract (10)) is the `--into`/`--namespace` ASK plus the two persistent knobs.
@@ -452,6 +503,45 @@ export function muxCapability(backend, verb, { drivers = new Map() } = {}) {
   return { ok: true, caps };
 }
 
+// THE PLATFORM VERDICT (D131: Linux and Windows are BOTH operating platforms for this rig, so a backend that
+// resolves on one may name a DIFFERENT binary — or no presentation layer at all — on the other). WHICH binary to
+// look for, and whether an OS has one at all, is a DRIVER fact: this function READS `driver.platform[os]` and
+// names NO backend and NO OS, so the backend-word census of this file stays 0 and the WORDS of an OS-specific
+// refusal live in the driver that declares them. The DECISION lives here: a row whose `status` is `refused`
+// makes the whole ask a REFUSAL BY NAME that emits ZERO commands, because a command planned for a platform the
+// driver refused is a command aimed at a binary that is not there — the fail-open class this seam refuses.
+// `os` is a fact handed in by the caller: the owner plane passes `process.platform`, and a pin INJECTS it, which
+// is what makes a Windows verdict a HERMETIC run on a Linux box (D213: the fast loop for a platform this box
+// cannot run isolates the platform behind a seam and states its cost, rather than sleeping on a host that does not exist).
+export function muxPlatformVerdict(backend, os = null, { drivers = new Map() } = {}) {
+  const want = os ?? process.platform;
+  const record = drivers.get(backend);
+  if (!record)
+    return { ok: false, code: "backend-not-registered", argvAllowed: false, binary: null, status: null, route: null, note: null, row: null, refusal: `mux: no driver registered for backend \`${backend ?? "(none active)"}\`. registered: ${[...drivers.keys()].join(", ") || "(none)"}. No command was named and nothing was run.` };
+  const table = record.driver?.platform ?? null;
+  if (!table)
+    return { ok: true, code: "platform-table-not-declared", argvAllowed: true, binary: null, status: null, route: null, note: `this driver declares no platform table, so the seam probes the driver's own probe argv on \`${want}\` — declared, not assumed.`, row: null };
+  const row = table[want];
+  if (!row)
+    return { ok: true, code: "platform-row-not-declared", argvAllowed: true, binary: null, status: null, route: null, note: `the driver declares no verdict for platform \`${want}\` (declared: ${Object.keys(table).join(", ")}), so the seam neither refuses that platform nor invents a binary for it.`, row: null };
+  const status = row.status ?? "status-not-declared";
+  if (status === "refused") {
+    const words = row.note ?? row.route ?? "the driver named no reason for the refusal";
+    return {
+      ok: false,
+      code: "platform-refused",
+      argvAllowed: false,
+      binary: row.binary ?? null,
+      status,
+      route: row.route ?? null,
+      note: words,
+      refusal: `mux: this ask is REFUSED on platform \`${want}\` for the \`${backend}\` backend BY NAME — the driver's own verdict is \`refused\` (${words}) No argv is planned, nothing was run, and this plugin substitutes NO route the driver did not declare (native host OS only, docs/DECISIONS.md D131).`,
+      row,
+    };
+  }
+  return { ok: true, code: status, argvAllowed: true, binary: row.binary ?? null, status, route: row.route ?? null, note: row.note ?? "", row };
+}
+
 // THE PLAN: for one verb and one selection, every command the backend would run, as DATA, attributed to the
 // action and to the pane it belongs to. The core RUNS NONE OF THEM (its `child_process` count is 0).
 // `sessionTag` is the CENSUS-LEARNED label for the resolved session — some backends address a session only by
@@ -466,8 +556,21 @@ export function muxPlan(verb, state, { session = null, sessionTag = null, tag = 
   // `list` and `keys` answer from the registry; `act` is BACKEND-FREE — it is the broker's spool op, not a
   // multiplexer command, so a backend that cannot name it still acts. A driver MAY name a command for it,
   // but the core never needs one, and it never runs one.
-  const BACKEND_FREE = new Set(["list", "keys", "act"]);
+  const BACKEND_FREE = new Set(["list", "keys", "act", "send"]);
   if (!capability.ok && !BACKEND_FREE.has(verb)) return { ...capability, commands: [], panes };
+  // A PLATFORM THE DRIVER REFUSED emits ZERO commands for every verb that needs a multiplexer command.
+  // The DECISION is the core's (which asks die on which platform, and which asks survive at all) and the WORDS
+  // are the driver's, so neither the core's backend-word census nor a driver's argv table changes. The verbs
+  // listed below are EXEMPT on purpose: `act`/`send` are the broker's spool ops and `keys` renders a preset,
+  // so none of them needs anything from the multiplexer — refusing them would claim the RIG's own session cannot
+  // be acted on, which is a different fact from "this OS has no presentation layer". `state.os` is injectable
+  // (the plane passes `process.platform`; a pin injects `"windows"`), which is what makes the refusal testable
+  // on a host that cannot boot Windows.
+  const NO_ARGV_VERBS = new Set(["act", "keys", "send"]);
+  const aimOs = state?.os ?? null;
+  const platformVerdict = muxPlatformVerdict(backend, aimOs, { drivers });
+  if (!platformVerdict.ok && !NO_ARGV_VERBS.has(verb))
+    return { ok: false, code: "platform-refused", refusal: platformVerdict.refusal, commands: [], gaps: [], panes, backend, platform: { os: aimOs ?? process.platform, verdict: platformVerdict } };
   const commands = [];
   const sessionName = session ?? (d.sessionName ? d.sessionName({ cwd: null, store: null, tag, namespace }) : tag);
   // A driver may answer "this backend CANNOT NAME this ask" with a note and NO argv — a backend whose session
@@ -481,7 +584,12 @@ export function muxPlan(verb, state, { session = null, sessionTag = null, tag = 
     const pane = panes[i];
     // the pane's INDEX and TOTAL are what tells a driver whether this pane opens the session's first window
     // or adds another; `store` is what every driver needs to build the pane's rig-attach command.
-    const plan = { sessionName, sessionTag, tag, namespace, pane, store, backend, verb, index: i, total: panes.length };
+    //
+    // THE PANE COMMAND IS THIS CORE'S DECISION AND IS HANDED TO THE DRIVER AS DATA (`paneArgv`). A driver that
+    // IMPORTED the decision from its sibling instead would be unloadable outside the directory the core sits in
+    // — and an unloadable driver is a half-loaded registration (see the registry pin's temp registry, where a
+    // driver copied without its sibling landed in loadErrors). So the seam passes the decision, not a dependency.
+    const plan = { sessionName, sessionTag, tag, namespace, pane, store, backend, verb, index: i, total: panes.length, paneArgv: muxPaneArgv(store, pane?.seat, pane?.paneName) };
     const made = d.commands?.[verb]?.(plan);
     if (!made) continue;
     if (!made.argv) {
@@ -493,7 +601,7 @@ export function muxPlan(verb, state, { session = null, sessionTag = null, tag = 
     commands.push({ action: verb, pane: pane.seat ?? pane.paneName, argv: made.argv, ...(made.cwd ? { cwd: made.cwd } : {}), ...(made.env ? { env: made.env } : {}), ...(made.note ? { note: made.note } : {}) });
   }
   if (!panes.length) {
-    const made = d.commands?.[verb]?.({ sessionName, sessionTag, tag, namespace, pane: null, store, backend, verb, index: 0, total: 0 });
+    const made = d.commands?.[verb]?.({ sessionName, sessionTag, tag, namespace, pane: null, store, backend, verb, index: 0, total: 0, paneArgv: null }); // a session-level verb names no pane, so it gets no pane command
     if (made?.argv) commands.push({ action: verb, pane: "-", argv: made.argv, ...(made.cwd ? { cwd: made.cwd } : {}), ...(made.env ? { env: made.env } : {}), ...(made.note ? { note: made.note } : {}) });
     else if (made?.note) gaps.push({ action: verb, pane: "-", note: made.note });
   }
@@ -603,7 +711,7 @@ export async function muxSurfaceInvoke(text = "", { env = process.env, cwd = pro
   // THE ACT LEG. One spool request per pane, built BEFORE anything runs, so an op the broker does not carry
   // is refused BY NAME with nothing written. The request is PRINTED even when nothing ran — an act that
   // printed nothing is indistinguishable from an act that did nothing.
-  const acts = state.verb === "act" ? panes.map((pane) => ({ pane, act: muxActRequest(pane, { op: state.op, text: state.text }) })) : [];
+  const acts = (state.verb === "act" || state.verb === "send") ? panes.map((pane) => ({ pane, act: muxActRequest(pane, { op: state.op, text: state.text }) })) : [];
   const refusedActs = acts.filter((a) => !a.act.ok);
   if (refusedActs.length)
     return { show: [{ level: "error", body: refusedActs.map((a) => a.act.refusal).join("\n") }], ok: false, exitCode: 1, state, ownership, panes, acts };

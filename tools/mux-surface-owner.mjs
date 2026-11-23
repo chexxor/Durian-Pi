@@ -116,7 +116,11 @@ export function muxRunArgv(argv, { cwd = null, timeoutMs = DEFAULT_TIMEOUT_MS, e
 
 // A driver's probe/version/census argv, run in this plane only. Returns the PRESENCE verdict and the version
 // line, and NEVER invents one when the binary is absent: `NOT-RUN` is the answer (contract (7)).
-export async function muxProbeBackends(drivers, { cwd = null, timeoutMs = 2_000 } = {}) {
+export async function muxProbeBackends(drivers, { cwd = null, timeoutMs = 2_000, os = null } = {}) {
+  // WHICH OS the census answers for is a fact handed in (default: this box). A pin INJECTS it so a Windows
+  // route — `psmux` for the tmux vocabulary, the `.exe` route for zellij, a REFUSED row for GNU screen — is a
+  // RUN on the box that cannot boot Windows, which is the D213 fast loop for a platform that is not here.
+  const want0 = os ?? process.platform;
   const list = drivers?.values ? [...drivers.values()] : Array.isArray(drivers) ? drivers : [];
   const out = [];
   for (const rec of list) {
@@ -128,11 +132,48 @@ export async function muxProbeBackends(drivers, { cwd = null, timeoutMs = 2_000 
       out.push({ backend: rec?.backend ?? d?.backend ?? "(unnamed)", present: false, reason: "driver names no probe argv", versionLine: null, ms: 0, rank: d?.rank ?? null });
       continue;
     }
-    if (!onPath(String(probe[0]))) {
-      out.push({ backend: d.backend, present: false, reason: "binary NOT on PATH => NOT-RUN", versionLine: null, ms: 0, rank: d?.rank ?? null });
+    // THE PLATFORM TABLE, read HERE because this plane is the one that resolves a binary. A driver may name a
+    // DIFFERENT binary for the OS the census runs on (a Windows host's tmux vocabulary really lives in `psmux`),
+    // or REFUSE the OS entirely (`binary: null`, `status: "refused"`), in which case probing `probe[0]` on the
+    // wrong OS reads a real binary as absent — the false gap this seam was built to refuse. Probing the driver's
+    // own `probe[0]` on the OS it was written for is unchanged, so no existing answer moves.
+    const row = d?.platform?.[want0] ?? null;
+    if (row && row.status === "refused") {
+      out.push({
+        backend: d.backend,
+        present: false,
+        reason: `platform-refused on \`${want0}\` — ${row.note ?? row.route ?? "the driver named no reason"}`,
+        versionLine: null,
+        ms: 0,
+        rank: d?.rank ?? null,
+        platformStatus: "refused",
+        platformBinary: row.binary ?? null,
+        route: row.route ?? null,
+        os: want0,
+      });
       continue;
     }
-    const r = muxRunArgv(probe, { cwd, timeoutMs });
+    const want = row?.binary ?? probe[0];
+    const argv = want === probe[0] ? probe : [want, ...probe.slice(1)];
+    const routeNote = want === probe[0] ? "" : " (this OS route names " + want + ", not the driver's own " + probe[0] + ")";
+    if (!onPath(String(argv[0]))) {
+      out.push({
+        backend: d.backend,
+        present: false,
+        // The verbatim NOT-RUN string is kept for the OS's own probe (a pin compares it EXACTLY); when this
+        // platform's route differs, the route is printed BESIDE it so a reader knows WHICH name was looked for.
+        reason: "binary NOT on PATH => NOT-RUN" + routeNote,
+        versionLine: null,
+        ms: 0,
+        rank: d?.rank ?? null,
+        platformStatus: row?.status ?? null,
+        platformBinary: want,
+        route: row?.route ?? null,
+        os: want0,
+      });
+      continue;
+    }
+    const r = muxRunArgv(argv, { cwd, timeoutMs });
     out.push({
       backend: d.backend,
       present: r.ran && r.rc === 0,
@@ -144,6 +185,12 @@ export async function muxProbeBackends(drivers, { cwd = null, timeoutMs = 2_000 
       versionLine: r.ran ? String(r.stdout ?? "").trim().split("\n")[0] || null : null,
       ms: r.ms,
       rank: d?.rank ?? null,
+      // the OS-specific route, printed so a Windows census says WHICH binary it looked for and where that route
+      // was advertised (advertised-elsewhere != observed).
+      platformStatus: row?.status ?? null,
+      platformBinary: want,
+      route: row?.route ?? null,
+      os: want0,
     });
   }
   return out;

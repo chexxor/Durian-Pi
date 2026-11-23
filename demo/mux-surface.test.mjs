@@ -49,7 +49,7 @@ import {
   muxKeysText,
   muxRefusalText,
 } from "../tools/mux-surface-core.mjs";
-import { MUX_BACKEND_ENV, MUX_STORE_ENV, MUX_STORE_ENV_ALIAS } from "../tools/mux-surface-core.mjs";
+import { MUX_BACKEND_ENV, MUX_STORE_ENV, MUX_STORE_ENV_ALIAS, muxPaneArgv } from "../tools/mux-surface-core.mjs";
 
 const BACKENDS = ["tmux", "screen", "zellij", "herdr"]; // the TEST's census list, never the core's decision
 const ROOT = join(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
@@ -132,7 +132,9 @@ for (const b of BACKENDS) {
   const heads = [];
   for (const verb of ["list", "open", "attach", "detach", "kill", "capture"]) {
     for (let index = 0; index < 2; index += 1) {
-      const made = d.commands?.[verb]?.({ sessionName: "durian-w1", sessionTag: null, tag: "durian-w1", namespace: "plugin", pane: { seat: "impl" }, store: join(tmp, "w1", "selfdev.sqlite"), backend: b, verb, index, total: 2 });
+      // the plan the SEAM hands a driver is this object (`muxPlan` at the core), so it carries `paneArgv` too —
+      // the pane command is the core's decision, handed in as data, never imported by a driver.
+      const made = d.commands?.[verb]?.({ sessionName: "durian-w1", sessionTag: null, tag: "durian-w1", namespace: "plugin", pane: { seat: "impl", paneName: "impl" }, store: join(tmp, "w1", "selfdev.sqlite"), backend: b, verb, index, total: 2, paneArgv: muxPaneArgv(join(tmp, "w1", "selfdev.sqlite"), "impl", "impl") });
       if (!made) continue;
       if (!made.argv) continue;
       heads.push(String(made.argv[0]));
@@ -220,7 +222,7 @@ console.log("\n=== 6. EVERY /mux VERB RUNS THROUGH THE SURFACE AND PRINTS AN ATT
 // exit-0 legs for those three, on a store a REAL broker owns, are demo/mux-live.test.mjs and demo/mux-ownership.test.mjs).
 const verbTable = [
   ["list", 2, 2, ["tmux ls -F #{session_name} #{session_windows} #{?session_attached,attached,detached}", "tmux list-windows -t durian-w1 -F #{window_index} #{pane_pid} #{window_name} #{pane_current_command}"]],
-  ["open --all --create", 2, 2, [`tmux new-session -d -s durian-w1 -n impl -c ${join(tmp, "w1")} -- node tui.mjs --db ${join(tmp, "w1", "selfdev.sqlite")} --attach --select impl`, `tmux new-window -t durian-w1 -n qa -c ${join(tmp, "w1")} -- node tui.mjs --db ${join(tmp, "w1", "selfdev.sqlite")} --attach --select qa`]],
+  ["open --all --create", 2, 2, [`tmux new-session -d -s durian-w1 -n impl -c ${join(tmp, "w1")} -- ${process.execPath} ${join(ROOT, "tools", "mux-pane-client.mjs")} --db ${join(tmp, "w1", "selfdev.sqlite")} --select impl --pane impl`, `tmux new-window -t durian-w1 -n qa -c ${join(tmp, "w1")} -- ${process.execPath} ${join(ROOT, "tools", "mux-pane-client.mjs")} --db ${join(tmp, "w1", "selfdev.sqlite")} --select qa --pane qa`]],
   ["detach --all", 2, 1, ["tmux detach-client -s durian-w1"]],
   ["kill --all", 2, 2, ["tmux kill-pane -t durian-w1:impl", "tmux kill-pane -t durian-w1:qa"]],
   ["capture --all", 2, 2, ["tmux capture-pane -p -t durian-w1:impl", "tmux capture-pane -p -t durian-w1:qa"]],

@@ -276,6 +276,7 @@
       "demo/mux-keybinds.test.mjs",
       "demo/mux-drivers.test.mjs",
       "demo/mux-namespace.test.mjs",
+      "demo/mux-pane-client.test.mjs",
       "demo/tui-ownership-attach.test.mjs",
       "demo/tui-queue-split.test.mjs",
       "demo/tui-restore.test.mjs",

@@ -41,6 +41,26 @@ export const MUX_DRIVER = {
   probe: ["herdr", "--version"],
   docs: "docs/runbooks/pi-inside-tmux.md", // this driver owns that runbook's herdr section
 
+  // THE PLATFORM TABLE — a DRIVER fact (classes defined in tools/mux-driver-tmux.mjs; the core's
+  // `muxPlatformVerdict` reads it). herdr is the backend whose Windows page is the RICHEST, because its
+  // Windows support is native but PARTIAL: the panes and the local persistent sessions are supported, several
+  // of this plugin's own verbs are NOT supported there, and that difference is stated in this row rather than
+  // discovered by a user at 2 a.m. by a pane that does nothing.
+  platform: {
+    linux: {
+      binary: "herdr",
+      status: "absent",
+      note: "MEASURED ABSENT on this rig's host (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1): `herdr` is not on PATH and there is no passwordless sudo to install it, so the owner plane answers NOT-RUN at ms 0 and starts NOTHING. Registered != runnable (contract (7)); this backend is never green on this box.",
+      route: null,
+    },
+    windows: {
+      binary: "herdr",
+      status: "advertised-elsewhere",
+      route: "https://herdr.dev/tui/docs/windows-beta/ — a native Windows channel (stable/preview), installed as its own binary; no emulated layer required",
+      note: "VERBATIM: \"Native Windows support is generally available.\" https://herdr.dev/tui/docs/windows-beta/ fetched 2026-11-22. Native panes run through ConPTY and local persistent sessions keep running after the client detaches — which is this seam's detach guarantee. NOT SUPPORTED ON WINDOWS, so the plugin must not plan for them there: `herdr terminal attach`, live server handoff, Unix file-descriptor handoff, and Unix foreground process groups. Two of this driver's OWN argvs sit on that unsupported half — `attach` (the per-terminal form) and the read-only live view — so a Windows herdr pane is created and censused but may not be attached the Unix way. Also: Windows agent detection \"scans descendants of the pane shell\", which is NOT Unix foreground process-group detection, and an elevated server needs an administrator client (`allow_unelevated_clients` is off by default). NEVER RUN here (no Windows host on this rig; herdr is absent on this host): the page is titled `windows-beta`, so even the vendor claim is beta, not stable.",
+    },
+  },
+
   // NOTE THE MISSING `detach` — deliberate (see the header). A capability the backend has no word for is
   // REFUSED BY NAME by `muxCapability`; it is never forwarded to the multiplexer's own key.
   capabilities: new Set(["list", "open", "attach", "kill", "capture", "halt", "act"]),
@@ -119,7 +139,7 @@ export const MUX_DRIVER = {
       return {
         argv: ["herdr", "pane", "split", "--direction", "right", "--cwd", ws ?? process.cwd(), "--no-focus"],
         cwd: ws,
-        note: "another PANE in the plugin's own session; the new id arrives at `.result.pane.pane_id` and must be CAPTURED, not assumed. The pane then runs the rig's OWN attach surface via `herdr pane run <id> node tui.mjs --db <abs store> --attach --select <seat>` — `pane run` TYPES that command into the pane's SHELL to start the pane, which is legitimate; the same verb aimed at a SEAT afterwards would be a second writer and the plugin names it nowhere. UNVERIFIED on this host.",
+        note: "another PANE in the plugin's own session; the new id arrives at `.result.pane.pane_id` and must be CAPTURED, not assumed. The pane then runs the PLUGIN's OWN pane client — the argv `muxPaneArgv()` builds in the core (`<execPath> <abs tools/mux-pane-client.mjs> --db <abs store> --select <seat> --pane <name>`), handed to herdr as `herdr pane run <id> <that argv>`: `pane run` TYPES that command into the pane's SHELL to START the pane, which is legitimate; the same verb aimed at a SEAT afterwards would be a keystroke into a seat = a second writer, and the plugin names it nowhere. UNVERIFIED on this host (herdr is absent here).",
       };
     },
 
@@ -161,6 +181,6 @@ export const MUX_DRIVER = {
 
     // NO `act` HERE — deliberate: acts are the broker's spool ops (core `muxActRequest`), and herdr's `pane send-text`
     // / `pane send-keys` / `agent prompt` would be a SECOND WRITER into a seat. (`agent start --kind pi` starts PI,
-    // not this rig's `tui.mjs` attach surface — a named difference, not a shortcut to take.)
+    // not this plugin's pane client — a named difference, not a shortcut to take.)
   },
 };

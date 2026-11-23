@@ -24,6 +24,9 @@
 // Cost (D213): pure composition — no model/key/network/process here. `node --check` 0.01 s; the pin that
 // exercises it is `node demo/mux-drivers.test.mjs`.
 import { dirname as dirOf, join } from "node:path";
+// THE PANE COMMAND IS THE CORE'S DECISION, HANDED IN ON THE PLAN AS DATA (`plan.paneArgv`, built by the core's
+// `muxPaneArgv` — see its note there). This driver imports NO sibling module: the seam passes the decision, so a
+// driver can be loaded on its own and cannot half-register against a sibling it cannot see.
 
 const workspace = (store) => (store ? dirOf(store) : null);
 // A census-learned pane id when one exists; otherwise the NAME this driver gave the pane (a human-readable
@@ -40,6 +43,25 @@ export const MUX_DRIVER = {
   version: ["zellij", "version"],
   probe: ["zellij", "version"],
   docs: "docs/runbooks/pi-inside-tmux.md", // this driver owns that runbook's Zellij section
+
+  // THE PLATFORM TABLE — a DRIVER fact (the classes are defined in tools/mux-driver-tmux.mjs; the core's
+  // `muxPlatformVerdict` reads it and never names an OS). Nothing in this driver has been RUN: the binary is
+  // absent on this rig's Linux host, and this box has no Windows host either, so BOTH rows are the honest
+  // class — one measured ABSENT, one advertised-elsewhere — and neither may be printed as observed.
+  platform: {
+    linux: {
+      binary: "zellij",
+      status: "absent",
+      note: "MEASURED ABSENT on this rig's host (Linux / Fedora Linux 45 (Forty Five) / kernel 7.2.15-300.fc45.x86_64 / node v24.22.1): `zellij` is not on PATH and there is no passwordless sudo to install it, so the owner plane answers NOT-RUN at ms 0 and starts NOTHING. Registered != runnable (contract (7)); this backend is never green on this box.",
+      route: null,
+    },
+    windows: {
+      binary: "zellij",
+      status: "advertised-elsewhere",
+      route: "the official Windows build ships as a zip (`zellij-x86_64-pc-windows-msvc.zip`) holding `zellij.exe` and `zellij-terminal.exe`, plus an .msi installer route — https://zellij.dev/documentation/installation.html fetched 2026-11-22",
+      note: "VERBATIM: \"The zip (`zellij-x86_64-pc-windows-msvc.zip`) holds `zellij.exe` and `zellij-terminal.exe`.\" https://zellij.dev/documentation/installation.html fetched 2026-11-22. The Windows binary's NAME is `zellij`; the `.exe` is the extension a Windows PATH resolves, so the probe argv below stays valid. NEVER RUN here: no Windows host on this rig and no zellij on this host at all, so every argv in this driver is UNVERIFIED on every platform.",
+    },
+  },
 
   capabilities: new Set(["list", "open", "attach", "detach", "kill", "capture", "halt", "act"]),
 
@@ -122,7 +144,13 @@ export const MUX_DRIVER = {
     open: (plan) => {
       if (!plan.pane || !plan.pane.seat) return null;
       const ws = workspace(plan.store);
-      const cmd = ["node", "tui.mjs", "--db", plan.store, "--attach", "--select", plan.pane.seat];
+      const cmd = plan.paneArgv; // the core's ONE pane argv, never restated here
+      if (!cmd)
+        return {
+          note:
+            "NAMED GAP: no pane argv could be built (no store, no seat, or the plugin's pane client is not on disk), " +
+            "so NO argv is emitted — a pane that runs nothing is the fail-open this seam refuses.",
+        };
       if (plan.index === 0)
         return {
           argv: ["zellij", "attach", "--create", String(plan.sessionName)],
@@ -132,7 +160,7 @@ export const MUX_DRIVER = {
       return {
         argv: ["zellij", "action", "new-pane", "--name", String(plan.pane.paneName), ...(ws ? ["--cwd", ws] : []), "--close-on-exit", "--", ...cmd],
         cwd: ws,
-        note: "another PANE in the plugin's own session running the rig's OWN attach surface (official form; `action new-pane` RETURNS the created pane id, which is Zellij's own — capture it). `--close-on-exit` keeps a finished pane's window from holding a client. UNVERIFIED on this host.",
+        note: "another PANE in the plugin's own session running the PLUGIN's OWN pane client (official form; `action new-pane` RETURNS the created pane id, which is Zellij's own — capture it). `--close-on-exit` keeps a finished pane's window from holding a client; the client itself defaults to FOREVER, so a normal pane does not finish. UNVERIFIED on this host (zellij is absent here).",
       };
     },
 

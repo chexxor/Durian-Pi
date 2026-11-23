@@ -359,12 +359,10 @@ user-own 2 pane(s) detached` with the user's own session reported PRESENT, NOT T
 `kill-pane -t durian-w1:impl-2` rc 0 left the broker resident, and the whole leg answered
 **`MUXLIVE 0 FAIL` in 15.995 s** — so tmux pane semantics are MEASURED, not docs-grounded
 (read `docs/runbooks/pi-inside-tmux.md` for what it does and does not do); Zellij and
-herdr stay registered-but-NOT-RUN. Pane-LEVEL isolation is NOT implemented (SESSION level
-only). Proof: `node tools/mux-surface-install.mjs --check` → `UP TO DATE` in **28 ms**, and
-the six pins `node demo/mux-{surface,ownership,interact,keybinds,drivers,namespace}.test.mjs`
-exit 0 / 0 FAIL at **0.31/7.33/0.04/0.23/0.32/0.12 s** internal (WALL 1.1/7.5/0.18/0.36/0.46/0.25 s),
-all six in the `tui` area → `node scripts/test.mjs --area tui --jobs 4` **58/58 in 17.7 s**
-exit 0. Runbook: `docs/runbooks/pi-inside-tmux.md`.
+herdr stay registered-but-NOT-RUN. **NEW THIS WINDOW (2026-11-22) — A PANE IS AN ATTACHED
+CLIENT, PROVEN BY A RUN:** the argv the seam puts in a pane is `<execPath> <abs tools/mux-pane-client.mjs> --db <store> --select <seat> --pane <tag>`, a read-only multiplex client that reads its seat and can only act on it through the broker's existing spool ops — never a second writer, never the rig's full TUI, never a shim; `demo/mux-pane-client.test.mjs` runs TWO panes (`impl` and `impl-2`) of ONE seat against a REAL broker on a TEMP store on the mocked `fauxProvider` plane. **AND THE WINDOWS HALF IS REGISTERED, NOT GUESSED:** on a windows aim the seam reads each driver's own `platform` table — the tmux vocabulary names `psmux` (`advertised-elsewhere`: quoted, URL, fetched 2026-11-22, NEVER RUN here), zellij/herdr name their own Windows routes, and **GNU screen on Windows is REFUSED with ZERO commands** because the only routes found (wsl, cygwin, msys2) are forbidden by the native-host-OS rule and the seam substitutes no route the driver did not declare. This rig has NO Windows host, so every Windows row says `advertised-elsewhere` — that label, not a green run, is what the Windows half is made of.
+
+Pane-LEVEL isolation is NOT implemented (SESSION level only). Proof: `node tools/mux-surface-install.mjs --check` → `UP TO DATE` in **28 ms**, and the SEVEN pins `node demo/mux-{surface,ownership,interact,keybinds,drivers,namespace,pane-client}.test.mjs` exit 0 / 0 FAIL at **0.79/6.85/0.17/0.35/0.45/7.95/23.18 s WALL** (measured 2026-11-22 on this box, host line above), all seven in the `tui` area → `node scripts/test.mjs --area tui --jobs 4` **59/59 in 27.7 s exit 0** (slowest mux-pane-client 23.2 s; the six older pins read 0.31/7.33/0.04/0.23/0.32/0.12 s internal at the earlier tree). Runbook: `docs/runbooks/pi-inside-tmux.md` (its 2026-11-22 tmux AND WINDOWS addenda).
 
 ## Where to go next
 
